@@ -311,7 +311,7 @@ export function createProxyHandler(
     // Extract session ID and source from routing headers if present, otherwise use URL path
     const headers = req.headers as Record<string, string | undefined>;
     const sessionId = headers["x-session-affinity"] || urlSessionId;
-    const source = headers["x-source"] || urlSource;
+    const source = headers["x-real-ip"] || headers["x-forwarded-for"]?.split(',')[0]?.trim() || headers["x-session-affinity"] || urlSource || 'unknown';
     
     const search = parsedUrl.search || null;
 
