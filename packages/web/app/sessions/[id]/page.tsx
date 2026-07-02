@@ -1,9 +1,12 @@
+"use client";
+
 import { MainLayout } from "@/components/main-layout";
 import { LogsViewer } from "@/components/logs-viewer";
 import { formatDateTime, safeJsonStringify } from "@/lib/utils";
 import type { SessionDetail } from "@/types/api";
 import Link from "next/link";
 import { apiClient } from "@/lib/api";
+import { useState, useEffect } from "react";
 
 function renderResponseBody(body: unknown): React.ReactNode {
   if (typeof body === "string") {
@@ -15,21 +18,42 @@ function renderResponseBody(body: unknown): React.ReactNode {
   return safeJsonStringify(body);
 }
 
-export default async function SessionDetailPage({
+export default function SessionDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
+  const [session, setSession] = useState<SessionDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [id, setId] = useState<string | null>(null);
 
-  let session: SessionDetail | null = null;
-  let error: string | null = null;
+  useEffect(() => {
+    const unwrapParams = async () => {
+      const resolved = await params;
+      setId(resolved.id);
+    };
+    unwrapParams();
+  }, [params]);
 
-  try {
-    session = await apiClient.getSession(id);
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Unknown error";
-  }
+  useEffect(() => {
+    if (!id) return;
+    
+    const fetchSession = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await apiClient.getSession(id);
+        setSession(data);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSession();
+  }, [id]);
 
   return (
     <MainLayout>
@@ -42,9 +66,20 @@ export default async function SessionDetailPage({
             ← Back to sessions
           </Link>
           <h1 className="text-3xl font-bold tracking-tight mt-2">
-            Session: {session?.sessionId || "Unknown"}
+            Session: {session?.sessionId || id || "Unknown"}
           </h1>
         </div>
+
+        {loading && (
+          <div className="space-y-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-lg border p-4">
+                <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
+                <div className="h-64 bg-muted/20 rounded" />
+              </div>
+            ))}
+          </div>
+        )}
 
         {error && (
           <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
