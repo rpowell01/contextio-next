@@ -137,7 +137,7 @@ export async function GET(request: Request) {
     const groupBySourceDest = url.searchParams.get("groupBySourceDest") === "true";
     const pathParts = url.pathname.split("/").filter(Boolean);
     
-// Check if we're requesting a specific session by ID
+    // Check if we're requesting a specific session by ID
     if (pathParts.length >= 2 && pathParts[0] === "api" && pathParts[1] === "sessions" && pathParts[2]) {
       const sessionId = pathParts[2];
       
@@ -206,7 +206,7 @@ export async function GET(request: Request) {
         totalRequestBytes += c.requestBytes;
         totalResponseBytes += c.responseBytes;
         totalTimeMs += c.timings.total_ms;
-        
+          
         // Set response status and streaming from first capture (or could validate consistency)
         if (!firstTimestamp) {
           responseStatus = c.responseStatus ?? 200;
@@ -252,7 +252,7 @@ export async function GET(request: Request) {
           } catch { /* ignore */ }
         }
         
-// Count redactions from response body (simplified)
+        // Count redactions from response body (simplified)
         // In a real implementation, we would have redaction data stored with the capture
         // For now, we'll count based on common patterns
         if (c.responseBody && typeof c.responseBody === "string") {
@@ -262,66 +262,43 @@ export async function GET(request: Request) {
           
           // Using capture groups in match requires downlevel iteration which TS doesn't allow
           // So we'll extract matches using exec and a while loop
-          let matchString: string;
-          let allMatches = [];
-          
-          // Extract matches from placeholderRegex
-          let regexResults;
-          while ((regexResults = placeholderRegex.exec(c.responseBody)) !== null) {
-            allMatches.push({ result: regexResults[0], type: 'placeholder' });
-          }
-          
-          // Extract matches from ssnRegex
-          while ((regexResults = ssnRegex.exec(c.responseBody)) !== null) {
-            allMatches.push({ result: regexResults[0], type: 'ssn' });
-          }
-          
-          for (const match of allMatches) {
-            matchString = match.result;
-            // Process placeholders like [API_KEY_1] -> API_KEY
-            if (match.type === 'placeholder' && /^\[([A-Z][A-Z0-9_]+)_\d+\]$/.test(matchString)) {
-              const matchClean = matchString.replace(/\[\s*|\s*\]/g, "");
-              const parts = matchClean.split("_");
-              if (parts.length >= 2) {
-                const ruleType = parts.slice(0, -1).join("_"); // Everything except the last part (the number)
-                if (parts.length >= 2) {
-                  const ruleName = parts.slice(0, -1).join("_");
-                  if (/^[A-Z][A-Z0-9_]+$/.test(ruleName)) {
-                    byRule[ruleName] = (byRule[ruleName] || 0) + 1;
-                    totalRedactions++;
-                  }
-                }
-              }
-            } else {
-              // Process SSN patterns like 123-45-6789
-              byRule["ssn"] = (byRule["ssn"] || 0) + 1;
-              totalRedactions++;
-            }
-          }
-        }
-          
-          // Extract matches from ssnRegex
-          while ((regexResults = ssnRegex.exec(c.responseBody)) !== null) {
-            allMatches.push({ result: regexResults[0], type: 'ssn' });
-          }
-          
-          for (const match of allMatches) {
-            matchString = match.result;
-            // Process placeholders like [EXAMPLE_1] -> EXAMPLE
-            if (match.type === 'placeholder' && /^\[([A-Z]+)_\d+\]$/.test(matchString)) {
-              const matchClean = matchString.replace(/\[\s*|\s*\]/g, "");
-              const parts = matchClean.split("_");
-              if (parts.length >= 2) {
-                const ruleType = parts.slice(0, -1).join("_"); // Everything except the last part (the number)
-                byRule[ruleType] = (byRule[ruleType] || 0) + 1;
-                totalRedactions++;
-              }
-            } else {
-              // Process SSN patterns like 123-45-6789
-              byRule["ssn"] = (byRule["ssn"] || 0) + 1;
-              totalRedactions++;
-            }
-          }
+const allMatches: { result: string; type: string }[] = [];
+           
+           // Extract matches from placeholderRegex
+           let regexResults;
+           while ((regexResults = placeholderRegex.exec(c.responseBody)) !== null) {
+             allMatches.push({ result: regexResults[0], type: 'placeholder' });
+           }
+           
+           // Extract matches from ssnRegex
+           while ((regexResults = ssnRegex.exec(c.responseBody)) !== null) {
+             allMatches.push({ result: regexResults[0], type: 'ssn' });
+           }
+           
+           for (const match of allMatches) {
+             // Process based on match type
+             if (match.type === 'placeholder') {
+               // Process placeholders like [API_KEY_1] -> API_KEY
+               const matchClean = match.result.replace(/\[\s*|\s*\]/g, "");
+               const parts = matchClean.split("_");
+               if (parts.length >= 2) {
+                 const ruleName = parts.slice(0, -1).join("_");
+                 // Validate that ruleName starts with uppercase letter and contains only
+                 // uppercase letters, digits, and underscores
+                 if (/^[A-Z][A-Z0-9_]*$/.test(ruleName)) {
+                   byRule[ruleName] = (byRule[ruleName] || 0) + 1;
+                   totalRedactions++;
+                 }
+                 // Invalid rule name format - ignore this placeholder
+               }
+               // Not enough parts after splitting by _ - ignore this placeholder
+             } else if (match.type === 'ssn') {
+               // Process SSN patterns like 123-45-6789
+               byRule["ssn"] = (byRule["ssn"] || 0) + 1;
+               totalRedactions++;
+             }
+             // Other types should not occur given how we built the array, but ignore if they do
+           }
         }
       }
       
@@ -368,29 +345,29 @@ export async function GET(request: Request) {
       
       return Response.json(sessionDetail);
     }
-
+    
     const files = await listCaptureFiles();
     const sessions: Session[] = [];
-
+    
     for (const filename of files) {
       try {
         const filepath = join(CAPTURE_DIR, filename);
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
-
+        
         const raw = await fs.readFile(filepath, "utf8");
         const data = JSON.parse(raw) as Record<string, unknown>;
-
+        
         const session = await getSessionMetadata(filename, data);
         sessions.push(session);
       } catch {
         continue;
       }
     }
-
+    
     // Sort by timestamp descending (newest first)
     sessions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
+    
     // Return grouped summaries if requested
     if (groupBySourceDest) {
       const rawCaptures: RawCaptureData[] = sessions.map((s) => ({
@@ -405,11 +382,11 @@ export async function GET(request: Request) {
         requestBody: undefined,
         responseBody: undefined,
       }));
-
+      
       const { summaries, metrics } = groupCapturesIntoSessions(rawCaptures);
       return Response.json({ sessions, summaries, metrics });
     }
-
+    
     return Response.json(sessions);
   } catch (error) {
     console.error("Error in sessions API:", error);

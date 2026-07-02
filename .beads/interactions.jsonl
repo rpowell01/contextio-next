@@ -176,3 +176,7 @@
 {"id":"int-b8cbc751","kind":"field_change","created_at":"2026-07-01T23:21:17.160560572Z","actor":"Russell Powell","issue_id":"contextio-zycm","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
 {"id":"int-b2be9eb6","kind":"field_change","created_at":"2026-07-02T14:41:48.898861425Z","actor":"Russell Powell","issue_id":"contextio-6ec9","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-7d9b5f63","kind":"field_change","created_at":"2026-07-02T14:46:56.667843293Z","actor":"Russell Powell","issue_id":"contextio-2oa2","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-6ec2d1fb","kind":"field_change","created_at":"2026-07-02T21:18:45.355352797Z","actor":"Russell Powell","issue_id":"contextio-xdkd","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-5301c278","kind":"field_change","created_at":"2026-07-02T21:38:20.41434288Z","actor":"Russell Powell","issue_id":"contextio-xdkd","extra":{"field":"status","new_value":"open","old_value":"closed"}}
+{"id":"int-9ae35f14","kind":"field_change","created_at":"2026-07-02T21:39:00.230617658Z","actor":"Russell Powell","issue_id":"contextio-xdkd.1","extra":{"field":"status","new_value":"closed","old_value":"open"}}
+{"id":"int-a47d16ad","kind":"field_change","created_at":"2026-07-02T21:39:26.215751121Z","actor":"Russell Powell","issue_id":"contextio-xdkd","extra":{"field":"status","new_value":"closed","old_value":"open"}}
