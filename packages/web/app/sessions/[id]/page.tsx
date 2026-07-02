@@ -1,11 +1,8 @@
 import { MainLayout } from "@/components/main-layout";
 import { LogsViewer } from "@/components/logs-viewer";
-import { formatDateTime, isValidSession, safeJsonStringify } from "@/lib/utils";
-import type { Session } from "@/types/api";
+import { formatDateTime, safeJsonStringify } from "@/lib/utils";
+import type { SessionDetail } from "@/types/api";
 import Link from "next/link";
-import fs from "node:fs/promises";
-import { join } from "node:path";
-import { listCaptureFiles, getSessionMetadata, CAPTURE_DIR, MAX_FILE_SIZE, extractSessionId } from "@/lib/sessions/utils";
 
 function renderResponseBody(body: unknown): React.ReactNode {
   if (typeof body === "string") {
@@ -17,35 +14,12 @@ function renderResponseBody(body: unknown): React.ReactNode {
   return safeJsonStringify(body);
 }
 
-async function getSession(id: string): Promise<Session> {
-  const files = await listCaptureFiles();
-
-  for (const filename of files) {
-    try {
-      const filepath = join(CAPTURE_DIR, filename);
-      const stats = await fs.stat(filepath);
-      if (stats.size > MAX_FILE_SIZE) continue;
-
-      const raw = await fs.readFile(filepath, "utf8");
-      const data = JSON.parse(raw) as Record<string, unknown>;
-
-      const sessionId = extractSessionId(filename);
-      if (sessionId !== id) continue;
-
-      const session = await getSessionMetadata(filename, data);
-
-      // Validate the response
-      if (!isValidSession(session)) {
-        throw new Error("Invalid session data received from API");
-      }
-
-      return session;
-    } catch {
-      continue;
-    }
+async function getSession(id: string): Promise<SessionDetail> {
+  const response = await fetch(`/api/sessions/${id}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch session: ${response.status}`);
   }
-
-  throw new Error("Session not found");
+  return response.json();
 }
 
 export default async function SessionDetailPage({
@@ -55,7 +29,7 @@ export default async function SessionDetailPage({
 }) {
   const { id } = await params;
 
-  let session: Session | null = null;
+  let session: SessionDetail | null = null;
   let error: string | null = null;
 
   try {
@@ -92,7 +66,7 @@ export default async function SessionDetailPage({
           <>
             <div className="grid gap-6 md:grid-cols-2">
               <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Request</h3>
+                <h3 className="font-semibold mb-3">Request Details</h3>
                 <div className="space-y-2 text-sm">
                   <div>
                     <span className="text-muted-foreground">Source:</span>{" "}
@@ -114,7 +88,7 @@ export default async function SessionDetailPage({
               </div>
 
               <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Response</h3>
+                <h3 className="font-semibold mb-3">Response Details</h3>
                 <div className="space-y-2 text-sm">
                   <div>
                     <span className="text-muted-foreground">Status:</span>{" "}
@@ -127,6 +101,103 @@ export default async function SessionDetailPage({
                 </div>
               </div>
             </div>
+
+            {/* Metrics Section */}
+            {session.metrics && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Session Metrics</h3>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <div>
+                    <span className="text-muted-foreground">Total Inbound Bytes:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.totalInboundBytes.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Outbound Bytes:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.totalOutboundBytes.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Inbound Throughput:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.inboundThroughput.toFixed(2)} bytes/sec
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Outbound Throughput:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.outboundThroughput.toFixed(2)} bytes/sec
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Context Values:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.totalContextValues}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Redactions:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.redactionStats?.totalRedactions ?? 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Redaction Statistics */}
+            {session.redactionStats && session.redactionStats.totalRedactions > 0 && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Redaction Statistics</h3>
+                <div className="space-y-2">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Total Redactions:</span>{" "}
+                    {session.redactionStats.totalRedactions}
+                  </div>
+                  {Object.keys(session.redactionStats.byRule).length > 0 && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">By Rule:</span>
+                      <ul className="ml-2 mt-1 list-disc list-inside">
+                        {Object.entries(session.redactionStats.byRule).map(([rule, count]) => (
+                          <li key={rule}>
+                            <span className="font-medium">{rule}:</span> {count}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Context Values */}
+            {session.contextValues && Object.keys(session.contextValues).length > 0 && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Context Values</h3>
+                <div className="max-h-64 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">Key</th>
+                        <th className="text-left py-2">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(session.contextValues).map(([key, value]) => (
+                        <tr key={key} className="border-b">
+                          <td className="py-2 font-mono text-xs">{key}</td>
+                          <td className="py-2 font-mono text-xs max-w-xs truncate">
+                            {typeof value === "string" ? value : safeJsonStringify(value)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="rounded-lg border p-4">
               <h3 className="font-semibold mb-3">Request Body</h3>

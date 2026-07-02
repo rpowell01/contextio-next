@@ -1,25 +1,28 @@
 import { MainLayout } from "@/components/main-layout";
 import { formatDateTime } from "@/lib/utils";
-import type { Session } from "@/types/api";
+import type { SessionSummary } from "@/types/api";
 import Link from "next/link";
 import { apiClient } from "@/lib/api";
 
-async function getSessions(): Promise<Session[]> {
+async function getGroupedSessions(): Promise<{
+  summaries: SessionSummary[];
+}> {
   try {
-    const sessions = await apiClient.getSessions();
-    return sessions;
+    const data = await apiClient.getGroupedSessions();
+    return { summaries: data.summaries };
   } catch (error) {
-    console.error("Failed to fetch sessions:", error);
-    return [];
+    console.error("Failed to fetch grouped sessions:", error);
+    return { summaries: [] };
   }
 }
 
 export default async function SessionsPage() {
-  let sessions: Session[] = [];
+  let summaries: SessionSummary[] = [];
   let error: string | null = null;
 
   try {
-    sessions = await getSessions();
+    const data = await getGroupedSessions();
+    summaries = data.summaries;
   } catch (e) {
     error = e instanceof Error ? e.message : "Unknown error";
   }
@@ -42,7 +45,7 @@ export default async function SessionsPage() {
           </div>
         )}
 
-        {!error && sessions.length === 0 ? (
+        {!error && summaries.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12">
             <svg className="h-12 w-12 text-muted-foreground mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h5.5a2 2 0 002-2V9a2 2 0 002-2V9a2 2 0 00-2-2z" />
@@ -54,7 +57,7 @@ export default async function SessionsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {sessions.map((session) => (
+            {summaries.map((session) => (
               <Link
                 key={session.sessionId}
                 href={`/sessions/${session.sessionId}`}
@@ -67,9 +70,9 @@ export default async function SessionsPage() {
                     </svg>
                   </div>
                   <div>
-                    <div className="font-medium">{session.source} → {session.provider}</div>
+                    <div className="font-medium">{session.source} → {session.destination}</div>
                     <div className="text-sm text-muted-foreground">
-                      Status: {session.responseStatus} • {formatDateTime(session.timestamp)}
+                      {session.captureCount} captures • {formatDateTime(session.firstTimestamp)}
                     </div>
                   </div>
                 </div>

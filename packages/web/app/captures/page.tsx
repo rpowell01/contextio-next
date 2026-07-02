@@ -4,6 +4,7 @@ import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
 import { formatDateTime } from "@/lib/utils";
 import type { Capture, CaptureWithRedaction, PaginationMeta } from "@/types/api";
+import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -327,8 +328,9 @@ export default function CapturesPage() {
         ) : (
           <div className="space-y-4">
             {captures.map((capture) => (
-              <div
+              <Link
                 key={capture.id}
+                href={`/captures/${capture.id}`}
                 className="flex items-center justify-between rounded-lg border p-4 hover:bg-accent transition-colors"
               >
                 <div className="flex items-center gap-4">
@@ -353,7 +355,7 @@ export default function CapturesPage() {
                   <div className="text-sm font-mono">#{capture.sessionId?.slice(0, 8) ?? "N/A"}</div>
                   <div className="text-xs text-muted-foreground">{formatDateTime(capture.timestamp)}</div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
