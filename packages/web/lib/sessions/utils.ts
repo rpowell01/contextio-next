@@ -2,10 +2,10 @@ import fs from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { Session } from "@/types/api";
+import type { Session, Capture } from "@/types/api";
 
-// Re-export Session type for convenience
-export type { Session } from "@/types/api";
+// Re-export Session and Capture types for convenience
+export type { Session, Capture } from "@/types/api";
 
 // Allow override via environment variable (used in Docker environments)
 // Falls back to default ~/.contextio/captures for local development
@@ -45,19 +45,72 @@ export async function listCaptureFiles(): Promise<string[]> {
 }
 
 /**
- * Safely extract session ID from filename.
- * Supports filename format: {source}_{sessionId}_{timestamp}-{counter}.json
- * where timestamp is 13-digit Unix epoch milliseconds.
- * Session ID is expected to be 8 lowercase hex chars.
- * Session ID is optional - if not present, returns null.
- *
- * @param filename - The capture filename to parse
- * @returns The extracted session ID or null if not found
+ * Extract capture metadata from parsed data.
  */
-export function extractSessionId(filename: string): string | null {
-  // Match: source_{sessionId}_{13digitTimestamp}-{counter}.json
-  // Session ID is 8 lowercase hex chars between underscores
-  // Session ID is optional - only match if present
+export function extractCaptureMetadata(
+  filename: string,
+  data: Record<string, unknown>
+): Capture {
+  const sessionId = extractSessionId(filename, data);
+  const source = typeof data.source === "string" ? data.source : (extractSource(filename) ?? "unknown");
+
+  // Helper to safely extract number from unknown
+  const getNumber = (obj: unknown, key: string): number => {
+    if (typeof obj === "object" && obj !== null) {
+      const val = (obj as Record<string, unknown>)[key];
+      return typeof val === "number" ? val : Number(val) || 0;
+    }
+    return 0;
+  };
+
+  const timings = data.timings as Record<string, unknown> | undefined;
+
+  return {
+    id: filename,
+    sessionId,
+    source,
+    provider: typeof data.provider === "string" ? data.provider : "unknown",
+    apiFormat: typeof data.apiFormat === "string" ? data.apiFormat : "unknown",
+    targetUrl: typeof data.targetUrl === "string" ? data.targetUrl : "",
+    method: typeof data.method === "string" ? data.method : "POST",
+    requestBytes:
+      typeof data.requestBytes === "number"
+        ? data.requestBytes
+        : Number(data.requestBytes) || 0,
+    responseBytes:
+      typeof data.responseBytes === "number"
+        ? data.responseBytes
+        : Number(data.responseBytes) || 0,
+    responseStatus:
+      typeof data.responseStatus === "number"
+        ? data.responseStatus
+        : Number(data.responseStatus) || 0,
+    responseIsStreaming:
+      typeof data.responseIsStreaming === "boolean"
+        ? data.responseIsStreaming
+        : data.responseIsStreaming === true ||
+          data.responseIsStreaming === "true",
+    timestamp: validateCaptureTimestamp(data.timestamp) ?? new Date().toISOString(),
+    timings: {
+      send_ms: getNumber(timings, "send_ms"),
+      wait_ms: getNumber(timings, "wait_ms"),
+      receive_ms: getNumber(timings, "receive_ms"),
+      total_ms: getNumber(timings, "total_ms"),
+    },
+  };
+}
+
+/**
+ * Safely extract session ID from filename or data.
+ */
+export function extractSessionId(
+  filename: string,
+  data?: Record<string, unknown>
+): string | null {
+  if (data && typeof data.sessionId === "string" && data.sessionId.length > 0) {
+    return data.sessionId;
+  }
+
   const match = filename.match(/_([a-f0-9]{8})_\d{13}-\d{6}\.json$/i);
   if (match) return match[1].toLowerCase();
 
