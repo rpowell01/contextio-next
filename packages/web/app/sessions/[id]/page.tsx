@@ -3,6 +3,7 @@ import { LogsViewer } from "@/components/logs-viewer";
 import { formatDateTime, safeJsonStringify } from "@/lib/utils";
 import type { SessionDetail } from "@/types/api";
 import Link from "next/link";
+import { apiClient } from "@/lib/api";
 
 function renderResponseBody(body: unknown): React.ReactNode {
   if (typeof body === "string") {
@@ -12,14 +13,6 @@ function renderResponseBody(body: unknown): React.ReactNode {
     return "{}";
   }
   return safeJsonStringify(body);
-}
-
-async function getSession(id: string): Promise<SessionDetail> {
-  const response = await fetch(`/api/sessions/${id}`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch session: ${response.status}`);
-  }
-  return response.json();
 }
 
 export default async function SessionDetailPage({
@@ -33,7 +26,7 @@ export default async function SessionDetailPage({
   let error: string | null = null;
 
   try {
-    session = await getSession(id);
+    session = await apiClient.getSession(id);
   } catch (e) {
     error = e instanceof Error ? e.message : "Unknown error";
   }

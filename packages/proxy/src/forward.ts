@@ -306,7 +306,12 @@ export function createProxyHandler(
     res: http.ServerResponse,
   ): void {
     const parsedUrl = url.parse(req.url!);
-    const { source, sessionId, cleanPath } = extractSource(parsedUrl.pathname!);
+    const { source, sessionId: urlSessionId, cleanPath } = extractSource(parsedUrl.pathname!);
+    
+    // Extract session ID from x-session-affinity header if present, otherwise use URL path
+    const headers = req.headers as Record<string, string | undefined>;
+    const sessionId = headers["x-session-affinity"] || urlSessionId;
+    
     const search = parsedUrl.search || null;
 
     if (opts.logTraffic) {
