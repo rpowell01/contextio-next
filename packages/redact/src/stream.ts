@@ -42,12 +42,13 @@ interface Extracted {
 }
 
 /**
- * Extract text content from a JSON SSE event line.
+ * Extract text content from a JSON SSE event.
  *
  * Recognizes content fields from all three providers:
  * - Anthropic: `text_delta` events with `"text"` field
  * - Anthropic: `thinking_delta` events with `"thinking"` field
  * - OpenAI: `delta` objects with `"content"` field
+ * - OpenAI: `delta` objects with `"reasoning"` or `"reasoning_content"` field
  * - Gemini: `parts` arrays with `"text"` field
  *
  * @returns Extracted text and match context, or null for non-content events.
@@ -65,6 +66,11 @@ function extractContent(json: string): Extracted | null {
   }
   if (json.includes('"delta"') && json.includes('"content"')) {
     m = json.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (m) return { text: m[1], fullMatch: m[0], prefix: m[0].slice(0, m[0].indexOf(m[1])) };
+  }
+  if (json.includes('"delta"') && (json.includes('"reasoning"') || json.includes('"reasoning_content"'))) {
+    // Handle OpenAI reasoning/reasoning_content fields
+    m = json.match(/"reasoning(?:_content)?\s*:\s*"((?:[^"\\]|\\.)*)"/);
     if (m) return { text: m[1], fullMatch: m[0], prefix: m[0].slice(0, m[0].indexOf(m[1])) };
   }
   if (json.includes('"parts"') && json.includes('"text"')) {
