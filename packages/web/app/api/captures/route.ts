@@ -13,7 +13,7 @@ import { CAPTURE_DIR, MAX_FILE_SIZE, isValidFilename } from "@/lib/sessions/util
 // Pre-compiled regex for placeholder pattern matching.
 // Matches patterns like [EMAIL_1], [AWS_KEY_2], [SSN_REDACTED_3], etc.
 // Format: [UPPERCASE_WITH_UNDERSCORES_NUMBER]
-const PLACEHOLDER_REGEX = /\[([A-Z][A-Z0-9_]*)_(\d+)\]/g;
+const PLACEHOLDER_REGEX = /\[([A-Z][A-Z0-9_]*)_(\d+)\]|\b\d{3}-\d{2}-\d{4}\b/g;
 
 /**
  * Increment a counter in the byRule record.
@@ -243,16 +243,27 @@ function findRedactedValuesInString(
 
   while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
     const placeholder = m[0];
-    const ruleId = m[1].toLowerCase();
+    const ruleId = m[1]?.toLowerCase();
 
-    matches.push({
-      ruleId,
-      original: `[REDACTED_${ruleId.toUpperCase()}_${m[2]}]`,
-      placeholder,
-      path,
-    });
-
-    incrementRuleCount(byRule, ruleId);
+    if (ruleId) {
+      // Placeholder format: [RULE_NAME_NUMBER]
+      matches.push({
+        ruleId,
+        original: `[REDACTED_${ruleId.toUpperCase()}_${m[2]}]`,
+        placeholder,
+        path,
+      });
+      incrementRuleCount(byRule, ruleId);
+    } else if (m[0] && /\d{3}-\d{2}-\d{4}/.test(m[0])) {
+      // SSN format: 123-45-6789
+      matches.push({
+        ruleId: "ssn",
+        original: m[0],
+        placeholder: `[SSN_REDACTED_${m[0]}]`,
+        path,
+      });
+      incrementRuleCount(byRule, "ssn");
+    }
   }
 }
 

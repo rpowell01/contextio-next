@@ -87,7 +87,7 @@ function computeSessionMetrics(
 
       // Count redactions from response body
       if (typeof c.responseBody === "string") {
-        const redactedMatches = c.responseBody.match(/\[[A-Z]+_\d+\]/g) || [];
+        const redactedMatches = c.responseBody.match(/\[[A-Z][A-Z_]*_\d+\]/g) || [];
         for (const match of redactedMatches) {
           const matchClean = match.replace(/\[\s*|\s*\]/g, "");
           const parts = matchClean.split("_");
@@ -202,10 +202,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       provider: destination,
       apiFormat: firstCapture.apiFormat || "unknown",
       targetUrl: firstCapture.targetUrl || "",
-      requestBody: {},
+      requestBody: firstCapture.requestBody as Record<string, unknown> || ({} as Record<string, unknown>),
       responseStatus,
       responseIsStreaming,
-      responseBody: null,
+      responseBody: firstCapture.responseBody || null,
       timestamp: firstTimestamp,
       timings: { total_ms: totalTimeMs },
       metrics,

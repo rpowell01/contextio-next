@@ -308,10 +308,27 @@ export function createProxyHandler(
     const parsedUrl = url.parse(req.url!);
     const { source: urlSource, sessionId: urlSessionId, cleanPath } = extractSource(parsedUrl.pathname!);
     
-    // Extract session ID and source from routing headers if present, otherwise use URL path
+    // Extract session ID and source from routing headers
     const headers = req.headers as Record<string, string | undefined>;
     const sessionId = headers["x-session-affinity"] || urlSessionId;
-    const source = headers["x-source"] || urlSource;
+    // Extract source from headers in priority order, fallback to URL source
+    let source = headers['x-real-ip']?.trim();
+    if (!source) {
+        source = headers['x-forwarded-for'];
+        if (source) {
+            // X-Forwarded-For can contain multiple IPs, take the first one
+            source = source.split(',')[0].trim();
+        }
+    }
+    if (!source) {
+        source = headers['x-session-affinity']?.trim();
+    }
+    if (!source) {
+        source = urlSource;
+    }
+    if (!source) {
+        source = 'unknown';
+    }
     
     const search = parsedUrl.search || null;
 
@@ -515,12 +532,44 @@ export function createProxyHandler(
               respBytes += chunk.length;
               respChunks.push(chunk);
               if (!shouldBufferResponse && !res.destroyed) {
-                let out = chunk;
+                // Ensure JSON objects are separated to avoid concatenation errors
+                let outBuffer: Buffer = chunk;
                 if (hasStreamPlugins && isStreaming) {
+                  // Convert to string for safe splitting
+                  const text = outBuffer.toString('utf8');
+                  // Split where a JSON object ends and another begins without a delimiter
+                  const parts = text.split(/(?<=})\s*(?={)/);
+                  const processedParts: Buffer[] = [];
+                  for (let part of parts) {
+                    let buf = Buffer.from(part, 'utf8');
+                    // Run plugins on each part individually
+                    if (hasStreamPlugins) {
+                      for (const plugin of plugins) {
+                        if (!plugin.onStreamChunk) continue;
+                        try {
+                          const ret = plugin.onStreamChunk(buf, sessionId);
+                          if (ret instanceof SharedArrayBuffer) {
+                            ret = Buffer.from(ret);
+                          }
+                          buf = ret;
+                        } catch (err: unknown) {
+                          console.error(
+                            `Plugin "${plugin.name}" onStreamChunk error:`,
+                            err instanceof Error ? err.message : String(err),
+                          );
+                        }
+                      }
+                    }
+                    processedParts.push(buf);
+                  }
+                  // Join parts with newline to keep valid JSON separation
+                  outBuffer = Buffer.concat(processedParts.map(b => Buffer.concat([b, Buffer.from('\n')])));
+                } else if (hasStreamPlugins) {
+                  // Non-streaming plugins still operate on whole chunk
                   for (const plugin of plugins) {
                     if (!plugin.onStreamChunk) continue;
                     try {
-                      out = plugin.onStreamChunk(out, sessionId);
+                      outBuffer = plugin.onStreamChunk(outBuffer, sessionId);
                     } catch (err: unknown) {
                       console.error(
                         `Plugin "${plugin.name}" onStreamChunk error:`,
@@ -529,7 +578,53 @@ export function createProxyHandler(
                     }
                   }
                 }
-                res.write(out);
+                res.write(outBuffer);
+              }
+                if (hasStreamPlugins && isStreaming) {
+                  // Convert to string for safe splitting
+                  const text = outBuffer.toString('utf8');
+                  // Split where a JSON object ends and another begins without a delimiter
+                  const parts = text.split(/(?<=})\s*(?={)/);
+                  const processedParts: Buffer[] = [];
+                  for (let part of parts) {
+                    let buf = Buffer.from(part, 'utf8');
+                    // Run plugins on each part individually
+                    if (hasStreamPlugins) {
+                      for (const plugin of plugins) {
+                        if (!plugin.onStreamChunk) continue;
+                        try {
+                          const ret = plugin.onStreamChunk(buf, sessionId);
+if (ret instanceof SharedArrayBuffer) {
+  ret = Buffer.from(ret);
+}
+buf = ret;
+                        } catch (err: unknown) {
+                          console.error(
+                            `Plugin "${plugin.name}" onStreamChunk error:`,
+                            err instanceof Error ? err.message : String(err),
+                          );
+                        }
+                      }
+                    }
+                    processedParts.push(buf);
+                  }
+                  // Join parts with newline to keep valid JSON separation
+                  outBuffer = Buffer.concat(processedParts.map(b => Buffer.concat([b, Buffer.from('\n')] )));
+                } else if (hasStreamPlugins) {
+                  // Non-streaming plugins still operate on whole chunk
+                  for (const plugin of plugins) {
+                    if (!plugin.onStreamChunk) continue;
+                    try {
+                      outBuffer = plugin.onStreamChunk(outBuffer, sessionId);
+                    } catch (err: unknown) {
+                      console.error(
+                        `Plugin "${plugin.name}" onStreamChunk error:`,
+                        err instanceof Error ? err.message : String(err),
+                      );
+                    }
+                  }
+                }
+                res.write(outBuffer);
               }
             });
 

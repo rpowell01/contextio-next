@@ -252,19 +252,73 @@ export async function GET(request: Request) {
           } catch { /* ignore */ }
         }
         
-        // Count redactions from response body (simplified)
+// Count redactions from response body (simplified)
         // In a real implementation, we would have redaction data stored with the capture
         // For now, we'll count based on common patterns
         if (c.responseBody && typeof c.responseBody === "string") {
           // Simple redaction detection - look for common placeholder patterns
-          const redactedMatches = c.responseBody.match(/\[[A-Z]+_\d+\]/g) || [];
-          for (const match of redactedMatches) {
-            // Extract rule type from match like [API_KEY_1] -> API_KEY
-            const matchClean = match.replace(/\[\s*|\s*\]/g, "");
-            const parts = matchClean.split("_");
-            if (parts.length >= 2) {
-              const ruleType = parts.slice(0, -1).join("_"); // Everything except the last part (the number)
-              byRule[ruleType] = (byRule[ruleType] || 0) + 1;
+          const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
+          const placeholderRegex = /\[[A-Z][A-Z0-9_]*_\d+\]/g;
+          
+          // Using capture groups in match requires downlevel iteration which TS doesn't allow
+          // So we'll extract matches using exec and a while loop
+          let matchString: string;
+          let allMatches = [];
+          
+          // Extract matches from placeholderRegex
+          let regexResults;
+          while ((regexResults = placeholderRegex.exec(c.responseBody)) !== null) {
+            allMatches.push({ result: regexResults[0], type: 'placeholder' });
+          }
+          
+          // Extract matches from ssnRegex
+          while ((regexResults = ssnRegex.exec(c.responseBody)) !== null) {
+            allMatches.push({ result: regexResults[0], type: 'ssn' });
+          }
+          
+          for (const match of allMatches) {
+            matchString = match.result;
+            // Process placeholders like [API_KEY_1] -> API_KEY
+            if (match.type === 'placeholder' && /^\[([A-Z][A-Z0-9_]+)_\d+\]$/.test(matchString)) {
+              const matchClean = matchString.replace(/\[\s*|\s*\]/g, "");
+              const parts = matchClean.split("_");
+              if (parts.length >= 2) {
+                const ruleType = parts.slice(0, -1).join("_"); // Everything except the last part (the number)
+                if (parts.length >= 2) {
+                  const ruleName = parts.slice(0, -1).join("_");
+                  if (/^[A-Z][A-Z0-9_]+$/.test(ruleName)) {
+                    byRule[ruleName] = (byRule[ruleName] || 0) + 1;
+                    totalRedactions++;
+                  }
+                }
+              }
+            } else {
+              // Process SSN patterns like 123-45-6789
+              byRule["ssn"] = (byRule["ssn"] || 0) + 1;
+              totalRedactions++;
+            }
+          }
+        }
+          
+          // Extract matches from ssnRegex
+          while ((regexResults = ssnRegex.exec(c.responseBody)) !== null) {
+            allMatches.push({ result: regexResults[0], type: 'ssn' });
+          }
+          
+          for (const match of allMatches) {
+            matchString = match.result;
+            // Process placeholders like [EXAMPLE_1] -> EXAMPLE
+            if (match.type === 'placeholder' && /^\[([A-Z]+)_\d+\]$/.test(matchString)) {
+              const matchClean = matchString.replace(/\[\s*|\s*\]/g, "");
+              const parts = matchClean.split("_");
+              if (parts.length >= 2) {
+                const ruleType = parts.slice(0, -1).join("_"); // Everything except the last part (the number)
+                byRule[ruleType] = (byRule[ruleType] || 0) + 1;
+                totalRedactions++;
+              }
+            } else {
+              // Process SSN patterns like 123-45-6789
+              byRule["ssn"] = (byRule["ssn"] || 0) + 1;
               totalRedactions++;
             }
           }
