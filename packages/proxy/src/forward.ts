@@ -312,7 +312,7 @@ export function createProxyHandler(
     const headers = req.headers as Record<string, string | undefined>;
     const sessionId = headers["x-session-affinity"] || urlSessionId;
     // Extract source from headers in priority order, fallback to URL source
-    let source = headers['x-real-ip']?.trim();
+    let source: string | null | undefined = headers['x-real-ip']?.trim();
     if (!source) {
         source = headers['x-forwarded-for'];
         if (source) {
@@ -547,11 +547,14 @@ export function createProxyHandler(
                       for (const plugin of plugins) {
                         if (!plugin.onStreamChunk) continue;
                         try {
-                          const ret = plugin.onStreamChunk(buf, sessionId);
+                          let ret: unknown = plugin.onStreamChunk(buf, sessionId);
                           if (ret instanceof SharedArrayBuffer) {
-                            ret = Buffer.from(ret);
+                            // @ts-expect-error - TypeScript doesn't recognize buffer property on SharedArrayBuffer
+                            ret = Buffer.from((ret as SharedArrayBuffer).buffer);
                           }
-                          buf = ret;
+                          if (ret instanceof Buffer) {
+                            buf = ret;
+                          }
                         } catch (err: unknown) {
                           console.error(
                             `Plugin "${plugin.name}" onStreamChunk error:`,
@@ -564,52 +567,6 @@ export function createProxyHandler(
                   }
                   // Join parts with newline to keep valid JSON separation
                   outBuffer = Buffer.concat(processedParts.map(b => Buffer.concat([b, Buffer.from('\n')])));
-                } else if (hasStreamPlugins) {
-                  // Non-streaming plugins still operate on whole chunk
-                  for (const plugin of plugins) {
-                    if (!plugin.onStreamChunk) continue;
-                    try {
-                      outBuffer = plugin.onStreamChunk(outBuffer, sessionId);
-                    } catch (err: unknown) {
-                      console.error(
-                        `Plugin "${plugin.name}" onStreamChunk error:`,
-                        err instanceof Error ? err.message : String(err),
-                      );
-                    }
-                  }
-                }
-                res.write(outBuffer);
-              }
-                if (hasStreamPlugins && isStreaming) {
-                  // Convert to string for safe splitting
-                  const text = outBuffer.toString('utf8');
-                  // Split where a JSON object ends and another begins without a delimiter
-                  const parts = text.split(/(?<=})\s*(?={)/);
-                  const processedParts: Buffer[] = [];
-                  for (let part of parts) {
-                    let buf = Buffer.from(part, 'utf8');
-                    // Run plugins on each part individually
-                    if (hasStreamPlugins) {
-                      for (const plugin of plugins) {
-                        if (!plugin.onStreamChunk) continue;
-                        try {
-                          const ret = plugin.onStreamChunk(buf, sessionId);
-if (ret instanceof SharedArrayBuffer) {
-  ret = Buffer.from(ret);
-}
-buf = ret;
-                        } catch (err: unknown) {
-                          console.error(
-                            `Plugin "${plugin.name}" onStreamChunk error:`,
-                            err instanceof Error ? err.message : String(err),
-                          );
-                        }
-                      }
-                    }
-                    processedParts.push(buf);
-                  }
-                  // Join parts with newline to keep valid JSON separation
-                  outBuffer = Buffer.concat(processedParts.map(b => Buffer.concat([b, Buffer.from('\n')] )));
                 } else if (hasStreamPlugins) {
                   // Non-streaming plugins still operate on whole chunk
                   for (const plugin of plugins) {
