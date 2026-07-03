@@ -89,6 +89,16 @@ export interface SessionMetrics {
    * in the "Context Values" table.
    */
   totalContextValues: number;
+  /** Total input tokens across all captures */
+  totalInputTokens?: number;
+  /** Total output tokens across all captures */
+  totalOutputTokens?: number;
+  /**
+   * Total output token rate across captured turns, in tokens per second.
+   * Derived from total output tokens divided by capture count; returns 0 when
+   * the session has no captures or no token data.
+   */
+  tokensPerSecond?: number;
   /** Redaction statistics */
   redactionStats: {
     totalRedactions: number;

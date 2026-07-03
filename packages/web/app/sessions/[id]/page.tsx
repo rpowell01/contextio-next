@@ -1,22 +1,11 @@
 "use client";
 
 import { MainLayout } from "@/components/main-layout";
-import { LogsViewer } from "@/components/logs-viewer";
 import { formatDateTime, safeJsonStringify } from "@/lib/utils";
 import type { SessionDetail } from "@/types/api";
 import Link from "next/link";
 import { apiClient } from "@/lib/api";
 import { useState, useEffect } from "react";
-
-function renderResponseBody(body: unknown): React.ReactNode {
-  if (typeof body === "string") {
-    return body;
-  }
-  if (body === null || body === undefined) {
-    return "{}";
-  }
-  return safeJsonStringify(body);
-}
 
 export default function SessionDetailPage({
   params,
@@ -176,52 +165,41 @@ export default function SessionDetailPage({
     <div className="rounded-lg border p-4">
       <h3 className="font-semibold mb-3">Session Metrics</h3>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <div>
-          <span className="text-muted-foreground">Total Inbound Bytes:</span>{" "}
-          <span className="font-medium">
-            {session.metrics.totalInboundBytes.toLocaleString()}
-          </span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Total Outbound Bytes:</span>{" "}
-          <span className="font-medium">
-            {session.metrics.totalOutboundBytes.toLocaleString()}
-          </span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Inbound Throughput:</span>{" "}
-          <span className="font-medium">
-            {session.metrics.inboundThroughput.toFixed(2)} bytes/sec
-          </span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Outbound Throughput:</span>{" "}
-          <span className="font-medium">
-            {session.metrics.outboundThroughput.toFixed(2)} bytes/sec
-          </span>
-        </div>
-        <div>
-          <span
-            className="text-muted-foreground"
-            title="Number of scalar (string/number/boolean) leaf values extracted from request bodies — top-level keys plus one level of nested keys (object properties or array indices), flattened to dotted paths. Matches the row count in the Context Values table."
-          >
-            Total Context Values:
-          </span>{" "}
-          <span className="font-medium">
-            {session.metrics.totalContextValues}
-          </span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Total Redactions:</span>{" "}
-          <span className="font-medium">
-            {session.metrics.redactionStats?.totalRedactions ?? 0}
-          </span>
-        </div>
-      </div>
-    </div>
-  )}
+<div>
+  <span className="text-muted-foreground">Total Context Values:</span>{" "}
+  <span className="font-medium">
+    {session.metrics.totalContextValues}
+  </span>
+</div>
+<div>
+  <span className="text-muted-foreground">Total Input Tokens:</span>{" "}
+  <span className="font-medium">
+    {session.metrics.totalInputTokens ?? 0}
+  </span>
+</div>
+<div>
+  <span className="text-muted-foreground">Total Output Tokens:</span>{" "}
+  <span className="font-medium">
+    {session.metrics.totalOutputTokens ?? 0}
+  </span>
+</div>
+<div>
+  <span className="text-muted-foreground">Tokens / Second:</span>{" "}
+  <span className="font-medium">
+    {(session.metrics.tokensPerSecond ?? 0).toFixed(2)}
+  </span>
+</div>
+<div>
+  <span className="text-muted-foreground">Total Redactions:</span>{" "}
+  <span className="font-medium">
+    {session.metrics.redactionStats?.totalRedactions ?? 0}
+  </span>
+</div>
+</div>
+</div>
+</div>
 
-  {/* Redaction Statistics */}
+{/* Redaction Statistics */}
   {session.redactionStats && session.redactionStats.totalRedactions > 0 && (
     <div className="rounded-lg border p-4">
       <h3 className="font-semibold mb-3">Redaction Statistics</h3>
@@ -273,28 +251,6 @@ export default function SessionDetailPage({
     </div>
   )}
 
-  <div className="rounded-lg border p-4">
-    <h3 className="font-semibold mb-3">Request Body</h3>
-    <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
-      {safeJsonStringify(session.requestBody, 2)}
-    </pre>
-  </div>
-
-  {session.responseBody !== undefined && session.responseBody !== null && (
-    <div className="rounded-lg border p-4">
-      <h3 className="font-semibold mb-3">Response Body</h3>
-      <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
-        {renderResponseBody(session.responseBody)}
-      </pre>
-    </div>
-  )}
-
-  <div className="rounded-lg border p-4">
-    <h3 className="font-semibold mb-3">Container Logs</h3>
-    <div className="h-96">
-      <LogsViewer containerId={session.sessionId} />
-    </div>
-  </div>
 </>
 )}
 

@@ -103,17 +103,23 @@ function groupCapturesIntoSessions(
       } : undefined,
     });
 
-    metrics[sessionId] = {
-      totalInboundBytes: totalRequestBytes,
-      totalOutboundBytes: totalResponseBytes,
-      inboundThroughput,
-      outboundThroughput,
-      totalContextValues,
-      redactionStats: {
-        totalRedactions,
-        byRule,
-      },
-    };
+const captureCount = sessionCaptures.length;
+const tokensPerSecond = captureCount > 0 && totalOutputTokens > 0 ? totalOutputTokens / captureCount : 0;
+
+metrics[sessionId] = {
+  totalInboundBytes: totalRequestBytes,
+  totalOutboundBytes: totalResponseBytes,
+  inboundThroughput,
+  outboundThroughput,
+  totalContextValues,
+  totalInputTokens: totalInputTokens || undefined,
+  totalOutputTokens: totalOutputTokens || undefined,
+  tokensPerSecond: tokensPerSecond > 0 ? Number(tokensPerSecond.toFixed(2)) : 0,
+  redactionStats: {
+    totalRedactions,
+    byRule,
+  },
+};
   }
 
   return { summaries, metrics };

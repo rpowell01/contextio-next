@@ -87,12 +87,18 @@ const timeSec = totalTimeMs / 1000 || 1;
   const source = firstCapture?.source || "unknown";
   const destination = firstCapture?.provider || "unknown";
 
+const captureCount = sessionCaptures.length;
+const tokensPerSecond = captureCount > 0 && totalOutputTokens > 0 ? totalOutputTokens / captureCount : 0;
+
 const metrics: SessionMetrics = {
   totalInboundBytes: totalRequestBytes,
   totalOutboundBytes: totalResponseBytes,
   inboundThroughput,
   outboundThroughput,
   totalContextValues,
+  totalInputTokens: totalInputTokens || undefined,
+  totalOutputTokens: totalOutputTokens || undefined,
+  tokensPerSecond: tokensPerSecond > 0 ? Number(tokensPerSecond.toFixed(2)) : 0,
   redactionStats: {
     totalRedactions,
     byRule,

@@ -544,44 +544,54 @@ export function createProxyHandler(
                   const fullText = jsonBuffer ? jsonBuffer + text : text;
                   jsonBuffer = '';
                   // Split where a JSON object ends and another begins without a delimiter
-                  const parts = fullText.split(/(?<=})\s*(?={)/);
-                  const processedParts: Buffer[] = [];
-                  for (let i = 0; i < parts.length; i++) {
-                    const part = parts[i];
-                    let buf = Buffer.from(part, 'utf8');
-                    // Run plugins on each part individually
-                    if (hasStreamPlugins) {
-                      for (const plugin of plugins) {
-                        if (!plugin.onStreamChunk) continue;
-                        try {
-                          let ret: unknown = plugin.onStreamChunk(buf, sessionId);
-                          if (ret instanceof SharedArrayBuffer) {
-                            // @ts-expect-error - TypeScript doesn't recognize buffer property on SharedArrayBuffer
-                            ret = Buffer.from((ret as SharedArrayBuffer).buffer);
-                          }
-                          if (ret instanceof Buffer) {
-                            buf = ret;
-                          }
-                        } catch (err: unknown) {
-                          console.error(
-                            `Plugin "${plugin.name}" onStreamChunk error:`,
-                            err instanceof Error ? err.message : String(err),
-                          );
-                        }
-                      }
-                    }
-                    // Only process complete JSON objects; save incomplete trailing part
-                    const isLastPart = i === parts.length - 1;
-                    const looksComplete = part.trim().endsWith('}');
-                    if (isLastPart && !looksComplete) {
-                      // Save incomplete trailing part for next chunk
-                      jsonBuffer = part;
-                    } else {
-                      processedParts.push(buf);
-                    }
-                  }
-                  // Join parts with newline to keep valid JSON separation
-                  outBuffer = Buffer.concat(processedParts.map(b => Buffer.concat([b, Buffer.from('\n')])));
+      const parts = fullText.split(/(?<=})\s*(?={)/);
+      const processedParts: Buffer[] = [];
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        let buf = Buffer.from(part, 'utf8');
+        // Run plugins on each part individually
+        if (hasStreamPlugins) {
+          for (const plugin of plugins) {
+            if (!plugin.onStreamChunk) continue;
+            try {
+              let ret: unknown = plugin.onStreamChunk(buf, sessionId);
+              if (ret instanceof SharedArrayBuffer) {
+                // @ts-expect-error - TypeScript doesn't recognize buffer property on SharedArrayBuffer
+                ret = Buffer.from((ret as SharedArrayBuffer).buffer);
+              }
+              if (ret instanceof Buffer) {
+                buf = ret;
+              }
+            } catch (err: unknown) {
+              console.error(
+                `Plugin "${plugin.name}" onStreamChunk error:`,
+                err instanceof Error ? err.message : String(err),
+              );
+            }
+          }
+        }
+        // Only process complete JSON objects; save incomplete trailing part
+        const isLastPart = i === parts.length - 1;
+        const looksComplete = part.trim().endsWith('}');
+        if (isLastPart && !looksComplete) {
+          // Save incomplete trailing part for next chunk
+          jsonBuffer = part;
+        } else {
+          const trimmed = part.trim();
+          const startsObject = trimmed.startsWith('{');
+          const endsObject = trimmed.endsWith('}');
+          if (startsObject && endsObject) {
+            try {
+              JSON.parse(trimmed);
+            } catch {
+              console.error('Malformed JSON in SSE stream, skipping invalid part');
+              continue;
+            }
+          }
+          processedParts.push(buf);
+        }
+      }
+      outBuffer = Buffer.concat(processedParts);
                 } else if (hasStreamPlugins) {
                   // Non-streaming plugins still operate on whole chunk
                   for (const plugin of plugins) {
