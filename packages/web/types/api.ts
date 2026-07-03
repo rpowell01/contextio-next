@@ -80,7 +80,14 @@ export interface SessionMetrics {
   inboundThroughput: number;
   /** Outbound performance metrics (bytes/sec) */
   outboundThroughput: number;
-  /** Total context values */
+  /**
+   * Total count of scalar (string/number/boolean) leaf values extracted from
+   * the request bodies in this session. Scanned over the first two levels of
+   * nesting — top-level keys plus one level of nested keys (object properties
+   * or array indices, flattened to dotted-path keys like "messages.0").
+   * Null values are skipped at every level. This count matches the row count
+   * in the "Context Values" table.
+   */
   totalContextValues: number;
   /** Redaction statistics */
   redactionStats: {

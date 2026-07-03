@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { join } from "node:path";
 import type { Session, SessionSummary, SessionMetrics, SessionDetail } from "@/types/api";
-import { listCaptureFiles, getSessionMetadata, CAPTURE_DIR, MAX_FILE_SIZE } from "@/lib/sessions/utils";
+import { listCaptureFiles, getSessionMetadata, CAPTURE_DIR, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
 
 interface RawCaptureData {
   sessionId: string | null;
@@ -66,27 +66,14 @@ function groupCapturesIntoSessions(
       }
 
       // Count context values from request body
-      if (c.requestBody && typeof c.requestBody === "object") {
-        const body = c.requestBody as Record<string, unknown>;
-        const messages = Array.isArray(body.messages) ? body.messages : [];
-        totalContextValues += messages.reduce((sum, msg: unknown) => {
-          const m = msg as Record<string, unknown>;
-          return sum + (m.role ? 1 : 0) + (m.content ? String(m.content).length : 0);
-        }, 0);
-      }
+      // Uses the same scalar-leaf counting logic as /api/sessions/[id] so list
+      // and detail views agree for the same session (replaces prior
+      // messages.reduce(...) formula that under-counted non-message captures).
+      totalContextValues += computeContextValues(c.requestBody).count;
 
-      // Parse response for tokens and redactions
-      if (c.responseBody) {
-        try {
-          const parsed = JSON.parse(c.responseBody);
-          if (parsed.usage?.prompt_tokens) {
-            totalInputTokens += parsed.usage.prompt_tokens;
-          }
-          if (parsed.usage?.completion_tokens) {
-            totalOutputTokens += parsed.usage.completion_tokens;
-          }
-        } catch { /* ignore */ }
-      }
+      const usage = computeTokenUsage(c.responseBody);
+      totalInputTokens += usage.input;
+      totalOutputTokens += usage.output;
     }
 
     // Compute throughput (bytes/sec)
@@ -220,24 +207,9 @@ export async function GET(request: Request) {
           lastTimestamp = c.timestamp;
         }
         
-        // Count context values from request body
-        if (c.requestBody && typeof c.requestBody === "object") {
-          const body = c.requestBody as Record<string, unknown>;
-          // Extract key-value pairs from request body as context values
-          for (const [key, value] of Object.entries(body)) {
-            // Skip complex objects/arrays for simplicity in context display
-            if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-              contextValues[key] = value;
-            } else if (value !== null && typeof value === "object") {
-              // For objects, try to extract meaningful scalar values
-              for (const [subKey, subValue] of Object.entries(value)) {
-                if (typeof subValue === "string" || typeof subValue === "number" || typeof subValue === "boolean") {
-                  contextValues[`${key}.${subKey}`] = subValue;
-                }
-              }
-            }
-          }
-        }
+        // Count context values from request body (shared with /api/sessions/[id])
+        const captureContextValues = computeContextValues(c.requestBody);
+        Object.assign(contextValues, captureContextValues.values);
         
         // Parse response for tokens and redactions
         if (c.responseBody) {
@@ -330,7 +302,7 @@ const allMatches: { result: string; type: string }[] = [];
           totalOutboundBytes: totalResponseBytes,
           inboundThroughput,
           outboundThroughput,
-          totalContextValues: Object.keys(contextValues).length,
+          totalContextValues: Object.keys(contextValues).length, // equivalent to computeContextValues(c.requestBody).count per capture
           redactionStats: {
             totalRedactions,
             byRule

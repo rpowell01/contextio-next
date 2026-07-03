@@ -160,7 +160,12 @@ export default function SessionDetailPage({
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Total Context Values:</span>{" "}
+                    <span
+                      className="text-muted-foreground"
+                      title="Number of scalar (string/number/boolean) leaf values extracted from request bodies — top-level keys plus one level of nested keys (object properties or array indices), flattened to dotted paths. Matches the row count in the Context Values table."
+                    >
+                      Total Context Values:
+                    </span>{" "}
                     <span className="font-medium">
                       {session.metrics.totalContextValues}
                     </span>
