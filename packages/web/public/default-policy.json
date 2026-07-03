@@ -1,5 +1,5 @@
 {
-  "extends": "secrets",
+  "extends": "pii",
   "rules": [],
   "allowlist": {
     "strings": [],

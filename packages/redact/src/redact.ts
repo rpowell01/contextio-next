@@ -97,11 +97,12 @@ function isRuleAllowlisted(fullMatch: string, capturedGroup: string | undefined,
 /**
  * Check if a JSON path matches a path matcher pattern.
  * Segments must match exactly, except "*" which matches any single segment.
- * Both arrays must be the same length.
+ * The matcher can also be a prefix of the path (e.g., matcher ["messages", "*", "content"]
+ * matches path ["messages", "0", "content", "0", "text"]).
  */
 function pathMatches(segments: string[], matcher: string[]): boolean {
-  if (segments.length !== matcher.length) return false;
-  for (let i = 0; i < segments.length; i++) {
+  if (matcher.length > segments.length) return false;
+  for (let i = 0; i < matcher.length; i++) {
     if (matcher[i] === "*") continue;
     if (segments[i] !== matcher[i]) return false;
   }
