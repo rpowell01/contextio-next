@@ -369,10 +369,11 @@ describe("loadPolicyFile", () => {
     fs.unlinkSync(file);
   });
 
-  it("throws on missing file", () => {
+  it("returns null for missing file", () => {
     const file = tmpFile();
     // File doesn't exist
-    assert.throws(() => loadPolicyFile(file), /ENOENT/);
+    const policy = loadPolicyFile(file);
+    assert.equal(policy, null);
   });
 });
 

@@ -477,6 +477,13 @@ export async function GET(request: Request) {
     // Filter captures for pagination
     const filtered = captures;
 
+    // Sort by timestamp descending (newest first)
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.timestamp).getTime();
+      const dateB = new Date(b.timestamp).getTime();
+      return dateB - dateA;
+    });
+
     // Build pagination metadata
     const pagination: PaginationMeta = {
       page: validPage,

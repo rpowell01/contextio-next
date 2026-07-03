@@ -138,6 +138,14 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo '# Ensure policy file is writable by node user' >> /app/start.sh && \
     echo 'chmod 666 "$POLICY_FILE" 2>/dev/null || true' >> /app/start.sh && \
     echo 'echo "Using policy file: $POLICY_FILE"' >> /app/start.sh && \
+    echo '# Log policy file status' >> /app/start.sh && \
+    echo 'if [ -f "/app/custom-policy/custom-policy.json" ] && [ ! -f "/app/custom-policy/custom-policy.json.default" ]; then' >> /app/start.sh && \
+    echo '    echo "Custom policy file: LOADED (true)"' >> /app/start.sh && \
+    echo 'else' >> /app/start.sh && \
+    echo '    echo "Custom policy file: LOADED (false) - using default"' >> /app/start.sh && \
+    echo 'fi' >> /app/start.sh && \
+    echo 'echo "Active policy contents:"' >> /app/start.sh && \
+    echo 'cat "$POLICY_FILE"' >> /app/start.sh && \
     echo 'mkdir -p "$CAPTURE_DIR"' >> /app/start.sh && \
     echo 'chmod 700 "$CAPTURE_DIR" 2>/dev/null || true' >> /app/start.sh && \
     echo 'echo "Starting ContextIO Proxy on port 4040..."' >> /app/start.sh && \
