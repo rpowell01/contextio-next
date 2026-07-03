@@ -195,9 +195,9 @@ export default function SessionDetailPage({
     {session.metrics.redactionStats?.totalRedactions ?? 0}
   </span>
 </div>
-</div>
-</div>
-</div>
+      </div>
+    </div>
+  )}
 
 {/* Redaction Statistics */}
   {session.redactionStats && session.redactionStats.totalRedactions > 0 && (
