@@ -50,7 +50,21 @@ bd update <id> --claim
 4. Create durable follow-up work when implementation reveals new tasks:
 
 ```bash
-bd create "Short title" --description="Why this exists and what needs to be done." --type=task --priority=2
+bd create "Short title" \
+  --description="$(cat <<'EOF'
+Why this exists and what needs to be done.
+
+Before completing this bead, you MUST invoke the beads-code-reviewer sub-agent. You must continue fixing issues and re-invoking the beads-code-reviewer until the response is exactly: APPROVED.
+
+> **IMPORTANT**: Before invoking the beads-code-reviewer, provide a full git diff of your changes:
+>
+>     git diff HEAD
+>
+> Include the complete diff output in your invocation.
+EOF
+)" \
+  --type=task \
+  --priority=2
 ```
 
 When writing the description, remember to include the mandatory code-review instruction:

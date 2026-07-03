@@ -90,172 +90,213 @@ export default function SessionDetailPage({
           </div>
         )}
 
-        {!error && session && (
-          <>
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Request Details</h3>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Source:</span>{" "}
-                    {session.source}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Provider:</span>{" "}
-                    {session.provider}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Target:</span>{" "}
-                    {session.targetUrl}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Timestamp:</span>{" "}
-                    {formatDateTime(session.timestamp)}
-                  </div>
-                </div>
-              </div>
+{!error && session && (
+<>
+  <div className="grid gap-6 md:grid-cols-2">
+    <div className="rounded-lg border p-4">
+      <h3 className="font-semibold mb-3">Request Details</h3>
+      <div className="space-y-2 text-sm">
+        <div>
+          <span className="text-muted-foreground">Source:</span>{" "}
+          {session.source}
+        </div>
+        <div>
+          <span className="text-muted-foreground">Provider:</span>{" "}
+          {session.provider}
+        </div>
+        <div>
+          <span className="text-muted-foreground">Target:</span>{" "}
+          {session.targetUrl}
+        </div>
+        <div>
+          <span className="text-muted-foreground">Timestamp:</span>{" "}
+          {formatDateTime(session.timestamp)}
+        </div>
+      </div>
+    </div>
 
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Response Details</h3>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Status:</span>{" "}
-                    {session.responseStatus}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Streaming:</span>{" "}
-                    {session.responseIsStreaming ? "Yes" : "No"}
-                  </div>
-                </div>
-              </div>
-            </div>
+    <div className="rounded-lg border p-4">
+      <h3 className="font-semibold mb-3">Response Details</h3>
+      <div className="space-y-2 text-sm">
+        <div>
+          <span className="text-muted-foreground">Status:</span>{" "}
+          {session.responseStatus}
+        </div>
+        <div>
+          <span className="text-muted-foreground">Streaming:</span>{" "}
+          {session.responseIsStreaming ? "Yes" : "No"}
+        </div>
+      </div>
+    </div>
+  </div>
 
-            {/* Metrics Section */}
-            {session.metrics && (
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Session Metrics</h3>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  <div>
-                    <span className="text-muted-foreground">Total Inbound Bytes:</span>{" "}
-                    <span className="font-medium">
-                      {session.metrics.totalInboundBytes.toLocaleString()}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Total Outbound Bytes:</span>{" "}
-                    <span className="font-medium">
-                      {session.metrics.totalOutboundBytes.toLocaleString()}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Inbound Throughput:</span>{" "}
-                    <span className="font-medium">
-                      {session.metrics.inboundThroughput.toFixed(2)} bytes/sec
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Outbound Throughput:</span>{" "}
-                    <span className="font-medium">
-                      {session.metrics.outboundThroughput.toFixed(2)} bytes/sec
-                    </span>
-                  </div>
-                  <div>
-                    <span
-                      className="text-muted-foreground"
-                      title="Number of scalar (string/number/boolean) leaf values extracted from request bodies — top-level keys plus one level of nested keys (object properties or array indices), flattened to dotted paths. Matches the row count in the Context Values table."
-                    >
-                      Total Context Values:
-                    </span>{" "}
-                    <span className="font-medium">
-                      {session.metrics.totalContextValues}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Total Redactions:</span>{" "}
-                    <span className="font-medium">
-                      {session.metrics.redactionStats?.totalRedactions ?? 0}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
+  {/* Capture Breakdown */}
+  {session.captures && session.captures.length > 0 && (
+    <div className="rounded-lg border p-4">
+      <h3 className="font-semibold mb-3">Capture Breakdown</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-2">Capture</th>
+              <th className="text-left py-2">Timestamp</th>
+              <th className="text-right py-2">Req (bytes)</th>
+              <th className="text-right py-2">Res (bytes)</th>
+              <th className="text-right py-2">Total (bytes)</th>
+              <th className="text-left py-2">Status</th>
+              <th className="text-left py-2">Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {session.captures.map((capture) => (
+              <tr key={capture.id} className="border-b">
+                <td className="py-2 font-mono text-xs">{capture.id}</td>
+                <td className="py-2 text-xs">{formatDateTime(capture.timestamp)}</td>
+                <td className="py-2 text-right font-mono text-xs">
+                  {capture.requestBytes.toLocaleString()}
+                </td>
+                <td className="py-2 text-right font-mono text-xs">
+                  {capture.responseBytes.toLocaleString()}
+                </td>
+                <td className="py-2 text-right font-mono text-xs">
+                  {(capture.requestBytes + capture.responseBytes).toLocaleString()}
+                </td>
+                <td className="py-2 text-xs">{capture.responseStatus ?? "—"}</td>
+                <td className="py-2 text-xs">{capture.timings.total_ms.toLocaleString()} ms</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )}
 
-            {/* Redaction Statistics */}
-            {session.redactionStats && session.redactionStats.totalRedactions > 0 && (
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Redaction Statistics</h3>
-                <div className="space-y-2">
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">Total Redactions:</span>{" "}
-                    {session.redactionStats.totalRedactions}
-                  </div>
-                  {Object.keys(session.redactionStats.byRule).length > 0 && (
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">By Rule:</span>
-                      <ul className="ml-2 mt-1 list-disc list-inside">
-                        {Object.entries(session.redactionStats.byRule).map(([rule, count]) => (
-                          <li key={rule}>
-                            <span className="font-medium">{rule}:</span> {count}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+  {/* Metrics Section */}
+  {session.metrics && (
+    <div className="rounded-lg border p-4">
+      <h3 className="font-semibold mb-3">Session Metrics</h3>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <span className="text-muted-foreground">Total Inbound Bytes:</span>{" "}
+          <span className="font-medium">
+            {session.metrics.totalInboundBytes.toLocaleString()}
+          </span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Total Outbound Bytes:</span>{" "}
+          <span className="font-medium">
+            {session.metrics.totalOutboundBytes.toLocaleString()}
+          </span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Inbound Throughput:</span>{" "}
+          <span className="font-medium">
+            {session.metrics.inboundThroughput.toFixed(2)} bytes/sec
+          </span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Outbound Throughput:</span>{" "}
+          <span className="font-medium">
+            {session.metrics.outboundThroughput.toFixed(2)} bytes/sec
+          </span>
+        </div>
+        <div>
+          <span
+            className="text-muted-foreground"
+            title="Number of scalar (string/number/boolean) leaf values extracted from request bodies — top-level keys plus one level of nested keys (object properties or array indices), flattened to dotted paths. Matches the row count in the Context Values table."
+          >
+            Total Context Values:
+          </span>{" "}
+          <span className="font-medium">
+            {session.metrics.totalContextValues}
+          </span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Total Redactions:</span>{" "}
+          <span className="font-medium">
+            {session.metrics.redactionStats?.totalRedactions ?? 0}
+          </span>
+        </div>
+      </div>
+    </div>
+  )}
 
-            {/* Context Values */}
-            {session.contextValues && Object.keys(session.contextValues).length > 0 && (
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Context Values</h3>
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2">Key</th>
-                        <th className="text-left py-2">Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(session.contextValues).map(([key, value]) => (
-                        <tr key={key} className="border-b">
-                          <td className="py-2 font-mono text-xs">{key}</td>
-                          <td className="py-2 font-mono text-xs max-w-xs truncate">
-                            {typeof value === "string" ? value : safeJsonStringify(value)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-lg border p-4">
-              <h3 className="font-semibold mb-3">Request Body</h3>
-              <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
-                {safeJsonStringify(session.requestBody, 2)}
-              </pre>
-            </div>
-
-            {session.responseBody !== undefined && session.responseBody !== null && (
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Response Body</h3>
-                <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
-                  {renderResponseBody(session.responseBody)}
-                </pre>
-              </div>
-            )}
-
-            <div className="rounded-lg border p-4">
-              <h3 className="font-semibold mb-3">Container Logs</h3>
-              <div className="h-96">
-                <LogsViewer containerId={session.sessionId} />
-              </div>
-            </div>
-          </>
+  {/* Redaction Statistics */}
+  {session.redactionStats && session.redactionStats.totalRedactions > 0 && (
+    <div className="rounded-lg border p-4">
+      <h3 className="font-semibold mb-3">Redaction Statistics</h3>
+      <div className="space-y-2">
+        <div className="text-sm">
+          <span className="text-muted-foreground">Total Redactions:</span>{" "}
+          {session.redactionStats.totalRedactions}
+        </div>
+        {Object.keys(session.redactionStats.byRule).length > 0 && (
+          <div className="text-sm">
+            <span className="text-muted-foreground">By Rule:</span>
+            <ul className="ml-2 mt-1 list-disc list-inside">
+              {Object.entries(session.redactionStats.byRule).map(([rule, count]) => (
+                <li key={rule}>
+                  <span className="font-medium">{rule}:</span> {count}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
+      </div>
+    </div>
+  )}
+
+  {/* Context Values */}
+  {session.contextValues && Object.keys(session.contextValues).length > 0 && (
+    <div className="rounded-lg border p-4">
+      <h3 className="font-semibold mb-3">Context Values</h3>
+      <div className="max-h-64 overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-2">Key</th>
+              <th className="text-left py-2">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(session.contextValues).map(([key, value]) => (
+              <tr key={key} className="border-b">
+                <td className="py-2 font-mono text-xs">{key}</td>
+                <td className="py-2 font-mono text-xs max-w-xs truncate">
+                  {typeof value === "string" ? value : safeJsonStringify(value)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )}
+
+  <div className="rounded-lg border p-4">
+    <h3 className="font-semibold mb-3">Request Body</h3>
+    <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
+      {safeJsonStringify(session.requestBody, 2)}
+    </pre>
+  </div>
+
+  {session.responseBody !== undefined && session.responseBody !== null && (
+    <div className="rounded-lg border p-4">
+      <h3 className="font-semibold mb-3">Response Body</h3>
+      <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
+        {renderResponseBody(session.responseBody)}
+      </pre>
+    </div>
+  )}
+
+  <div className="rounded-lg border p-4">
+    <h3 className="font-semibold mb-3">Container Logs</h3>
+    <div className="h-96">
+      <LogsViewer containerId={session.sessionId} />
+    </div>
+  </div>
+</>
+)}
 
         {!error && !session && (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12">

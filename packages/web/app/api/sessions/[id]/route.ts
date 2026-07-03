@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { join } from "node:path";
 import type { SessionDetail, SessionMetrics } from "@/types/api";
 import { listCaptureFiles, CAPTURE_DIR, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
+import { countRedactionsInResponse } from "@/lib/sessions/redaction-utils";
 
 interface RawCaptureData {
   sessionId: string | null;
@@ -60,23 +61,21 @@ for (const c of sessionCaptures) {
   Object.assign(contextValues, captureContextValues.values);
   totalContextValues += captureContextValues.count;
 
-// Parse response for tokens
-const usage = computeTokenUsage(c.responseBody);
-totalInputTokens += usage.input;
-totalOutputTokens += usage.output;
+  // Parse response for tokens (defensive: malformed JSON in the response
+  // body must not crash metrics aggregation)
+  let tokenUsage = { input: 0, output: 0 };
+  try {
+    tokenUsage = computeTokenUsage(c.responseBody);
+  } catch {
+    tokenUsage = { input: 0, output: 0 };
+  }
+  totalInputTokens += tokenUsage.input;
+  totalOutputTokens += tokenUsage.output;
 
-// Count redactions from response body
-  if (typeof c.responseBody === "string") {
-    const redactedMatches = c.responseBody.match(/\[[A-Z][A-Z_]*_\d+\]/g) || [];
-    for (const match of redactedMatches) {
-      const matchClean = match.replace(/\[\s*|\s*\]/g, "");
-      const parts = matchClean.split("_");
-      if (parts.length >= 2) {
-        const ruleType = parts.slice(0, -1).join("_");
-        byRule[ruleType] = (byRule[ruleType] || 0) + 1;
-        totalRedactions++;
-      }
-    }
+  const redactionCounts = countRedactionsInResponse(c.responseBody);
+  totalRedactions += redactionCounts.total;
+  for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
+    byRule[rule] = (byRule[rule] || 0) + (count as number);
   }
 }
 
@@ -171,28 +170,38 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       totalTimeMs,
     } = computeSessionMetrics(sessionCaptures);
 
-    const firstCapture = sessionCaptures[0];
+const firstCapture = sessionCaptures[0];
 
-    // Build detailed session response
-    const sessionDetail: SessionDetail = {
-      id,
-      sessionId: id,
-      source,
-      provider: destination,
-      apiFormat: firstCapture.apiFormat || "unknown",
-      targetUrl: firstCapture.targetUrl || "",
-      requestBody: firstCapture.requestBody as Record<string, unknown> || ({} as Record<string, unknown>),
-      responseStatus,
-      responseIsStreaming,
-      responseBody: firstCapture.responseBody || null,
-      timestamp: firstTimestamp,
-      timings: { total_ms: totalTimeMs },
-      metrics,
-      contextValues,
-      redactionStats,
-    };
+// Build detailed session response
+const sessionDetail: SessionDetail = {
+  id,
+  sessionId: id,
+  source,
+  provider: destination,
+  apiFormat: firstCapture.apiFormat || "unknown",
+  targetUrl: firstCapture.targetUrl || "",
+  requestBody: firstCapture.requestBody as Record<string, unknown> || ({} as Record<string, unknown>),
+  responseStatus,
+  responseIsStreaming,
+  responseBody: firstCapture.responseBody || null,
+  timestamp: firstTimestamp,
+  timings: { total_ms: totalTimeMs },
+  metrics,
+  contextValues,
+  redactionStats,
+  captures: sessionCaptures.map((c, index) => ({
+    id: c.sessionId ? `${c.sessionId}-${index + 1}` : `capture-${index + 1}`,
+    timestamp: c.timestamp,
+    targetUrl: c.targetUrl,
+    requestBytes: c.requestBytes,
+    responseBytes: c.responseBytes,
+    responseStatus: c.responseStatus,
+    responseIsStreaming: c.responseIsStreaming,
+    timings: c.timings,
+  })),
+};
 
-    return Response.json(sessionDetail);
+return Response.json(sessionDetail);
   } catch (error) {
     console.error("Error in session detail API:", error);
     return Response.json({ error: "Internal server error" }, { status: 500 });

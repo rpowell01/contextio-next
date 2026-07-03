@@ -109,6 +109,19 @@ export interface SessionDetail extends Session {
     totalRedactions: number;
     byRule: Record<string, number>;
   };
+  /** Breakdown of individual captures within the session */
+  captures?: Array<{
+    id: string;
+    timestamp: string;
+    targetUrl: string;
+    requestBytes: number;
+    responseBytes: number;
+    responseStatus?: number;
+    responseIsStreaming?: boolean;
+    timings: {
+      total_ms: number;
+    };
+  }>;
 }
 
 /**

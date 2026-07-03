@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { join } from "node:path";
 import type { Session, SessionSummary, SessionMetrics, SessionDetail } from "@/types/api";
 import { listCaptureFiles, getSessionMetadata, CAPTURE_DIR, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
+import { countRedactionsInResponse } from "@/lib/sessions/redaction-utils";
 
 interface RawCaptureData {
   sessionId: string | null;
@@ -169,14 +170,15 @@ export async function GET(request: Request) {
         return Response.json({ error: "Session not found" }, { status: 404 });
       }
       
-      // Calculate metrics for this session
-      let totalRequestBytes = 0;
-      let totalResponseBytes = 0;
-      let totalTimeMs = 0;
-      let totalRedactions = 0;
-      const byRule: Record<string, number> = {};
-      let totalInputTokens = 0;
-      let totalOutputTokens = 0;
+  // Calculate metrics for this session
+  let totalRequestBytes = 0;
+  let totalResponseBytes = 0;
+  let totalTimeMs = 0;
+  let totalRedactions = 0;
+  const byRule: Record<string, number> = {};
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalContextValues = 0;
       
       let firstTimestamp = "";
       let lastTimestamp = "";
@@ -207,74 +209,23 @@ export async function GET(request: Request) {
           lastTimestamp = c.timestamp;
         }
         
-        // Count context values from request body (shared with /api/sessions/[id])
-        const captureContextValues = computeContextValues(c.requestBody);
-        Object.assign(contextValues, captureContextValues.values);
-        
-        // Parse response for tokens and redactions
-        if (c.responseBody) {
-          try {
-            const parsed = JSON.parse(c.responseBody);
-            if (parsed.usage?.prompt_tokens) {
-              totalInputTokens += parsed.usage.prompt_tokens;
-            }
-            if (parsed.usage?.completion_tokens) {
-              totalOutputTokens += parsed.usage.completion_tokens;
-            }
-          } catch { /* ignore */ }
-        }
-        
-        // Count redactions from response body (simplified)
-        // In a real implementation, we would have redaction data stored with the capture
-        // For now, we'll count based on common patterns
-        if (c.responseBody && typeof c.responseBody === "string") {
-          // Simple redaction detection - look for common placeholder patterns
-          const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
-          const placeholderRegex = /\[[A-Z][A-Z0-9_]*_\d+\]/g;
-          
-          // Using capture groups in match requires downlevel iteration which TS doesn't allow
-          // So we'll extract matches using exec and a while loop
-const allMatches: { result: string; type: string }[] = [];
-           
-           // Extract matches from placeholderRegex
-           let regexResults;
-           while ((regexResults = placeholderRegex.exec(c.responseBody)) !== null) {
-             allMatches.push({ result: regexResults[0], type: 'placeholder' });
-           }
-           
-           // Extract matches from ssnRegex
-           while ((regexResults = ssnRegex.exec(c.responseBody)) !== null) {
-             allMatches.push({ result: regexResults[0], type: 'ssn' });
-           }
-           
-           for (const match of allMatches) {
-             // Process based on match type
-             if (match.type === 'placeholder') {
-               // Process placeholders like [API_KEY_1] -> API_KEY
-               const matchClean = match.result.replace(/\[\s*|\s*\]/g, "");
-               const parts = matchClean.split("_");
-               if (parts.length >= 2) {
-                 const ruleName = parts.slice(0, -1).join("_");
-                 // Validate that ruleName starts with uppercase letter and contains only
-                 // uppercase letters, digits, and underscores
-                 if (/^[A-Z][A-Z0-9_]*$/.test(ruleName)) {
-                   byRule[ruleName] = (byRule[ruleName] || 0) + 1;
-                   totalRedactions++;
-                 }
-                 // Invalid rule name format - ignore this placeholder
-               }
-               // Not enough parts after splitting by _ - ignore this placeholder
-             } else if (match.type === 'ssn') {
-               // Process SSN patterns like 123-45-6789
-               byRule["ssn"] = (byRule["ssn"] || 0) + 1;
-               totalRedactions++;
-             }
-             // Other types should not occur given how we built the array, but ignore if they do
-           }
-        }
-      }
-      
-      // Compute throughput (bytes/sec)
+  const captureContextValues = computeContextValues(c.requestBody);
+  Object.assign(contextValues, captureContextValues.values);
+  totalContextValues += captureContextValues.count;
+
+  const usage = computeTokenUsage(c.responseBody);
+  totalInputTokens += usage.input;
+  totalOutputTokens += usage.output;
+
+  // Count redactions from response body
+  const redactionCounts = countRedactionsInResponse(c.responseBody);
+  totalRedactions += redactionCounts.total;
+  for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
+    byRule[rule] = (byRule[rule] || 0) + count;
+  }
+}
+
+// Compute throughput (bytes/sec)
       const timeSec = totalTimeMs / 1000 || 1;
       const inboundThroughput = totalRequestBytes / timeSec;
       const outboundThroughput = totalResponseBytes / timeSec;

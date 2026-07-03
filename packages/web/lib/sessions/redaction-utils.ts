@@ -169,3 +169,73 @@ export function computeCaptureRedactionCounts(
     matches,
   };
 }
+
+/** Redaction counts for a single response body string. Matches placeholders like
+ * [RULE_NUMBER] and bare SSN patterns, returning canonical per-rule and total
+ * counts used by the sessions API routes.
+ */
+export function countRedactionsInResponse(
+  responseBody: string | null | undefined,
+): RedactionCounts {
+  if (!responseBody) {
+    return {
+      total: 0,
+      byRule: {},
+      matches: [],
+    };
+  }
+
+  const matches: RedactionMatch[] = [];
+  const byRule: Record<string, number> = {};
+
+  try {
+    const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
+    const placeholderRegex = /\[[A-Z][A-Z0-9_]*_\d+\]/g;
+
+    const allMatches: { result: string; type: string }[] = [];
+
+    let regexResults;
+    while ((regexResults = placeholderRegex.exec(responseBody)) !== null) {
+      allMatches.push({ result: regexResults[0], type: "placeholder" });
+    }
+    while ((regexResults = ssnRegex.exec(responseBody)) !== null) {
+      allMatches.push({ result: regexResults[0], type: "ssn" });
+    }
+
+    for (const match of allMatches) {
+      if (match.type === "placeholder") {
+        const matchClean = match.result.replace(/[\[\]\s]/g, "");
+        const parts = matchClean.split("_");
+        if (parts.length >= 2) {
+          const ruleName = parts.slice(0, -1).join("_");
+          if (/^[A-Z][A-Z0-9_]*$/.test(ruleName)) {
+            matches.push({
+              ruleId: ruleName.toLowerCase(),
+              original: `[REDACTED_${ruleName.toUpperCase()}_${parts.at(-1)}]`,
+              placeholder: match.result,
+              path: "",
+            });
+            incrementRuleCount(byRule, ruleName.toLowerCase());
+          }
+        }
+      } else if (match.type === "ssn") {
+        matches.push({
+          ruleId: "ssn",
+          original: match.result,
+          placeholder: `[SSN_REDACTED_${match.result}]`,
+          path: "",
+        });
+        incrementRuleCount(byRule, "ssn");
+      }
+    }
+  } catch (error) {
+    console.error("Error counting response redactions:", error);
+  }
+
+  return {
+    total: matches.length,
+    byRule,
+    matches,
+  };
+}
+
