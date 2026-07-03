@@ -516,6 +516,9 @@ export function createProxyHandler(
             let respBytes = 0;
             const respChunks: Buffer[] = [];
 
+            // Buffer data to handle partial JSON objects across chunk boundaries
+            let jsonBuffer = '';
+
             // Buffer the full response only when response plugins are active
             // AND the response is not streaming. Streaming responses must be
             // forwarded chunk by chunk; buffering them would break SSE clients.
@@ -537,10 +540,14 @@ export function createProxyHandler(
                 if (hasStreamPlugins && isStreaming) {
                   // Convert to string for safe splitting
                   const text = outBuffer.toString('utf8');
+                  // Prepend any leftover partial JSON from previous chunks
+                  const fullText = jsonBuffer ? jsonBuffer + text : text;
+                  jsonBuffer = '';
                   // Split where a JSON object ends and another begins without a delimiter
-                  const parts = text.split(/(?<=})\s*(?={)/);
+                  const parts = fullText.split(/(?<=})\s*(?={)/);
                   const processedParts: Buffer[] = [];
-                  for (let part of parts) {
+                  for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
                     let buf = Buffer.from(part, 'utf8');
                     // Run plugins on each part individually
                     if (hasStreamPlugins) {
@@ -563,7 +570,15 @@ export function createProxyHandler(
                         }
                       }
                     }
-                    processedParts.push(buf);
+                    // Only process complete JSON objects; save incomplete trailing part
+                    const isLastPart = i === parts.length - 1;
+                    const looksComplete = part.trim().endsWith('}');
+                    if (isLastPart && !looksComplete) {
+                      // Save incomplete trailing part for next chunk
+                      jsonBuffer = part;
+                    } else {
+                      processedParts.push(buf);
+                    }
                   }
                   // Join parts with newline to keep valid JSON separation
                   outBuffer = Buffer.concat(processedParts.map(b => Buffer.concat([b, Buffer.from('\n')])));
