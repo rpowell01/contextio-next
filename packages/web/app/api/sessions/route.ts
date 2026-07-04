@@ -315,7 +315,7 @@ export async function GET(request: Request) {
       }));
       
       const { summaries, metrics } = groupCapturesIntoSessions(rawCaptures);
-      return Response.json({ sessions, summaries, metrics });
+      return Response.json({ sessions: [], summaries, metrics });
     }
     
     return Response.json(sessions);
