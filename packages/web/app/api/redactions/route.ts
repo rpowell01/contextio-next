@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import { join } from "node:path";
 
 import { CAPTURE_DIR, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
-import { countRedactionsInResponse } from "@/lib/sessions/redaction-utils";
+import { computeCaptureRedactionCounts } from "@/lib/sessions/redaction-utils";
 
 interface RedactionDetailRow {
   redactionType: string;
@@ -39,10 +39,7 @@ export async function GET(_request: Request) {
         const captureId = filename.replace(/\.json$/, "");
 
         // Compute redaction details
-        const redaction = countRedactionsInResponse(
-          data.responseBody as string | null | undefined,
-          data.requestBody
-        );
+        const redaction = computeCaptureRedactionCounts(data);
 
         totalRedactions += redaction.total;
 
