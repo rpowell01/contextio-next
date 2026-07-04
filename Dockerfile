@@ -151,7 +151,7 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'echo "Starting ContextIO Proxy on port 4040..."' >> /app/start.sh && \
     echo 'node dist/server.js &' >> /app/start.sh && \
     echo 'echo "Starting ContextIO Web UI on port 4041..."' >> /app/start.sh && \
-    echo 'cd standalone/packages/web && NEXT_PUBLIC_SITE_URL=http://localhost:4041 PORT=4041 REDACT_POLICY_FILE="$POLICY_FILE" node server.js' >> /app/start.sh && \
+    echo 'cd standalone/packages/web && NEXT_PUBLIC_SITE_URL=http://localhost:4041 PORT=4041 REDACT_POLICY_FILE="$POLICY_FILE" LOGGER_CAPTURE_DIR="$CAPTURE_DIR" node server.js' >> /app/start.sh && \
     chmod +x /app/start.sh
 
 # Fix permissions for node user (after all files are created)
