@@ -80,7 +80,7 @@ for (const c of sessionCaptures) {
   totalInputTokens += tokenUsage.input;
   totalOutputTokens += tokenUsage.output;
 
-  const redactionCounts = countRedactionsInResponse(c.responseBody);
+  const redactionCounts = countRedactionsInResponse(c.responseBody, c.requestBody);
   totalRedactions += redactionCounts.total;
   for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
     byRule[rule] = (byRule[rule] || 0) + (count as number);

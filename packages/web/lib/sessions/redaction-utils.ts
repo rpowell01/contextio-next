@@ -170,66 +170,75 @@ export function computeCaptureRedactionCounts(
   };
 }
 
-/** Redaction counts for a single response body string. Matches placeholders like
- * [RULE_NUMBER] and bare SSN patterns, returning canonical per-rule and total
- * counts used by the sessions API routes.
+/** Redaction counts for a capture. Counts placeholders in both the request
+ * body (where redaction typically happens) and the response body. Returns
+ * canonical per-rule and total counts used by the sessions API routes.
  */
 export function countRedactionsInResponse(
   responseBody: string | null | undefined,
+  requestBody?: unknown,
 ): RedactionCounts {
-  if (!responseBody) {
-    return {
-      total: 0,
-      byRule: {},
-      matches: [],
-    };
-  }
-
   const matches: RedactionMatch[] = [];
   const byRule: Record<string, number> = {};
 
-  try {
-    const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
-    const placeholderRegex = /\[[A-Z][A-Z0-9_]*_\d+\]/g;
+  const placeholderRegex = /\[[A-Z][A-Z0-9_]*_\d+\]/g;
+  const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
 
-    const allMatches: { result: string; type: string }[] = [];
+  const searchText = (text: string): void => {
+    try {
+      placeholderRegex.lastIndex = 0;
+      ssnRegex.lastIndex = 0;
 
-    let regexResults;
-    while ((regexResults = placeholderRegex.exec(responseBody)) !== null) {
-      allMatches.push({ result: regexResults[0], type: "placeholder" });
-    }
-    while ((regexResults = ssnRegex.exec(responseBody)) !== null) {
-      allMatches.push({ result: regexResults[0], type: "ssn" });
-    }
+      const allMatches: { result: string; type: string }[] = [];
 
-    for (const match of allMatches) {
-      if (match.type === "placeholder") {
-        const matchClean = match.result.replace(/[\[\]\s]/g, "");
-        const parts = matchClean.split("_");
-        if (parts.length >= 2) {
-          const ruleName = parts.slice(0, -1).join("_");
-          if (/^[A-Z][A-Z0-9_]*$/.test(ruleName)) {
-            matches.push({
-              ruleId: ruleName.toLowerCase(),
-              original: `[REDACTED_${ruleName.toUpperCase()}_${parts.at(-1)}]`,
-              placeholder: match.result,
-              path: "",
-            });
-            incrementRuleCount(byRule, ruleName.toLowerCase());
-          }
-        }
-      } else if (match.type === "ssn") {
-        matches.push({
-          ruleId: "ssn",
-          original: match.result,
-          placeholder: `[SSN_REDACTED_${match.result}]`,
-          path: "",
-        });
-        incrementRuleCount(byRule, "ssn");
+      let m: RegExpExecArray | null;
+      while ((m = placeholderRegex.exec(text)) !== null) {
+        allMatches.push({ result: m[0], type: "placeholder" });
       }
+      while ((m = ssnRegex.exec(text)) !== null) {
+        allMatches.push({ result: m[0], type: "ssn" });
+      }
+
+      for (const match of allMatches) {
+        if (match.type === "placeholder") {
+          const matchClean = match.result.replace(/[\[\]\s]/g, "");
+          const parts = matchClean.split("_");
+          if (parts.length >= 2) {
+            const ruleName = parts.slice(0, -1).join("_");
+            if (/^[A-Z][A-Z0-9_]*$/.test(ruleName)) {
+              matches.push({
+                ruleId: ruleName.toLowerCase(),
+                original: `[REDACTED_${ruleName.toUpperCase()}_${parts.at(-1)}]`,
+                placeholder: match.result,
+                path: "",
+              });
+              incrementRuleCount(byRule, ruleName.toLowerCase());
+            }
+          }
+        } else if (match.type === "ssn") {
+          matches.push({
+            ruleId: "ssn",
+            original: match.result,
+            placeholder: `[SSN_REDACTED_${match.result}]`,
+            path: "",
+          });
+          incrementRuleCount(byRule, "ssn");
+        }
+      }
+    } catch (innerError) {
+      console.error("Error searching text for redactions:", innerError);
+    }
+  };
+
+  try {
+    if (requestBody !== null && requestBody !== undefined) {
+      searchText(JSON.stringify(requestBody));
+    }
+    if (responseBody) {
+      searchText(responseBody);
     }
   } catch (error) {
-    console.error("Error counting response redactions:", error);
+    console.error("Error counting redactions:", error);
   }
 
   return {

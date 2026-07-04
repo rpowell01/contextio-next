@@ -75,6 +75,13 @@ function groupCapturesIntoSessions(
       const usage = computeTokenUsage(c.responseBody);
       totalInputTokens += usage.input;
       totalOutputTokens += usage.output;
+
+      // Count redactions in both request and response bodies
+      const redactionCounts = countRedactionsInResponse(c.responseBody, c.requestBody);
+      totalRedactions += redactionCounts.total;
+      for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
+        byRule[rule] = (byRule[rule] || 0) + count;
+      }
     }
 
     // Compute throughput (bytes/sec)
@@ -224,8 +231,8 @@ export async function GET(request: Request) {
   totalInputTokens += usage.input;
   totalOutputTokens += usage.output;
 
-  // Count redactions from response body
-  const redactionCounts = countRedactionsInResponse(c.responseBody);
+  // Count redactions from both request and response bodies
+  const redactionCounts = countRedactionsInResponse(c.responseBody, c.requestBody);
   totalRedactions += redactionCounts.total;
   for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
     byRule[rule] = (byRule[rule] || 0) + count;
