@@ -164,12 +164,30 @@ export default function SessionDetailPage({
   {session.metrics && (
     <div className="rounded-lg border p-4">
       <h3 className="font-semibold mb-3">Session Metrics</h3>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 <div>
-  <span className="text-muted-foreground">Total Context Values:</span>{" "}
-  <span className="font-medium">
-    {session.metrics.totalContextValues}
-  </span>
+<span className="text-muted-foreground">Success Count:</span>{" "}
+<span className="font-medium">
+{session.metrics.successCount ?? 0}
+</span>
+</div>
+<div>
+<span className="text-muted-foreground">Error Count:</span>{" "}
+<span className="font-medium">
+{session.metrics.errorCount ?? 0}
+</span>
+</div>
+<div>
+<span className="text-muted-foreground">Error Rate:</span>{" "}
+<span className="font-medium">
+{(session.metrics.errorRate ?? 0).toFixed(2)}
+</span>
+</div>
+<div>
+<span className="text-muted-foreground">Total Context Values:</span>{" "}
+<span className="font-medium">
+{session.metrics.totalContextValues}
+</span>
 </div>
 <div>
   <span className="text-muted-foreground">Total Input Tokens:</span>{" "}

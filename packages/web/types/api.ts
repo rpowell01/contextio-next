@@ -99,6 +99,12 @@ export interface SessionMetrics {
    * the session has no captures or no token data.
    */
   tokensPerSecond?: number;
+  /** Number of successful (2xx) captures */
+  successCount?: number;
+  /** Number of failed (non-2xx) captures */
+  errorCount?: number;
+  /** Percentage of failed captures (0-1) */
+  errorRate?: number;
   /** Redaction statistics */
   redactionStats: {
     totalRedactions: number;

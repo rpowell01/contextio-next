@@ -30,9 +30,11 @@ let totalRedactions = 0;
 const byRule: Record<string, number> = {};
 let totalInputTokens = 0;
 let totalOutputTokens = 0;
-let totalContextValues = 0;
+  let totalContextValues = 0;
+  let successCount = 0;
+  let errorCount = 0;
 
-let firstTimestamp = "";
+  let firstTimestamp = "";
 let lastTimestamp = "";
 let responseStatus = 200;
 let responseIsStreaming = false;
@@ -54,6 +56,12 @@ for (const c of sessionCaptures) {
   }
   if (!lastTimestamp || c.timestamp > lastTimestamp) {
     lastTimestamp = c.timestamp;
+  }
+
+  if (c.responseStatus && c.responseStatus >= 200 && c.responseStatus < 300) {
+    successCount++;
+  } else {
+    errorCount++;
   }
 
   // Count context values from request body (shared with /api/sessions)
@@ -99,6 +107,9 @@ const metrics: SessionMetrics = {
   totalInputTokens: totalInputTokens || undefined,
   totalOutputTokens: totalOutputTokens || undefined,
   tokensPerSecond: tokensPerSecond > 0 ? Number(tokensPerSecond.toFixed(2)) : 0,
+  successCount: successCount || undefined,
+  errorCount: errorCount || undefined,
+  errorRate: captureCount > 0 ? Number((errorCount / captureCount).toFixed(4)) : undefined,
   redactionStats: {
     totalRedactions,
     byRule,
