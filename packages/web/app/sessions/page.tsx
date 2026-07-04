@@ -1,33 +1,32 @@
+"use client";
+
 import { MainLayout } from "@/components/main-layout";
 import { formatDateTime } from "@/lib/utils";
 import type { SessionSummary } from "@/types/api";
 import Link from "next/link";
 import { apiClient } from "@/lib/api";
+import { useState, useEffect } from "react";
 
-export const dynamic = "force-dynamic";
+export default function SessionsPage() {
+  const [summaries, setSummaries] = useState<SessionSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-async function getGroupedSessions(): Promise<{
-  summaries: SessionSummary[];
-}> {
-  try {
-    const data = await apiClient.getGroupedSessions();
-    return { summaries: data.summaries };
-  } catch (error) {
-    console.error("Failed to fetch grouped sessions:", error);
-    return { summaries: [] };
-  }
-}
-
-export default async function SessionsPage() {
-  let summaries: SessionSummary[] = [];
-  let error: string | null = null;
-
-  try {
-    const data = await getGroupedSessions();
-    summaries = data.summaries;
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Unknown error";
-  }
+  useEffect(() => {
+    async function fetchSessions() {
+      try {
+        setLoading(true);
+        const data = await apiClient.getGroupedSessions();
+        setSummaries(data.summaries);
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSessions();
+  }, []);
 
   return (
     <MainLayout>
@@ -47,7 +46,14 @@ export default async function SessionsPage() {
           </div>
         )}
 
-        {!error && summaries.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12">
+            <svg className="h-12 w-12 text-muted-foreground mb-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <h3 className="font-semibold mb-2">Loading sessions...</h3>
+          </div>
+        ) : !error && summaries.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12">
             <svg className="h-12 w-12 text-muted-foreground mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h5.5a2 2 0 002-2V9a2 2 0 002-2V9a2 2 0 00-2-2z" />

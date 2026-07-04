@@ -5,19 +5,22 @@ import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics
 // In development: Next.js dev server handles both frontend and API routes
 // Use relative URLs for browser requests (same-origin), absolute for server-side
 const NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:4041";
 const PROXY_ADMIN_URL = process.env.NEXT_PUBLIC_PROXY_ADMIN_URL || "http://localhost:4040";
 
 // Get the base URL for web API requests based on context
 // In browser: use relative URLs for same-origin requests
-// In server-side rendering (SSR): use relative URLs since API routes
-// are served by the same Next.js process (both in Docker and dev)
+// In server-side rendering (SSR): use SITE_URL for absolute URLs
 function getApiBaseUrl(): string {
   // If NEXT_PUBLIC_API_URL is explicitly set (non-empty), use it
   // This handles Docker environments where the web UI is served separately
   if (NEXT_PUBLIC_API_URL) return NEXT_PUBLIC_API_URL;
-  // For both browser and server: use relative URLs (same-origin)
-  // API routes are served by the same Next.js process
-  return "";
+  // For browser requests: empty string means same-origin (relative URLs work)
+  // For server-side requests (SSR): use SITE_URL to construct absolute URL
+  if (typeof window !== "undefined") {
+    return ""; // Browser context - use relative URLs
+  }
+  return SITE_URL; // Server context - use absolute URL
 }
 
 // Get the base URL for proxy admin API requests
