@@ -20,6 +20,57 @@ interface RawCaptureData {
   responseIsStreaming?: boolean;
 }
 
+interface CaptureMetrics {
+  successCount: number;
+  errorCount: number;
+  errorRate: number;
+  totalContextValues: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  tokensPerSecond: number;
+  totalRedactions: number;
+}
+
+function computeCaptureMetrics(c: RawCaptureData): CaptureMetrics {
+  const isSuccess = c.responseStatus && c.responseStatus >= 200 && c.responseStatus < 300;
+  const successCount = isSuccess ? 1 : 0;
+  const errorCount = isSuccess ? 0 : 1;
+  const errorRate = errorCount; // Per capture, it's either 0 or 1
+
+  // Count context values from request body
+  const captureContextValues = computeContextValues(c.requestBody);
+  const totalContextValues = captureContextValues.count;
+
+  // Parse response for tokens
+  let tokenUsage = { input: 0, output: 0 };
+  try {
+    tokenUsage = computeTokenUsage(c.responseBody);
+  } catch {
+    tokenUsage = { input: 0, output: 0 };
+  }
+  const totalInputTokens = tokenUsage.input;
+  const totalOutputTokens = tokenUsage.output;
+
+  // Tokens per second for this capture
+  const timeSec = (c.timings.total_ms || 1) / 1000;
+  const tokensPerSecond = timeSec > 0 ? totalOutputTokens / timeSec : 0;
+
+  // Redactions
+  const redactionCounts = countRedactionsInResponse(c.responseBody, c.requestBody);
+  const totalRedactions = redactionCounts.total;
+
+  return {
+    successCount,
+    errorCount,
+    errorRate,
+    totalContextValues,
+    totalInputTokens,
+    totalOutputTokens,
+    tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+    totalRedactions,
+  };
+}
+
 function computeSessionMetrics(
   sessionCaptures: RawCaptureData[],
 ): { metrics: SessionMetrics; contextValues: Record<string, unknown>; redactionStats: { totalRedactions: number; byRule: Record<string, number> }; source: string; destination: string; firstTimestamp: string; lastTimestamp: string; responseStatus: number; responseIsStreaming: boolean; totalTimeMs: number } {
@@ -217,6 +268,7 @@ const sessionDetail: SessionDetail = {
     responseIsStreaming: c.responseIsStreaming,
     timings: c.timings,
     source: c.source,
+    metrics: computeCaptureMetrics(c),
   })),
 };
 

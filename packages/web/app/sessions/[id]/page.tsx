@@ -338,54 +338,70 @@ export default function SessionDetailPage({
 
             {session.metrics && (
               <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Session Metrics</h3>
+                <h3 className="font-semibold mb-3">Session Metrics (Average per Capture)</h3>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   <div>
-                    <span className="text-muted-foreground">Success Count:</span>{" "}
+                    <span className="text-muted-foreground">Avg Success Count:</span>{" "}
                     <span className="font-medium">
-                      {session.metrics.successCount ?? 0}
+                      {filteredAndSortedCaptures.length > 0
+                        ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.successCount ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
+                        : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Error Count:</span>{" "}
+                    <span className="text-muted-foreground">Avg Error Count:</span>{" "}
                     <span className="font-medium">
-                      {session.metrics.errorCount ?? 0}
+                      {filteredAndSortedCaptures.length > 0
+                        ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.errorCount ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
+                        : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Error Rate:</span>{" "}
+                    <span className="text-muted-foreground">Avg Error Rate:</span>{" "}
                     <span className="font-medium">
-                      {(session.metrics.errorRate ?? 0).toFixed(2)}
+                      {filteredAndSortedCaptures.length > 0
+                        ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.errorRate ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(4)
+                        : "0.0000"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Total Context Values:</span>{" "}
+                    <span className="text-muted-foreground">Avg Context Values:</span>{" "}
                     <span className="font-medium">
-                      {session.metrics.totalContextValues}
+                      {filteredAndSortedCaptures.length > 0
+                        ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalContextValues ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
+                        : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Total Input Tokens:</span>{" "}
+                    <span className="text-muted-foreground">Avg Input Tokens:</span>{" "}
                     <span className="font-medium">
-                      {session.metrics.totalInputTokens ?? 0}
+                      {filteredAndSortedCaptures.length > 0
+                        ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalInputTokens ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
+                        : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Total Output Tokens:</span>{" "}
+                    <span className="text-muted-foreground">Avg Output Tokens:</span>{" "}
                     <span className="font-medium">
-                      {session.metrics.totalOutputTokens ?? 0}
+                      {filteredAndSortedCaptures.length > 0
+                        ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalOutputTokens ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
+                        : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Tokens / Second:</span>{" "}
+                    <span className="text-muted-foreground">Avg Tokens / Second:</span>{" "}
                     <span className="font-medium">
-                      {(session.metrics.tokensPerSecond ?? 0).toFixed(2)}
+                      {filteredAndSortedCaptures.length > 0
+                        ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.tokensPerSecond ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
+                        : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Total Redactions:</span>{" "}
+                    <span className="text-muted-foreground">Avg Redactions:</span>{" "}
                     <span className="font-medium">
-                      {session.metrics.redactionStats?.totalRedactions ?? 0}
+                      {filteredAndSortedCaptures.length > 0
+                        ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalRedactions ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
+                        : "0.00"}
                     </span>
                   </div>
                 </div>
@@ -551,6 +567,14 @@ export default function SessionDetailPage({
                         <th className="text-right py-2">Total (bytes)</th>
                         <th className="text-left py-2">Status</th>
                         <th className="text-left py-2">Time</th>
+                        <th className="text-right py-2">Success</th>
+                        <th className="text-right py-2">Error</th>
+                        <th className="text-right py-2">Error Rate</th>
+                        <th className="text-right py-2">Context Values</th>
+                        <th className="text-right py-2">Input Tokens</th>
+                        <th className="text-right py-2">Output Tokens</th>
+                        <th className="text-right py-2">Tokens/sec</th>
+                        <th className="text-right py-2">Redactions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -565,6 +589,14 @@ export default function SessionDetailPage({
                           <td className="py-2 text-right font-mono text-xs">{(capture.requestBytes + capture.responseBytes).toLocaleString()}</td>
                           <td className="py-2 text-xs">{capture.responseStatus ?? "—"}</td>
                           <td className="py-2 text-xs">{capture.timings.total_ms.toLocaleString()} ms</td>
+                          <td className="py-2 text-right font-mono text-xs">{capture.metrics?.successCount ?? 0}</td>
+                          <td className="py-2 text-right font-mono text-xs">{capture.metrics?.errorCount ?? 0}</td>
+                          <td className="py-2 text-right font-mono text-xs">{(capture.metrics?.errorRate ?? 0).toFixed(2)}</td>
+                          <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalContextValues ?? 0}</td>
+                          <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalInputTokens.toLocaleString() ?? 0}</td>
+                          <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalOutputTokens.toLocaleString() ?? 0}</td>
+                          <td className="py-2 text-right font-mono text-xs">{capture.metrics?.tokensPerSecond.toLocaleString() ?? 0}</td>
+                          <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalRedactions ?? 0}</td>
                         </tr>
                       ))}
                     </tbody>

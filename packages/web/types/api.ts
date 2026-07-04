@@ -112,6 +112,25 @@ export interface SessionMetrics {
   };
 }
 
+export interface CaptureMetrics {
+  /** Whether this capture was successful (2xx) */
+  successCount: number;
+  /** Whether this capture failed (non-2xx) */
+  errorCount: number;
+  /** Error rate for this capture (0 or 1) */
+  errorRate: number;
+  /** Total context values in this capture's request */
+  totalContextValues: number;
+  /** Input tokens for this capture */
+  totalInputTokens: number;
+  /** Output tokens for this capture */
+  totalOutputTokens: number;
+  /** Output token rate for this capture (tokens/second) */
+  tokensPerSecond: number;
+  /** Total redactions in this capture */
+  totalRedactions: number;
+}
+
 /**
  * Detailed session information including metrics and context values.
  */
@@ -125,7 +144,7 @@ export interface SessionDetail extends Session {
     totalRedactions: number;
     byRule: Record<string, number>;
   };
-  /** Breakdown of individual captures within the session */
+/** Breakdown of individual captures within the session */
   captures?: Array<{
     id: string;
     timestamp: string;
@@ -138,6 +157,7 @@ export interface SessionDetail extends Session {
       total_ms: number;
     };
     source?: string | null;
+    metrics?: CaptureMetrics;
   }>;
 }
 
