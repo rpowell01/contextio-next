@@ -365,6 +365,49 @@ export const CREDENTIAL_PATTERNS: CredentialPattern[] = [
     pattern: /\bSG\.[a-z0-9=_\-.]{66}\b/i,
   },
 
+  // -------------------------------------------------------------------------
+  // LLM API provider patterns (Tier 1 — distinctive prefixes, near-zero FPs)
+  // -------------------------------------------------------------------------
+
+  {
+    id: "credential_nvidia",
+    label: "NVIDIA API key",
+    // NVIDIA API keys typically start with 'nvapi-' followed by alphanumeric chars
+    pattern: /\bnvapi-[a-zA-Z0-9_-]{32,}\b/,
+  },
+
+  {
+    id: "credential_openrouter",
+    label: "OpenRouter API key",
+    // OpenRouter keys typically start with 'sk-or-' followed by alphanumeric chars
+    pattern: /\bsk-or-[a-zA-Z0-9_-]{32,}\b/,
+  },
+
+  {
+    id: "credential_kilo",
+    label: "Kilo Gateway API key",
+    // Kilo Gateway keys typically start with 'kilo-' followed by alphanumeric chars
+    pattern: /\bkilo-[a-zA-Z0-9_-]{32,}\b/,
+  },
+
+  // -------------------------------------------------------------------------
+  // Generic secret detection patterns (Tier 2 — broader, needs entropy/allowlist)
+  // -------------------------------------------------------------------------
+
+  {
+    id: "credential_bearer_token",
+    label: "Bearer token in Authorization header",
+    // Matches "Bearer <token>" patterns in headers
+    pattern: /(?:^|\s)bearer\s+([a-zA-Z0-9._\-+/=]{20,})/i,
+  },
+
+  {
+    id: "credential_authorization_header",
+    label: "Authorization header value",
+    // Matches various Authorization header formats (Basic, Bearer, APIKey, etc.)
+    pattern: /(?:authorization|api-?key|x-api-?key)\s*[:=]\s*["']?([a-zA-Z0-9._\-+/=]{20,})["']?/i,
+  },
+
   {
     id: "credential_generic",
     label: "Likely API key or secret",
