@@ -4,6 +4,8 @@ import type { SessionSummary } from "@/types/api";
 import Link from "next/link";
 import { apiClient } from "@/lib/api";
 
+export const dynamic = "force-dynamic";
+
 async function getGroupedSessions(): Promise<{
   summaries: SessionSummary[];
 }> {
