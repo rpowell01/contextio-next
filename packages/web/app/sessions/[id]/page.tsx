@@ -2,10 +2,25 @@
 
 import { MainLayout } from "@/components/main-layout";
 import { formatDateTime, safeJsonStringify } from "@/lib/utils";
-import type { SessionDetail } from "@/types/api";
+import type { SessionDetail, CaptureDetail } from "@/types/api";
 import Link from "next/link";
 import { apiClient } from "@/lib/api";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+
+function renderJson(data: unknown): string {
+  if (typeof data === "string") {
+    try {
+      return JSON.stringify(JSON.parse(data), null, 2);
+    } catch {
+      return data;
+    }
+  }
+  if (data === null || data === undefined) {
+    return "{}";
+  }
+  return JSON.stringify(data, null, 2);
+}
 
 export default function SessionDetailPage({
   params,
@@ -16,6 +31,16 @@ export default function SessionDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [id, setId] = useState<string | null>(null);
+  const [selectedCaptureId, setSelectedCaptureId] = useState<string | null>(null);
+  const [captureDetail, setCaptureDetail] = useState<
+    (CaptureDetail & { requestBody: Record<string, unknown>; responseBody: string | null }) | null
+  >(null);
+  const [captureDetailLoading, setCaptureDetailLoading] = useState(false);
+  const [captureDetailError, setCaptureDetailError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  // Read captureId from query string to support deep-linking to a capture detail
+  const queryCaptureId = searchParams.get("captureId");
 
   useEffect(() => {
     const unwrapParams = async () => {
@@ -26,8 +51,17 @@ export default function SessionDetailPage({
   }, [params]);
 
   useEffect(() => {
+    if (!queryCaptureId) {
+      setSelectedCaptureId(null);
+      setCaptureDetail(null);
+      return;
+    }
+    setSelectedCaptureId(queryCaptureId);
+  }, [queryCaptureId]);
+
+  useEffect(() => {
     if (!id) return;
-    
+
     const fetchSession = async () => {
       setLoading(true);
       setError(null);
@@ -44,6 +78,28 @@ export default function SessionDetailPage({
     fetchSession();
   }, [id]);
 
+  useEffect(() => {
+    if (!selectedCaptureId) return;
+
+    const fetchCaptureDetail = async () => {
+      setCaptureDetailLoading(true);
+      setCaptureDetailError(null);
+      try {
+        const data = await apiClient.getCapture(selectedCaptureId);
+        setCaptureDetail(data);
+      } catch (e) {
+        setCaptureDetailError(
+          e instanceof Error ? e.message : "Unknown error",
+        );
+        setCaptureDetail(null);
+      } finally {
+        setCaptureDetailLoading(false);
+      }
+    };
+
+    fetchCaptureDetail();
+  }, [selectedCaptureId]);
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -59,27 +115,131 @@ export default function SessionDetailPage({
           </h1>
         </div>
 
-        {loading && (
-          <div className="space-y-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="rounded-lg border p-4">
-                <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
-                <div className="h-64 bg-muted/20 rounded" />
+{loading && !captureDetail && !captureDetailLoading ? (
+        <div className="space-y-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="rounded-lg border p-4">
+              <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
+              <div className="h-64 bg-muted/20 rounded" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(captureDetailLoading || captureDetail) && (
+        <div className="space-y-6">
+          <div>
+            <Link
+              href={`/sessions/${id ?? ""}`}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              ← Back to session
+            </Link>
+            <h2 className="text-3xl font-bold tracking-tight mt-2">
+              Capture: {selectedCaptureId ? `#${selectedCaptureId}` : "Loading..."}
+            </h2>
+          </div>
+
+          {captureDetailLoading && (
+            <div className="space-y-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="rounded-lg border p-4">
+                  <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
+                  <div className="h-64 bg-muted/20 rounded" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {captureDetailError && (
+            <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
+              <p className="text-destructive">Error: {captureDetailError}</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Please try again or contact support if the problem persists.
+              </p>
+            </div>
+          )}
+
+          {!captureDetailLoading && captureDetail && (
+            <>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="rounded-lg border p-4">
+                  <h3 className="font-semibold mb-3">Request Details</h3>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Provider:</span>{" "}
+                      {captureDetail.provider}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Method:</span>{" "}
+                      {captureDetail.method}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Target:</span>{" "}
+                      {captureDetail.targetUrl}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Request Size:</span>{" "}
+                      {captureDetail.requestBytes.toLocaleString()} bytes
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Timestamp:</span>{" "}
+                      {formatDateTime(captureDetail.timestamp)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <h3 className="font-semibold mb-3">Response Details</h3>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Status:</span>{" "}
+                      {captureDetail.responseStatus}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Streaming:</span>{" "}
+                      {captureDetail.responseIsStreaming ? "Yes" : "No"}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Response Size:</span>{" "}
+                      {captureDetail.responseBytes.toLocaleString()} bytes
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total Time:</span>{" "}
+                      {captureDetail.timings.total_ms.toLocaleString()} ms
+                    </div>
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
-        )}
 
-        {error && (
-          <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
-            <p className="text-destructive">Error: {error}</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Please try again or contact support if the problem persists.
-            </p>
-          </div>
-        )}
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Request Body</h3>
+                <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
+                  {renderJson(captureDetail.requestBody)}
+                </pre>
+              </div>
 
-{!error && session && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Response Body</h3>
+                <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
+                  {renderJson(captureDetail.responseBody)}
+                </pre>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {!loading && !captureDetailLoading && selectedCaptureId === null && error && (
+        <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
+          <p className="text-destructive">Error: {error}</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Please try again or contact support if the problem persists.
+          </p>
+        </div>
+      )}
+
+      {!loading && !captureDetailLoading && selectedCaptureId === null && !error && session && (
 <>
   <div className="grid gap-6 md:grid-cols-2">
     <div className="rounded-lg border p-4">
@@ -136,25 +296,32 @@ export default function SessionDetailPage({
               <th className="text-left py-2">Time</th>
             </tr>
           </thead>
-          <tbody>
-            {session.captures.map((capture) => (
-              <tr key={capture.id} className="border-b">
-                <td className="py-2 font-mono text-xs">{capture.id}</td>
-                <td className="py-2 text-xs">{formatDateTime(capture.timestamp)}</td>
-                <td className="py-2 text-right font-mono text-xs">
-                  {capture.requestBytes.toLocaleString()}
-                </td>
-                <td className="py-2 text-right font-mono text-xs">
-                  {capture.responseBytes.toLocaleString()}
-                </td>
-                <td className="py-2 text-right font-mono text-xs">
-                  {(capture.requestBytes + capture.responseBytes).toLocaleString()}
-                </td>
-                <td className="py-2 text-xs">{capture.responseStatus ?? "—"}</td>
-                <td className="py-2 text-xs">{capture.timings.total_ms.toLocaleString()} ms</td>
-              </tr>
-            ))}
-          </tbody>
+<tbody>
+          {session.captures.map((capture) => (
+            <tr key={capture.id} className="border-b">
+              <td className="py-2 font-mono text-xs">
+                <Link
+                  href={`/sessions/${session.sessionId}?captureId=${capture.id}`}
+                  className="text-primary hover:underline"
+                >
+                  {capture.id}
+                </Link>
+              </td>
+              <td className="py-2 text-xs">{formatDateTime(capture.timestamp)}</td>
+              <td className="py-2 text-right font-mono text-xs">
+                {capture.requestBytes.toLocaleString()}
+              </td>
+              <td className="py-2 text-right font-mono text-xs">
+                {capture.responseBytes.toLocaleString()}
+              </td>
+              <td className="py-2 text-right font-mono text-xs">
+                {(capture.requestBytes + capture.responseBytes).toLocaleString()}
+              </td>
+              <td className="py-2 text-xs">{capture.responseStatus ?? "—"}</td>
+              <td className="py-2 text-xs">{capture.timings.total_ms.toLocaleString()} ms</td>
+            </tr>
+          ))}
+        </tbody>
         </table>
       </div>
     </div>

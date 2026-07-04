@@ -9,12 +9,13 @@ export function cn(...inputs: (string | boolean | undefined)[]): string {
 export function formatDateTime(date: string | Date): string {
   const d = new Date(date);
   return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: undefined,
+ });
 }
 
 export function formatDuration(ms: number): string {

@@ -57,15 +57,6 @@ export const defaultNavigation: NavigationItem[] = [
     ),
   },
   {
-    name: "Captures",
-    href: "/captures",
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-label="Captures">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 10h10M7 14h6m-1 8l-4-4m0 0l4-4" />
-      </svg>
-    ),
-  },
-  {
     name: "Env Vars",
     href: "/env-vars",
     icon: (

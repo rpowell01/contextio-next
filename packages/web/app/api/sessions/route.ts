@@ -321,8 +321,9 @@ export async function GET(request: Request) {
         responseBody: undefined,
       }));
       
-      const { summaries, metrics } = groupCapturesIntoSessions(rawCaptures);
-      return Response.json({ sessions: [], summaries, metrics });
+  const { summaries, metrics } = groupCapturesIntoSessions(rawCaptures);
+  summaries.sort((a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime());
+  return Response.json({ sessions: [], summaries, metrics });
     }
     
     return Response.json(sessions);
