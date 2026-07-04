@@ -292,14 +292,12 @@ export default function SessionDetailPage({
                     <tbody>
                       {session.captures.map((capture) => (
                         <tr key={capture.id} className="border-b">
-                          <td className="py-2 font-mono text-xs">
-                            <Link
-                              href={`/sessions/${session.sessionId}?captureId=${capture.id}`}
-                              className="text-primary hover:underline"
-                            >
-                              {capture.id}
-                            </Link>
-                          </td>
+    <td className="py-2 font-mono text-xs">
+              <Link
+              href={`/sessions/${session.sessionId}?captureId=${capture.id}`}
+              className="text-primary hover:underline"
+              >{capture.id}</Link>
+            </td>
                           <td className="py-2 text-xs">
                             {formatDateTime(capture.timestamp)}
                           </td>
@@ -430,9 +428,45 @@ export default function SessionDetailPage({
                   </table>
                 </div>
               </div>
-            )}
-          </>
-        )}
+  )}
+
+  {session.captures && session.captures.length > 0 && (
+  <div className="rounded-lg border p-4">
+    <h3 className="font-semibold mb-3">Capture Breakdown</h3>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b">
+            <th className="text-left py-2">Capture</th>
+            <th className="text-left py-2">Timestamp</th>
+            <th className="text-right py-2">Req (bytes)</th>
+            <th className="text-right py-2">Res (bytes)</th>
+            <th className="text-right py-2">Total (bytes)</th>
+            <th className="text-left py-2">Status</th>
+            <th className="text-left py-2">Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {session.captures.map((capture) => (
+          <tr key={capture.id} className="border-b">
+            <td className="py-2 font-mono text-xs">
+              <Link href={`/sessions/${session.sessionId}?captureId=${capture.id}`} className="text-primary hover:underline">{capture.id}</Link>
+            </td>
+            <td className="py-2 text-xs">{formatDateTime(capture.timestamp)}</td>
+            <td className="py-2 text-right font-mono text-xs">{capture.requestBytes.toLocaleString()}</td>
+            <td className="py-2 text-right font-mono text-xs">{capture.responseBytes.toLocaleString()}</td>
+            <td className="py-2 text-right font-mono text-xs">{(capture.requestBytes + capture.responseBytes).toLocaleString()}</td>
+            <td className="py-2 text-xs">{capture.responseStatus ?? "—"}</td>
+            <td className="py-2 text-xs">{capture.timings.total_ms.toLocaleString()} ms</td>
+          </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  )}
+  </>
+  )}
 
         {!error && !session && (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12">
