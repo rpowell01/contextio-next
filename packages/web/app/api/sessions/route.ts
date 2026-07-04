@@ -167,7 +167,8 @@ export async function GET(request: Request) {
             };
             sessionCaptures.push(capture);
           }
-        } catch {
+        } catch (error) {
+          console.error(`Error processing session capture ${filename}:`, error);
           continue;
         }
       }
@@ -289,7 +290,8 @@ export async function GET(request: Request) {
         
         const session = await getSessionMetadata(filename, data);
         sessions.push(session);
-      } catch {
+      } catch (error) {
+        console.error(`Error processing session capture ${filename}:`, error);
         continue;
       }
     }

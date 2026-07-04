@@ -165,7 +165,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
           };
           sessionCaptures.push(capture);
         }
-      } catch {
+      } catch (error) {
+        console.error(`Error processing session detail capture ${filename}:`, error);
         continue;
       }
     }
