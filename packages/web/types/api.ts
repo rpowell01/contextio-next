@@ -137,6 +137,7 @@ export interface SessionDetail extends Session {
     timings: {
       total_ms: number;
     };
+    source?: string | null;
   }>;
 }
 

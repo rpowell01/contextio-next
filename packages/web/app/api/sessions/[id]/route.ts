@@ -216,6 +216,7 @@ const sessionDetail: SessionDetail = {
     responseStatus: c.responseStatus,
     responseIsStreaming: c.responseIsStreaming,
     timings: c.timings,
+    source: c.source,
   })),
 };
 

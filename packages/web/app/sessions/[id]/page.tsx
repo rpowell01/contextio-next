@@ -5,7 +5,7 @@ import { formatDateTime, safeJsonStringify } from "@/lib/utils";
 import type { SessionDetail, CaptureDetail } from "@/types/api";
 import Link from "next/link";
 import { apiClient } from "@/lib/api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 
 function renderJson(data: unknown): string {
@@ -22,6 +22,22 @@ function renderJson(data: unknown): string {
   return JSON.stringify(data, null, 2);
 }
 
+interface CaptureFilters {
+  source: string;
+  status: string;
+  from: string;
+  to: string;
+  redactionType: string;
+}
+
+const DEFAULT_FILTERS: CaptureFilters = {
+  source: "",
+  status: "",
+  from: "",
+  to: "",
+  redactionType: "",
+};
+
 export default function SessionDetailPage({
   params,
 }: {
@@ -37,6 +53,7 @@ export default function SessionDetailPage({
   >(null);
   const [captureDetailLoading, setCaptureDetailLoading] = useState(false);
   const [captureDetailError, setCaptureDetailError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<CaptureFilters>(DEFAULT_FILTERS);
   const searchParams = useSearchParams();
 
   // Read captureId from query string to support deep-linking to a capture detail
@@ -99,6 +116,51 @@ export default function SessionDetailPage({
 
     fetchCaptureDetail();
   }, [selectedCaptureId]);
+
+  const handleFilterChange = (key: keyof CaptureFilters, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const clearFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+  };
+
+  const hasActiveFilters = Object.values(filters).some((v) => v !== "");
+
+  // Filter and sort captures: newest first (by timestamp descending)
+  const filteredAndSortedCaptures = useMemo(() => {
+    if (!session?.captures) return [];
+
+    let captures = [...session.captures];
+
+    // Apply filters
+    if (filters.source) {
+      captures = captures.filter((c) =>
+        c.source?.toLowerCase().includes(filters.source.toLowerCase())
+      );
+    }
+    if (filters.status) {
+      captures = captures.filter((c) => c.responseStatus?.toString() === filters.status);
+    }
+    if (filters.from) {
+      const fromDate = new Date(filters.from);
+      captures = captures.filter((c) => new Date(c.timestamp) >= fromDate);
+    }
+    if (filters.to) {
+      const toDate = new Date(filters.to);
+      toDate.setHours(23, 59, 59, 999);
+      captures = captures.filter((c) => new Date(c.timestamp) <= toDate);
+    }
+    if (filters.redactionType) {
+      // Note: redaction info would need to be fetched separately or included in capture data
+      // For now, we skip this filter as it's not available in session.captures
+    }
+
+    // Sort by timestamp descending (newest first)
+    captures.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return captures;
+  }, [session?.captures, filters]);
 
   return (
     <MainLayout>
@@ -274,7 +336,6 @@ export default function SessionDetailPage({
             </div>
 
 
-
             {session.metrics && (
               <div className="rounded-lg border p-4">
                 <h3 className="font-semibold mb-3">Session Metrics</h3>
@@ -379,45 +440,140 @@ export default function SessionDetailPage({
                   </table>
                 </div>
               </div>
-  )}
+            )}
 
-  {session.captures && session.captures.length > 0 && (
-  <div className="rounded-lg border p-4">
-    <h3 className="font-semibold mb-3">Capture Breakdown</h3>
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b">
-            <th className="text-left py-2">Capture</th>
-            <th className="text-left py-2">Timestamp</th>
-            <th className="text-right py-2">Req (bytes)</th>
-            <th className="text-right py-2">Res (bytes)</th>
-            <th className="text-right py-2">Total (bytes)</th>
-            <th className="text-left py-2">Status</th>
-            <th className="text-left py-2">Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          {session.captures.map((capture) => (
-          <tr key={capture.id} className="border-b">
-            <td className="py-2 font-mono text-xs">
-              <Link href={`/sessions/${session.sessionId}?captureId=${capture.id}`} className="text-primary hover:underline">{capture.id}</Link>
-            </td>
-            <td className="py-2 text-xs">{formatDateTime(capture.timestamp)}</td>
-            <td className="py-2 text-right font-mono text-xs">{capture.requestBytes.toLocaleString()}</td>
-            <td className="py-2 text-right font-mono text-xs">{capture.responseBytes.toLocaleString()}</td>
-            <td className="py-2 text-right font-mono text-xs">{(capture.requestBytes + capture.responseBytes).toLocaleString()}</td>
-            <td className="py-2 text-xs">{capture.responseStatus ?? "—"}</td>
-            <td className="py-2 text-xs">{capture.timings.total_ms.toLocaleString()} ms</td>
-          </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  )}
-  </>
-  )}
+            {filteredAndSortedCaptures.length > 0 && (
+              <div className="rounded-lg border p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold">Capture Breakdown</h3>
+                  {hasActiveFilters && (
+                    <button
+                      onClick={clearFilters}
+                      className="text-sm text-muted-foreground hover:text-foreground underline"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+
+                {/* Filters */}
+                <div className="rounded-lg border p-4 mb-4 bg-muted/30">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                      <label htmlFor="source" className="block text-sm font-medium mb-1">
+                        Source
+                      </label>
+                      <input
+                        id="source"
+                        type="text"
+                        placeholder="Filter by source..."
+                        value={filters.source}
+                        onChange={(e) => handleFilterChange("source", e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="status" className="block text-sm font-medium mb-1">
+                        Status
+                      </label>
+                      <select
+                        id="status"
+                        value={filters.status}
+                        onChange={(e) => handleFilterChange("status", e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="">All statuses</option>
+                        <option value="200">200</option>
+                        <option value="201">201</option>
+                        <option value="400">400</option>
+                        <option value="401">401</option>
+                        <option value="403">403</option>
+                        <option value="404">404</option>
+                        <option value="500">500</option>
+                        <option value="502">502</option>
+                        <option value="503">503</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="from" className="block text-sm font-medium mb-1">
+                        From Date
+                      </label>
+                      <input
+                        id="from"
+                        type="date"
+                        value={filters.from}
+                        onChange={(e) => handleFilterChange("from", e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="to" className="block text-sm font-medium mb-1">
+                        To Date
+                      </label>
+                      <input
+                        id="to"
+                        type="date"
+                        value={filters.to}
+                        onChange={(e) => handleFilterChange("to", e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="redactionType" className="block text-sm font-medium mb-1">
+                        Redaction Type
+                      </label>
+                      <select
+                        id="redactionType"
+                        value={filters.redactionType}
+                        onChange={(e) => handleFilterChange("redactionType", e.target.value)}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="">All types</option>
+                        <option value="email">Email</option>
+                        <option value="api_key">API Key</option>
+                        <option value="password">Password</option>
+                        <option value="token">Token</option>
+                        <option value="phone">Phone</option>
+                        <option value="ssn">SSN</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">Capture</th>
+                        <th className="text-left py-2">Timestamp</th>
+                        <th className="text-right py-2">Req (bytes)</th>
+                        <th className="text-right py-2">Res (bytes)</th>
+                        <th className="text-right py-2">Total (bytes)</th>
+                        <th className="text-left py-2">Status</th>
+                        <th className="text-left py-2">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAndSortedCaptures.map((capture) => (
+                        <tr key={capture.id} className="border-b">
+                          <td className="py-2 font-mono text-xs">
+                            <Link href={`/sessions/${session.sessionId}?captureId=${capture.id}`} className="text-primary hover:underline">{capture.id}</Link>
+                          </td>
+                          <td className="py-2 text-xs">{formatDateTime(capture.timestamp)}</td>
+                          <td className="py-2 text-right font-mono text-xs">{capture.requestBytes.toLocaleString()}</td>
+                          <td className="py-2 text-right font-mono text-xs">{capture.responseBytes.toLocaleString()}</td>
+                          <td className="py-2 text-right font-mono text-xs">{(capture.requestBytes + capture.responseBytes).toLocaleString()}</td>
+                          <td className="py-2 text-xs">{capture.responseStatus ?? "—"}</td>
+                          <td className="py-2 text-xs">{capture.timings.total_ms.toLocaleString()} ms</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         {!error && !session && (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12">
