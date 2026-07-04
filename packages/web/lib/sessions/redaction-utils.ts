@@ -21,10 +21,10 @@ export interface RedactionCounts {
   matches: RedactionMatch[];
 }
 
-// Matches patterns like [EMAIL_1], [AWS_KEY_2], [SSN_REDACTED_3], etc.
-// Format: [UPPERCASE_WITH_UNDERSCORES_NUMBER]  OR  bare SSN without brackets.
+// Matches patterns like [EMAIL_REDACTED], [AWS_KEY_REDACTED], [SSN_REDACTED], etc.
+// Format: [UPPERCASE_WITH_UNDERSCORES_REDACTED]  OR  bare SSN without brackets.
 const PLACEHOLDER_REGEX =
-  /\[([A-Z][A-Z0-9_]*)_(\d+)\]|\b\d{3}-\d{2}-\d{4}\b/g;
+  /\[([A-Z][A-Z0-9_]*)_REDACTED\]|\b\d{3}-\d{2}-\d{4}\b/g;
 
 /**
  * Increment a counter in the byRule record.
@@ -53,10 +53,10 @@ export function findRedactedValuesInString(
     const ruleId = m[1]?.toLowerCase();
 
     if (ruleId) {
-      // Bracketed placeholder: [RULE_NAME_NUMBER]
+      // Bracketed placeholder: [RULE_NAME_REDACTED]
       matches.push({
         ruleId,
-        original: `[REDACTED_${ruleId.toUpperCase()}_${m[2]}]`,
+        original: `[REDACTED_${ruleId.toUpperCase()}]`,
         placeholder,
         path,
       });
@@ -181,7 +181,8 @@ export function countRedactionsInResponse(
   const matches: RedactionMatch[] = [];
   const byRule: Record<string, number> = {};
 
-  const placeholderRegex = /\[[A-Z][A-Z0-9_]*_\d+\]/g;
+  // Matches [RULE_NAME_REDACTED] format (e.g., [EMAIL_REDACTED], [SSN_REDACTED])
+  const placeholderRegex = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
   const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
 
   const searchText = (text: string): void => {
@@ -202,13 +203,14 @@ export function countRedactionsInResponse(
       for (const match of allMatches) {
         if (match.type === "placeholder") {
           const matchClean = match.result.replace(/[\[\]\s]/g, "");
-          const parts = matchClean.split("_");
-          if (parts.length >= 2) {
-            const ruleName = parts.slice(0, -1).join("_");
+          // Format: RULE_NAME_REDACTED
+          const parts = matchClean.split("_REDACTED");
+          if (parts.length === 2) {
+            const ruleName = parts[0];
             if (/^[A-Z][A-Z0-9_]*$/.test(ruleName)) {
               matches.push({
                 ruleId: ruleName.toLowerCase(),
-                original: `[REDACTED_${ruleName.toUpperCase()}_${parts.at(-1)}]`,
+                original: `[REDACTED_${ruleName.toUpperCase()}]`,
                 placeholder: match.result,
                 path: "",
               });

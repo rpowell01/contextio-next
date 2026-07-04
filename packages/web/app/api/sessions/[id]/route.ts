@@ -18,6 +18,7 @@ interface RawCaptureData {
   responseBody?: string;
   responseStatus?: number;
   responseIsStreaming?: boolean;
+  filename: string; // Store the actual filename for capture detail linking
 }
 
 interface CaptureMetrics {
@@ -213,6 +214,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
             responseBody: data.responseBody as string | undefined,
             responseStatus: (data.responseStatus as number) || 200,
             responseIsStreaming: (data.responseIsStreaming as boolean) || false,
+            filename: filename,
           };
           sessionCaptures.push(capture);
         }
@@ -258,8 +260,8 @@ const sessionDetail: SessionDetail = {
   metrics,
   contextValues,
   redactionStats,
-  captures: sessionCaptures.map((c, index) => ({
-    id: c.sessionId ? `${c.sessionId}-${index + 1}` : `capture-${index + 1}`,
+  captures: sessionCaptures.map((c) => ({
+    id: c.filename,
     timestamp: c.timestamp,
     targetUrl: c.targetUrl,
     requestBytes: c.requestBytes,
