@@ -104,10 +104,7 @@ export default function SessionDetailPage({
     <MainLayout>
       <div className="space-y-6">
         <div>
-          <Link
-            href="/sessions"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
+          <Link href="/sessions" className="text-sm text-muted-foreground hover:text-foreground">
             ← Back to sessions
           </Link>
           <h1 className="text-3xl font-bold tracking-tight mt-2">
@@ -115,329 +112,327 @@ export default function SessionDetailPage({
           </h1>
         </div>
 
-{loading && !captureDetail && !captureDetailLoading ? (
-        <div className="space-y-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="rounded-lg border p-4">
-              <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
-              <div className="h-64 bg-muted/20 rounded" />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {(captureDetailLoading || captureDetail) && (
-        <div className="space-y-6">
-          <div>
-            <Link
-              href={`/sessions/${id ?? ""}`}
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              ← Back to session
-            </Link>
-            <h2 className="text-3xl font-bold tracking-tight mt-2">
-              Capture: {selectedCaptureId ? `#${selectedCaptureId}` : "Loading..."}
-            </h2>
+        {loading && !captureDetail && !captureDetailLoading ? (
+          <div className="space-y-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-lg border p-4">
+                <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
+                <div className="h-64 bg-muted/20 rounded" />
+              </div>
+            ))}
           </div>
+        ) : null}
 
-          {captureDetailLoading && (
-            <div className="space-y-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="rounded-lg border p-4">
-                  <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
-                  <div className="h-64 bg-muted/20 rounded" />
-                </div>
-              ))}
+        {(captureDetailLoading || captureDetail) ? (
+          <div className="space-y-6">
+            <div>
+              <Link href={`/sessions/${id ?? ""}`} className="text-sm text-muted-foreground hover:text-foreground">
+                ← Back to session
+              </Link>
+              <h2 className="text-3xl font-bold tracking-tight mt-2">
+                Capture: {selectedCaptureId ? `#${selectedCaptureId}` : "Loading..."}
+              </h2>
             </div>
-          )}
 
-          {captureDetailError && (
-            <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
-              <p className="text-destructive">Error: {captureDetailError}</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Please try again or contact support if the problem persists.
-              </p>
-            </div>
-          )}
+            {captureDetailLoading && (
+              <div className="space-y-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="rounded-lg border p-4">
+                    <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
+                    <div className="h-64 bg-muted/20 rounded" />
+                  </div>
+                ))}
+              </div>
+            )}
 
-          {!captureDetailLoading && captureDetail && (
-            <>
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="rounded-lg border p-4">
-                  <h3 className="font-semibold mb-3">Request Details</h3>
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Provider:</span>{" "}
-                      {captureDetail.provider}
+            {captureDetailError && (
+              <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
+                <p className="text-destructive">Error: {captureDetailError}</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Please try again or contact support if the problem persists.
+                </p>
+              </div>
+            )}
+
+            {!captureDetailLoading && captureDetail && (
+              <>
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="rounded-lg border p-4">
+                    <h3 className="font-semibold mb-3">Request Details</h3>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Provider:</span>{" "}
+                        {captureDetail.provider}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Method:</span>{" "}
+                        {captureDetail.method}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Target:</span>{" "}
+                        {captureDetail.targetUrl}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Request Size:</span>{" "}
+                        {captureDetail.requestBytes.toLocaleString()} bytes
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Timestamp:</span>{" "}
+                        {formatDateTime(captureDetail.timestamp)}
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Method:</span>{" "}
-                      {captureDetail.method}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Target:</span>{" "}
-                      {captureDetail.targetUrl}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Request Size:</span>{" "}
-                      {captureDetail.requestBytes.toLocaleString()} bytes
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Timestamp:</span>{" "}
-                      {formatDateTime(captureDetail.timestamp)}
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <h3 className="font-semibold mb-3">Response Details</h3>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Status:</span>{" "}
+                        {captureDetail.responseStatus}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Streaming:</span>{" "}
+                        {captureDetail.responseIsStreaming ? "Yes" : "No"}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Response Size:</span>{" "}
+                        {captureDetail.responseBytes.toLocaleString()} bytes
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Total Time:</span>{" "}
+                        {captureDetail.timings.total_ms.toLocaleString()} ms
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-lg border p-4">
-                  <h3 className="font-semibold mb-3">Response Details</h3>
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Status:</span>{" "}
-                      {captureDetail.responseStatus}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Streaming:</span>{" "}
-                      {captureDetail.responseIsStreaming ? "Yes" : "No"}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Response Size:</span>{" "}
-                      {captureDetail.responseBytes.toLocaleString()} bytes
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Total Time:</span>{" "}
-                      {captureDetail.timings.total_ms.toLocaleString()} ms
-                    </div>
-                  </div>
+                  <h3 className="font-semibold mb-3">Request Body</h3>
+                  <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
+                    {renderJson(captureDetail.requestBody)}
+                  </pre>
                 </div>
-              </div>
 
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Request Body</h3>
-                <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
-                  {renderJson(captureDetail.requestBody)}
-                </pre>
-              </div>
+                <div className="rounded-lg border p-4">
+                  <h3 className="font-semibold mb-3">Response Body</h3>
+                  <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
+                    {renderJson(captureDetail.responseBody)}
+                  </pre>
+                </div>
+              </>
+            )}
+          </div>
+        ) : null}
 
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Response Body</h3>
-                <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
-                  {renderJson(captureDetail.responseBody)}
-                </pre>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {!loading && !captureDetailLoading && selectedCaptureId === null && error && (
-        <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
-          <p className="text-destructive">Error: {error}</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Please try again or contact support if the problem persists.
-          </p>
-        </div>
-      )}
-
-      {!loading && !captureDetailLoading && selectedCaptureId === null && !error && session && (
-<>
-  <div className="grid gap-6 md:grid-cols-2">
-    <div className="rounded-lg border p-4">
-      <h3 className="font-semibold mb-3">Request Details</h3>
-      <div className="space-y-2 text-sm">
-        <div>
-          <span className="text-muted-foreground">Source:</span>{" "}
-          {session.source}
-        </div>
-        <div>
-          <span className="text-muted-foreground">Provider:</span>{" "}
-          {session.provider}
-        </div>
-        <div>
-          <span className="text-muted-foreground">Target:</span>{" "}
-          {session.targetUrl}
-        </div>
-        <div>
-          <span className="text-muted-foreground">Timestamp:</span>{" "}
-          {formatDateTime(session.timestamp)}
-        </div>
-      </div>
-    </div>
-
-    <div className="rounded-lg border p-4">
-      <h3 className="font-semibold mb-3">Response Details</h3>
-      <div className="space-y-2 text-sm">
-        <div>
-          <span className="text-muted-foreground">Status:</span>{" "}
-          {session.responseStatus}
-        </div>
-        <div>
-          <span className="text-muted-foreground">Streaming:</span>{" "}
-          {session.responseIsStreaming ? "Yes" : "No"}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {/* Capture Breakdown */}
-  {session.captures && session.captures.length > 0 && (
-    <div className="rounded-lg border p-4">
-      <h3 className="font-semibold mb-3">Capture Breakdown</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left py-2">Capture</th>
-              <th className="text-left py-2">Timestamp</th>
-              <th className="text-right py-2">Req (bytes)</th>
-              <th className="text-right py-2">Res (bytes)</th>
-              <th className="text-right py-2">Total (bytes)</th>
-              <th className="text-left py-2">Status</th>
-              <th className="text-left py-2">Time</th>
-            </tr>
-          </thead>
-<tbody>
-          {session.captures.map((capture) => (
-            <tr key={capture.id} className="border-b">
-              <td className="py-2 font-mono text-xs">
-                <Link
-                  href={`/sessions/${session.sessionId}?captureId=${capture.id}`}
-                  className="text-primary hover:underline"
-                >
-                  {capture.id}
-                </Link>
-              </td>
-              <td className="py-2 text-xs">{formatDateTime(capture.timestamp)}</td>
-              <td className="py-2 text-right font-mono text-xs">
-                {capture.requestBytes.toLocaleString()}
-              </td>
-              <td className="py-2 text-right font-mono text-xs">
-                {capture.responseBytes.toLocaleString()}
-              </td>
-              <td className="py-2 text-right font-mono text-xs">
-                {(capture.requestBytes + capture.responseBytes).toLocaleString()}
-              </td>
-              <td className="py-2 text-xs">{capture.responseStatus ?? "—"}</td>
-              <td className="py-2 text-xs">{capture.timings.total_ms.toLocaleString()} ms</td>
-            </tr>
-          ))}
-        </tbody>
-        </table>
-      </div>
-    </div>
-  )}
-
-  {/* Metrics Section */}
-  {session.metrics && (
-    <div className="rounded-lg border p-4">
-      <h3 className="font-semibold mb-3">Session Metrics</h3>
-<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-<div>
-<span className="text-muted-foreground">Success Count:</span>{" "}
-<span className="font-medium">
-{session.metrics.successCount ?? 0}
-</span>
-</div>
-<div>
-<span className="text-muted-foreground">Error Count:</span>{" "}
-<span className="font-medium">
-{session.metrics.errorCount ?? 0}
-</span>
-</div>
-<div>
-<span className="text-muted-foreground">Error Rate:</span>{" "}
-<span className="font-medium">
-{(session.metrics.errorRate ?? 0).toFixed(2)}
-</span>
-</div>
-<div>
-<span className="text-muted-foreground">Total Context Values:</span>{" "}
-<span className="font-medium">
-{session.metrics.totalContextValues}
-</span>
-</div>
-<div>
-  <span className="text-muted-foreground">Total Input Tokens:</span>{" "}
-  <span className="font-medium">
-    {session.metrics.totalInputTokens ?? 0}
-  </span>
-</div>
-<div>
-  <span className="text-muted-foreground">Total Output Tokens:</span>{" "}
-  <span className="font-medium">
-    {session.metrics.totalOutputTokens ?? 0}
-  </span>
-</div>
-<div>
-  <span className="text-muted-foreground">Tokens / Second:</span>{" "}
-  <span className="font-medium">
-    {(session.metrics.tokensPerSecond ?? 0).toFixed(2)}
-  </span>
-</div>
-<div>
-  <span className="text-muted-foreground">Total Redactions:</span>{" "}
-  <span className="font-medium">
-    {session.metrics.redactionStats?.totalRedactions ?? 0}
-  </span>
-</div>
-      </div>
-    </div>
-  )}
-
-{/* Redaction Statistics */}
-  {session.redactionStats && session.redactionStats.totalRedactions > 0 && (
-    <div className="rounded-lg border p-4">
-      <h3 className="font-semibold mb-3">Redaction Statistics</h3>
-      <div className="space-y-2">
-        <div className="text-sm">
-          <span className="text-muted-foreground">Total Redactions:</span>{" "}
-          {session.redactionStats.totalRedactions}
-        </div>
-        {Object.keys(session.redactionStats.byRule).length > 0 && (
-          <div className="text-sm">
-            <span className="text-muted-foreground">By Rule:</span>
-            <ul className="ml-2 mt-1 list-disc list-inside">
-              {Object.entries(session.redactionStats.byRule).map(([rule, count]) => (
-                <li key={rule}>
-                  <span className="font-medium">{rule}:</span> {count}
-                </li>
-              ))}
-            </ul>
+        {!loading && !captureDetailLoading && selectedCaptureId === null && error && (
+          <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
+            <p className="text-destructive">Error: {error}</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Please try again or contact support if the problem persists.
+            </p>
           </div>
         )}
-      </div>
-    </div>
-  )}
 
-  {/* Context Values */}
-  {session.contextValues && Object.keys(session.contextValues).length > 0 && (
-    <div className="rounded-lg border p-4">
-      <h3 className="font-semibold mb-3">Context Values</h3>
-      <div className="max-h-64 overflow-y-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left py-2">Key</th>
-              <th className="text-left py-2">Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(session.contextValues).map(([key, value]) => (
-              <tr key={key} className="border-b">
-                <td className="py-2 font-mono text-xs">{key}</td>
-                <td className="py-2 font-mono text-xs max-w-xs truncate">
-                  {typeof value === "string" ? value : safeJsonStringify(value)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )}
+        {!loading && !captureDetailLoading && selectedCaptureId === null && !error && session && (
+          <>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Request Details</h3>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Source:</span>{" "}
+                    {session.source}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Provider:</span>{" "}
+                    {session.provider}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Target:</span>{" "}
+                    {session.targetUrl}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Timestamp:</span>{" "}
+                    {formatDateTime(session.timestamp)}
+                  </div>
+                </div>
+              </div>
 
-</>
-)}
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Response Details</h3>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Status:</span>{" "}
+                    {session.responseStatus}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Streaming:</span>{" "}
+                    {session.responseIsStreaming ? "Yes" : "No"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {session.captures && session.captures.length > 0 && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Capture Breakdown</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">Capture</th>
+                        <th className="text-left py-2">Timestamp</th>
+                        <th className="text-right py-2">Req (bytes)</th>
+                        <th className="text-right py-2">Res (bytes)</th>
+                        <th className="text-right py-2">Total (bytes)</th>
+                        <th className="text-left py-2">Status</th>
+                        <th className="text-left py-2">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {session.captures.map((capture) => (
+                        <tr key={capture.id} className="border-b">
+                          <td className="py-2 font-mono text-xs">
+                            <Link
+                              href={`/sessions/${session.sessionId}?captureId=${capture.id}`}
+                              className="text-primary hover:underline"
+                            >
+                              {capture.id}
+                            </Link>
+                          </td>
+                          <td className="py-2 text-xs">
+                            {formatDateTime(capture.timestamp)}
+                          </td>
+                          <td className="py-2 text-right font-mono text-xs">
+                            {capture.requestBytes.toLocaleString()}
+                          </td>
+                          <td className="py-2 text-right font-mono text-xs">
+                            {capture.responseBytes.toLocaleString()}
+                          </td>
+                          <td className="py-2 text-right font-mono text-xs">
+                            {(capture.requestBytes + capture.responseBytes).toLocaleString()}
+                          </td>
+                          <td className="py-2 text-xs">
+                            {capture.responseStatus ?? "—"}
+                          </td>
+                          <td className="py-2 text-xs">
+                            {capture.timings.total_ms.toLocaleString()} ms
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {session.metrics && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Session Metrics</h3>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <div>
+                    <span className="text-muted-foreground">Success Count:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.successCount ?? 0}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Error Count:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.errorCount ?? 0}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Error Rate:</span>{" "}
+                    <span className="font-medium">
+                      {(session.metrics.errorRate ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Context Values:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.totalContextValues}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Input Tokens:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.totalInputTokens ?? 0}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Output Tokens:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.totalOutputTokens ?? 0}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tokens / Second:</span>{" "}
+                    <span className="font-medium">
+                      {(session.metrics.tokensPerSecond ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Redactions:</span>{" "}
+                    <span className="font-medium">
+                      {session.metrics.redactionStats?.totalRedactions ?? 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {session.redactionStats && session.redactionStats.totalRedactions > 0 && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Redaction Statistics</h3>
+                <div className="space-y-2">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Total Redactions:</span>{" "}
+                    {session.redactionStats.totalRedactions}
+                  </div>
+                  {Object.keys(session.redactionStats.byRule).length > 0 && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">By Rule:</span>
+                      <ul className="ml-2 mt-1 list-disc list-inside">
+                        {Object.entries(session.redactionStats.byRule).map(([rule, count]) => (
+                          <li key={rule}>
+                            <span className="font-medium">{rule}:</span> {count}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {session.contextValues && Object.keys(session.contextValues).length > 0 && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Context Values</h3>
+                <div className="max-h-64 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">Key</th>
+                        <th className="text-left py-2">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(session.contextValues).map(([key, value]) => (
+                        <tr key={key} className="border-b">
+                          <td className="py-2 font-mono text-xs">{key}</td>
+                          <td className="py-2 font-mono text-xs max-w-xs truncate">
+                            {typeof value === "string" ? value : safeJsonStringify(value)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         {!error && !session && (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12">
