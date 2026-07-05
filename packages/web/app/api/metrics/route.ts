@@ -3,40 +3,53 @@ import { join } from "node:path";
 
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
 import { CAPTURE_DIR, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
+import { countRedactionsInResponse } from "@/lib/sessions/redaction-utils";
 
 /**
  * Parse a single capture file and extract metrics.
  */
 function parseCapture(data: Record<string, unknown>): {
-  traffic: TrafficMetric | null;
-  providerUsage: ProviderUsage | null;
-  redaction: RedactionMetric | null;
-} {
-  const timestamp = (data.timestamp as string) ?? new Date().toISOString();
-  const provider = (data.provider as string) ?? "unknown";
-  const requestBytes = (data.requestBytes as number) ?? 0;
-  const responseBytes = (data.responseBytes as number) ?? 0;
+   traffic: TrafficMetric | null;
+   providerUsage: ProviderUsage | null;
+   redaction: RedactionMetric | null;
+ } {
+   const timestamp = (data.timestamp as string) ?? new Date().toISOString();
+   const provider = (data.provider as string) ?? "unknown";
+   const requestBytes = (data.requestBytes as number) ?? 0;
+   const responseBytes = (data.responseBytes as number) ?? 0;
 
-  const traffic: TrafficMetric = {
-    timestamp,
-    requestBytes,
-    responseBytes,
-  };
+   const traffic: TrafficMetric = {
+     timestamp,
+     requestBytes,
+     responseBytes,
+   };
 
-  const providerUsage: ProviderUsage = {
-    provider,
-    requestCount: 1,
-    totalInputTokens: 0,
-    totalOutputTokens: 0,
-  };
+   const providerUsage: ProviderUsage = {
+     provider,
+     requestCount: 1,
+     totalInputTokens: 0,
+     totalOutputTokens: 0,
+   };
 
-  const redaction: RedactionMetric = {
-    timestamp,
-    count: 0,
-  };
+   // Compute redactions from request and response bodies
+   let redactionCount = 0;
+   try {
+     const redactionCounts = countRedactionsInResponse(
+       data.responseBody as string | null | undefined,
+       data.requestBody
+     );
+     redactionCount = redactionCounts.totalRedactions;
+   } catch (e) {
+     console.error("Failed to count redactions in capture:", e);
+   }
 
-  return { traffic, providerUsage, redaction };
-}
+   const redaction: RedactionMetric = {
+     timestamp,
+     count: redactionCount,
+   };
+
+   return { traffic, providerUsage, redaction };
+ }
 
 /**
  * Aggregate metrics from all capture files.
