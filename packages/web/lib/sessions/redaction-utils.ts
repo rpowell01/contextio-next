@@ -129,49 +129,38 @@ export function findRedactedValues(
  * Counts redactions in both request and response bodies.
  */
 export function computeCaptureRedactionCounts(
-  rawData: Record<string, unknown>,
-): RedactionCounts {
-  const matches: RedactionMatch[] = [];
-  const byRule: Record<string, number> = {};
+   rawData: Record<string, unknown>,
+ ): RedactionCounts {
+   const requestBody = rawData.requestBody;
+   const responseBody = rawData.responseBody;
 
-  try {
-    const requestBody = rawData.requestBody;
-    if (requestBody && typeof requestBody === "object") {
-      findRedactedValues(
-        requestBody as Record<string, unknown>,
-        "",
-        matches,
-        byRule,
-      );
-    }
+   let totalRedactions = 0;
+   const byRule: Record<string, number> = {};
+   const matches: RedactionMatch[] = [];
 
-    const responseBody = rawData.responseBody;
-    if (typeof responseBody === "string") {
-      try {
-        const parsed = JSON.parse(responseBody);
-        if (parsed && typeof parsed === "object") {
-          findRedactedValues(
-            parsed as Record<string, unknown>,
-            "",
-            matches,
-            byRule,
-          );
-        }
-      } catch {
-        // Response is not valid JSON - search raw string
-        findRedactedValuesInString(responseBody, matches, byRule);
-      }
-    }
-  } catch (error) {
-    console.error("Error computing redaction counts:", error);
-  }
+   function addCounts(src: RedactionCounts) {
+     totalRedactions += src.totalRedactions;
+     for (const [rule, count] of Object.entries(src.byRule)) {
+       byRule[rule] = (byRule[rule] ?? 0) + count;
+     }
+     matches.push(...src.matches);
+   }
 
-  return {
-    totalRedactions: matches.length,
-    byRule,
-    matches,
-  };
-}
+   if (requestBody && typeof requestBody === "object") {
+     const reqCounts = countRedactionsInResponse(undefined, requestBody);
+     addCounts(reqCounts);
+   }
+   if (typeof responseBody === "string") {
+     const resCounts = countRedactionsInResponse(responseBody, undefined);
+     addCounts(resCounts);
+   }
+
+   return {
+     totalRedactions,
+     byRule,
+     matches,
+   };
+ }
 
 /** Redaction counts for a capture. Counts placeholders in both the request
  * body (where redaction typically happens) and the response body. Returns
