@@ -21,10 +21,10 @@ export interface RedactionCounts {
   matches: RedactionMatch[];
 }
 
-// Matches patterns like [EMAIL_REDACTED], [AWS_KEY_REDACTED], [SSN_REDACTED], etc.
-// Format: [UPPERCASE_WITH_UNDERSCORES_REDACTED]  OR  bare SSN without brackets.
+// Matches patterns like [EMAIL_1], [AWS_KEY_2], [SSN_3], etc.
+// Format: [UPPERCASE_WITH_UNDERSCORES_NUMBER]  OR  bare SSN without brackets.
 const PLACEHOLDER_REGEX =
-  /\[([A-Z][A-Z0-9_]*)_REDACTED\]|\b\d{3}-\d{2}-\d{4}\b/g;
+  /\[([A-Z][A-Z0-9_]*)_\d+\]|\b\d{3}-\d{2}-\d{4}\b/g;
 
 /**
  * Increment a counter in the byRule record.
@@ -53,7 +53,7 @@ export function findRedactedValuesInString(
     const ruleId = m[1]?.toLowerCase();
 
     if (ruleId) {
-      // Bracketed placeholder: [RULE_NAME_REDACTED]
+      // Bracketed placeholder: [RULE_NAME_NUMBER]
       matches.push({
         ruleId,
         original: `[REDACTED_${ruleId.toUpperCase()}]`,
@@ -181,8 +181,8 @@ export function countRedactionsInResponse(
   const matches: RedactionMatch[] = [];
   const byRule: Record<string, number> = {};
 
-  // Matches [RULE_NAME_REDACTED] format (e.g., [EMAIL_REDACTED], [SSN_REDACTED])
-  const placeholderRegex = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
+  // Matches [RULE_NAME_NUMBER] format (e.g., [EMAIL_1], [AWS_KEY_2], [SSN_3])
+  const placeholderRegex = /\[([A-Z][A-Z0-9_]*)_\d+\]/g;
   const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
 
   const searchText = (text: string): void => {
@@ -190,33 +190,26 @@ export function countRedactionsInResponse(
       placeholderRegex.lastIndex = 0;
       ssnRegex.lastIndex = 0;
 
-      const allMatches: { result: string; type: string }[] = [];
+      const allMatches: { result: string; type: string; ruleName?: string }[] = [];
 
       let m: RegExpExecArray | null;
       while ((m = placeholderRegex.exec(text)) !== null) {
-        allMatches.push({ result: m[0], type: "placeholder" });
+        allMatches.push({ result: m[0], type: "placeholder", ruleName: m[1]?.toLowerCase() });
       }
       while ((m = ssnRegex.exec(text)) !== null) {
         allMatches.push({ result: m[0], type: "ssn" });
       }
 
       for (const match of allMatches) {
-        if (match.type === "placeholder") {
-          const matchClean = match.result.replace(/[\[\]\s]/g, "");
-          // Format: RULE_NAME_REDACTED
-          const parts = matchClean.split("_REDACTED");
-          if (parts.length === 2) {
-            const ruleName = parts[0];
-            if (/^[A-Z][A-Z0-9_]*$/.test(ruleName)) {
-              matches.push({
-                ruleId: ruleName.toLowerCase(),
-                original: `[REDACTED_${ruleName.toUpperCase()}]`,
-                placeholder: match.result,
-                path: "",
-              });
-              incrementRuleCount(byRule, ruleName.toLowerCase());
-            }
-          }
+        if (match.type === "placeholder" && match.ruleName) {
+          // Format: RULE_NAME_NUMBER
+          matches.push({
+            ruleId: match.ruleName,
+            original: `[REDACTED_${match.ruleName.toUpperCase()}]`,
+            placeholder: match.result,
+            path: "",
+          });
+          incrementRuleCount(byRule, match.ruleName);
         } else if (match.type === "ssn") {
           matches.push({
             ruleId: "ssn",
