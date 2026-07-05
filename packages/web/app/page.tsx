@@ -26,12 +26,12 @@ export default function HomePage() {
       .catch(console.error);
   }, []);
 
-  useEffect(() => {
-    fetch("/api/redactions")
-      .then((res) => res.json())
-      .then(setRedactionsSummary)
-      .catch(console.error);
-  }, []);
+useEffect(() => {
+  fetch("/api/redactions")
+  .then((res) => res.json())
+  .then((data: { summary: { totalRedactions: number; byType: Record<string, number> } }) => setRedactionsSummary(data.summary))
+  .catch(console.error);
+}, []);
 
   return (
     <MainLayout>
