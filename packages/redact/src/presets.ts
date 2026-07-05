@@ -66,22 +66,22 @@ const SECRETS_RULES: RedactionRule[] = [
   toRule("credential_npm", "[NPM_TOKEN_REDACTED]"),
   toRule("credential_pypi", "[PYPI_TOKEN_REDACTED]"),
   toRule("credential_vault", "[VAULT_TOKEN_REDACTED]"),
-  toRule("credential_sendgrid", "[SENDGRID_TOKEN_REDA_TOKEN_REDACTED]"),
+  toRule("credential_sendgrid", "[SENDGRID_TOKEN_REDACTED]"),
   // LLM API provider rules
   toRule("credential_nvidia", "[NVIDIA_KEY_REDACTED]"),
   toRule("credential_openrouter", "[OPENROUTER_KEY_REDACTED]"),
   toRule("credential_kilo", "[KILO_KEY_REDACTED]"),
   // Dynamic detection rules for common auth patterns
-  {
-    name: "bearer-token",
-    pattern: /(?:^|\s)bearer\s+([a-zA-Z0-9._\-+/=]{20,})/gi,
-    replacement: "[BEARER_TOKEN_REDACTED]",
-  },
-  {
-    name: "authorization-header",
-    pattern: /(?:authorization|api-?key|x-api-?key)\s*[:=]\s*["']?([a-zA-Z0-9._\-+/=]{20,})["']?/gi,
-    replacement: "[AUTH_HEADER_REDACTED]",
-  },
+ {
+  name: "authorization-header",
+  pattern: /authorization\s*:\s*bearer\s+["']?(?<!\[)[a-zA-Z0-9._\-+/=]{20,}["']?/gi,
+  replacement: "[AUTH_HEADER_REDACTED]",
+},
+ {
+  name: "bearer-token",
+  pattern: /(?:^|\s)bearer\s+([a-zA-Z0-9._\-+/=]{20,})/gi,
+  replacement: "[BEARER_TOKEN_REDACTED]",
+},
   // Broader prefix-based catch-all (sk-, pk-, api-, key-, token- prefixed values)
   {
     name: "api-key-prefixed",

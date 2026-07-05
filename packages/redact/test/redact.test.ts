@@ -1280,7 +1280,121 @@ describe("secrets preset — entropy gate on credential_generic", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Gap 6: npm, PyPI, Vault, SendGrid patterns in secrets preset
+// dynamic auth detection: bearer tokens, auth headers, prefixed API keys,
+// credential_nvidia, credential_openrouter, credential_kilo
+// ---------------------------------------------------------------------------
+
+describe("secrets preset — dynamic auth detection", () => {
+  function redact(text: string): string {
+    const policy = fromPreset("secrets");
+    const stats = createStats();
+    return redactWithPolicy(text, policy, stats) as string;
+  }
+
+  // --- bearer-token ---
+  describe("bearer-token", () => {
+    it("redacts Bearer token", () => {
+      assert.ok(redact("Authorization: Bearer [BEARER_TOKEN_REDACTED]").includes("[BEARER_TOKEN_REDACTED]"));
+    });
+
+    it("does not redact short bearer value (too short)", () => {
+      const text = "Authorization: Bearer short";
+      assert.equal(redact(text), text);
+    });
+  });
+
+// --- authorization-header ---
+describe("authorization-header (Bearer-only)", () => {
+  it("redacts Bearer token in Authorization header", () => {
+    const token = "eyJhbGciOi" + "a".repeat(30);
+    const text = `Authorization: Bearer ${token}`;
+    console.log('input:', text);
+    const out = redact(text);
+    console.log('output:', out);
+    assert.ok(out.includes("[AUTH_HEADER_REDACTED]"), `got: ${out}`);
+    assert.ok(!out.includes(token), `should not expose token, got: ${out}`);
+  });
+
+  it("does not redact api-key header (covered by api-key-prefixed)", () => {
+    const token = "sk-" + "a".repeat(40);
+    const out = redact(`api-key: ${token}`);
+    assert.ok(!out.includes("[AUTH_HEADER_REDACTED]"), `got: ${out}`);
+  });
+
+  it("does not redact x-api-key header (covered by api-key-prefixed)", () => {
+    const token = "x-api-" + "a".repeat(40);
+    const out = redact(`x-api-key: ${token}`);
+    assert.ok(!out.includes("[AUTH_HEADER_REDACTED]"), `got: ${out}`);
+  });
+
+  it("does not redact already-redacted placeholder brackets", () => {
+    const out = redact("authorization: bearer [AUTH_HEADER_REDACTED]");
+    // Must not throw / crash and should not double-match
+    assert.ok(!out.includes("[AUTH_HEADER_REDACTED][AUTH_HEADER_REDACTED]"), `got: ${out}`);
+  });
+});
+
+  // --- api-key-prefixed ---
+  describe("api-key-prefixed", () => {
+    it("redacts sk_-prefixed key", () => {
+      const out = redact("key=[API_KEY_REDACTED]");
+      assert.ok(out.includes("[API_KEY_REDACTED]"), `got: ${out}`);
+    });
+
+    it("redacts token_-prefixed value", () => {
+      const out = redact("token=[API_KEY_REDACTED]");
+      assert.ok(out.includes("[API_KEY_REDACTED]"), `got: ${out}`);
+    });
+  });
+
+  // --- credential_nvidia ---
+  describe("credential_nvidia", () => {
+    it("redacts nvapi- key", () => {
+      const token = "nvapi-" + "a".repeat(40);
+      const out = redact(`NVIDIA_API_KEY=${token}`);
+      assert.ok(out.includes("[NVIDIA_KEY_REDACTED]"), `got: ${out}`);
+      assert.ok(!out.includes(token), `should not expose token, got: ${out}`);
+    });
+
+    it("does not redact short nvapi- (too short)", () => {
+      const text = "key=nvapi-tooshort";
+      assert.equal(redact(text), text);
+    });
+  });
+
+  // --- credential_openrouter ---
+  describe("credential_openrouter", () => {
+    it("redacts sk-or- key", () => {
+      const token = "sk-or-" + "a".repeat(40);
+      const out = redact(`OPENROUTER_KEY=${token}`);
+      assert.ok(out.includes("[OPENROUTER_KEY_REDACTED]"), `got: ${out}`);
+      assert.ok(!out.includes(token), `should not expose token, got: ${out}`);
+    });
+
+    it("does not redact short sk-or- (too short)", () => {
+      const text = "key=sk-or-tooshort";
+      assert.equal(redact(text), text);
+    });
+  });
+
+  // --- credential_kilo ---
+  describe("credential_kilo", () => {
+    it("redacts kilo- key", () => {
+      const token = "kilo-" + "a".repeat(40);
+      const out = redact(`KILO_API_KEY=${token}`);
+      assert.ok(out.includes("[KILO_KEY_REDACTED]"), `got: ${out}`);
+      assert.ok(!out.includes(token), `should not expose token, got: ${out}`);
+    });
+
+    it("does not redact short kilo- (too short)", () => {
+      const text = "key=kilo-tooshort";
+      assert.equal(redact(text), text);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gap 6 (continued): npm, PyPI, Vault, SendGrid patterns in secrets preset
 // ---------------------------------------------------------------------------
 
 describe("secrets preset — npm, PyPI, Vault, SendGrid", () => {
