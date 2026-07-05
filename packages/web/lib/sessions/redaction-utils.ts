@@ -21,12 +21,10 @@ export interface RedactionCounts {
   matches: RedactionMatch[];
 }
 
-// Matches patterns like [EMAIL_1], [AWS_KEY_2], [SSN_3], etc.
-// Format: [UPPERCASE_WITH_UNDERSCORES_NUMBER]  OR  bare SSN without brackets.
-// Capture group 1: rule name (e.g., EMAIL, AWS_KEY)
-// Capture group 2: number (e.g., 1, 2)
+// Matches redacted placeholders: [RULE_REDACTED] where RULE is uppercase with underscores.
+// Also matches bare SSN without brackets.
 const PLACEHOLDER_REGEX =
-  /\[([A-Z][A-Z0-9_]*)_(\d+)\]|\b\d{3}-\d{2}-\d{4}\b/g;
+  /\[([A-Z][A-Z0-9_]*)_REDACTED\]|\b\d{3}-\d{2}-\d{4}\b/g;
 
 /**
  * Increment a counter in the byRule record.
@@ -52,14 +50,13 @@ export function findRedactedValuesInString(
   let m: RegExpExecArray | null;
   while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
     const placeholder = m[0];
-    const ruleId = m[1]?.toLowerCase();
-    const number = m[2];
-
-    if (ruleId) {
-      // Bracketed placeholder: [RULE_NAME_NUMBER]
+    if (m[1]) {
+      // [RULE_REDACTED]
+      const ruleId = m[1].toLowerCase();
+      // We don't have original value, but we can set placeholder as original for display.
       matches.push({
         ruleId,
-        original: `[REDACTED_${ruleId.toUpperCase()}_${number}]`,
+        original: placeholder,
         placeholder,
         path,
       });
@@ -69,7 +66,7 @@ export function findRedactedValuesInString(
       matches.push({
         ruleId: "ssn",
         original: m[0],
-        placeholder: `[SSN_REDACTED_${m[0]}]`,
+        placeholder: `[SSN_REDACTED]`,
         path,
       });
       incrementRuleCount(byRule, "ssn");
@@ -173,22 +170,23 @@ export function countRedactionsInResponse(
   const matches: RedactionMatch[] = [];
   const byRule: Record<string, number> = {};
 
-  // Matches [RULE_NAME_NUMBER] format (e.g., [EMAIL_1], [AWS_KEY_2], [SSN_3])
-// Capture group 1: rule name (e.g., EMAIL, AWS_KEY)
-// Capture group 2: number (e.g., 1, 2)
-  const placeholderRegex = /\[([A-Z][A-Z0-9_]*)_(\d+)\]/g;
-  const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
+// Matches [RULE_REDACTED] where RULE is uppercase with underscores.
+// Also matches bare SSN without brackets.
+const placeholderRegex = /\[([A-Z][A-Z0-9_]*)_REDACTED\]/g;
+const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
 
-  const searchText = (text: string): void => {
+const searchText = (text: string): void => {
     try {
       placeholderRegex.lastIndex = 0;
       ssnRegex.lastIndex = 0;
 
-      const allMatches: { result: string; type: string; ruleName?: string; number?: string }[] = [];
+      const allMatches: { result: string; type: string; ruleName?: string }[] = [];
 
       let m: RegExpExecArray | null;
       while ((m = placeholderRegex.exec(text)) !== null) {
-        allMatches.push({ result: m[0], type: "placeholder", ruleName: m[1]?.toLowerCase(), number: m[2] });
+        // m[0] = full match e.g. "[SSN_REDACTED]"
+        // m[1] = rule name
+        allMatches.push({ result: m[0], type: "placeholder", ruleName: m[1]?.toLowerCase() });
       }
       while ((m = ssnRegex.exec(text)) !== null) {
         allMatches.push({ result: m[0], type: "ssn" });
@@ -196,10 +194,9 @@ export function countRedactionsInResponse(
 
       for (const match of allMatches) {
         if (match.type === "placeholder" && match.ruleName) {
-          // Format: RULE_NAME_NUMBER
           matches.push({
             ruleId: match.ruleName,
-            original: `[REDACTED_${match.ruleName.toUpperCase()}_${match.number}]`,
+            original: match.result,
             placeholder: match.result,
             path: "",
           });
@@ -208,7 +205,7 @@ export function countRedactionsInResponse(
           matches.push({
             ruleId: "ssn",
             original: match.result,
-            placeholder: `[SSN_REDACTED_${match.result}]`,
+            placeholder: `[SSN_REDACTED]`,
             path: "",
           });
           incrementRuleCount(byRule, "ssn");
