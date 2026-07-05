@@ -41,7 +41,7 @@ export async function GET(_request: Request) {
         // Compute redaction details
         const redaction = computeCaptureRedactionCounts(data);
 
-        totalRedactions += redaction.total;
+        totalRedactions += redaction.totalRedactions;
 
         // Aggregate by type
         for (const [rule, count] of Object.entries(redaction.byRule)) {

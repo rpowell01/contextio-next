@@ -47,7 +47,7 @@ function computeCaptureMetrics(c: RawCaptureData): CaptureMetrics {
 
   // Redactions
   const redactionCounts = countRedactionsInResponse(c.responseBody, c.requestBody);
-  const totalRedactions = redactionCounts.total;
+  const totalRedactions = redactionCounts.totalRedactions;
 
   return {
     successCount,
@@ -124,7 +124,7 @@ for (const c of sessionCaptures) {
   totalOutputTokens += tokenUsage.output;
 
   const redactionCounts = countRedactionsInResponse(c.responseBody, c.requestBody);
-  totalRedactions += redactionCounts.total;
+  totalRedactions += redactionCounts.totalRedactions;
   for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
     byRule[rule] = (byRule[rule] || 0) + (count as number);
   }

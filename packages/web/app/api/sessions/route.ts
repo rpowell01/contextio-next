@@ -78,7 +78,7 @@ function groupCapturesIntoSessions(
 
       // Count redactions in both request and response bodies
       const redactionCounts = countRedactionsInResponse(c.responseBody, c.requestBody);
-      totalRedactions += redactionCounts.total;
+      totalRedactions += redactionCounts.totalRedactions;
       for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
         byRule[rule] = (byRule[rule] || 0) + count;
       }
@@ -233,7 +233,7 @@ export async function GET(request: Request) {
 
   // Count redactions from both request and response bodies
   const redactionCounts = countRedactionsInResponse(c.responseBody, c.requestBody);
-  totalRedactions += redactionCounts.total;
+  totalRedactions += redactionCounts.totalRedactions;
   for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
     byRule[rule] = (byRule[rule] || 0) + count;
   }

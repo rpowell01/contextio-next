@@ -16,15 +16,17 @@ export interface RedactionMatch {
 
 /** Aggregate redaction counts per rule. */
 export interface RedactionCounts {
-  total: number;
+  totalRedactions: number;
   byRule: Record<string, number>;
   matches: RedactionMatch[];
 }
 
 // Matches patterns like [EMAIL_1], [AWS_KEY_2], [SSN_3], etc.
 // Format: [UPPERCASE_WITH_UNDERSCORES_NUMBER]  OR  bare SSN without brackets.
+// Capture group 1: rule name (e.g., EMAIL, AWS_KEY)
+// Capture group 2: number (e.g., 1, 2)
 const PLACEHOLDER_REGEX =
-  /\[([A-Z][A-Z0-9_]*)_\d+\]|\b\d{3}-\d{2}-\d{4}\b/g;
+  /\[([A-Z][A-Z0-9_]*)_(\d+)\]|\b\d{3}-\d{2}-\d{4}\b/g;
 
 /**
  * Increment a counter in the byRule record.
@@ -51,12 +53,13 @@ export function findRedactedValuesInString(
   while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
     const placeholder = m[0];
     const ruleId = m[1]?.toLowerCase();
+    const number = m[2];
 
     if (ruleId) {
       // Bracketed placeholder: [RULE_NAME_NUMBER]
       matches.push({
         ruleId,
-        original: `[REDACTED_${ruleId.toUpperCase()}]`,
+        original: `[REDACTED_${ruleId.toUpperCase()}_${number}]`,
         placeholder,
         path,
       });
@@ -164,7 +167,7 @@ export function computeCaptureRedactionCounts(
   }
 
   return {
-    total: matches.length,
+    totalRedactions: matches.length,
     byRule,
     matches,
   };
@@ -182,7 +185,9 @@ export function countRedactionsInResponse(
   const byRule: Record<string, number> = {};
 
   // Matches [RULE_NAME_NUMBER] format (e.g., [EMAIL_1], [AWS_KEY_2], [SSN_3])
-  const placeholderRegex = /\[([A-Z][A-Z0-9_]*)_\d+\]/g;
+// Capture group 1: rule name (e.g., EMAIL, AWS_KEY)
+// Capture group 2: number (e.g., 1, 2)
+  const placeholderRegex = /\[([A-Z][A-Z0-9_]*)_(\d+)\]/g;
   const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
 
   const searchText = (text: string): void => {
@@ -190,11 +195,11 @@ export function countRedactionsInResponse(
       placeholderRegex.lastIndex = 0;
       ssnRegex.lastIndex = 0;
 
-      const allMatches: { result: string; type: string; ruleName?: string }[] = [];
+      const allMatches: { result: string; type: string; ruleName?: string; number?: string }[] = [];
 
       let m: RegExpExecArray | null;
       while ((m = placeholderRegex.exec(text)) !== null) {
-        allMatches.push({ result: m[0], type: "placeholder", ruleName: m[1]?.toLowerCase() });
+        allMatches.push({ result: m[0], type: "placeholder", ruleName: m[1]?.toLowerCase(), number: m[2] });
       }
       while ((m = ssnRegex.exec(text)) !== null) {
         allMatches.push({ result: m[0], type: "ssn" });
@@ -205,7 +210,7 @@ export function countRedactionsInResponse(
           // Format: RULE_NAME_NUMBER
           matches.push({
             ruleId: match.ruleName,
-            original: `[REDACTED_${match.ruleName.toUpperCase()}]`,
+            original: `[REDACTED_${match.ruleName.toUpperCase()}_${match.number}]`,
             placeholder: match.result,
             path: "",
           });
@@ -237,7 +242,7 @@ export function countRedactionsInResponse(
   }
 
   return {
-    total: matches.length,
+    totalRedactions: matches.length,
     byRule,
     matches,
   };
