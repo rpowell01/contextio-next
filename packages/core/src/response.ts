@@ -55,7 +55,31 @@ function asRecordArray(value: unknown): Record<string, unknown>[] | null {
 }
 
 function numberValue(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+	return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * Approximate token counts by counting characters in the provided text.
+ *
+ * Divide by 4 as a rough heuristic:
+ * - One token is roughly 4 characters for English text.
+ * - Produced by:
+	*   Claude 3.5 Sonnet / Haiku (Anthropic)
+	*   GPT-4.1 / GPT-5 series (OpenAI)
+	*   Gemini models (Google)
+ *
+ * This is intentionally loose; it is a upper bound when exact token counts
+ * are unavailable.
+ *
+ * Always uses Math.max(..., 1) so we never return 0-token estimates. That
+ * way the capture breakdown table always shows a non-zero value and the
+ * Tokens/sec column stays sensible.
+ */
+export const ESTIMATED_TOKENS_PER_CHARACTER = 0.25;
+export function estimateTokensFromText(text: string): number {
+	const trimmed = text.trim();
+	if (trimmed.length === 0) return 1;
+	return Math.max(Math.round(trimmed.length * ESTIMATED_TOKENS_PER_CHARACTER), 1);
 }
 
 function stringValue(value: unknown): string | null {

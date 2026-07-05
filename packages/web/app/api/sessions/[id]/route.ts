@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { join } from "node:path";
-import type { SessionDetail, SessionMetrics } from "@/types/api";
+import type { SessionDetail, SessionMetrics, CaptureMetrics } from "@/types/api";
 import { listCaptureFiles, CAPTURE_DIR, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
 import { countRedactionsInResponse } from "@/lib/sessions/redaction-utils";
 
@@ -21,17 +21,6 @@ interface RawCaptureData {
   filename: string; // Store the actual filename for capture detail linking
 }
 
-interface CaptureMetrics {
-  successCount: number;
-  errorCount: number;
-  errorRate: number;
-  totalContextValues: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  tokensPerSecond: number;
-  totalRedactions: number;
-}
-
 function computeCaptureMetrics(c: RawCaptureData): CaptureMetrics {
   const isSuccess = c.responseStatus && c.responseStatus >= 200 && c.responseStatus < 300;
   const successCount = isSuccess ? 1 : 0;
@@ -42,12 +31,12 @@ function computeCaptureMetrics(c: RawCaptureData): CaptureMetrics {
   const captureContextValues = computeContextValues(c.requestBody);
   const totalContextValues = captureContextValues.count;
 
-  // Parse response for tokens
-  let tokenUsage = { input: 0, output: 0 };
+  // Parse response for tokens (pass requestBody for fallback estimation)
+  let tokenUsage = { input: 0, output: 0, model: null as string | null };
   try {
-    tokenUsage = computeTokenUsage(c.responseBody);
+    tokenUsage = computeTokenUsage(c.responseBody, c.requestBody);
   } catch {
-    tokenUsage = { input: 0, output: 0 };
+    tokenUsage = { input: 0, output: 0, model: null };
   }
   const totalInputTokens = tokenUsage.input;
   const totalOutputTokens = tokenUsage.output;
@@ -69,6 +58,7 @@ function computeCaptureMetrics(c: RawCaptureData): CaptureMetrics {
     totalOutputTokens,
     tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
     totalRedactions,
+    model: tokenUsage.model,
   };
 }
 
@@ -122,10 +112,11 @@ for (const c of sessionCaptures) {
   totalContextValues += captureContextValues.count;
 
   // Parse response for tokens (defensive: malformed JSON in the response
-  // body must not crash metrics aggregation)
+  // body must not crash metrics aggregation). Pass requestBody for
+  // input token estimation when responseBody is empty (streaming).
   let tokenUsage = { input: 0, output: 0 };
   try {
-    tokenUsage = computeTokenUsage(c.responseBody);
+    tokenUsage = computeTokenUsage(c.responseBody, c.requestBody);
   } catch {
     tokenUsage = { input: 0, output: 0 };
   }

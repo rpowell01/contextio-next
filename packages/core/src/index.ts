@@ -34,10 +34,12 @@ export { IMAGE_TOKEN_ESTIMATE, estimateTokens, countImageBlocks } from "./tokens
 
 // Response parsing: extract usage/tokens from streaming and non-streaming responses
 export {
-  extractResponseId,
-  parseResponseUsage,
-  parseStreamingTokens,
-  type ParsedResponseUsage,
+extractResponseId,
+parseResponseUsage,
+parseStreamingTokens,
+estimateTokensFromText,
+ESTIMATED_TOKENS_PER_CHARACTER,
+type ParsedResponseUsage,
 } from "./response.js";
 
 // Input security: prompt injection and suspicious pattern detection

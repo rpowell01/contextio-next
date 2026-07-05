@@ -2,10 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  extractResponseId,
-  parseResponseUsage,
-  parseStreamingTokens,
-  type ParsedResponseUsage,
+extractResponseId,
+parseResponseUsage,
+parseStreamingTokens,
+estimateTokensFromText,
+ESTIMATED_TOKENS_PER_CHARACTER,
+type ParsedResponseUsage,
 } from "../dist/response.js";
 
 type UsageWithThinking = ParsedResponseUsage & { thinkingTokens: number };
@@ -305,10 +307,27 @@ data:{"type":"message_delta","usage":{"output_tokens":12}}
 
 data: [DONE]`;
 
-      const result = parseResponseUsage(chunks);
-      assert.equal(result.stream, true);
-      assert.equal(result.inputTokens, 100);
-      assert.equal(result.outputTokens, 12);
-    });
-  });
+const result = parseResponseUsage(chunks);
+assert.equal(result.stream, true);
+assert.equal(result.inputTokens, 100);
+assert.equal(result.outputTokens, 12);
+});
+});
+
+describe("estimateTokensFromText", () => {
+	it("returns 1 for empty input", () => {
+		assert.equal(estimateTokensFromText(""), 1);
+		assert.equal(estimateTokensFromText("   "), 1);
+	});
+
+	it("approximates tokens for typical responses", () => {
+		const text = "Hello world! ".repeat(10);
+		const expected = Math.max(Math.round(text.trim().length * ESTIMATED_TOKENS_PER_CHARACTER), 1);
+		assert.equal(estimateTokensFromText(text), expected);
+	});
+
+	it("exposes ESTIMATED_TOKENS_PER_CHARACTER as 0.25", () => {
+		assert.equal(ESTIMATED_TOKENS_PER_CHARACTER, 0.25);
+	});
+});
 });

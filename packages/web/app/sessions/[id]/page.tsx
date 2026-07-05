@@ -571,6 +571,7 @@ export default function SessionDetailPage({
                         <th className="text-right py-2">Error</th>
                         <th className="text-right py-2">Error Rate</th>
                         <th className="text-right py-2">Context Values</th>
+                        <th className="text-left py-2">Model</th>
                         <th className="text-right py-2">Input Tokens</th>
                         <th className="text-right py-2">Output Tokens</th>
                         <th className="text-right py-2">Tokens/sec</th>
@@ -593,6 +594,7 @@ export default function SessionDetailPage({
                           <td className="py-2 text-right font-mono text-xs">{capture.metrics?.errorCount ?? 0}</td>
                           <td className="py-2 text-right font-mono text-xs">{(capture.metrics?.errorRate ?? 0).toFixed(2)}</td>
                           <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalContextValues ?? 0}</td>
+                          <td className="py-2 text-left text-xs font-mono text-muted-foreground">{capture.metrics?.model ?? "—"}</td>
                           <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalInputTokens.toLocaleString() ?? 0}</td>
                           <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalOutputTokens.toLocaleString() ?? 0}</td>
                           <td className="py-2 text-right font-mono text-xs">{capture.metrics?.tokensPerSecond.toLocaleString() ?? 0}</td>

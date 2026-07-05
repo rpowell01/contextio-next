@@ -72,7 +72,7 @@ function groupCapturesIntoSessions(
       // messages.reduce(...) formula that under-counted non-message captures).
       totalContextValues += computeContextValues(c.requestBody).count;
 
-      const usage = computeTokenUsage(c.responseBody);
+      const usage = computeTokenUsage(c.responseBody, c.requestBody);
       totalInputTokens += usage.input;
       totalOutputTokens += usage.output;
 
@@ -227,7 +227,7 @@ export async function GET(request: Request) {
   Object.assign(contextValues, captureContextValues.values);
   totalContextValues += captureContextValues.count;
 
-  const usage = computeTokenUsage(c.responseBody);
+  const usage = computeTokenUsage(c.responseBody, c.requestBody);
   totalInputTokens += usage.input;
   totalOutputTokens += usage.output;
 

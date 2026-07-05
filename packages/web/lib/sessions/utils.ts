@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { Session, Capture } from "@/types/api";
+import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
 
 // Re-export Session and Capture types for convenience
 export type { Session, Capture } from "@/types/api";
@@ -187,29 +188,55 @@ export function computeContextValues(requestBody: unknown): ContextValues {
 }
 
 /**
+ * Result of token usage computation.
+ */
+export interface TokenUsageResult {
+  /** Estimated or actual input tokens */
+  input: number;
+  /** Estimated or actual output tokens */
+  output: number;
+  /** Model name detected from response, if available */
+  model: string | null;
+}
+
+/**
  * Extract token usage counts from a parsed LLM response body.
+ *
+ * Tries the rich core parser first (covers OpenAI, Anthropic, Gemini, and
+ * Context Lens wrapper formats). Falls back to a cheap character-count
+ * approximation when the capture did not preserve usage fields so the
+ * capture breakdown table always shows a plausible non-zero estimate.
+ *
+ * If responseBody is empty but requestBody is provided, estimates input tokens
+ * from the request body.
  */
 export function computeTokenUsage(
   responseBody: string | null | undefined,
-): { input: number; output: number } {
-  let input = 0;
-  let output = 0;
-
+  requestBody?: unknown,
+): TokenUsageResult {
+  // If we have a response body, parse it for actual usage data
   if (responseBody) {
-    try {
-      const parsed = JSON.parse(responseBody);
-      if (parsed.usage?.prompt_tokens) {
-        input += parsed.usage.prompt_tokens;
-      }
-      if (parsed.usage?.completion_tokens) {
-        output += parsed.usage.completion_tokens;
-      }
-    } catch {
-      /* ignore */
+    const parsed = parseResponseUsage(responseBody);
+    const fallback = estimateTokensFromText(responseBody);
+
+    if (parsed.inputTokens === 0 && parsed.outputTokens === 0) {
+      return { input: fallback, output: fallback, model: parsed.model };
     }
+
+    const input = parsed.inputTokens || fallback;
+    const output = parsed.outputTokens || fallback;
+    return { input, output, model: parsed.model };
   }
 
-  return { input, output };
+  // No response body - estimate from request body if available
+  if (requestBody) {
+    const requestText = JSON.stringify(requestBody);
+    const estimatedInput = estimateTokensFromText(requestText);
+    return { input: estimatedInput, output: 0, model: null };
+  }
+
+  // No data at all
+  return { input: 0, output: 0, model: null };
 }
 
 /**

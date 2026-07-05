@@ -129,6 +129,8 @@ export interface CaptureMetrics {
   tokensPerSecond: number;
   /** Total redactions in this capture */
   totalRedactions: number;
+  /** Model name detected from response, if available */
+  model?: string | null;
 }
 
 /**
