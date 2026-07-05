@@ -31,17 +31,18 @@ function parseCapture(data: Record<string, unknown>): {
      totalOutputTokens: 0,
    };
 
-   // Compute redactions from request and response bodies
-   let redactionCount = 0;
-   try {
-     const redactionCounts = countRedactionsInResponse(
-       data.responseBody as string | null | undefined,
-       data.requestBody
-     );
-     redactionCount = redactionCounts.totalRedactions;
-   } catch (e) {
-     console.error("Failed to count redactions in capture:", e);
-   }
+  // Count redactions from request body only to keep the dashboard/session totals consistent
+  let redactionCount = 0;
+  try {
+    const redactionCounts = countRedactionsInResponse(
+      data.responseBody as string | null | undefined,
+      data.requestBody,
+      false,
+    );
+    redactionCount = redactionCounts.totalRedactions;
+  } catch (e) {
+    console.error("Failed to count redactions in capture:", e);
+  }
 
    const redaction: RedactionMetric = {
      timestamp,

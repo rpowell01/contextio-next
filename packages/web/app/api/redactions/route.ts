@@ -38,8 +38,8 @@ export async function GET(_request: Request) {
         const targetUrl = (data.targetUrl as string) ?? "";
         const captureId = filename.replace(/\.json$/, "");
 
-        // Compute redaction details
-        const redaction = computeCaptureRedactionCounts(data);
+  // Compute redaction details — count only request body for the dashboard total
+  const redaction = computeCaptureRedactionCounts(data, false);
 
         totalRedactions += redaction.totalRedactions;
 
