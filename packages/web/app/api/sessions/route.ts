@@ -283,32 +283,35 @@ export async function GET(request: Request) {
       return Response.json(sessionDetail);
     }
     
-    const files = await listCaptureFiles();
-    const sessions: Session[] = [];
-    
-    for (const filename of files) {
-      try {
-        const filepath = join(CAPTURE_DIR, filename);
-        const stats = await fs.stat(filepath);
-        if (stats.size > MAX_FILE_SIZE) continue;
-        
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
-        
-        const session = await getSessionMetadata(filename, data);
-        sessions.push(session);
-      } catch (error) {
-        console.error(`Error processing session capture ${filename}:`, error);
-        continue;
-      }
-    }
-    
-    // Sort by timestamp descending (newest first)
+const files = await listCaptureFiles();
+const sessions: Session[] = [];
+
+for (const filename of files) {
+  try {
+    const filepath = join(CAPTURE_DIR, filename);
+    const stats = await fs.stat(filepath);
+    if (stats.size > MAX_FILE_SIZE) continue;
+
+    const raw = await fs.readFile(filepath, "utf8");
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    const session = await getSessionMetadata(filename, data);
+    sessions.push(session);
+  } catch (error) {
+    console.error(`Error processing session capture ${filename}:`, error);
+    continue;
+  }
+}
+
+// Strip heavy body fields from list responses to avoid RangeError in JSON.stringify
+const listSessions = sessions
+  .map(({ requestBody: _rb, responseBody: _rsp, ...rest }) => rest);
+
+// Sort by timestamp descending (newest first)
     sessions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     
     // Return grouped summaries if requested
-    if (groupBySourceDest) {
-      const rawCaptures: RawCaptureData[] = sessions.map((s) => ({
+if (groupBySourceDest) {
+  const rawCaptures: RawCaptureData[] = sessions.map((s) => ({
         sessionId: s.sessionId || null,
         source: s.source,
         provider: s.provider,
@@ -326,7 +329,7 @@ export async function GET(request: Request) {
   return Response.json({ sessions: [], summaries, metrics });
     }
     
-    return Response.json(sessions);
+    return Response.json(listSessions);
   } catch (error) {
     console.error("Error in sessions API:", error);
     return Response.json({ error: "Internal server error" }, { status: 500 });

@@ -79,11 +79,12 @@ export function isValidSession(data: unknown): data is Session {
     typeof session.timestamp === "string" &&
     typeof session.responseStatus === "number" &&
     typeof session.responseIsStreaming === "boolean" &&
-    typeof session.requestBody === "object" &&
-    session.requestBody !== null &&
-    (typeof session.responseBody === "string" ||
-      session.responseBody === null ||
-      session.responseBody === undefined) &&
+  (typeof session.requestBody === "undefined" ||
+    (typeof session.requestBody === "object" &&
+      session.requestBody !== null)) &&
+  (typeof session.responseBody === "undefined" ||
+    typeof session.responseBody === "string" ||
+    session.responseBody === null) &&
     typeof session.timings === "object" &&
     typeof (session.timings as Record<string, unknown>).total_ms === "number"
   );

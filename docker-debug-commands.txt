@@ -1,0 +1,68 @@
+# Docker Debug Commands for Zero-Redaction Issue
+# Run these from the host machine
+
+# 1. List running containers with port mappings
+docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Image}}"
+
+# 2. Inspect container logs (replace contextio-next with actual name/ID)
+docker logs contextio-next --tail 50
+
+# 3. Follow logs in real-time (replace contextio-next with actual name/ID)
+docker logs -f contextio-next
+
+# 4. Inspect container details (network, mounts, env)
+docker inspect contextio-next --format '{{json .NetworkSettings.Ports}}' | python3 -m json.tool
+
+# 5. Exec into container to check files
+docker exec -it contextio-next sh
+
+# 6. Once inside container, check capture files exist
+# ls -la /app/captures
+
+# 7. Check running processes inside container
+# ps aux
+
+# 8. Check environment variables inside container
+# env | grep -iE 'port|host|bind|url'
+
+# === Zero-Redaction Debug Session ===
+# Container name: contextio-next
+# Image: ixjcp3xkmrrojwetdsqytmxm:26ab37efdd7c4ec5d870f5c3be66c1fea057b853
+
+# 1. Get 500 lines of logs to capture the /api/sessions error
+docker logs contextio-next --tail 500 2>&1 | tee /tmp/contextio-logs-500.txt
+
+# 2. Grep specifically for 500 errors and API session errors
+grep -E "500|Internal server error|Error in.*sessions|error.*api/sessions|undefined|null is not" /tmp/contextio-logs-500.txt | tail -30
+
+# 3. Grep for ANY error/warn/exception lines
+grep -iE "error|warn|exception|fail|reject|ENOENT|ECONNREFUSED|timeout" /tmp/contextio-logs-500.txt | tail -50
+
+# 4. Full unfiltered log dump (may be large)
+docker logs contextio-next --tail 2000 2>&1 > /tmp/contextio-logs-full.txt
+echo "Full log saved to /tmp/contextio-logs-full.txt (lines: $(wc -l < /tmp/contextio-logs-full.txt))"
+
+# 5. Start a live log tail in a separate terminal to catch the error as it happens
+# docker logs contextio-next -f --tail 0
+
+# 6. Inside container: check the redaction count script/regex
+docker exec contextio-next sh -c "grep -n 'REDACTED\|placeholderRegex\|countRedact' /app/packages/web/lib/sessions/redaction-utils.ts 2>/dev/null || find /app -name 'redaction-utils.ts' -exec grep -Hn 'REDACTED' {} \;"
+
+# 7. Inside container: check capture files exist and have content
+docker exec contextio-next sh -c "ls -la /app/captures/ 2>/dev/null | head -20 && echo '---' && wc -l /app/captures/*.json 2>/dev/null | tail -5"
+
+# 8. Inside container: check running Node/Next.js process
+docker exec contextio-next sh -c "ps aux | grep -E 'node|next|bun' | grep -v grep"
+
+# 9. Inside container: check env vars related to port/host/bind
+docker exec contextio-next sh -c "env | grep -iE 'port|host|bind|url|node_env|next'"
+
+# 10. Hit the failing endpoint with verbose output while following logs
+# In one terminal: docker logs contextio-next -f --tail 0
+# In another terminal: curl -v https://contextio-next.sslip.mywire.org/api/sessions
+
+# 11. Check Next.js build output exists
+docker exec contextio-next sh -c "ls -la /app/.next/ 2>/dev/null | head -10"
+
+# 12. Check if there's a .next/server/app/api/sessions build artifact
+docker exec contextio-next sh -c "find /app/.next/server -name '*sessions*' 2>/dev/null"

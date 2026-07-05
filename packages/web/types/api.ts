@@ -22,8 +22,8 @@ export interface Session {
   apiFormat: string;
   /** Target URL for the API request */
   targetUrl: string;
-  /** Request body as key-value pairs */
-  requestBody: Record<string, unknown>;
+  /** Request body as key-value pairs (omitted from list endpoints for size) */
+  requestBody?: Record<string, unknown>;
   /** HTTP response status code */
   responseStatus: number;
   /** Whether the response is streaming */
