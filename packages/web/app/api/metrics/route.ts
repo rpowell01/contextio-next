@@ -38,20 +38,17 @@ try {
   if (cachedStats) {
     redactionCount = cachedStats.totalRedactions;
   } else {
-    const redactionCounts = countRedactionsInResponse(
+    redactionCount = countRedactionsInResponse(
       data.responseBody as string | null | undefined,
       data.requestBody,
       false,
     ).totalRedactions;
-  } catch (error) {
-    console.error(
-      `Error counting redactions for ${data.timestamp ?? "unknown"} capture:`,
-      error,
-    );
-    redactionCount = redactionCounts.totalRedactions;
   }
-} catch (e) {
-  console.error("Failed to count redactions in capture:", e);
+} catch (error) {
+  console.error(
+    `Error counting redactions for ${data.timestamp ?? "unknown"} capture:`,
+    error,
+  );
 }
 
   const redaction: RedactionMetric = {

@@ -12,6 +12,11 @@ import {
   getCaptureRedactionStats,
   computeCaptureRedactionCounts,
 } from "@/lib/sessions/redaction-utils";
+import {
+  CAPTURE_DIR,
+  MAX_FILE_SIZE,
+  listCaptureFiles,
+} from "@/lib/sessions/utils";
 
 function extractCaptureMetadata(
   filename: string,
@@ -83,18 +88,6 @@ function extractCaptureMetadata(
     timestamp: validatedTimestamp ?? new Date().toISOString(),
     timings,
   };
-}
-
-async function listCaptureFiles(): Promise<string[]> {
-  try {
-    const files = await fs.readdir(CAPTURE_DIR);
-    return files
-      .filter((f) => isValidFilename(f) && !f.endsWith(".tmp"))
-      .sort();
-  } catch (error) {
-    console.error("Error listing capture files:", error);
-    return [];
-  }
 }
 
 function validateDate(dateStr: string | null): Date | null {
@@ -230,26 +223,27 @@ export async function GET(request: Request) {
         ) {
           continue;
         }
+      }
 
-        const captureTimestamp = validateCaptureTimestamp(capture.timestamp);
-        if (!captureTimestamp) continue;
-        const captureDate = new Date(captureTimestamp);
-        if (isNaN(captureDate.getTime())) continue;
-        if (fromDate && captureDate < fromDate) continue;
-        if (toDate && captureDate > toDate) continue;
+      const captureTimestamp = validateCaptureTimestamp(capture.timestamp);
+      if (!captureTimestamp) continue;
+      const captureDate = new Date(captureTimestamp);
+      if (isNaN(captureDate.getTime())) continue;
+      if (fromDate && captureDate < fromDate) continue;
+      if (toDate && captureDate > toDate) continue;
 
-        if (sessionId && capture.sessionId !== sessionId) continue;
-        if (source && capture.source !== source) continue;
-        if (statusParam && String(capture.responseStatus) !== statusParam)
-          continue;
+      if (sessionId && capture.sessionId !== sessionId) continue;
+      if (source && capture.source !== source) continue;
+      if (statusParam && String(capture.responseStatus) !== statusParam)
+        continue;
 
-        if (includeRedaction && redaction) {
-          captures.push({ ...capture, redaction });
-        } else {
-          captures.push(capture);
-        }
-      } catch (error) {
-        console.error(`Error processing capture ${filename}:`, error);
+      if (includeRedaction && redaction) {
+        captures.push({ ...capture, redaction });
+      } else {
+        captures.push(capture);
+      }
+    } catch (error) {
+      console.error(`Error processing capture ${filename}:`, error);
         continue;
       }
     }

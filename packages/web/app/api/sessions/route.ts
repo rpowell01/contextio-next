@@ -20,6 +20,53 @@ import {
 } from "@/lib/sessions/redaction-utils";
 import type { CaptureRedactionStats } from "@/lib/sessions/redaction-utils";
 
+// Re-implementation of computeCaptureMetrics from /api/sessions/[id]:
+// returns per-capture metric fields. Equivalent to the id-route's helper.
+function computeCaptureMetrics(c: {
+  requestBody?: unknown;
+  responseBody?: string;
+  responseStatus?: number;
+  timings?: { total_ms?: number };
+  redactionStats?: { totalRedactions: number; byRule: Record<string, number> };
+}): {
+  successCount: number;
+  errorCount: number;
+  errorRate: number;
+  totalContextValues: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  tokensPerSecond: number;
+  totalRedactions: number;
+  model: string | null;
+} {
+  const isSuccess =
+    !!c.responseStatus && c.responseStatus >= 200 && c.responseStatus < 300;
+  const captureContextValues = computeContextValues(c.requestBody);
+  let tokenUsage = { input: 0, output: 0, model: null as string | null };
+  try {
+    tokenUsage = computeTokenUsage(c.responseBody, c.requestBody);
+  } catch {
+    tokenUsage = { input: 0, output: 0, model: null };
+  }
+  const timeSec = (c.timings?.total_ms || 1) / 1000;
+  const tokensPerSecond = timeSec > 0 ? tokenUsage.output / timeSec : 0;
+  const redaction: CaptureRedactionStats =
+    c.redactionStats ??
+    getCaptureRedactionStats(c as unknown as Record<string, unknown>) ??
+    countRedactionsInResponse(c.responseBody, c.requestBody, false);
+  return {
+    successCount: isSuccess ? 1 : 0,
+    errorCount: isSuccess ? 0 : 1,
+    errorRate: isSuccess ? 0 : 1,
+    totalContextValues: captureContextValues.count,
+    totalInputTokens: tokenUsage.input,
+    totalOutputTokens: tokenUsage.output,
+    tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+    totalRedactions: redaction.totalRedactions,
+    model: tokenUsage.model,
+  };
+}
+
 interface RawCaptureData extends Record<string, unknown> {
   sessionId: string | null;
   source: string | null;

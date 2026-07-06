@@ -205,13 +205,7 @@ export function computeCaptureRedactionCounts(
     }
   }
 
-  const requestBody = rawData.requestBody;
-  const reqCounts = countRedactionsInResponse(undefined, requestBody, false);
-  return {
-    totalRedactions: reqCounts.totalRedactions,
-    byRule: { ...reqCounts.byRule },
-    matches: [...reqCounts.matches],
-  };
+  return { totalRedactions, byRule, matches };
 }
 
 /**
