@@ -1,7 +1,19 @@
 import fs from "node:fs/promises";
 import { join } from "node:path";
-import type { Session, SessionSummary, SessionMetrics, SessionDetail } from "@/types/api";
-import { listCaptureFiles, getSessionMetadata, CAPTURE_DIR, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
+import type {
+  Session,
+  SessionSummary,
+  SessionMetrics,
+  SessionDetail,
+} from "@/types/api";
+import {
+  listCaptureFiles,
+  getSessionMetadata,
+  CAPTURE_DIR,
+  MAX_FILE_SIZE,
+  computeContextValues,
+  computeTokenUsage,
+} from "@/lib/sessions/utils";
 import {
   countRedactionsInResponse,
   getCaptureRedactionStats,
@@ -84,9 +96,13 @@ function groupCapturesIntoSessions(captures: RawCaptureData[]): {
       totalInputTokens += usage.input;
       totalOutputTokens += usage.output;
 
-  // Prefer canonical capture.redactionStats; fall back to recomputation for legacy captures
-  const cachedStats = getCaptureRedactionStats(c as unknown as Record<string, unknown>);
-  const redactionCounts: CaptureRedactionStats = cachedStats ?? countRedactionsInResponse(c.responseBody, c.requestBody, false);
+      // Prefer canonical capture.redactionStats; fall back to recomputation for legacy captures
+      const cachedStats = getCaptureRedactionStats(
+        c as unknown as Record<string, unknown>,
+      );
+      const redactionCounts: CaptureRedactionStats =
+        cachedStats ??
+        countRedactionsInResponse(c.responseBody, c.requestBody, false);
       totalRedactions += redactionCounts.totalRedactions;
       for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
         byRule[rule] = (byRule[rule] || 0) + count;
@@ -263,132 +279,137 @@ export async function GET(request: Request) {
         totalInputTokens += usage.input;
         totalOutputTokens += usage.output;
 
-// Count redactions from request body only to keep totals consistent
-const cachedStats = getCaptureRedactionStats(c as unknown as Record<string, unknown>);
-const redactionCounts: CaptureRedactionStats = cachedStats ?? countRedactionsInResponse(c.responseBody, c.requestBody, false);
-totalRedactions += redactionCounts.totalRedactions;
-for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
-  byRule[rule] = (byRule[rule] || 0) + count;
-}
-}
+        // Count redactions from request body only to keep totals consistent
+        const cachedStats = getCaptureRedactionStats(
+          c as unknown as Record<string, unknown>,
+        );
+        const redactionCounts: CaptureRedactionStats =
+          cachedStats ??
+          countRedactionsInResponse(c.responseBody, c.requestBody, false);
+        totalRedactions += redactionCounts.totalRedactions;
+        for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
+          byRule[rule] = (byRule[rule] || 0) + count;
+        }
+      }
 
-const timeSec = totalTimeMs / 1000 || 1;
+      const timeSec = totalTimeMs / 1000 || 1;
 
-const firstCapture = sessionCaptures[0];
-const source = firstCapture?.source || "unknown";
-const destination = firstCapture?.provider || "unknown";
+      const firstCapture = sessionCaptures[0];
+      const source = firstCapture?.source || "unknown";
+      const destination = firstCapture?.provider || "unknown";
 
-const captureCount = sessionCaptures.length;
-const tokensPerSecond =
-captureCount > 0 && totalOutputTokens > 0
-  ? totalOutputTokens / captureCount
-  : 0;
+      const captureCount = sessionCaptures.length;
+      const tokensPerSecond =
+        captureCount > 0 && totalOutputTokens > 0
+          ? totalOutputTokens / captureCount
+          : 0;
 
-const metrics: SessionMetrics = {
-  totalInboundBytes: totalRequestBytes,
-  totalOutboundBytes: totalResponseBytes,
-  inboundThroughput: totalRequestBytes / timeSec,
-  outboundThroughput: totalResponseBytes / timeSec,
-  totalContextValues,
-  totalInputTokens: totalInputTokens || undefined,
-  totalOutputTokens: totalOutputTokens || undefined,
-  tokensPerSecond:
-    tokensPerSecond > 0 ? Number(tokensPerSecond.toFixed(2)) : 0,
-  redactionStats: { totalRedactions, byRule },
-};
+      const metrics: SessionMetrics = {
+        totalInboundBytes: totalRequestBytes,
+        totalOutboundBytes: totalResponseBytes,
+        inboundThroughput: totalRequestBytes / timeSec,
+        outboundThroughput: totalResponseBytes / timeSec,
+        totalContextValues,
+        totalInputTokens: totalInputTokens || undefined,
+        totalOutputTokens: totalOutputTokens || undefined,
+        tokensPerSecond:
+          tokensPerSecond > 0 ? Number(tokensPerSecond.toFixed(2)) : 0,
+        redactionStats: { totalRedactions, byRule },
+      };
 
-// Build detailed session response
-const sessionDetail: SessionDetail = {
-  id: sessionId,
-  sessionId: sessionId,
-  source,
-  provider: destination,
-  apiFormat: firstCapture?.apiFormat || "unknown",
-  targetUrl: firstCapture?.targetUrl || "",
-  requestBody:
-    (firstCapture?.requestBody as Record<string, unknown>) ||
-    ({} as Record<string, unknown>),
-  responseStatus,
-  responseIsStreaming,
-  responseBody: firstCapture?.responseBody || null,
-  timestamp: firstTimestamp,
-  timings: { total_ms: totalTimeMs },
-  metrics,
-  contextValues,
-  redactionStats: { totalRedactions, byRule },
-  captures: sessionCaptures.map((c) => ({
-    id: (c as unknown as { filename: string }).filename,
-    timestamp: c.timestamp,
-    targetUrl: c.targetUrl,
-    requestBytes: c.requestBytes,
-    responseBytes: c.responseBytes,
-    responseStatus: c.responseStatus,
-    responseIsStreaming: c.responseIsStreaming,
-    timings: c.timings,
-    source: c.source,
-    metrics: computeCaptureMetrics(c as unknown as Parameters<typeof computeCaptureMetrics>[0]),
-  })),
-};
+      // Build detailed session response
+      const sessionDetail: SessionDetail = {
+        id: sessionId,
+        sessionId: sessionId,
+        source,
+        provider: destination,
+        apiFormat: firstCapture?.apiFormat || "unknown",
+        targetUrl: firstCapture?.targetUrl || "",
+        requestBody:
+          (firstCapture?.requestBody as Record<string, unknown>) ||
+          ({} as Record<string, unknown>),
+        responseStatus,
+        responseIsStreaming,
+        responseBody: firstCapture?.responseBody || null,
+        timestamp: firstTimestamp,
+        timings: { total_ms: totalTimeMs },
+        metrics,
+        contextValues,
+        redactionStats: { totalRedactions, byRule },
+        captures: sessionCaptures.map((c) => ({
+          id: (c as unknown as { filename: string }).filename,
+          timestamp: c.timestamp,
+          targetUrl: c.targetUrl,
+          requestBytes: c.requestBytes,
+          responseBytes: c.responseBytes,
+          responseStatus: c.responseStatus,
+          responseIsStreaming: c.responseIsStreaming,
+          timings: c.timings,
+          source: c.source,
+          metrics: computeCaptureMetrics(
+            c as unknown as Parameters<typeof computeCaptureMetrics>[0],
+          ),
+        })),
+      };
 
-return Response.json(sessionDetail);
-}
+      return Response.json(sessionDetail);
+    }
 
-const files = await listCaptureFiles();
-const sessions: Session[] = [];
+    const files = await listCaptureFiles();
+    const sessions: Session[] = [];
 
-for (const filename of files) {
-  try {
-    const filepath = join(CAPTURE_DIR, filename);
-    const stats = await fs.stat(filepath);
-    if (stats.size > MAX_FILE_SIZE) continue;
+    for (const filename of files) {
+      try {
+        const filepath = join(CAPTURE_DIR, filename);
+        const stats = await fs.stat(filepath);
+        if (stats.size > MAX_FILE_SIZE) continue;
 
-    const raw = await fs.readFile(filepath, "utf8");
-    const data = JSON.parse(raw) as Record<string, unknown>;
-    const session = await getSessionMetadata(filename, data);
-    sessions.push(session);
+        const raw = await fs.readFile(filepath, "utf8");
+        const data = JSON.parse(raw) as Record<string, unknown>;
+        const session = await getSessionMetadata(filename, data);
+        sessions.push(session);
+      } catch (error) {
+        console.error(`Error processing session capture ${filename}:`, error);
+        continue;
+      }
+    }
+
+    // Sort by timestamp descending (newest first)
+    sessions.sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
+
+    // Strip heavy body fields from list responses to avoid RangeError in JSON.stringify
+    const listSessions = sessions.map(
+      ({ requestBody: _rb, responseBody: _rsp, ...rest }) => rest,
+    );
+    // Return grouped summaries if requested
+    if (groupBySourceDest) {
+      const rawCaptures: RawCaptureData[] = sessions.map((s) => ({
+        sessionId: s.sessionId || null,
+        source: s.source,
+        provider: s.provider,
+        targetUrl: s.targetUrl,
+        requestBytes: 0,
+        responseBytes: 0,
+        timings: { total_ms: 0 },
+        timestamp: s.timestamp,
+        requestBody: undefined,
+        responseBody: undefined,
+      }));
+
+      const { summaries, metrics } = groupCapturesIntoSessions(rawCaptures);
+      summaries.sort(
+        (a, b) =>
+          new Date(b.lastTimestamp).getTime() -
+          new Date(a.lastTimestamp).getTime(),
+      );
+      return Response.json({ sessions: [], summaries, metrics });
+    }
+
+    return Response.json(listSessions);
   } catch (error) {
-    console.error(`Error processing session capture ${filename}:`, error);
-    continue;
-  }
-}
-
-// Sort by timestamp descending (newest first)
-sessions.sort(
-  (a, b) =>
-    new Date(b.timestamp).getTime() -
-    new Date(a.timestamp).getTime(),
-);
-
-// Strip heavy body fields from list responses to avoid RangeError in JSON.stringify
-const listSessions = sessions.map(
-  ({ requestBody: _rb, responseBody: _rsp, ...rest }) => rest,
-);
-// Return grouped summaries if requested
-if (groupBySourceDest) {
-  const rawCaptures: RawCaptureData[] = sessions.map((s) => ({
-    sessionId: s.sessionId || null,
-    source: s.source,
-    provider: s.provider,
-    targetUrl: s.targetUrl,
-    requestBytes: 0,
-    responseBytes: 0,
-    timings: { total_ms: 0 },
-    timestamp: s.timestamp,
-    requestBody: undefined,
-    responseBody: undefined,
-  }));
-
-  const { summaries, metrics } = groupCapturesIntoSessions(rawCaptures);
-  summaries.sort(
-    (a, b) =>
-      new Date(b.lastTimestamp).getTime() -
-      new Date(a.lastTimestamp).getTime(),
-  );
-  return Response.json({ sessions: [], summaries, metrics });
-}
-
-return Response.json(listSessions);
-} catch (error) {
     console.error("Error in sessions API:", error);
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }

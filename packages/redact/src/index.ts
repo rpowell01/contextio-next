@@ -157,32 +157,32 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
         session.rehydrator = createStreamRehydrator(session.map);
       }
 
-  const redactionStats = {
-    totalRedactions: stats.totalReplacements,
-    byRule: Object.fromEntries(Object.entries(stats.byRule)),
-  } as const;
   if (stats.totalReplacements > 0) {
+    const redactionStats = {
+      totalRedactions: stats.totalReplacements,
+      byRule: Object.fromEntries(Object.entries(stats.byRule)),
+    } as const;
     if (verbose) {
       const details = Object.entries(stats.byRule)
-            .map(([name, count]) => `${name}=${count}`)
-            .join(", ");
-          const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
-          console.error(
-            `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
-          );
-          if (map) {
-            console.error(
-              `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
-            );
-          }
-        }
+        .map(([name, count]) => `${name}=${count}`)
+        .join(", ");
+      const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
+      console.error(
+        `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
+      );
+      if (map) {
+        console.error(
+          `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
+        );
       }
-
-  return {
-    ...ctx,
-    redactionStats,
-    body: stats.totalReplacements > 0 ? (redacted as Record<string, any>) : ctx.body,
-  };
+    }
+    return {
+      ...ctx,
+      redactionStats,
+      body: redacted as Record<string, any>,
+    };
+  }
+  return ctx;
     },
 
     // Rehydrate placeholders in non-streaming responses.

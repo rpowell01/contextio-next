@@ -42,6 +42,11 @@ try {
       data.responseBody as string | null | undefined,
       data.requestBody,
       false,
+    ).totalRedactions;
+  } catch (error) {
+    console.error(
+      `Error counting redactions for ${data.timestamp ?? "unknown"} capture:`,
+      error,
     );
     redactionCount = redactionCounts.totalRedactions;
   }

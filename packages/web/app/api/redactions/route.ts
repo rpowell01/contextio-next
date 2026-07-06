@@ -1,10 +1,14 @@
 import fs from "node:fs/promises";
 import { join } from "node:path";
 
-import { CAPTURE_DIR, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
 import {
-  getCaptureRedactionStats,
+  CAPTURE_DIR,
+  MAX_FILE_SIZE,
+  listCaptureFiles,
+} from "@/lib/sessions/utils";
+import {
   computeCaptureRedactionCounts,
+  getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
 
 interface RedactionDetailRow {
@@ -35,23 +39,25 @@ export async function GET(_request: Request) {
         const data = JSON.parse(raw) as Record<string, unknown>;
 
         // Extract capture metadata (similar to extractCaptureMetadata in captures/route.ts)
-        const sessionId = (data.sessionId as string | null) ?? extractSessionFromFilename(filename);
+        const sessionId =
+          (data.sessionId as string | null) ??
+          extractSessionFromFilename(filename);
         const source = (data.source as string | null) ?? null;
         const provider = (data.provider as string) ?? "unknown";
         const targetUrl = (data.targetUrl as string) ?? "";
         const captureId = filename.replace(/\.json$/, "");
 
-      const cached = getCaptureRedactionStats(data);
+        const cached = getCaptureRedactionStats(data);
 
-      if (cached) {
-        // Canonical stats from the redact plugin
-        totalRedactions += cached.totalRedactions;
-        for (const [rule, count] of Object.entries(cached.byRule)) {
-          byType[rule] = (byType[rule] ?? 0) + count;
-        }
+        if (cached) {
+          // Canonical stats from the redact plugin
+          totalRedactions += cached.totalRedactions;
+          for (const [rule, count] of Object.entries(cached.byRule)) {
+            byType[rule] = (byType[rule] ?? 0) + count;
+          }
 
-        // Still compute match details when we need to render the per-capture detail view
-        const redaction = computeCaptureRedactionCounts(data, false);
+  // Still compute match details when we need to render the per-capture detail view
+  const redaction = computeCaptureRedactionCounts(data, false, cached);
         for (const match of redaction.matches) {
           detailRows.push({
             redactionType: match.ruleId,
@@ -68,23 +74,23 @@ export async function GET(_request: Request) {
         // Legacy capture without redactionStats; recompute from raw bodies
         const redaction = computeCaptureRedactionCounts(data, false);
 
-        totalRedactions += redaction.totalRedactions;
-        for (const [rule, count] of Object.entries(redaction.byRule)) {
-          byType[rule] = (byType[rule] ?? 0) + count;
+          totalRedactions += redaction.totalRedactions;
+          for (const [rule, count] of Object.entries(redaction.byRule)) {
+            byType[rule] = (byType[rule] ?? 0) + count;
+          }
+          for (const match of redaction.matches) {
+            detailRows.push({
+              redactionType: match.ruleId,
+              requestSource: source,
+              requestProvider: provider,
+              requestTarget: targetUrl,
+              sessionId,
+              captureId,
+              preRedactionValue: match.original,
+              postRedactionValue: match.placeholder,
+            });
+          }
         }
-        for (const match of redaction.matches) {
-          detailRows.push({
-            redactionType: match.ruleId,
-            requestSource: source,
-            requestProvider: provider,
-            requestTarget: targetUrl,
-            sessionId,
-            captureId,
-            preRedactionValue: match.original,
-            postRedactionValue: match.placeholder,
-          });
-        }
-      }
       } catch (error) {
         console.error(`Error processing capture ${filename}:`, error);
         continue;

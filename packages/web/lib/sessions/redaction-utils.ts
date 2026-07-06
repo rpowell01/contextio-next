@@ -53,14 +53,16 @@ export function getCaptureRedactionStats(
     return null;
   }
   const obj = raw as Record<string, unknown>;
-  const total = typeof obj.totalRedactions === "number"
-    ? obj.totalRedactions
-    : typeof obj.total === "number"
-      ? obj.total
+  const total =
+    typeof obj.totalRedactions === "number"
+      ? obj.totalRedactions
+      : typeof obj.total === "number"
+        ? obj.total
+        : null;
+  const byRule =
+    typeof obj.byRule === "object" && obj.byRule !== null
+      ? (obj.byRule as Record<string, unknown>)
       : null;
-  const byRule = typeof obj.byRule === "object" && obj.byRule !== null
-    ? (obj.byRule as Record<string, unknown>)
-    : null;
 
   if (total === null || byRule === null) {
     return null;
@@ -106,12 +108,7 @@ export function findRedactedValuesInString(
       // [RULE_REDACTED]
       const ruleId = m[1].toLowerCase();
       // We don't have original value, but we can set placeholder as original for display.
-      matches.push({
-        ruleId,
-        original: placeholder,
-        placeholder,
-        path,
-      });
+      matches.push({ ruleId, original: placeholder, placeholder, path });
       incrementRuleCount(byRule, ruleId);
     } else if (m[0] && /\d{3}-\d{2}-\d{4}/.test(m[0])) {
       // SSN format (bare digits, no brackets)
@@ -175,45 +172,51 @@ export function findRedactedValues(
 
 /**
  * Compute redaction counts for a single capture's raw data.
- * Counts redactions in both request and response bodies unless
- * `countResponseBody` is set to false.
+ * Scans the request body for matches. When `persistedStats` is provided,
+ * aggregate totals come from the persisted capture stats; otherwise they
+ * are derived from the scanned request body. Response body is never scanned
+ * by this helper.
  */
 export function computeCaptureRedactionCounts(
   rawData: Record<string, unknown>,
-  countResponseBody = true,
+  _countResponseBody = false,
+  persistedStats?: CaptureRedactionStats,
 ): RedactionCounts {
   const requestBody = rawData.requestBody;
-  const responseBody = rawData.responseBody as string | null | undefined;
 
-  let totalRedactions = 0;
-  const byRule: Record<string, number> = {};
   const matches: RedactionMatch[] = [];
-
-  function addCounts(src: RedactionCounts) {
-    totalRedactions += src.totalRedactions;
-    for (const [rule, count] of Object.entries(src.byRule)) {
-      byRule[rule] = (byRule[rule] ?? 0) + count;
-    }
-    matches.push(...src.matches);
-  }
+  const byRule: Record<string, number> = {};
 
   if (requestBody && typeof requestBody === "object") {
-    const reqCounts = countRedactionsInResponse(undefined, requestBody, countResponseBody);
-    addCounts(reqCounts);
-  }
-  if (typeof responseBody === "string" && countResponseBody) {
-    const resCounts = countRedactionsInResponse(responseBody, undefined, countResponseBody);
-    addCounts(resCounts);
+    const reqCounts = countRedactionsInResponse(undefined, requestBody, false);
+    matches.push(...reqCounts.matches);
+    for (const [rule, count] of Object.entries(reqCounts.byRule)) {
+      byRule[rule] = count;
+    }
   }
 
+  const totalRedactions = persistedStats
+    ? persistedStats.totalRedactions
+    : matches.length;
+
+  if (persistedStats) {
+    for (const [rule, count] of Object.entries(persistedStats.byRule)) {
+      byRule[rule] = count;
+    }
+  }
+
+  const requestBody = rawData.requestBody;
+  const reqCounts = countRedactionsInResponse(undefined, requestBody, false);
   return {
-    totalRedactions,
-    byRule,
-    matches,
+    totalRedactions: reqCounts.totalRedactions,
+    byRule: { ...reqCounts.byRule },
+    matches: [...reqCounts.matches],
   };
 }
 
-/** Count redactions in both the request and response bodies. */
+/**
+ * Count redactions in both the request and response bodies.
+ */
 export function countRedactionsInResponse(
   responseBody: string | null | undefined,
   requestBody?: unknown,
@@ -222,23 +225,28 @@ export function countRedactionsInResponse(
   const matches: RedactionMatch[] = [];
   const byRule: Record<string, number> = {};
 
-// Matches [RULE_REDACTED] where RULE is uppercase with underscores.
-// Also matches bare SSN without brackets.
-const placeholderRegex = /\[([A-Z][A-Z0-9_]*)_REDACTED\]/g;
-const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
+  // Matches [RULE_REDACTED] where RULE is uppercase with underscores.
+  // Also matches bare SSN without brackets.
+  const placeholderRegex = /\[([A-Z][A-Z0-9_]*)_REDACTED\]/g;
+  const ssnRegex = /\b\d{3}-\d{2}-\d{4}\b/g;
 
-const searchText = (text: string): void => {
+  const searchText = (text: string): void => {
     try {
       placeholderRegex.lastIndex = 0;
       ssnRegex.lastIndex = 0;
 
-      const allMatches: { result: string; type: string; ruleName?: string }[] = [];
+      const allMatches: { result: string; type: string; ruleName?: string }[] =
+        [];
 
       let m: RegExpExecArray | null;
       while ((m = placeholderRegex.exec(text)) !== null) {
         // m[0] = full match e.g. "[SSN_REDACTED]"
         // m[1] = rule name
-        allMatches.push({ result: m[0], type: "placeholder", ruleName: m[1]?.toLowerCase() });
+        allMatches.push({
+          result: m[0],
+          type: "placeholder",
+          ruleName: m[1]?.toLowerCase(),
+        });
       }
       while ((m = ssnRegex.exec(text)) !== null) {
         allMatches.push({ result: m[0], type: "ssn" });
@@ -268,21 +276,16 @@ const searchText = (text: string): void => {
     }
   };
 
-try {
-  if (requestBody !== null && requestBody !== undefined) {
-    searchText(JSON.stringify(requestBody));
+  try {
+    if (requestBody !== null && requestBody !== undefined) {
+      searchText(JSON.stringify(requestBody));
+    }
+    if (responseBody && countResponseBody) {
+      searchText(responseBody);
+    }
+  } catch (error) {
+    console.error("Error counting redactions:", error);
   }
-  if (responseBody && countResponseBody) {
-    searchText(responseBody);
-  }
-} catch (error) {
-  console.error("Error counting redactions:", error);
-}
 
-  return {
-    totalRedactions: matches.length,
-    byRule,
-    matches,
-  };
+  return { totalRedactions: matches.length, byRule, matches };
 }
-

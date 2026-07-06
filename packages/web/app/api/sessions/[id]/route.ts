@@ -3,12 +3,13 @@ import { join } from "node:path";
 import type { SessionDetail, SessionMetrics, CaptureMetrics } from "@/types/api";
 import { listCaptureFiles, CAPTURE_DIR, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
 import {
+  computeCaptureRedactionCounts,
   countRedactionsInResponse,
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
 import type { CaptureRedactionStats } from "@/lib/sessions/redaction-utils";
 
-interface RawCaptureData {
+interface RawCaptureData extends Record<string, unknown> {
   sessionId: string | null;
   source: string | null;
   provider: string;
@@ -138,7 +139,7 @@ function computeSessionMetrics(sessionCaptures: RawCaptureData[]): {
     totalInputTokens += tokenUsage.input;
     totalOutputTokens += tokenUsage.output;
 
-    const redactionCounts = computeCaptureRedactionCounts(c, false);
+    const redactionCounts = computeCaptureRedactionCounts(c as unknown as Record<string, unknown>);
     totalRedactions += redactionCounts.totalRedactions;
     for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
       byRule[rule] = (byRule[rule] || 0) + (count as number);
