@@ -9,7 +9,10 @@ import type {
 } from "@/types/api";
 
 import { CAPTURE_DIR, MAX_FILE_SIZE, isValidFilename } from "@/lib/sessions/utils";
-import { computeCaptureRedactionCounts } from "@/lib/sessions/redaction-utils";
+import {
+  getCaptureRedactionStats,
+  computeCaptureRedactionCounts,
+} from "@/lib/sessions/redaction-utils";
 
 /**
  * Extract capture metadata from parsed data.
@@ -260,19 +263,28 @@ export async function GET(request: Request) {
         // Extract capture metadata
         capture = extractCaptureMetadata(filename, data);
 
-        // Compute redaction details if needed (includeRedaction or redactionType filtering)
-        if (includeRedaction || (redactionType && redactionType !== "all")) {
+      // Compute redaction details if needed (includeRedaction or redactionType filtering)
+      if (includeRedaction || (redactionType && redactionType !== "all")) {
+        const cachedStats = getCaptureRedactionStats(data);
+        if (cachedStats) {
+          redaction = {
+            totalRedactions: cachedStats.totalRedactions,
+            byRule: cachedStats.byRule,
+            matches: [],
+          };
+        } else {
           redaction = computeCaptureRedactionCounts(data);
-
-          // Filter by redaction type if specified
-          if (
-            redactionType &&
-            redactionType !== "all" &&
-            !redaction.byRule[redactionType]
-          ) {
-            continue;
-          }
         }
+
+        // Filter by redaction type if specified
+        if (
+          redactionType &&
+          redactionType !== "all" &&
+          !redaction.byRule[redactionType]
+        ) {
+          continue;
+        }
+      }
 
         // Apply date filters - skip records with invalid timestamps
         const captureTimestamp = validateCaptureTimestamp(capture.timestamp);

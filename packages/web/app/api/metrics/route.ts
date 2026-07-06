@@ -3,54 +3,59 @@ import { join } from "node:path";
 
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
 import { CAPTURE_DIR, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
-import { countRedactionsInResponse } from "@/lib/sessions/redaction-utils";
+import { countRedactionsInResponse, getCaptureRedactionStats } from "@/lib/sessions/redaction-utils";
 
 /**
  * Parse a single capture file and extract metrics.
  */
 function parseCapture(data: Record<string, unknown>): {
-   traffic: TrafficMetric | null;
-   providerUsage: ProviderUsage | null;
-   redaction: RedactionMetric | null;
- } {
-   const timestamp = (data.timestamp as string) ?? new Date().toISOString();
-   const provider = (data.provider as string) ?? "unknown";
-   const requestBytes = (data.requestBytes as number) ?? 0;
-   const responseBytes = (data.responseBytes as number) ?? 0;
+  traffic: TrafficMetric | null;
+  providerUsage: ProviderUsage | null;
+  redaction: RedactionMetric | null;
+} {
+  const timestamp = (data.timestamp as string) ?? new Date().toISOString();
+  const provider = (data.provider as string) ?? "unknown";
+  const requestBytes = (data.requestBytes as number) ?? 0;
+  const responseBytes = (data.responseBytes as number) ?? 0;
 
-   const traffic: TrafficMetric = {
-     timestamp,
-     requestBytes,
-     responseBytes,
-   };
+  const traffic: TrafficMetric = {
+    timestamp,
+    requestBytes,
+    responseBytes,
+  };
 
-   const providerUsage: ProviderUsage = {
-     provider,
-     requestCount: 1,
-     totalInputTokens: 0,
-     totalOutputTokens: 0,
-   };
+  const providerUsage: ProviderUsage = {
+    provider,
+    requestCount: 1,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+  };
 
-  // Count redactions from request body only to keep the dashboard/session totals consistent
-  let redactionCount = 0;
-  try {
+// Count redactions from persisted capture stats, falling back to request body only
+let redactionCount = 0;
+try {
+  const cachedStats = getCaptureRedactionStats(data);
+  if (cachedStats) {
+    redactionCount = cachedStats.totalRedactions;
+  } else {
     const redactionCounts = countRedactionsInResponse(
       data.responseBody as string | null | undefined,
       data.requestBody,
       false,
     );
     redactionCount = redactionCounts.totalRedactions;
-  } catch (e) {
-    console.error("Failed to count redactions in capture:", e);
   }
+} catch (e) {
+  console.error("Failed to count redactions in capture:", e);
+}
 
-   const redaction: RedactionMetric = {
-     timestamp,
-     count: redactionCount,
-   };
+  const redaction: RedactionMetric = {
+    timestamp,
+    count: redactionCount,
+  };
 
-   return { traffic, providerUsage, redaction };
- }
+  return { traffic, providerUsage, redaction };
+}
 
 /**
  * Aggregate metrics from all capture files.
@@ -85,7 +90,9 @@ function aggregateMetrics(
         existing.totalInputTokens += capture.providerUsage.totalInputTokens;
         existing.totalOutputTokens += capture.providerUsage.totalOutputTokens;
       } else {
-        providerMap.set(capture.providerUsage.provider, { ...capture.providerUsage });
+        providerMap.set(capture.providerUsage.provider, {
+          ...capture.providerUsage,
+        });
       }
     }
 
@@ -138,9 +145,6 @@ export async function GET(_request: Request): Promise<Response> {
     return Response.json(metrics);
   } catch (error) {
     console.error("Error in metrics API:", error);
-    return Response.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    return Response.json({ error: "Internal server error" }, { status: 500 });
   }
 }

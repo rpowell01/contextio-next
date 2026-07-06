@@ -22,7 +22,11 @@
  * ```
  */
 
-import type { ProxyPlugin, RequestContext, ResponseContext } from "@contextio/core";
+import type {
+  ProxyPlugin,
+  RequestContext,
+  ResponseContext,
+} from "@contextio/core";
 
 import { ReplacementMap } from "./mapping.js";
 import type { CompiledPolicy } from "./policy.js";
@@ -127,7 +131,9 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
         if (now - s.lastSeen > sessionTtlMs) {
           sessions.delete(k);
           if (verbose) {
-            console.error(`[redact] Evicted idle session ${k} (${s.map.size} mapping(s))`);
+            console.error(
+              `[redact] Evicted idle session ${k} (${s.map.size} mapping(s))`,
+            );
           }
         }
       }
@@ -145,16 +151,19 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
       const map = reversible ? getSession(ctx.sessionId).map : null;
       const stats = createStats();
       const redacted = redactWithPolicy(ctx.body, policy, stats, [], map);
-
       // Reset stream rehydrator for this session (new response coming)
       if (reversible) {
         const session = getSession(ctx.sessionId);
         session.rehydrator = createStreamRehydrator(session.map);
       }
 
-      if (stats.totalReplacements > 0) {
-        if (verbose) {
-          const details = Object.entries(stats.byRule)
+  const redactionStats = {
+    totalRedactions: stats.totalReplacements,
+    byRule: Object.fromEntries(Object.entries(stats.byRule)),
+  } as const;
+  if (stats.totalReplacements > 0) {
+    if (verbose) {
+      const details = Object.entries(stats.byRule)
             .map(([name, count]) => `${name}=${count}`)
             .join(", ");
           const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
@@ -162,17 +171,18 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
             `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
           );
           if (map) {
-            console.error(`[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`);
+            console.error(
+              `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
+            );
           }
         }
-
-        return {
-          ...ctx,
-          body: redacted as Record<string, any>,
-        };
       }
 
-      return ctx;
+  return {
+    ...ctx,
+    redactionStats,
+    body: stats.totalReplacements > 0 ? (redacted as Record<string, any>) : ctx.body,
+  };
     },
 
     // Rehydrate placeholders in non-streaming responses.
@@ -186,7 +196,9 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
 
           if (verbose) {
             const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
-            console.error(`[redact]${sid} Rehydrated response (${session.map.size} mapping(s) active)`);
+            console.error(
+              `[redact]${sid} Rehydrated response (${session.map.size} mapping(s) active)`,
+            );
           }
 
           return { ...ctx, body: rehydrated };

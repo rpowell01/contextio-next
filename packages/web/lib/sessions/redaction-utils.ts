@@ -27,8 +27,60 @@ const PLACEHOLDER_REGEX =
   /\[([A-Z][A-Z0-9_]*)_REDACTED\]|\b\d{3}-\d{2}-\d{4}\b/g;
 
 /**
- * Increment a counter in the byRule record.
+ * Canonical capture-level redaction stats written by the redact plugin.
+ *
+ * shape: { totalRedactions: number; byRule: Record<string, number> }
  */
+export interface CaptureRedactionStats {
+  totalRedactions: number;
+  byRule: Record<string, number>;
+}
+
+/**
+ * Read the canonical `capture.redactionStats` field when present.
+ *
+ * This path is primary: the redact plugin produces these counts once
+ * during capture so other layers do not need to re-scan raw bodies.
+ * Returns null when the field is absent or the shape is unexpected
+ * (legacy captures, etc.), signaling the caller to fall back to
+ * recomputation.
+ */
+export function getCaptureRedactionStats(
+  capture: Record<string, unknown>,
+): CaptureRedactionStats | null {
+  const raw = capture.redactionStats;
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const obj = raw as Record<string, unknown>;
+  const total = typeof obj.totalRedactions === "number"
+    ? obj.totalRedactions
+    : typeof obj.total === "number"
+      ? obj.total
+      : null;
+  const byRule = typeof obj.byRule === "object" && obj.byRule !== null
+    ? (obj.byRule as Record<string, unknown>)
+    : null;
+
+  if (total === null || byRule === null) {
+    return null;
+  }
+
+  const normalizedByRule: Record<string, number> = {};
+  for (const [rule, count] of Object.entries(byRule)) {
+    if (typeof count === "number") {
+      normalizedByRule[rule] = count;
+    } else if (typeof count === "string") {
+      const parsed = Number(count);
+      if (Number.isFinite(parsed)) {
+        normalizedByRule[rule] = parsed;
+      }
+    }
+  }
+
+  return { totalRedactions: total, byRule: normalizedByRule };
+}
+
 export function incrementRuleCount(
   byRule: Record<string, number>,
   ruleId: string,
@@ -131,7 +183,7 @@ export function computeCaptureRedactionCounts(
   countResponseBody = true,
 ): RedactionCounts {
   const requestBody = rawData.requestBody;
-  const responseBody = rawData.responseBody;
+  const responseBody = rawData.responseBody as string | null | undefined;
 
   let totalRedactions = 0;
   const byRule: Record<string, number> = {};
@@ -149,7 +201,7 @@ export function computeCaptureRedactionCounts(
     const reqCounts = countRedactionsInResponse(undefined, requestBody, countResponseBody);
     addCounts(reqCounts);
   }
-  if (typeof responseBody === "string") {
+  if (typeof responseBody === "string" && countResponseBody) {
     const resCounts = countRedactionsInResponse(responseBody, undefined, countResponseBody);
     addCounts(resCounts);
   }

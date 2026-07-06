@@ -90,10 +90,7 @@ async function runResponsePlugins(
 }
 
 /** Fire all onCapture hooks. Errors are logged but never block the response. */
-function runCapturePlugins(
-  plugins: ProxyPlugin[],
-  capture: CaptureData,
-): void {
+function runCapturePlugins(plugins: ProxyPlugin[], capture: CaptureData): void {
   for (const plugin of plugins) {
     if (!plugin.onCapture) continue;
     try {
@@ -180,6 +177,7 @@ function buildCaptureData(options: {
     requestHeaders: selectHeaders(options.ctx.headers),
     requestBody: options.ctx.body,
     requestBytes: options.reqBytes,
+    redactionStats: options.ctx.redactionStats,
     responseStatus: options.proxyRes.statusCode || 0,
     responseHeaders: selectHeaders(options.proxyRes.headers as HeaderMap),
     responseBody: options.finalBody,
@@ -229,7 +227,9 @@ function headersForResolution(
 ): Record<string, string | undefined> {
   const h = headers as Record<string, string | undefined>;
   if (logTraffic) {
-    console.error(`[DEBUG] headersForResolution: allowTargetOverride=${allowTargetOverride}`);
+    console.error(
+      `[DEBUG] headersForResolution: allowTargetOverride=${allowTargetOverride}`,
+    );
     console.error(`[DEBUG] x-target-url present: ${!!h["x-target-url"]}`);
   }
   if (h["x-target-url"] && !allowTargetOverride) {
@@ -306,35 +306,43 @@ export function createProxyHandler(
     res: http.ServerResponse,
   ): void {
     const parsedUrl = url.parse(req.url!);
-    const { source: urlSource, sessionId: urlSessionId, cleanPath } = extractSource(parsedUrl.pathname!);
-    
+    const {
+      source: urlSource,
+      sessionId: urlSessionId,
+      cleanPath,
+    } = extractSource(parsedUrl.pathname!);
+
     // Extract session ID and source from routing headers
     const headers = req.headers as Record<string, string | undefined>;
     const sessionId = headers["x-session-affinity"] || urlSessionId;
     // Extract source from headers in priority order, fallback to URL source
-    let source: string | null | undefined = headers['x-real-ip']?.trim();
+    let source: string | null | undefined = headers["x-real-ip"]?.trim();
     if (!source) {
-        source = headers['x-forwarded-for'];
-        if (source) {
-            // X-Forwarded-For can contain multiple IPs, take the first one
-            source = source.split(',')[0].trim();
-        }
+      source = headers["x-forwarded-for"];
+      if (source) {
+        // X-Forwarded-For can contain multiple IPs, take the first one
+        source = source.split(",")[0].trim();
+      }
     }
     if (!source) {
-        source = headers['x-session-affinity']?.trim();
+      source = headers["x-session-affinity"]?.trim();
     }
     if (!source) {
-        source = urlSource;
+      source = urlSource;
     }
     if (!source) {
-        source = 'unknown';
+      source = "unknown";
     }
-    
+
     const search = parsedUrl.search || null;
 
     if (opts.logTraffic) {
-      console.error(`[DEBUG] handleProxy: path=${parsedUrl.pathname}, cleanPath=${cleanPath}`);
-      console.error(`[DEBUG] Raw headers: ${JSON.stringify(req.headers, null, 2)}`);
+      console.error(
+        `[DEBUG] handleProxy: path=${parsedUrl.pathname}, cleanPath=${cleanPath}`,
+      );
+      console.error(
+        `[DEBUG] Raw headers: ${JSON.stringify(req.headers, null, 2)}`,
+      );
     }
 
     const routingHeaders = headersForResolution(
@@ -344,7 +352,9 @@ export function createProxyHandler(
     );
 
     if (opts.logTraffic) {
-      console.error(`[DEBUG] Routing headers: ${JSON.stringify(routingHeaders, null, 2)}`);
+      console.error(
+        `[DEBUG] Routing headers: ${JSON.stringify(routingHeaders, null, 2)}`,
+      );
     }
 
     const { targetUrl, provider, apiFormat } = resolveTargetUrl(
@@ -425,7 +435,10 @@ export function createProxyHandler(
           decompressed = zlib.zstdDecompressSync(bodyBuffer);
         } else if (contentEncoding === "br") {
           decompressed = zlib.brotliDecompressSync(bodyBuffer);
-        } else if (contentEncoding === "gzip" || contentEncoding === "deflate") {
+        } else if (
+          contentEncoding === "gzip" ||
+          contentEncoding === "deflate"
+        ) {
           decompressed = zlib.unzipSync(bodyBuffer);
         } else {
           decompressed = bodyBuffer;
@@ -487,8 +500,7 @@ export function createProxyHandler(
           forwardBuffer.length,
         );
 
-        const protocol =
-          targetParsed.protocol === "https:" ? https : http;
+        const protocol = targetParsed.protocol === "https:" ? https : http;
         const startTime = performance.now();
         let firstByteTime = 0;
         let requestSentTime = 0;
@@ -510,20 +522,17 @@ export function createProxyHandler(
             }
 
             const isStreaming =
-              proxyRes.headers["content-type"]?.includes(
-                "text/event-stream",
-              );
+              proxyRes.headers["content-type"]?.includes("text/event-stream");
             let respBytes = 0;
             const respChunks: Buffer[] = [];
 
             // Buffer data to handle partial JSON objects across chunk boundaries
-            let jsonBuffer = '';
+            let jsonBuffer = "";
 
             // Buffer the full response only when response plugins are active
             // AND the response is not streaming. Streaming responses must be
             // forwarded chunk by chunk; buffering them would break SSE clients.
-            const shouldBufferResponse =
-              hasResponsePlugins && !isStreaming;
+            const shouldBufferResponse = hasResponsePlugins && !isStreaming;
 
             if (!shouldBufferResponse) {
               // Stream directly to client
@@ -539,59 +548,65 @@ export function createProxyHandler(
                 let outBuffer: Buffer = chunk;
                 if (hasStreamPlugins && isStreaming) {
                   // Convert to string for safe splitting
-                  const text = outBuffer.toString('utf8');
+                  const text = outBuffer.toString("utf8");
                   // Prepend any leftover partial JSON from previous chunks
                   const fullText = jsonBuffer ? jsonBuffer + text : text;
-                  jsonBuffer = '';
+                  jsonBuffer = "";
                   // Split where a JSON object ends and another begins without a delimiter
-      const parts = fullText.split(/(?<=})\s*(?={)/);
-      const processedParts: Buffer[] = [];
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        let buf = Buffer.from(part, 'utf8');
-        // Run plugins on each part individually
-        if (hasStreamPlugins) {
-          for (const plugin of plugins) {
-            if (!plugin.onStreamChunk) continue;
-            try {
-              let ret: unknown = plugin.onStreamChunk(buf, sessionId);
-              if (ret instanceof SharedArrayBuffer) {
-                // @ts-expect-error - TypeScript doesn't recognize buffer property on SharedArrayBuffer
-                ret = Buffer.from((ret as SharedArrayBuffer).buffer);
-              }
-              if (ret instanceof Buffer) {
-                buf = ret;
-              }
-            } catch (err: unknown) {
-              console.error(
-                `Plugin "${plugin.name}" onStreamChunk error:`,
-                err instanceof Error ? err.message : String(err),
-              );
-            }
-          }
-        }
-        // Only process complete JSON objects; save incomplete trailing part
-        const isLastPart = i === parts.length - 1;
-        const looksComplete = part.trim().endsWith('}');
-        if (isLastPart && !looksComplete) {
-          // Save incomplete trailing part for next chunk
-          jsonBuffer = part;
-        } else {
-          const trimmed = part.trim();
-          const startsObject = trimmed.startsWith('{');
-          const endsObject = trimmed.endsWith('}');
-          if (startsObject && endsObject) {
-            try {
-              JSON.parse(trimmed);
-            } catch {
-              console.error('Malformed JSON in SSE stream, skipping invalid part');
-              continue;
-            }
-          }
-          processedParts.push(buf);
-        }
-      }
-      outBuffer = Buffer.concat(processedParts);
+                  const parts = fullText.split(/(?<=})\s*(?={)/);
+                  const processedParts: Buffer[] = [];
+                  for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    let buf = Buffer.from(part, "utf8");
+                    // Run plugins on each part individually
+                    if (hasStreamPlugins) {
+                      for (const plugin of plugins) {
+                        if (!plugin.onStreamChunk) continue;
+                        try {
+                          let ret: unknown = plugin.onStreamChunk(
+                            buf,
+                            sessionId,
+                          );
+  if (ret instanceof SharedArrayBuffer) {
+  ret = Buffer.from(
+    Buffer.from(ret as ArrayBufferLike),
+  );
+}
+                          if (ret instanceof Buffer) {
+                            buf = ret;
+                          }
+                        } catch (err: unknown) {
+                          console.error(
+                            `Plugin "${plugin.name}" onStreamChunk error:`,
+                            err instanceof Error ? err.message : String(err),
+                          );
+                        }
+                      }
+                    }
+                    // Only process complete JSON objects; save incomplete trailing part
+                    const isLastPart = i === parts.length - 1;
+                    const looksComplete = part.trim().endsWith("}");
+                    if (isLastPart && !looksComplete) {
+                      // Save incomplete trailing part for next chunk
+                      jsonBuffer = part;
+                    } else {
+                      const trimmed = part.trim();
+                      const startsObject = trimmed.startsWith("{");
+                      const endsObject = trimmed.endsWith("}");
+                      if (startsObject && endsObject) {
+                        try {
+                          JSON.parse(trimmed);
+                        } catch {
+                          console.error(
+                            "Malformed JSON in SSE stream, skipping invalid part",
+                          );
+                          continue;
+                        }
+                      }
+                      processedParts.push(buf);
+                    }
+                  }
+                  outBuffer = Buffer.concat(processedParts);
                 } else if (hasStreamPlugins) {
                   // Non-streaming plugins still operate on whole chunk
                   for (const plugin of plugins) {
@@ -632,8 +647,7 @@ export function createProxyHandler(
                 }
               }
 
-              const respBody =
-                Buffer.concat(respChunks).toString("utf8");
+              const respBody = Buffer.concat(respChunks).toString("utf8");
 
               // finishResponse is called once the response body is final:
               // either immediately after the upstream ends (non-buffered path)
@@ -661,20 +675,16 @@ export function createProxyHandler(
                     send_ms: Math.round(
                       Math.max(
                         0,
-                        (requestSentTime || firstByteTime) -
-                          startTime,
+                        (requestSentTime || firstByteTime) - startTime,
                       ),
                     ),
                     wait_ms: Math.round(
                       Math.max(
                         0,
-                        firstByteTime -
-                          (requestSentTime || startTime),
+                        firstByteTime - (requestSentTime || startTime),
                       ),
                     ),
-                    receive_ms: Math.round(
-                      endTime - firstByteTime,
-                    ),
+                    receive_ms: Math.round(endTime - firstByteTime),
                     total_ms: Math.round(endTime - startTime),
                   };
 
@@ -720,9 +730,7 @@ export function createProxyHandler(
                   .catch((err: unknown) => {
                     console.error(
                       "Response plugin pipeline error:",
-                      err instanceof Error
-                        ? err.message
-                        : String(err),
+                      err instanceof Error ? err.message : String(err),
                     );
                     finishResponse(
                       respBody,
@@ -740,10 +748,7 @@ export function createProxyHandler(
             });
 
             proxyRes.on("error", (err) => {
-              console.error(
-                "Upstream response error:",
-                err.message,
-              );
+              console.error("Upstream response error:", err.message);
               if (!res.destroyed) res.end();
             });
           },

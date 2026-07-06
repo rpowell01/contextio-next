@@ -74,7 +74,8 @@ const SECRETS_RULES: RedactionRule[] = [
   // Dynamic detection rules for common auth patterns
  {
   name: "authorization-header",
-  pattern: /authorization\s*:\s*bearer\s+["']?(?<!\[)[a-zA-Z0-9._\-+/=]{20,}["']?/gi,
+  pattern:
+  /authorization\s*:\s*bearer\s+["']?(?<!\[)[a-zA-Z0-9._\-+/=]{20,}["']?/gi,
   replacement: "[AUTH_HEADER_REDACTED]",
 },
  {
