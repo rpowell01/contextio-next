@@ -302,12 +302,13 @@ for (const filename of files) {
   }
 }
 
-// Strip heavy body fields from list responses to avoid RangeError in JSON.stringify
-const listSessions = sessions
-  .map(({ requestBody: _rb, responseBody: _rsp, ...rest }) => rest);
+  // Strip heavy body fields from list responses to avoid RangeError in JSON.stringify
+  const listSessions = sessions
+  .map(({ requestBody: _rb, responseBody: _rsp, ...rest }) => rest)
+  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-// Sort by timestamp descending (newest first)
-    sessions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  // Sort by timestamp descending (newest first)
+  sessions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     
     // Return grouped summaries if requested
 if (groupBySourceDest) {
