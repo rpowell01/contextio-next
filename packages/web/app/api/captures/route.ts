@@ -149,26 +149,24 @@ export async function GET(request: Request) {
 
         capture = extractCaptureMetadata(filename, data);
 
- // Compute redaction details if needed (includeRedaction or redactionType filtering)
- if (includeRedaction || (redactionType && redactionType !== "all")) {
- const cachedStats = getCaptureRedactionStats(data);
- redaction = computeCaptureRedactionCounts(
- data,
- false,
- cachedStats ?? undefined,
- data.originalRequestBody,
- );
+        // Compute redaction details if needed (includeRedaction or redactionType filtering)
+        if (includeRedaction || (redactionType && redactionType !== "all")) {
+          const cachedStats = getCaptureRedactionStats(data);
+          redaction = computeCaptureRedactionCounts(
+            data,
+            false,
+            cachedStats ?? undefined,
+            data.originalRequestBody,
+          );
 
- // Filter by redaction type if specified
- if (
- redactionType &&
- redactionType !== "all" &&
- !redaction.byRule[redactionType]
- ) {
- continue;
- }
- }
-
+          // Filter by redaction type if specified
+          if (
+            redactionType &&
+            redactionType !== "all" &&
+            !redaction.byRule[redactionType]
+          ) {
+            continue;
+          }
         }
 
         const captureTimestamp = validateCaptureTimestamp(capture.timestamp);
@@ -177,6 +175,7 @@ export async function GET(request: Request) {
         if (isNaN(captureDate.getTime())) continue;
         if (fromDate && captureDate < fromDate) continue;
         if (toDate && captureDate > toDate) continue;
+
         if (sessionId && capture.sessionId !== sessionId) continue;
         if (source && capture.source !== source) continue;
         if (statusParam && String(capture.responseStatus) !== statusParam) continue;
