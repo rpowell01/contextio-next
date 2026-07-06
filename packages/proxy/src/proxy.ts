@@ -6,12 +6,62 @@
  */
 
 import http from "node:http";
+import fs from "node:fs/promises";
+import { join } from "node:path";
 
 import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
 
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
+
+async function cleanupCaptureFiles(config: {
+  loggerCaptureDir: string;
+  loggerCaptureMaxAgeMs: number;
+}): Promise<void> {
+  const files = await fs.readdir(config.loggerCaptureDir).catch(() => []);
+  const threshold = Date.now() - config.loggerCaptureMaxAgeMs;
+  for (const filename of files) {
+    if (!filename.endsWith(".json")) continue;
+    const filepath = join(config.loggerCaptureDir, filename);
+    try {
+      const stats = await fs.stat(filepath);
+      if (stats.mtimeMs < threshold) {
+        await fs.unlink(filepath);
+        console.debug(`Removed stale capture: ${filename}`);
+      }
+    } catch {
+      // ignore missing/corrupt files and continue
+    }
+  }
+}
+
+function startCaptureCleanup(config: {
+  loggerCaptureDir: string;
+  loggerCaptureMaxAgeMs: number;
+  loggerCaptureCleanupIntervalMs: number;
+  loggerCaptureCleanupEnabled: boolean;
+}): NodeJS.Timeout {
+  if (!config.loggerCaptureCleanupEnabled || config.loggerCaptureMaxAgeMs <= 0) {
+    return setInterval(() => {}, 0) as unknown as NodeJS.Timeout;
+  }
+
+  const timer = setInterval(
+    () => {
+      cleanupCaptureFiles(config).catch((error) =>
+        console.error("Capture cleanup failed:", error),
+      );
+    },
+    config.loggerCaptureCleanupIntervalMs,
+  );
+
+  // Run an initial pass at startup as well.
+  cleanupCaptureFiles(config).catch((error) =>
+    console.error("Initial capture cleanup failed:", error),
+  );
+
+  return timer as NodeJS.Timeout;
+}
 
 export interface ProxyInstance {
   /** Start listening. Resolves when the server is ready. */
@@ -66,9 +116,10 @@ export function createProxy(
     }
   };
 
-  const server = http.createServer(combinedHandler);
-  let boundPort = resolved.port;
-  let started = false;
+const server = http.createServer(combinedHandler);
+const cleanupTimer = startCaptureCleanup(resolved);
+let boundPort = resolved.port;
+let started = false;
 
   return {
     get port() {

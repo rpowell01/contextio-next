@@ -361,11 +361,19 @@ class APIClient {
     return this.request(`/api/captures${query ? `?${query}` : ""}`);
   }
 
-  async getCapture(id: string): Promise<Capture & { requestBody: Record<string, unknown>; responseBody: string | null }> {
-    return this.request(`/api/captures/${id}`);
-  }
+async getCapture(id: string): Promise<Capture & { requestBody: Record<string, unknown>; responseBody: string | null }> {
+  return this.request(`/api/captures/${id}`);
+}
 
-  // Proxy Admin API methods
+async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: number; message: string }> {
+  return this.request("/api/captures?action=clear", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: true }),
+  });
+}
+
+// Proxy Admin API methods
   // These connect to the proxy service on port 4040
 
   async getProxyStatus(signal?: AbortSignal): Promise<ProxyStatus> {

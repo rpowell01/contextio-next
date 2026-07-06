@@ -145,9 +145,12 @@ function buildForwardHeaders(
 /**
  * Assemble a CaptureData record from the completed request/response cycle.
  *
- * Takes the final plugin-processed request context (`ctx`) rather than the
- * raw request, so the captured body and headers reflect what was actually
- * forwarded to the upstream (after redaction, etc.), not the original client request.
+ * Stores both the plugin-processed body (`ctx.body`) and the original
+ * unmodified body. The captured `requestBody` is redacted/placeholder
+ * text; `originalRequestBody` preserves the real values so the UI can
+ * display true pre-redaction values.
+ *
+ * Security note: `originalRequestBody` contains unredacted sensitive data.
  */
 function buildCaptureData(options: {
   sessionId: string | null;
@@ -158,6 +161,7 @@ function buildCaptureData(options: {
   apiFormat: string;
   targetUrl: string;
   ctx: RequestContext;
+  originalBody: JsonValue | null;
   reqBytes: number;
   proxyRes: http.IncomingMessage;
   finalBody: string;
@@ -176,6 +180,7 @@ function buildCaptureData(options: {
     targetUrl: options.targetUrl,
     requestHeaders: selectHeaders(options.ctx.headers),
     requestBody: options.ctx.body,
+    originalRequestBody: options.originalBody,
     requestBytes: options.reqBytes,
     redactionStats: options.ctx.redactionStats,
     responseStatus: options.proxyRes.statusCode || 0,
@@ -688,22 +693,23 @@ export function createProxyHandler(
                     total_ms: Math.round(endTime - startTime),
                   };
 
-                  const capture = buildCaptureData({
-                    sessionId,
-                    req,
-                    cleanPath,
-                    source,
-                    provider,
-                    apiFormat,
-                    targetUrl,
-                    ctx,
-                    reqBytes,
-                    proxyRes,
-                    finalBody,
-                    isStreaming: !!isStreaming,
-                    respBytes,
-                    timings,
-                  });
+  const capture = buildCaptureData({
+    sessionId,
+    req,
+    cleanPath,
+    source,
+    provider,
+    apiFormat,
+    targetUrl,
+    ctx,
+    originalBody: bodyJson,
+    reqBytes,
+    proxyRes,
+    finalBody,
+    isStreaming: !!isStreaming,
+    respBytes,
+    timings,
+  });
 
                   runCapturePlugins(plugins, capture);
                 }

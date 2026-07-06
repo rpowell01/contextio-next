@@ -92,29 +92,37 @@ export function incrementRuleCount(
 
 /**
  * Find all redacted placeholders in a string.
+ *
+ * When `originalText` is provided, the whole original leaf string is used
+ * as the recovered pre-redaction value (avoiding positional slicing, which
+ * breaks when placeholder length differs from the original value's length).
+ * Otherwise the placeholder itself is used as a fallback (legacy / non-JSON
+ * bodies).
  */
 export function findRedactedValuesInString(
   text: string,
   matches: RedactionMatch[],
   byRule: Record<string, number>,
   path = "",
+  originalText?: string,
 ): void {
   PLACEHOLDER_REGEX.lastIndex = 0;
 
   let m: RegExpExecArray | null;
   while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
     const placeholder = m[0];
+    const original = originalText ?? placeholder;
+
     if (m[1]) {
       // [RULE_REDACTED]
       const ruleId = m[1].toLowerCase();
-      // We don't have original value, but we can set placeholder as original for display.
-      matches.push({ ruleId, original: placeholder, placeholder, path });
+      matches.push({ ruleId, original, placeholder, path });
       incrementRuleCount(byRule, ruleId);
-    } else if (m[0] && /\d{3}-\d{2}-\d{4}/.test(m[0])) {
+    } else if (placeholder && /\d{3}-\d{2}-\d{4}/.test(placeholder)) {
       // SSN format (bare digits, no brackets)
       matches.push({
         ruleId: "ssn",
-        original: m[0],
+        original,
         placeholder: `[SSN_REDACTED]`,
         path,
       });
@@ -126,36 +134,55 @@ export function findRedactedValuesInString(
 /**
  * Recursively walk a JSON object tree and find all redacted placeholders.
  *
- * @param obj - The object to traverse
- * @param currentPath - Current JSON path (empty string for root)
- * @param matches - Array to collect match details (mutated in place)
- * @param byRule - Record to collect per-rule counts (mutated in place)
+ * When `originalObj` is provided, it is walked in parallel with the redacted
+ * tree so the real pre-redaction values can be recovered at leaf strings.
  */
 export function findRedactedValues(
   obj: Record<string, unknown>,
   currentPath: string,
   matches: RedactionMatch[],
   byRule: Record<string, number>,
+  originalObj?: Record<string, unknown>,
 ): void {
   for (const [key, value] of Object.entries(obj)) {
     const path = currentPath ? `${currentPath}.${key}` : key;
 
     if (typeof value === "string") {
-      findRedactedValuesInString(value, matches, byRule, path);
+      const originalStr = originalObj?.[key];
+      findRedactedValuesInString(
+        value,
+        matches,
+        byRule,
+        path,
+        typeof originalStr === "string" ? originalStr : undefined,
+      );
     } else if (value !== null && typeof value === "object") {
+      const origChild = originalObj?.[key];
       if (Array.isArray(value)) {
+        const origArr = Array.isArray(origChild) ? origChild : [];
         value.forEach((item, i) => {
           const itemPath = `${path}[${i}]`;
           if (typeof item === "string") {
-            findRedactedValuesInString(item, matches, byRule, itemPath);
-          } else if (item !== null && typeof item === "object") {
-            findRedactedValues(
-              item as Record<string, unknown>,
-              itemPath,
+            const oStr = origArr[i];
+            findRedactedValuesInString(
+              item,
               matches,
               byRule,
+              itemPath,
+              typeof oStr === "string" ? oStr : undefined,
             );
-          }
+} else if (item !== null && typeof item === "object") {
+        const origItem = origArr[i];
+        findRedactedValues(
+          item as Record<string, unknown>,
+          itemPath,
+          matches,
+          byRule,
+          typeof origItem === "object" && origItem !== null
+            ? (origItem as Record<string, unknown>)
+            : undefined,
+        );
+      }
         });
       } else {
         findRedactedValues(
@@ -163,6 +190,9 @@ export function findRedactedValues(
           path,
           matches,
           byRule,
+          typeof origChild === "object" && origChild !== null
+            ? (origChild as unknown as Record<string, unknown>)
+            : undefined,
         );
       }
     }
@@ -172,26 +202,53 @@ export function findRedactedValues(
 
 /**
  * Compute redaction counts for a single capture's raw data.
+ *
  * Scans the request body for matches. When `persistedStats` is provided,
  * aggregate totals come from the persisted capture stats; otherwise they
  * are derived from the scanned request body. Response body is never scanned
  * by this helper.
+ *
+ * When `originalRequestBody` is present, the helper uses it to recover real
+ * pre-redaction values for display in the Pre-Redaction column.
  */
 export function computeCaptureRedactionCounts(
   rawData: Record<string, unknown>,
   _countResponseBody = false,
   persistedStats?: CaptureRedactionStats,
+  originalRequestBody?: unknown,
 ): RedactionCounts {
   const requestBody = rawData.requestBody;
+
+  // `originalRequestBody` is only useful for parallel-tree traversal when
+  // the body is a plain object (or nested object). Arrays/roots primitives
+  // share no parallel key structure, so we fall back to regex-only in that case.
+  const originalObj =
+    typeof originalRequestBody === "object" &&
+    originalRequestBody !== null &&
+    !Array.isArray(originalRequestBody)
+      ? (originalRequestBody as Record<string, unknown>)
+      : undefined;
 
   const matches: RedactionMatch[] = [];
   const byRule: Record<string, number> = {};
 
   if (requestBody && typeof requestBody === "object") {
-    const reqCounts = countRedactionsInResponse(undefined, requestBody, false);
-    matches.push(...reqCounts.matches);
-    for (const [rule, count] of Object.entries(reqCounts.byRule)) {
-      byRule[rule] = count;
+    if (originalObj) {
+      // Walk the redacted tree and original tree in parallel so leaf-string
+      // matches can recover the un-redacted value from the same path.
+      findRedactedValues(
+        requestBody as Record<string, unknown>,
+        "",
+        matches,
+        byRule,
+        originalObj,
+      );
+    } else {
+      const reqCounts = countRedactionsInResponse(undefined, requestBody, false);
+      matches.push(...reqCounts.matches);
+      for (const [rule, count] of Object.entries(reqCounts.byRule)) {
+        byRule[rule] = count;
+      }
     }
   }
 

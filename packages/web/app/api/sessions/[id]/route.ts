@@ -20,6 +20,7 @@ interface RawCaptureData extends Record<string, unknown> {
   timings: { total_ms: number };
   timestamp: string;
   requestBody?: unknown;
+  originalRequestBody?: unknown;
   responseBody?: string;
   responseStatus?: number;
   responseIsStreaming?: boolean;
@@ -139,8 +140,13 @@ function computeSessionMetrics(sessionCaptures: RawCaptureData[]): {
     totalInputTokens += tokenUsage.input;
     totalOutputTokens += tokenUsage.output;
 
-    const redactionCounts = computeCaptureRedactionCounts(c as unknown as Record<string, unknown>);
-    totalRedactions += redactionCounts.totalRedactions;
+  const redactionCounts = computeCaptureRedactionCounts(
+    c as unknown as Record<string, unknown>,
+    false,
+    undefined,
+    c.originalRequestBody,
+  );
+  totalRedactions += redactionCounts.totalRedactions;
     for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
       byRule[rule] = (byRule[rule] || 0) + (count as number);
     }
@@ -220,23 +226,24 @@ export async function GET(
           data.sessionId === id ||
           (data.sessionId === null && id === "unsorted")
         ) {
-          const capture: RawCaptureData = {
-            sessionId: data.sessionId as string | null,
-            source: data.source as string | null,
-        provider: data.provider as string,
-        apiFormat: data.apiFormat as string | undefined,
-        targetUrl: data.targetUrl as string,
-        requestBytes: (data.requestBytes as number) || 0,
-        responseBytes: (data.responseBytes as number) || 0,
-        timings: (data.timings as { total_ms: number }) || { total_ms: 0 },
-        timestamp: data.timestamp as string,
-        requestBody: data.requestBody,
-        responseBody: data.responseBody as string | undefined,
-        responseStatus: (data.responseStatus as number) || 200,
-        responseIsStreaming: (data.responseIsStreaming as boolean) || false,
-        filename: filename,
-        redactionStats: data.redactionStats as { totalRedactions: number; byRule: Record<string, number> } | undefined,
-      };
+  const capture: RawCaptureData = {
+    sessionId: data.sessionId as string | null,
+    source: data.source as string | null,
+    provider: data.provider as string,
+    apiFormat: data.apiFormat as string | undefined,
+    targetUrl: data.targetUrl as string,
+    requestBytes: (data.requestBytes as number) || 0,
+    responseBytes: (data.responseBytes as number) || 0,
+    timings: (data.timings as { total_ms: number }) || { total_ms: 0 },
+    timestamp: data.timestamp as string,
+    requestBody: data.requestBody,
+    originalRequestBody: data.originalRequestBody,
+    responseBody: data.responseBody as string | undefined,
+    responseStatus: (data.responseStatus as number) || 200,
+    responseIsStreaming: (data.responseIsStreaming as boolean) || false,
+    filename: filename,
+    redactionStats: data.redactionStats as { totalRedactions: number; byRule: Record<string, number> } | undefined,
+  };
           sessionCaptures.push(capture);
         }
       } catch (error) {

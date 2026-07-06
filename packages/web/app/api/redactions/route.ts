@@ -45,34 +45,43 @@ export async function GET(_request: Request) {
         const source = (data.source as string | null) ?? null;
         const provider = (data.provider as string) ?? "unknown";
         const targetUrl = (data.targetUrl as string) ?? "";
-        const captureId = filename.replace(/\.json$/, "");
+        const captureId = filename;
 
-        const cached = getCaptureRedactionStats(data);
+  const cached = getCaptureRedactionStats(data);
 
-        if (cached) {
-          // Canonical stats from the redact plugin
-          totalRedactions += cached.totalRedactions;
-          for (const [rule, count] of Object.entries(cached.byRule)) {
-            byType[rule] = (byType[rule] ?? 0) + count;
-          }
+  if (cached) {
+    // Canonical stats from the redact plugin
+    totalRedactions += cached.totalRedactions;
+    for (const [rule, count] of Object.entries(cached.byRule)) {
+      byType[rule] = (byType[rule] ?? 0) + count;
+    }
 
-  // Still compute match details when we need to render the per-capture detail view
-  const redaction = computeCaptureRedactionCounts(data, false, cached);
-        for (const match of redaction.matches) {
-          detailRows.push({
-            redactionType: match.ruleId,
-            requestSource: source,
-            requestProvider: provider,
-            requestTarget: targetUrl,
-            sessionId,
-            captureId,
-            preRedactionValue: match.original,
-            postRedactionValue: match.placeholder,
-          });
-        }
-      } else {
-        // Legacy capture without redactionStats; recompute from raw bodies
-        const redaction = computeCaptureRedactionCounts(data, false);
+    const redaction = computeCaptureRedactionCounts(
+      data,
+      false,
+      cached,
+      data.originalRequestBody,
+    );
+    for (const match of redaction.matches) {
+      detailRows.push({
+        redactionType: match.ruleId,
+        requestSource: source,
+        requestProvider: provider,
+        requestTarget: targetUrl,
+        sessionId,
+        captureId,
+        preRedactionValue: match.original,
+        postRedactionValue: match.placeholder,
+      });
+    }
+  } else {
+    // Legacy capture without redactionStats; recompute from raw bodies
+    const redaction = computeCaptureRedactionCounts(
+      data,
+      false,
+      undefined,
+      data.originalRequestBody,
+    );
 
           totalRedactions += redaction.totalRedactions;
           for (const [rule, count] of Object.entries(redaction.byRule)) {

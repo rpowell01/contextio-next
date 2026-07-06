@@ -93,8 +93,14 @@ export interface CaptureData {
   targetUrl: string;
   /** Request headers with sensitive values (auth, API keys) stripped. */
   requestHeaders: Record<string, string>;
-  /** Parsed JSON request body, or null if non-JSON. */
+  /** Parsed JSON request body, or null if non-JSON. May contain redacted placeholders. */
   requestBody: JsonValue | null;
+  /**
+   * Original unmodified request body before plugin redaction.
+   * Store with care: this field contains unredacted sensitive data and must
+   * not be sent over untrusted channels or written to access-controlled logs.
+   */
+  originalRequestBody: JsonValue | null;
   /** Size of the raw request body in bytes. */
   requestBytes: number;
   /** HTTP status code from the upstream. */
@@ -142,12 +148,7 @@ export interface RequestContext {
   redactionStats?: { totalRedactions: number; byRule: Record<string, number> };
 }
 
-/**
- * Context passed to onResponse hooks.
- *
- * Plugins can modify `body` to transform the response before it is
- * sent back to the client. Only available for non-streaming responses.
- */
+/** Context passed to onResponse hooks. */
 export interface ResponseContext {
   status: number;
   headers: HeaderMap;
@@ -209,6 +210,10 @@ export interface ProxyConfig {
   allowTargetOverride?: boolean;
   strictUrlForwarding?: boolean;
   plugins?: ProxyPlugin[];
+  loggerCaptureDir?: string;
+  loggerCaptureMaxAgeMs?: number;
+  loggerCaptureCleanupIntervalMs?: number;
+  loggerCaptureCleanupEnabled?: boolean;
 }
 
 // --- Routing helpers (re-exported from routing.ts) ---
