@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-import { DEFAULT_SETTINGS, validateSettings, mergeWithDefaults } from "@/lib/settings";
+import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults } from "@/lib/settings";
 import { applyLogDir } from "@/lib/sessions/utils";
 
 const SETTINGS_FILE = join(homedir(), ".contextio-next", "settings.json");
@@ -26,38 +26,8 @@ export async function GET(): Promise<NextResponse> {
     if (typeof parsed !== "object" || parsed === null) {
       return NextResponse.json({ settings: DEFAULT_SETTINGS });
     }
-    // Per-field validation with defaults fallback - never fail the whole request
-    const obj = parsed as Record<string, unknown>;
-  const settings = {
-    logDir: validateField(obj, "logDir", (v) => {
-      if (typeof v !== "string" || !v.length) throw new Error("invalid");
-      return v;
-    }),
-    maxSessions: validateField(obj, "maxSessions", (v) => {
-      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 10000) throw new Error("invalid");
-      return v;
-    }),
-    redactPreset: validateField(obj, "redactPreset", (v) => {
-      if (typeof v !== "string" || !["secrets", "pii", "strict"].includes(v)) throw new Error("invalid");
-      return v as "secrets" | "pii" | "strict";
-    }),
-    redactReversible: validateField(obj, "redactReversible", (v) => {
-      if (typeof v !== "boolean") throw new Error("invalid");
-      return v;
-    }),
-    captureCleanupEnabled: validateField(obj, "captureCleanupEnabled", (v) => {
-      if (typeof v !== "boolean") throw new Error("invalid");
-      return v;
-    }),
-    captureCleanupIntervalHours: validateField(obj, "captureCleanupIntervalHours", (v) => {
-      if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 168) throw new Error("invalid");
-      return v;
-    }),
-    captureCleanupMaxAgeDays: validateField(obj, "captureCleanupMaxAgeDays", (v) => {
-      if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 365) throw new Error("invalid");
-      return v;
-    }),
-  };
+  // Lenient per-field validation with defaults fallback - never fail the whole request
+  const settings = validateSettingsLenient(parsed);
   applyLogDir(settings.logDir);
   return NextResponse.json({ settings });
   } catch (error) {
@@ -69,8 +39,8 @@ export async function GET(): Promise<NextResponse> {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
-    // Validate the incoming settings
-    const validated = validateSettings(body);
+  // Validate the incoming settings
+  const validated = validateSettingsLenient(body);
     // Merge with defaults for any missing fields
     const settings = mergeWithDefaults(validated);
 
