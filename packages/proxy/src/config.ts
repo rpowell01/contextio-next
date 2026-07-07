@@ -57,28 +57,6 @@ export interface ResolvedProxyConfig {
   loggerCaptureCleanupEnabled: boolean;
 }
 
-/** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
- *  double-prefix API paths. Empty values pass through intact. */
-function normalizeUpstreamUrl(url: string): string {
-  if (!url || typeof url !== "string") {
-    return url;
-  }
-  return url.replace(/\/v1$/, "");
-}
-
-/** Fully resolved config with all defaults applied. */
-export interface ResolvedProxyConfig {
-  upstreams: Upstreams;
-  bindHost: string;
-  port: number;
-  allowTargetOverride: boolean;
-  strictUrlForwarding: boolean;
-  loggerCaptureDir: string;
-  loggerCaptureMaxAgeMs: number;
-  loggerCaptureCleanupIntervalMs: number;
-  loggerCaptureCleanupEnabled: boolean;
-}
-
 /**
  * Resolve final proxy config from environment variables and overrides.
  *

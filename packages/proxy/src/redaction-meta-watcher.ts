@@ -19,7 +19,7 @@
  */
 
 import fs from "node:fs";
-import { stat, readFile, writeFile, rename, unlink, mkdir } from "node:fs/promises";
+import { stat, readdir, readFile, writeFile, rename, unlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { CaptureData } from "@contextio/core";
@@ -123,8 +123,8 @@ async function atomicWriteMetadata(
  * may be left behind after a process crash.
  */
 async function reapStaleTmpFiles(dir: string): Promise<void> {
-  try {
-    const entries = await fs.readdir(dir);
+ try {
+ const entries = await readdir(dir);
     const threshold = Date.now() - REDACTION_META_TMP_MAX_AGE_MS;
     for (const entry of entries) {
       if (!entry.includes(".tmp-")) continue;
@@ -343,8 +343,12 @@ export function createRedactionMetaWatcher(
         "[redaction-meta-watcher] fs.watch error, attempting restart in 5s:",
         err.message,
       );
-      watcher?.close().catch(() => undefined);
-      if (!stopped) {
+ try {
+ watcher?.close();
+ } catch {
+ // ignore close errors during restart
+ }
+ if (!stopped) {
         setTimeout(startWatcher, 5_000);
       }
     });
@@ -368,8 +372,12 @@ export function createRedactionMetaWatcher(
         clearTimeout(state.timer);
       }
       pending.clear();
-      watcher?.close().catch(() => undefined);
-    },
+ try {
+ watcher?.close();
+ } catch {
+ // ignore close errors during shutdown
+ }
+ },
   };
 }
 
