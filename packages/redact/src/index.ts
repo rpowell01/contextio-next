@@ -32,7 +32,7 @@ import { ReplacementMap } from "./mapping.js";
 import type { CompiledPolicy } from "./policy.js";
 import { compilePolicy, fromPreset, loadPolicyFile } from "./policy.js";
 import type { PresetName } from "./presets.js";
-import { createStats, redactWithPolicy } from "./redact.js";
+import { buildRedactMetaPayload, createStats, redactWithPolicy, writeRedactionMeta } from "./redact.js";
 import { createStreamRehydrator } from "./stream.js";
 
 /** Configuration for {@link createRedactPlugin}. */
@@ -60,6 +60,13 @@ export interface RedactPluginConfig {
   sessionTtlMs?: number;
   /** Log redaction stats to stderr after each request. */
   verbose?: boolean;
+  /**
+   * Directory where `${captureId}.redact-meta.json` sidecars are written
+   * after an onRequest redaction pass. Requires `captureId` on the
+   * RequestContext (plumbed by the proxy when captureDir is configured).
+   * Omit to skip sidecar writes.
+   */
+  captureDir?: string;
 }
 
 /** Per-session state for reversible mode: mapping table + stream rehydrator. */
@@ -145,45 +152,45 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
   return {
     name: "redact",
 
-    onRequest(ctx: RequestContext): RequestContext {
-      if (!ctx.body) return ctx;
+onRequest(ctx: RequestContext): RequestContext {
+  if (!ctx.body) return ctx;
 
-      const map = reversible ? getSession(ctx.sessionId).map : null;
-      const stats = createStats();
-      const redacted = redactWithPolicy(ctx.body, policy, stats, [], map);
-      // Reset stream rehydrator for this session (new response coming)
-      if (reversible) {
-        const session = getSession(ctx.sessionId);
-        session.rehydrator = createStreamRehydrator(session.map);
-      }
-
-  if (stats.totalReplacements > 0) {
-    const redactionStats = {
-      totalRedactions: stats.totalReplacements,
-      byRule: Object.fromEntries(Object.entries(stats.byRule)),
-    } as const;
-    if (verbose) {
-      const details = Object.entries(stats.byRule)
-        .map(([name, count]) => `${name}=${count}`)
-        .join(", ");
-      const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
-      console.error(
-        `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
-      );
-      if (map) {
-        console.error(
-          `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
-        );
-      }
-    }
-    return {
-      ...ctx,
-      redactionStats,
-      body: redacted as Record<string, any>,
-    };
+  const map = reversible ? getSession(ctx.sessionId).map : null;
+  const stats = createStats();
+  const redacted = redactWithPolicy(ctx.body, policy, stats, [], map);
+  // Reset stream rehydrator for this session (new response coming)
+  if (reversible) {
+    const session = getSession(ctx.sessionId);
+    session.rehydrator = createStreamRehydrator(session.map);
   }
-  return ctx;
-    },
+
+  const redactionStats = buildRedactMetaPayload(stats);
+
+if (config?.captureDir && ctx.captureId) {
+  writeRedactionMeta(config.captureDir, ctx.captureId, redactionStats);
+}
+
+  if (stats.totalReplacements > 0 && verbose) {
+    const details = Object.entries(stats.byRule)
+    .map(([name, count]) => `${name}=${count}`)
+    .join(", ");
+    const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
+    console.error(
+      `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
+    );
+    if (map) {
+      console.error(
+        `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
+      );
+    }
+  }
+
+  return {
+    ...ctx,
+    redactionStats,
+    body: redacted as Record<string, any>,
+  };
+},
 
     // Rehydrate placeholders in non-streaming responses.
     onResponse: reversible

@@ -1,4 +1,4 @@
-# ContextIO Docker Image
+# ContextIO-Next Docker Image
 
 Minimal Docker image for `@contextio/proxy` with logging and redaction plugins pre-installed.
 
@@ -14,40 +14,40 @@ Minimal Docker image for `@contextio/proxy` with logging and redaction plugins p
 
 ```bash
 # Pull from ghcr.io
-docker pull ghcr.io/larsderidder/contextio:latest
+docker pull ghcr.io/larsderidder/contextio-next:latest
 
 # Run with default settings (logging only, no redaction)
-docker run --rm -p 4040:4040 ghcr.io/larsderidder/contextio:latest
+docker run --rm -p 4040:4040 ghcr.io/larsderidder/contextio-next:latest
 
 # Enable redaction (PII preset)
 docker run --rm -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
-  ghcr.io/larsderidder/contextio:latest
+-e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
+ghcr.io/larsderidder/contextio-next:latest
 
 # Mount a volume to persist captures
 docker run --rm -p 4040:4040 \
-  -v $(pwd)/captures:/home/node/.contextio/captures \
-  ghcr.io/larsderidder/contextio:latest
+-v $(pwd)/captures:/home/node/.contextio-next/captures \
+ghcr.io/larsderidder/contextio-next:latest
 ```
 
 ### Building Locally
 
 ```bash
 # Build the image
-docker build -t contextio-proxy .
+docker build -t contextio-next-proxy .
 
 # Run with default settings (logging only, no redaction)
-docker run --rm -p 4040:4040 contextio-proxy
+docker run --rm -p 4040:4040 contextio-next-proxy
 
 # Enable redaction
 docker run --rm -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
-  contextio-proxy
+-e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
+contextio-next-proxy
 
 # Mount a volume to persist captures
 docker run --rm -p 4040:4040 \
-  -v $(pwd)/captures:/home/node/.contextio/captures \
-  contextio-proxy
+-v $(pwd)/captures:/home/node/.contextio-next/captures \
+contextio-next-proxy
 ```
 
 ### Available Tags
@@ -103,9 +103,9 @@ Plugins are loaded from `CONTEXT_PROXY_PLUGINS` (comma-separated module paths). 
 ```bash
 # Mount a volume to persist captures
 docker run --rm -p 4040:4040 \
-  -e LOGGER_CAPTURE_DIR=/app/captures \
-  -v ./captures:/app/captures \
-  ghcr.io/larsderidder/contextio:latest
+-e LOGGER_CAPTURE_DIR=/app/captures \
+-v ./captures:/app/captures \
+ghcr.io/larsderidder/contextio-next:latest
 ```
 
 #### Redaction Presets
@@ -113,21 +113,21 @@ docker run --rm -p 4040:4040 \
 ```bash
 # Secrets only (API keys, tokens)
 docker run --rm -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
-  -e REDACT_PRESET=secrets \
-  ghcr.io/larsderidder/contextio:latest
+-e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
+-e REDACT_PRESET=secrets \
+ghcr.io/larsderidder/contextio-next:latest
 
 # PII (default: email, SSN, credit cards, phone numbers)
 docker run --rm -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
-  -e REDACT_PRESET=pii \
-  ghcr.io/larsderidder/contextio:latest
+-e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
+-e REDACT_PRESET=pii \
+ghcr.io/larsderidder/contextio-next:latest
 
 # Strict (PII + IP addresses, dates of birth)
 docker run --rm -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
-  -e REDACT_PRESET=strict \
-  ghcr.io/larsderidder/contextio:latest
+-e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
+-e REDACT_PRESET=strict \
+ghcr.io/larsderidder/contextio-next:latest
 ```
 
 #### Disable Logging
@@ -135,27 +135,27 @@ docker run --rm -p 4040:4040 \
 ```bash
 # Redaction only (no logging)
 docker run --rm -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS=/app/redact-plugin.js \
-  ghcr.io/larsderidder/contextio:latest
+-e CONTEXT_PROXY_PLUGINS=/app/redact-plugin.js \
+ghcr.io/larsderidder/contextio-next:latest
 
 # No plugins (raw proxy only)
 docker run --rm -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS= \
-  ghcr.io/larsderidder/contextio:latest
+-e CONTEXT_PROXY_PLUGINS= \
+ghcr.io/larsderidder/contextio-next:latest
 ```
 
 #### Logger Configuration
 
-- `LOGGER_CAPTURE_DIR`: Directory for captures (default: `~/.contextio/captures`)
+- `LOGGER_CAPTURE_DIR`: Directory for captures (default: `~/.contextio-next/captures`)
 - `LOGGER_MAX_SESSIONS`: Max sessions to retain, 0 = unlimited (default: `0`)
 
 ```bash
 # Custom capture directory with session limit
 docker run --rm -p 4040:4040 \
-  -e LOGGER_CAPTURE_DIR=/app/captures \
-  -e LOGGER_MAX_SESSIONS=50 \
-  -v ./captures:/app/captures \
-  ghcr.io/larsderidder/contextio:latest
+-e LOGGER_CAPTURE_DIR=/app/captures \
+-e LOGGER_MAX_SESSIONS=50 \
+-v ./captures:/app/captures \
+ghcr.io/larsderidder/contextio-next:latest
 ```
 
 #### Redaction Configuration
@@ -167,13 +167,11 @@ docker run --rm -p 4040:4040 \
 ```bash
 # Custom redaction policy
 docker run --rm -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
-  -e REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json \
-  -v $(pwd)/my-policy.json:/app/custom-policy/custom-policy.json:ro \
-  ghcr.io/larsderidder/contextio:latest
+-e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
+-e REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json \
+-v $(pwd)/my-policy.json:/app/custom-policy/custom-policy.json:ro \
+ghcr.io/larsderidder/contextio-next:latest
 ```
-
-
 
 ## Capture Persistence
 
@@ -206,8 +204,8 @@ Configure in Coolify's **Persistent Directories** settings:
 
 ```bash
 docker run --rm -p 4040:4040 -p 4041:4041 \
-  -v ./captures:/app/captures \
-  contextio-proxy
+-v ./captures:/app/captures \
+contextio-next-proxy
 ```
 
 Files on the host will be owned by UID `1000` (the `node` user inside the container).
@@ -217,7 +215,7 @@ Files on the host will be owned by UID `1000` (the `node` user inside the contai
 ```yaml
 version: "3.8"
 services:
-  contextio:
+  contextio-next:
     build: .
     ports:
       - "4040:4040"
@@ -230,7 +228,7 @@ services:
     environment:
       LOGGER_CAPTURE_DIR: /app/captures
       CONTEXT_PROXY_PLUGINS: /app/logger-plugin.js
-    restart: unless-stopped
+      restart: unless-stopped
 
 volumes:
   captures:
@@ -241,8 +239,8 @@ With custom policy:
 
 ```yaml
 services:
-  contextio-proxy:
-    image: ghcr.io/larsderidder/contextio:latest
+  contextio-next-proxy:
+    image: ghcr.io/larsderidder/contextio-next:latest
     ports:
       - "4040:4040"
     volumes:
@@ -252,7 +250,7 @@ services:
       CONTEXT_PROXY_PLUGINS: /app/logger-plugin.js,/app/redact-plugin.js
       REDACT_POLICY_FILE: /app/custom-policy/custom-policy.json
       REDACT_REVERSIBLE: "false"
-    restart: unless-stopped
+      restart: unless-stopped
 ```
 
 ## What's NOT Included
@@ -283,12 +281,14 @@ npm install -g @contextio/cli
 ```
 Failed to load plugin "...": ...
 ```
+
 Check that `CONTEXT_PROXY_PLUGINS` points to valid module paths. The image includes `/app/logger-plugin.js` and `/app/redact-plugin.js` by default.
 
 **Port already in use:**
 ```
 Error: listen EADDRINUSE: address already in use 0.0.0.0:4040
 ```
+
 Change the port with `-p 4041:4040` or set `CONTEXT_PROXY_PORT=4041`.
 
 **Captures not persisting:**

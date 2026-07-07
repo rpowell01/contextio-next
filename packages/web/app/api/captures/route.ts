@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Capture, CaptureWithRedaction, RedactionDetails, PaginationMeta } from "@/types/api";
 
 import { getCaptureRedactionStats, computeCaptureRedactionCounts } from "@/lib/sessions/redaction-utils";
-import { CAPTURE_DIR, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
+import { CAPTURE_DIR, MAX_FILE_SIZE, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
 
 function extractCaptureMetadata(
   filename: string,
@@ -246,6 +246,9 @@ export async function POST(request: Request) {
       const filepath = join(CAPTURE_DIR, filename);
       try {
         await fs.unlink(filepath);
+        // Also delete the associated redaction metadata file
+        const metaPath = join(CAPTURE_DIR, metaFilenameFor(filename));
+        await fs.unlink(metaPath).catch(() => {}); // Ignore if doesn't exist
         deleted++;
       } catch (error) {
         errors++;

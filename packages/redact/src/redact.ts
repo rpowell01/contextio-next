@@ -6,6 +6,8 @@
  * Preserves structure; does not mutate the original.
  */
 
+import fs from "node:fs";
+import { join } from "node:path";
 import { shannonEntropy } from "@contextio/core";
 
 import type { ReplacementMap } from "./mapping.js";
@@ -17,26 +19,64 @@ export interface RedactionStats {
   totalReplacements: number;
   /** Per-rule replacement counts. Only includes rules that matched. */
   byRule: Record<string, number>;
+  /** First-10 match payload captured for the sidecar meta file. */
+  matches?: MatchEntry[];
 }
 
-/**
- * Create fresh stats for a redaction pass.
- */
+export interface MatchEntry {
+  rule: string;
+  original: string;
+  path: string;
+}
+
 export function createStats(): RedactionStats {
   return { totalReplacements: 0, byRule: {} };
+}
+
+function recordMatch(
+  stats: RedactionStats,
+  rule: RedactionRule,
+  originalValue: string,
+  path: string[],
+): void {
+  if (!stats.matches) stats.matches = [];
+  if (stats.matches.length >= 10) return;
+  stats.matches.push({ rule: rule.name, original: originalValue, path: path.join(".") });
+}
+
+export function buildRedactMetaPayload(
+  stats: RedactionStats,
+): { totalRedactions: number; byRule: Readonly<Record<string, number>>; matches?: MatchEntry[] } {
+  return {
+    totalRedactions: stats.totalReplacements,
+    byRule: { ...stats.byRule },
+    ...(stats.matches && stats.matches.length > 0 ? { matches: stats.matches } : {}),
+  };
+}
+
+export function writeRedactionMeta(
+  captureDir: string,
+  captureId: string | undefined,
+  payload: { totalRedactions: number; byRule: Readonly<Record<string, number>>; matches?: MatchEntry[] },
+): boolean {
+  if (!captureId) return false;
+  const filePath = join(captureDir, `${captureId}.redact-meta.json`);
+  const tmpPath = `${filePath}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(payload));
+    fs.renameSync(tmpPath, filePath);
+    return true;
+  } catch (err: unknown) {
+    console.error("[redact] meta write error:", err instanceof Error ? err.message : String(err));
+    try { fs.unlinkSync(tmpPath); } catch { /* may not exist */ }
+    return false;
+  }
 }
 
 // --- Context word matching ---
 
 /**
  * Check if any context word appears within `window` characters of a match.
- *
- * This is how context-gated rules work: a pattern like SSN (XXX-XX-XXXX)
- * only fires when words like "ssn" or "social security" appear nearby.
- * The window extends both before and after the match, so either side counts.
- *
- * Comparison is done on a lowercased slice of the original text, so context
- * words should always be supplied in lowercase.
  */
 function hasContextNearby(
   text: string,
@@ -56,10 +96,6 @@ function hasContextNearby(
 
 /**
  * Check if a matched value is in the allowlist.
- *
- * Exact string matches are checked first (fast Set lookup). If none match,
- * each allowlist regex is tested. The regex `lastIndex` is reset before
- * testing to avoid stale state from previous calls.
  */
 function isAllowlisted(
   match: string,
@@ -76,12 +112,6 @@ function isAllowlisted(
 
 /**
  * Check the per-rule allowlist from a CredentialPattern.
- *
- * Anchored patterns (source starts with "^") are tested against the first
- * capture group so they can match just the credential value, not the full
- * match string. All other patterns are tested against the full match.
- *
- * Returns true if the match should be suppressed.
  */
 function isRuleAllowlisted(fullMatch: string, capturedGroup: string | undefined, ruleAllowlist: RegExp[]): boolean {
   for (const al of ruleAllowlist) {
@@ -96,9 +126,6 @@ function isRuleAllowlisted(fullMatch: string, capturedGroup: string | undefined,
 
 /**
  * Check if a JSON path matches a path matcher pattern.
- * Segments must match exactly, except "*" which matches any single segment.
- * The matcher can also be a prefix of the path (e.g., matcher ["messages", "*", "content"]
- * matches path ["messages", "0", "content", "0", "text"]).
  */
 function pathMatches(segments: string[], matcher: string[]): boolean {
   if (matcher.length > segments.length) return false;
@@ -109,17 +136,14 @@ function pathMatches(segments: string[], matcher: string[]): boolean {
   return true;
 }
 
-/** Determine if a value at this JSON path should be redacted, per "only"/"skip" config. */
 function shouldRedactPath(
   path: string[],
   onlyMatchers: { segments: string[] }[] | null,
   skipMatchers: { segments: string[] }[],
 ): boolean {
-  // Check skip first
   for (const m of skipMatchers) {
     if (pathMatches(path, m.segments)) return false;
   }
-  // If "only" is set, path must match at least one
   if (onlyMatchers !== null) {
     for (const m of onlyMatchers) {
       if (pathMatches(path, m.segments)) return true;
@@ -133,17 +157,8 @@ function shouldRedactPath(
 
 /**
  * Resolve the replacement string for a matched value.
- *
- * In non-reversible mode (`map` is null), returns the rule's static
- * replacement string (e.g. "[EMAIL_REDACTED]"). In reversible mode, delegates
- * to the ReplacementMap which generates a numbered placeholder and records
- * the original so it can be restored later from the LLM's response.
  */
-function resolveReplacement(
-  match: string,
-  rule: RedactionRule,
-  map: ReplacementMap | null,
-): string {
+function resolveReplacement(match: string, rule: RedactionRule, map: ReplacementMap | null): string {
   if (map) return map.getOrCreate(match, rule.name);
   return rule.replacement;
 }
@@ -159,6 +174,7 @@ function redactString(
   allowlistPatterns: RegExp[],
   stats: RedactionStats,
   map: ReplacementMap | null,
+  currentPath: string[] = [],
 ): string {
   let result = input;
   for (const rule of rules) {
@@ -168,8 +184,8 @@ function redactString(
       // Context-gated: use exec loop to check context per match
       const window = rule.contextWindow ?? 100;
       const matches: { start: number; end: number; match: string; captured: string | undefined }[] = [];
-      let m: RegExpExecArray | null;
       rule.pattern.lastIndex = 0;
+      let m: RegExpExecArray | null;
       while ((m = rule.pattern.exec(result)) !== null) {
         matches.push({ start: m.index, end: m.index + m[0].length, match: m[0], captured: m[1] });
       }
@@ -183,20 +199,21 @@ function redactString(
         if (!hasContextNearby(result, start, end, rule.context, window)) continue;
         stats.totalReplacements++;
         stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
+        recordMatch(stats, rule, match, currentPath);
         const replacement = resolveReplacement(match, rule, map);
         result = result.slice(0, start) + replacement + result.slice(end);
       }
     } else {
       // No context gating: simple replace
-      result = result.replace(rule.pattern, (match, ...args) => {
-        // args: [cap1, cap2, ..., offset, fullString] — first arg is capture group 1 if present
+      result = result.replace(rule.pattern, (matchArg, ...args) => {
         const captured = typeof args[0] === "string" ? args[0] : undefined;
-        if (isAllowlisted(match, allowlistStrings, allowlistPatterns)) return match;
-        if (rule.allowlist && isRuleAllowlisted(match, captured, rule.allowlist)) return match;
-        if (rule.minEntropy !== undefined && shannonEntropy(captured ?? match) < rule.minEntropy) return match;
+        if (isAllowlisted(matchArg, allowlistStrings, allowlistPatterns)) return matchArg;
+        if (rule.allowlist && isRuleAllowlisted(matchArg, captured, rule.allowlist)) return matchArg;
+        if (rule.minEntropy !== undefined && shannonEntropy(captured ?? matchArg) < rule.minEntropy) return matchArg;
         stats.totalReplacements++;
         stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
-        return resolveReplacement(match, rule, map);
+        recordMatch(stats, rule, matchArg, currentPath);
+        return resolveReplacement(matchArg, rule, map);
       });
     }
   }
@@ -207,21 +224,6 @@ function redactString(
 
 /**
  * Recursively walk a JSON value and apply redaction rules to string leaves.
- *
- * Preserves the original structure; returns a new object tree with
- * sensitive strings replaced. Respects path filtering ("only" and "skip")
- * when configured in the policy.
- *
- * When `map` is provided (reversible mode), redacted values are tracked
- * so they can be restored in the response. The same original always maps
- * to the same placeholder within a map.
- *
- * @param value - The value to redact (string, object, array, or primitive).
- * @param policy - Compiled redaction policy with rules and path config.
- * @param stats - Mutable stats object; updated with replacement counts.
- * @param currentPath - Current JSON path segments (used internally for recursion).
- * @param map - Optional replacement map for reversible mode.
- * @returns A new value with sensitive strings replaced. Primitives pass through unchanged.
  */
 export function redactWithPolicy(
   value: unknown,
@@ -231,11 +233,7 @@ export function redactWithPolicy(
   map: ReplacementMap | null = null,
 ): unknown {
   if (typeof value === "string") {
-    // Check path filtering
-    if (
-      policy.paths.only !== null ||
-      policy.paths.skip.length > 0
-    ) {
+    if (policy.paths.only !== null || policy.paths.skip.length > 0) {
       if (!shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip)) {
         return value;
       }
@@ -247,13 +245,12 @@ export function redactWithPolicy(
       policy.allowlist.patterns,
       stats,
       map,
+      currentPath,
     );
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) =>
-      redactWithPolicy(item, policy, stats, [...currentPath, "*"], map),
-    );
+    return value.map((item) => redactWithPolicy(item, policy, stats, [...currentPath, "*"], map));
   }
 
   if (value !== null && typeof value === "object") {
@@ -272,18 +269,16 @@ export function redactWithPolicy(
 
 /**
  * Simple redaction without path filtering or context words.
- *
- * Applies all rules to every string leaf in the value tree. Provided
- * for backward compatibility; new code should use {@link redactWithPolicy}.
  */
 export function redactValue(
   value: unknown,
   rules: RedactionRule[],
   allowlist: Set<string>,
   stats: RedactionStats,
+  _depth: string[] = [],
 ): unknown {
   if (typeof value === "string") {
-    return redactString(value, rules, allowlist, [], stats, null);
+    return redactString(value, rules, allowlist, [], stats, null, []);
   }
 
   if (Array.isArray(value)) {

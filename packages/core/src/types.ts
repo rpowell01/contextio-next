@@ -113,6 +113,8 @@ export interface CaptureData {
   responseIsStreaming: boolean;
   /** Size of the raw response body in bytes. */
   responseBytes: number;
+  /** Unique capture filename assigned before plugin pipeline. Links redact-meta to capture. */
+  captureId?: string;
   /** Redaction counts from the actual plugin actions that transformed the request. */
   redactionStats?: { totalRedactions: number; byRule: Record<string, number> };
   /** Timing breakdown for the request lifecycle. */
@@ -145,6 +147,7 @@ export interface RequestContext {
   headers: HeaderMap;
   body: JsonValue | null;
   rawBody: Buffer;
+  captureId?: string;
   redactionStats?: { totalRedactions: number; byRule: Record<string, number> };
 }
 

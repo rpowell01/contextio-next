@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  contextio:
+  contextio-next:
     build: .
     ports:
       - "4040:4040"

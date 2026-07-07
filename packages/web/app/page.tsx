@@ -40,7 +40,7 @@ useEffect(() => {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-muted-foreground">
-              Monitor and inspect your LLM API traffic through ContextIO proxy.
+              Monitor and inspect your LLM API traffic through ContextIO-Next proxy.
             </p>
           </div>
           {buildInfo && (
@@ -115,7 +115,7 @@ useEffect(() => {
           <h2 className="text-xl font-semibold mb-4">Quick Start</h2>
           <div className="space-y-3 text-sm">
             <p>
-              <strong>1.</strong> Start the ContextIO proxy:
+              <strong>1.</strong> Start the ContextIO-Next proxy:
             </p>
             <pre className="rounded bg-muted p-3 text-xs">
               ctxio proxy --log-dir ./captures

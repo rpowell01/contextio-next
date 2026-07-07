@@ -77,16 +77,15 @@ export function createLoggerPlugin(config?: LoggerConfig): LoggerPlugin {
    * Format: {source}_{sessionId}_{timestamp}-{counter}.json
    * Falls back to "unknown" for missing source, omits session if null.
    */
-  function buildFilename(capture: CaptureData): string {
-    const source = capture.source || "unknown";
-    const safe = source.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const session = capture.sessionId
-      ? `_${capture.sessionId}`
-      : "";
-    const ts = Date.now();
-    const seq = String(counter++).padStart(6, "0");
-    return `${safe}${session}_${ts}-${seq}.json`;
-  }
+function buildFilename(capture: CaptureData): string {
+  if (capture.captureId) return capture.captureId;
+  const source = capture.source || "unknown";
+  const safe = source.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const session = capture.sessionId ? `_${capture.sessionId}` : "";
+  const ts = Date.now();
+  const seq = String(counter++).padStart(6, "0");
+  return `${safe}${session}_${ts}-${seq}.json`;
+}
 
   /**
    * Extract the session ID from a capture filename.

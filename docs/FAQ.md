@@ -2,7 +2,7 @@
 
 ## General
 
-### What does contextio do?
+### What does ContextIO-Next do?
 
 It's a local HTTP proxy that sits between your AI coding tools (Claude CLI, Aider, etc.) and the LLM APIs they call. It logs every request and response, and optionally strips PII and secrets before they leave your machine. Nothing leaves your machine, it's all local-first.
 
@@ -17,7 +17,7 @@ I don't know, maybe you want to:
 
 ### Does it work with any AI tool?
 
-Most tools that accept base URL overrides work directly (Claude CLI, Aider, Pi, Gemini CLI). Tools that don't (Codex, Copilot, OpenCode) require mitmproxy for TLS termination, which contextio handles automatically.
+Most tools that accept base URL overrides work directly (Claude CLI, Aider, Pi, Gemini CLI). Tools that don't (Codex, Copilot, OpenCode) require mitmproxy for TLS termination, which ContextIO-Next handles automatically.
 
 ### Does it slow down requests?
 
@@ -252,7 +252,7 @@ ctxio export a1b2c3d4              # export session a1b2c3d4
 ctxio export a1b2c3d4 --redact     # strip PII before bundling
 ```
 
-This creates `contextio-export-YYYY-MM-DD-HHMMSS.tar.gz` with all capture files for that session.
+This creates `contextio-next-export-YYYY-MM-DD-HHMMSS.tar.gz` with all capture files for that session.
 
 ## Monitoring and Inspection
 
@@ -396,6 +396,6 @@ To reduce overhead. If you run `ctxio proxy -- claude` in two terminals, both in
 
 This is more efficient than spinning up a new proxy for every tool invocation.
 
-### Does contextio send telemetry?
+### Does ContextIO-Next send telemetry?
 
 No. Zero network activity except forwarding your API requests to the upstream you specify. No analytics, no ET, no phone-home.

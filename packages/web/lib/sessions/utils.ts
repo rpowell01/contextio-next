@@ -32,13 +32,26 @@ export function isValidFilename(filename: string): boolean {
 }
 
 /**
+ * Derive metadata file path: `<name>.redact-meta.json`.
+ *
+ * If the input filename ends in `.json`, the metadata filename replaces
+ * that suffix. Otherwise `.redact-meta.json` is appended.
+ */
+export function metaFilenameFor(captureFilename: string): string {
+  const base = captureFilename.endsWith(".json")
+    ? captureFilename.slice(0, -".json".length)
+    : captureFilename;
+  return `${base}.redact-meta.json`;
+}
+
+/**
  * List capture files from the capture directory.
  */
 export async function listCaptureFiles(): Promise<string[]> {
   try {
     const files = await fs.readdir(CAPTURE_DIR);
     return files
-      .filter((f) => isValidFilename(f) && !f.endsWith(".tmp"))
+      .filter((f) => isValidFilename(f) && !f.endsWith(".tmp") && !f.includes("redact-meta"))
       .sort();
   } catch {
     return [];

@@ -1,6 +1,6 @@
 # @contextio/web
 
-Web interface for ContextIO proxy monitoring and inspection.
+Web interface for ContextIO-Next proxy monitoring and inspection.
 
 ## Development
 
@@ -26,14 +26,14 @@ pnpm lint
 
 ## API Connection
 
-The web interface connects to the ContextIO proxy API at `http://localhost:4040` by default. Configure via `NEXT_PUBLIC_API_URL` environment variable.
+The web interface connects to the ContextIO-Next proxy API at `http://localhost:4040` by default. Configure via `NEXT_PUBLIC_API_URL` environment variable.
 
 ## Usage with Docker
 
 ```bash
 docker run -p 4040:4040 -p 3000:3000 \
   -e CONTEXT_PROXY_PORT=4040 \
-  ghcr.io/larsderidder/contextio:latest
+  ghcr.io/larsderidder/contextio-next:latest
 ```
 
 Then access the web interface at `http://localhost:3000`.

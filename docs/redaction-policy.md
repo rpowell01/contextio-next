@@ -1,6 +1,6 @@
 # Redaction Policy Reference
 
-Redaction policies are JSON files that control what contextio redacts from LLM requests. Policies support `//` comments and trailing commas (JSONC).
+Redaction policies are JSON files that control what ContextIO-Next redacts from LLM requests. Policies support `//` comments and trailing commas (JSONC).
 
 ## Structure
 
@@ -168,7 +168,7 @@ A JSON Schema is available for validation and IDE autocomplete. Save this URL in
 }
 ```
 
-Or download from: `https://github.com/larsderidder/contextio/raw/main/schemas/redaction-policy.schema.json`
+Or download from: `https://github.com/larsderidder/contextio-next/raw/main/schemas/redaction-policy.schema.json`
 
 ### VS Code integration
 

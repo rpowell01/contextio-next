@@ -6,7 +6,56 @@
  * and feature flags are resolved here before the proxy starts.
  */
 
+import fs from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import type { ProxyConfig, Upstreams } from "@contextio/core";
+
+/** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
+ *  double-prefix API paths. Empty values pass through intact. */
+function normalizeUpstreamUrl(url: string): string {
+  if (!url || typeof url !== "string") {
+    return url;
+  }
+  return url.replace(/\/v1$/, "");
+}
+
+/** Web UI settings interface for capture cleanup settings. */
+interface WebUICaptureCleanupSettings {
+  captureCleanupEnabled?: boolean;
+  captureCleanupIntervalHours?: number;
+  captureCleanupMaxAgeDays?: number;
+}
+
+/** Read web UI settings from the JSON file. */
+function readWebUISettings(): WebUICaptureCleanupSettings {
+  const settingsPath = join(homedir(), ".contextio-next", "settings.json");
+  try {
+    const data = fs.readFileSync(settingsPath, "utf8");
+    const parsed = JSON.parse(data);
+    return {
+      captureCleanupEnabled: parsed.captureCleanupEnabled,
+      captureCleanupIntervalHours: parsed.captureCleanupIntervalHours,
+      captureCleanupMaxAgeDays: parsed.captureCleanupMaxAgeDays,
+    };
+  } catch {
+    return {};
+  }
+}
+
+/** Fully resolved config with all defaults applied. */
+export interface ResolvedProxyConfig {
+  upstreams: Upstreams;
+  bindHost: string;
+  port: number;
+  allowTargetOverride: boolean;
+  strictUrlForwarding: boolean;
+  loggerCaptureDir: string;
+  loggerCaptureMaxAgeMs: number;
+  loggerCaptureCleanupIntervalMs: number;
+  loggerCaptureCleanupEnabled: boolean;
+}
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
  *  double-prefix API paths. Empty values pass through intact. */

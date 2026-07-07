@@ -73,10 +73,10 @@ ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
 ENV NEXT_PUBLIC_SITE_URL=http://localhost:4041
 
-LABEL org.opencontainers.image.title="contextio"
+LABEL org.opencontainers.image.title="contextio-next"
 LABEL org.opencontainers.image.description="LLM API proxy with redaction, logging, and web UI. Zero external dependencies."
-LABEL org.opencontainers.image.url="https://github.com/larsderidder/contextio"
-LABEL org.opencontainers.image.source="https://github.com/larsderidder/contextio"
+LABEL org.opencontainers.image.url="https://github.com/larsderidder/contextio-next"
+LABEL org.opencontainers.image.source="https://github.com/larsderidder/contextio-next"
 LABEL org.opencontainers.image.vendor="Lars de Ridder"
 LABEL org.opencontainers.image.licenses="MIT"
 
@@ -148,9 +148,9 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'cat "$POLICY_FILE"' >> /app/start.sh && \
     echo 'mkdir -p "$CAPTURE_DIR"' >> /app/start.sh && \
     echo 'chmod 700 "$CAPTURE_DIR" 2>/dev/null || true' >> /app/start.sh && \
-    echo 'echo "Starting ContextIO Proxy on port 4040..."' >> /app/start.sh && \
+    echo 'echo "Starting ContextIO-Next Proxy on port 4040..."' >> /app/start.sh && \
     echo 'node dist/server.js &' >> /app/start.sh && \
-    echo 'echo "Starting ContextIO Web UI on port 4041..."' >> /app/start.sh && \
+    echo 'echo "Starting ContextIO-Next Web UI on port 4041..."' >> /app/start.sh && \
     echo 'cd standalone/packages/web && NEXT_PUBLIC_API_URL="" NEXT_PUBLIC_SITE_URL=http://localhost:4041 PORT=4041 REDACT_POLICY_FILE="$POLICY_FILE" LOGGER_CAPTURE_DIR="$CAPTURE_DIR" node server.js' >> /app/start.sh && \
     chmod +x /app/start.sh
 

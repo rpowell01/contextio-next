@@ -182,6 +182,7 @@ function buildCaptureData(options: {
     requestBody: options.ctx.body,
     originalRequestBody: options.originalBody,
     requestBytes: options.reqBytes,
+    captureId: options.ctx.captureId,
     redactionStats: options.ctx.redactionStats,
     responseStatus: options.proxyRes.statusCode || 0,
     responseHeaders: selectHeaders(options.proxyRes.headers as HeaderMap),
@@ -413,10 +414,19 @@ export function createProxyHandler(
       return;
     }
 
-    // Buffer the request body
-    const chunks: Buffer[] = [];
-    let clientAborted = false;
-    req.on("data", (chunk: Buffer) => {
+  // Pre-assign captureId so plugins (redact, logger) can use it.
+  // Logger plugin will use this verbatim in its filename; the redact plugin
+  // will write {captureId}.redact-meta.json to the same capture dir.
+  const captureId: string | null =
+    source !== null && source !== undefined
+      ? `${source.replace(/[^a-zA-Z0-9_-]/g, "_")}_${sessionId ?? "null"}_${Date.now()}-${String(Math.floor(Math.random() * 999_999)).padStart(6, "0")}.json`
+      : null;
+
+  // Buffer the request body (must be declared before the event handlers below)
+  const chunks: Buffer[] = [];
+  let clientAborted = false;
+
+  req.on("data", (chunk: Buffer) => {
       chunks.push(chunk);
     });
     req.on("error", () => {
@@ -464,16 +474,17 @@ export function createProxyHandler(
       }
 
       // Build the request context for plugins
-      const reqCtx: RequestContext = {
-        provider,
-        apiFormat,
-        path: cleanPath,
-        source,
-        sessionId,
-        headers: { ...req.headers } as HeaderMap,
-        body: bodyJson,
-        rawBody: bodyBuffer,
-      };
+  const reqCtx: RequestContext = {
+    provider,
+    apiFormat,
+    path: cleanPath,
+    source,
+    sessionId,
+    headers: { ...req.headers } as HeaderMap,
+    body: bodyJson,
+    rawBody: bodyBuffer,
+    captureId: captureId ?? undefined,
+  };
 
       // Run the async plugin pipeline, then forward.
       // doForward is a closure so it can reference bodyBuffer, bodyJson,

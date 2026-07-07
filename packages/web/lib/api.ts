@@ -1,4 +1,5 @@
 import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar } from "@/types/api";
+import type { Settings } from "@/lib/settings";
 
 // API routes are served by the same web server that serves the frontend
 // In Docker: web server on port 4041, API routes are internal (/api/*)
@@ -366,14 +367,26 @@ async getCapture(id: string): Promise<Capture & { requestBody: Record<string, un
 }
 
 async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: number; message: string }> {
-  return this.request("/api/captures?action=clear", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ confirm: true }),
-  });
-}
+    return this.request("/api/captures?action=clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+  }
 
-// Proxy Admin API methods
+  async getSettings(): Promise<{ settings: Settings }> {
+    return this.request("/api/settings");
+  }
+
+  async saveSettings(settings: Settings): Promise<{ success: boolean; settings: Settings }> {
+    return this.request("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+  }
+
+  // Proxy Admin API methods
   // These connect to the proxy service on port 4040
 
   async getProxyStatus(signal?: AbortSignal): Promise<ProxyStatus> {

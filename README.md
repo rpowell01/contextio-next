@@ -1,8 +1,14 @@
-# ContextIO - Control your context
+# ContextIO-Next - Control your context
 
-[![CI](https://github.com/larsderidder/contextio/actions/workflows/ci.yml/badge.svg)](https://github.com/larsderidder/contextio/actions/workflows/ci.yml)
+[![CI](https://github.com/larsderidder/contextio-next/actions/workflows/ci.yml/badge.svg)](https://github.com/larsderidder/contextio-next/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@contextio/cli)](https://www.npmjs.com/package/@contextio/cli)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
+
+## MIT License and Attribution
+
+This project is forked from [contextio](https://github.com/larsderidder/contextio) by larsderidder, which is released under the MIT License. The original copyright and license are preserved in [LICENSE](LICENSE).
+
+The visual identity has been renamed to ContextIO-Next. All code, documentation, and references to the project identity on `github.com/larsderidder/contextio-next` reflect this fork.
 
 A local proxy that sits between your AI coding tools and the LLM APIs they call. Logs every request and response, optionally strips PII and secrets before anything leaves your machine.
 
@@ -23,8 +29,8 @@ npm install -g @contextio/cli
 ### Docker (for deployment)
 
 ```bash
-docker pull ghcr.io/larsderidder/contextio:latest
-docker run -p 4040:4040 ghcr.io/larsderidder/contextio:latest
+docker pull ghcr.io/larsderidder/contextio-next:latest
+docker run -p 4040:4040 ghcr.io/larsderidder/contextio-next:latest
 ```
 
 See [docker/README.md](docker/README.md) for full Docker documentation.
@@ -65,7 +71,7 @@ ctxio attach claude
 ctxio proxy stop
 ```
 
-`contextio` is a longer alias for `ctxio` for those who just _love_ typing.
+`contextio-next` is the longer alias for `ctxio` for those who just _love_ typing.
 
 ## Commands
 
@@ -149,7 +155,7 @@ ctxio export a1b2c3d4         # export one session
 ctxio export --redact         # strip PII before bundling
 ```
 
-Creates `contextio-export-YYYY-MM-DD-HHMMSS.tar.gz` with all matching capture files.
+Creates `contextio-next-export-YYYY-MM-DD-HHMMSS.tar.gz` with all matching capture files.
 
 ### Doctor
 
@@ -201,7 +207,7 @@ The proxy has zero npm dependencies (Node.js built-ins + `@contextio/core` only)
 | OpenCode | mitmproxy + proxy | ✓ | ✓ |
 | Copilot CLI | mitmproxy + proxy | ✓ | ✓ |
 
-Tools that accept a base URL override (Claude, Pi, Gemini, Aider) get routed through the proxy directly. Tools that don't (Codex, Copilot, OpenCode) go through mitmproxy first to terminate TLS, then chain into the contextio proxy. contextio handles starting and stopping mitmproxy automatically.
+Tools that accept a base URL override (Claude, Pi, Gemini, Aider) get routed through the proxy directly. Tools that don't (Codex, Copilot, OpenCode) go through mitmproxy first to terminate TLS, then chain into the ContextIO-Next proxy. ContextIO-Next handles starting and stopping mitmproxy automatically.
 
 Codex, OpenCode, and Copilot require mitmproxy to be installed:
 
@@ -318,4 +324,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for dependency policy and guidelines.
 
 ## License
 
-MIT
+MIT. Copyright (c) larsderidder and contributors.
+
+This project is forked from [contextio](https://github.com/larsderidder/contextio). The original project and its authorship are acknowledged and preserved in compliance with the MIT License.

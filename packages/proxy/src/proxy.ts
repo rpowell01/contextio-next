@@ -14,6 +14,7 @@ import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
+import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
 
 async function cleanupCaptureFiles(config: {
   loggerCaptureDir: string;
@@ -94,6 +95,12 @@ export function createProxy(
 
   const startTime = Date.now();
 
+  // Start background redaction metadata watcher. Runs independently and
+  // never touches the hot request/response path.
+  const redactionMetaWatcher = createRedactionMetaWatcher({
+    captureDir: resolved.loggerCaptureDir,
+  });
+
   // Enable log capture for admin API
   enableLogCapture();
 
@@ -146,18 +153,19 @@ let started = false;
       });
     },
 
-    stop() {
-      if (!started) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        // Force resolve after a short grace period. server.close() waits
-        // for active connections to drain, which may never happen with
-        // long-lived streaming or SSE connections.
-        const forceTimer = setTimeout(() => resolve(), 500);
-        server.close(() => {
-          clearTimeout(forceTimer);
-          resolve();
-        });
+  stop() {
+    if (!started) return Promise.resolve();
+    redactionMetaWatcher.stop();
+    return new Promise<void>((resolve) => {
+      // Force resolve after a short grace period. server.close() waits
+      // for active connections to drain, which may never happen with
+      // long-lived streaming or SSE connections.
+      const forceTimer = setTimeout(() => resolve(), 500);
+      server.close(() => {
+        clearTimeout(forceTimer);
+        resolve();
       });
-    },
+    });
+  },
   };
 }
