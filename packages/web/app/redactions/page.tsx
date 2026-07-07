@@ -4,6 +4,7 @@ import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
 import { formatDateTime } from "@/lib/utils";
 import { useState, useEffect } from "react";
+import { apiClient } from "@/lib/api";
 
 interface RedactionSummary {
   totalRedactions: number;
@@ -79,9 +80,7 @@ export default function RedactionsPage() {
     setSelectedRow(row);
     setCaptureLoading(true);
     try {
-      const response = await fetch(`/api/captures/${row.captureId}`);
-      if (!response.ok) throw new Error("Failed to fetch capture details");
-      const detail = await response.json();
+      const detail = await apiClient.getCapture(row.captureId);
       setCaptureDetail(detail);
     } catch (e) {
       console.error("Error fetching capture detail:", e);
