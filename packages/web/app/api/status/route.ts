@@ -1,7 +1,8 @@
 import type { ProxyStatus } from "@/types/api";
 
 // Proxy admin API URL (for server-side requests)
-const PROXY_ADMIN_URL = process.env.NEXT_PUBLIC_PROXY_ADMIN_URL || "http://localhost:4040";
+const PROXY_ADMIN_URL =
+  process.env.NEXT_PUBLIC_PROXY_ADMIN_URL || "http://localhost:4040";
 
 export async function GET() {
   try {
@@ -10,7 +11,16 @@ export async function GET() {
     if (!response.ok) {
       throw new Error(`Proxy admin API returned ${response.status}`);
     }
-    const status: ProxyStatus = await response.json();
+    let status: ProxyStatus;
+    try {
+      status = await response.json();
+    } catch (e: unknown) {
+      throw new Error(
+        `Failed to parse proxy status JSON: ${
+          e instanceof Error ? e.message : "Unknown error"
+        }`,
+      );
+    }
     // Include container name for consistency
     return Response.json({ ...status, containerId: "contextio-next" });
   } catch (error) {

@@ -1,0 +1,54 @@
+[
+  {
+    "id": "contextio-o0i8",
+    "reason": "Already implemented: packages/web/app/api/settings/route.ts GET handler (lines 41–71) uses per-field validateField() with type and range checks, falling back to DEFAULT_SETTINGS on invalid input."
+  },
+  {
+    "id": "contextio-0qhs",
+    "reason": "Already implemented: packages/web/app/api/captures/route.ts POST clear handler (line 250) now computes metaPath via the shared metaFilenameFor() import from @/lib/sessions/utils rather than any inline string concatenation."
+  },
+  {
+    "id": "contextio-6gp5",
+    "reason": "Already implemented: packages/web/app/api/captures/route.ts POST clear handler (lines 236–239) requires a JSON body with confirm=true, returning HTTP 400 if missing—server-side protection is meaningful."
+  },
+  {
+    "id": "contextio-uwcq",
+    "reason": "Already implemented: packages/web/lib/settings.ts validateSettings() already enforces captureCleanupIntervalHours range (1–168) on POST; packages/web/lib/cleanup-scheduler.ts loadSettings() (lines 32–39) validates integer type and falls back to defaults for the scheduled consumer."
+  },
+  {
+    "id": "contextio-xydd",
+    "reason": "Already implemented: packages/web/tailwind.config.js uses ESM import syntax (line 2: import animate from 'tailwindcss-animate') instead of require."
+  },
+  {
+    "id": "contextio-kko0",
+    "reason": "Already implemented: packages/redact/src/redact.ts.bak does not exist anywhere in the working tree and is not listed in git ls-files—file is fully removed from both working tree and index."
+  },
+  {
+    "id": "contextio-rd8u",
+    "reason": "Already implemented: packages/web/app/api/captures/route.ts (line 7) imports metaFilenameFor from @/lib/sessions/utils instead of defining a local copy."
+  },
+  {
+    "id": "contextio-hari",
+    "reason": "Already implemented: settings page labels all carry matching htmlFor attributes tied to input/switch id attributes (e.g., Label htmlFor='logDir' <> Input id='logDir', Label htmlFor='redactReversible' <> input id='redactReversible', Switch/Label htmlFor='captureCleanupEnabled')."
+  },
+  {
+    "id": "contextio-wglo",
+    "reason": "Already implemented: packages/redact/src/redact.ts.bak has been fully deleted from the working tree and git index (confirmed by glob and git ls-files)."
+  },
+  {
+    "id": "contextio-byme",
+    "reason": "Already implemented: packages/web/app/api/settings/route.ts GET handler validates and coerces every field via validateField() (lines 41–71) before returning—fixes unvalidated raw file response."
+  },
+  {
+    "id": "contextio-l7dz",
+    "reason": "Already implemented: packages/web/app/api/captures/route.ts POST clear (line 250–251) deletes each capture's .redact-meta.json sibling; cleanup-scheduler.ts (line 57) does the same for the scheduled path."
+  },
+  {
+    "id": "contextio-cw6f",
+    "reason": "Already implemented: packages/web/app/settings/page.tsx tracks the dismiss timeout via messageTimeoutRef (useRef, line 30), clears it before setting a new timer (line 69), and cleans it up on unmount (lines 49–52)."
+  },
+  {
+    "id": "contextio-448p",
+    "reason": "Already implemented: packages/web/lib/api.ts APIClient exposes getSettings() and saveSettings() (lines 377–387); settings page.tsx calls apiClient.getSettings() and apiClient.saveSettings() exclusively (lines 35, 59)."
+  }
+]

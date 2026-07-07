@@ -178,7 +178,14 @@ class APIClient {
           throw error;
         }
 
-        const data = await response.json();
+        let data: T;
+        try {
+          data = await response.json();
+        } catch {
+          throw new Error(
+            `Response body could not be parsed as JSON (HTTP ${response.status})`,
+          );
+        }
         return data;
       } catch (error) {
         clearTimeout(timeoutId);
@@ -574,7 +581,14 @@ class APIClient {
           throw error;
         }
 
-        const data = await response.json();
+        let data: T;
+        try {
+          data = await response.json();
+        } catch {
+          throw new Error(
+            `Response body could not be parsed as JSON (HTTP ${response.status})`,
+          );
+        }
         return data;
       } catch (error) {
         clearTimeout(timeoutId);
