@@ -9,7 +9,7 @@ import type {
 import {
   listCaptureFiles,
   getSessionMetadata,
-  CAPTURE_DIR,
+  getCaptureDir,
   MAX_FILE_SIZE,
   computeContextValues,
   computeTokenUsage,
@@ -234,7 +234,7 @@ export async function GET(request: Request) {
 
       for (const filename of files) {
         try {
-          const filepath = join(CAPTURE_DIR, filename);
+  const filepath = join(getCaptureDir(), filename);
           const stats = await fs.stat(filepath);
           if (stats.size > MAX_FILE_SIZE) continue;
 
@@ -405,9 +405,9 @@ export async function GET(request: Request) {
     const files = await listCaptureFiles();
     const sessions: Session[] = [];
 
-    for (const filename of files) {
-      try {
-        const filepath = join(CAPTURE_DIR, filename);
+  for (const filename of files) {
+  try {
+  const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
 

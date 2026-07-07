@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { join } from "node:path";
 import type { SessionDetail, SessionMetrics, CaptureMetrics } from "@/types/api";
-import { listCaptureFiles, CAPTURE_DIR, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
+import { listCaptureFiles, getCaptureDir, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
 import {
   computeCaptureRedactionCounts,
   countRedactionsInResponse,
@@ -214,7 +214,7 @@ export async function GET(
 
     for (const filename of files) {
       try {
-        const filepath = join(CAPTURE_DIR, filename);
+        const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
 

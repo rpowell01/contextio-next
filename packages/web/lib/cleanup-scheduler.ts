@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { join } from "node:path";
 
-import { getCaptureDir, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
+import { applyLogDir, getCaptureDir, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 
 const SETTINGS_FILE = join(process.env.HOME ?? "~/.contextio-next", ".contextio-next", "settings.json");
@@ -22,25 +22,38 @@ async function loadSettings(): Promise<{
   maxAgeDays: number;
   intervalHours: number;
 }> {
+  let capturedLogDir: string | undefined;
+  let cleanupSettings: { enabled: boolean; maxAgeDays: number; intervalHours: number } | null = null;
   try {
     const raw = await fs.readFile(SETTINGS_FILE, "utf8");
     const parsed = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return defaultSettings();
-    const obj = parsed as Record<string, unknown>;
-    return {
-      enabled: typeof obj.captureCleanupEnabled === "boolean" ? obj.captureCleanupEnabled : defaultSettings().enabled,
-      maxAgeDays:
-        typeof obj.captureCleanupMaxAgeDays === "number" && Number.isInteger(obj.captureCleanupMaxAgeDays)
-          ? obj.captureCleanupMaxAgeDays
-          : defaultSettings().maxAgeDays,
-      intervalHours:
-        typeof obj.captureCleanupIntervalHours === "number" && Number.isInteger(obj.captureCleanupIntervalHours)
-          ? obj.captureCleanupIntervalHours
-          : defaultSettings().intervalHours,
-    };
+    if (typeof parsed === "object" && parsed !== null) {
+      const obj = parsed as Record<string, unknown>;
+      if (typeof obj.logDir === "string") capturedLogDir = obj.logDir;
+      cleanupSettings = {
+        enabled:
+          typeof obj.captureCleanupEnabled === "boolean"
+            ? obj.captureCleanupEnabled
+            : defaultSettings().enabled,
+        maxAgeDays:
+          typeof obj.captureCleanupMaxAgeDays === "number" && Number.isInteger(obj.captureCleanupMaxAgeDays)
+            ? obj.captureCleanupMaxAgeDays
+            : defaultSettings().maxAgeDays,
+        intervalHours:
+          typeof obj.captureCleanupIntervalHours === "number" && Number.isInteger(obj.captureCleanupIntervalHours)
+            ? obj.captureCleanupIntervalHours
+            : defaultSettings().intervalHours,
+      };
+    }
   } catch {
-    return defaultSettings();
+    // ignore settings read errors; fall back to cleanup defaults below
   }
+
+  if (typeof capturedLogDir === "string") {
+    applyLogDir(capturedLogDir);
+  }
+
+  return cleanupSettings ?? defaultSettings();
 }
 
 async function runCleanup(): Promise<void> {

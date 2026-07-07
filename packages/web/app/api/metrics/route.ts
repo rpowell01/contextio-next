@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import { join } from "node:path";
 
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
-import { CAPTURE_DIR, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
+import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
 import { countRedactionsInResponse, getCaptureRedactionStats } from "@/lib/sessions/redaction-utils";
 
 /**
@@ -127,7 +127,7 @@ export async function GET(_request: Request): Promise<Response> {
 
     for (const filename of files) {
       try {
-        const filepath = join(CAPTURE_DIR, filename);
+        const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) {
           console.warn(`Capture file too large, skipping: ${filename}`);

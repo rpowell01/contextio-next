@@ -11,22 +11,23 @@ export type { Session, Capture } from "@/types/api";
 // Allow override via environment variable (used in Docker environments)
 // Falls back to default ~/.contextio/captures for local development
 let _captureDir: string = process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
-export let CAPTURE_DIR = _captureDir;
 
 /** Read the capture directory currently in effect. */
 export function getCaptureDir(): string {
   return _captureDir;
 }
 
-/** Update the capture directory seen by all server-side helpers.
- *
- * ESM live bindings ensure existing `import { CAPTURE_DIR }` call sites
- * observe the new value without additional changes.
- */
+/** Update the capture directory seen by all server-side helpers. */
 export function setCaptureDir(dir: string): void {
   _captureDir = dir;
+  // Keep the deprecated re-export in sync for external callers
   CAPTURE_DIR = dir;
 }
+
+/** @deprecated Use `getCaptureDir()` — live ESM binding kept for external
+ *  callers that haven't migrated. Internal code should call `getCaptureDir()`
+ *  directly to avoid relying on live-binding propagation quirks. */
+export let CAPTURE_DIR: string = _captureDir;
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const MAX_FILENAME_LENGTH = 255;
@@ -66,7 +67,7 @@ export function metaFilenameFor(captureFilename: string): string {
  */
 export async function listCaptureFiles(): Promise<string[]> {
   try {
-    const files = await fs.readdir(CAPTURE_DIR);
+  const files = await fs.readdir(getCaptureDir());
     return files
       .filter((f) => isValidFilename(f) && !f.endsWith(".tmp") && !f.includes("redact-meta"))
       .sort();

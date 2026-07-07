@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { join } from "node:path";
-import { CAPTURE_DIR, MAX_FILE_SIZE, extractCaptureMetadata } from "@/lib/sessions/utils";
+import { getCaptureDir, MAX_FILE_SIZE, extractCaptureMetadata } from "@/lib/sessions/utils";
 
 export async function GET(
   _request: Request,
@@ -9,7 +9,7 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const filepath = join(CAPTURE_DIR, id);
+    const filepath = join(getCaptureDir(), id);
     const stats = await fs.stat(filepath).catch(() => null);
     
     if (!stats) {

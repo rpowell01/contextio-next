@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Capture, CaptureWithRedaction, RedactionDetails, PaginationMeta } from "@/types/api";
 
 import { getCaptureRedactionStats, computeCaptureRedactionCounts } from "@/lib/sessions/redaction-utils";
-import { CAPTURE_DIR, MAX_FILE_SIZE, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
+import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
 import { consumeNonce } from "@/middleware";
 
 function extractCaptureMetadata(
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
     const id = url.pathname.split("/").pop();
 
     if (id && id !== "captures") {
-      const filepath = join(CAPTURE_DIR, id);
+      const filepath = join(getCaptureDir(), id);
       const stats = await fs.stat(filepath).catch(() => null);
       if (!stats) {
         return Response.json({ error: "Capture not found" }, { status: 404 });
@@ -134,8 +134,8 @@ export async function GET(request: Request) {
     const captures: (Capture | CaptureWithRedaction)[] = [];
 
     for (const filename of files) {
-      const filepath = join(CAPTURE_DIR, filename);
-      let capture: Capture | null = null;
+  const filepath = join(getCaptureDir(), filename);
+  let capture: Capture | null = null;
       let redaction: RedactionDetails | null = null;
 
       try {
@@ -248,12 +248,12 @@ export async function POST(request: Request) {
     let deleted = 0;
     let errors = 0;
 
-    for (const filename of files) {
-      const filepath = join(CAPTURE_DIR, filename);
-      try {
-        await fs.unlink(filepath);
-        // Also delete the associated redaction metadata file
-        const metaPath = join(CAPTURE_DIR, metaFilenameFor(filename));
+  for (const filename of files) {
+  const filepath = join(getCaptureDir(), filename);
+  try {
+  await fs.unlink(filepath);
+  // Also delete the associated redaction metadata file
+  const metaPath = join(getCaptureDir(), metaFilenameFor(filename));
         await fs.unlink(metaPath).catch(() => {}); // Ignore if doesn't exist
         deleted++;
       } catch (error) {

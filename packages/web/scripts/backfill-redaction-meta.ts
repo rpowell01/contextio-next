@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { CAPTURE_DIR, metaFilenameFor } from "@/lib/sessions/utils";
+import { getCaptureDir, metaFilenameFor } from "@/lib/sessions/utils";
 import {
   computeCaptureRedactionCounts,
   getCaptureRedactionStats,
@@ -77,22 +77,21 @@ function processCapture(
     stats.totalRedactions += counts.totalRedactions;
   } catch (err) {
     stats.errors++;
-    console.error(`  ERROR: ${captureBasename} — ${(err as Error).message}`);
+    console.error(` ERROR: ${captureBasename} — ${(err as Error).message}`);
   }
 }
 
 function usage(): void {
   console.error(`Usage: backfill-redaction-meta [CAPTURE_DIR]`);
-  console.error(`  CAPTURE_DIR  Override capture directory.`);
+  console.error(` CAPTURE_DIR Override capture directory.`);
   console.error(
-    `               Defaults to ${CAPTURE_DIR} (or LOGGER_CAPTURE_DIR)`,
+    ` Defaults to ${getCaptureDir()} (or LOGGER_CAPTURE_DIR)`,
   );
   process.exit(1);
 }
 
 function runBackfill(): void {
-  const resolvedCaptureDir =
-    process.argv[2] ?? CAPTURE_DIR;
+  const resolvedCaptureDir = process.argv[2] ?? getCaptureDir();
 
   if (process.argv[2] === "--help" || process.argv[2] === "-h") {
     usage();
@@ -128,10 +127,10 @@ function runBackfill(): void {
 
   console.log("\n=== Backfill Summary ===");
   console.log(`Total capture files : ${stats.total}`);
-  console.log(`Processed          : ${stats.processed}`);
+  console.log(`Processed : ${stats.processed}`);
   console.log(`Skipped (existing) : ${stats.skippedExisting}`);
-  console.log(`Errors             : ${stats.errors}`);
-  console.log(`Total redactions   : ${stats.totalRedactions}`);
+  console.log(`Errors : ${stats.errors}`);
+  console.log(`Total redactions : ${stats.totalRedactions}`);
 
   if (stats.errors > 0) {
     process.exitCode = 1;

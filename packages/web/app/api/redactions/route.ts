@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import { join } from "node:path";
 
 import {
-  CAPTURE_DIR,
+  getCaptureDir,
   MAX_FILE_SIZE,
   listCaptureFiles,
 } from "@/lib/sessions/utils";
@@ -31,7 +31,7 @@ export async function GET(_request: Request) {
 
     for (const filename of files) {
       try {
-        const filepath = join(CAPTURE_DIR, filename);
+        const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
 
