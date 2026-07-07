@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { join } from "node:path";
 
-import { CAPTURE_DIR, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
+import { getCaptureDir, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 
 const SETTINGS_FILE = join(process.env.HOME ?? "~/.contextio-next", ".contextio-next", "settings.json");
@@ -48,13 +48,14 @@ async function runCleanup(): Promise<void> {
   if (!settings.enabled || settings.maxAgeDays <= 0) return;
   const cutoff = Date.now() - settings.maxAgeDays * 24 * 60 * 60 * 1000;
   const files = await listCaptureFiles();
+  const captureDir = getCaptureDir();
   for (const file of files) {
-    const filepath = join(CAPTURE_DIR, file);
+    const filepath = join(captureDir, file);
     try {
       const stats = await fs.stat(filepath);
       if (stats.mtimeMs >= cutoff) continue;
       await fs.unlink(filepath);
-      await fs.unlink(join(CAPTURE_DIR, metaFilenameFor(file))).catch(() => {});
+      await fs.unlink(join(captureDir, metaFilenameFor(file))).catch(() => {});
     } catch {
       // ignore individual file errors (e.g., already deleted, permissions)
     }

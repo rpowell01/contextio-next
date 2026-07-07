@@ -9,7 +9,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  logDir: "./captures",
+  logDir: "",
   maxSessions: 0,
   redactPreset: "pii",
   redactReversible: false,
@@ -57,7 +57,7 @@ export function validateSettings(input: unknown): Settings {
   };
 
   return {
-    logDir: validateString("logDir", 1),
+    logDir: validateString("logDir", 0),
     maxSessions: validateNumber("maxSessions", 0, 10000),
     redactPreset: validateEnum("redactPreset", ["secrets", "pii", "strict"]),
     redactReversible: validateBoolean("redactReversible"),
@@ -69,4 +69,52 @@ export function validateSettings(input: unknown): Settings {
 
 export function mergeWithDefaults(partial: Partial<Settings>): Settings {
   return { ...DEFAULT_SETTINGS, ...partial };
+}
+
+export function validateSettingsLenient(input: unknown): Settings {
+  if (typeof input !== "object" || input === null) {
+    return DEFAULT_SETTINGS;
+  }
+  const obj = input as Record<string, unknown>;
+
+  return {
+    logDir:
+      typeof obj.logDir === "string" && obj.logDir.length >= 1
+        ? obj.logDir
+        : DEFAULT_SETTINGS.logDir,
+    maxSessions:
+      typeof obj.maxSessions === "number" &&
+      Number.isInteger(obj.maxSessions) &&
+      obj.maxSessions >= 0 &&
+      obj.maxSessions <= 10000
+        ? obj.maxSessions
+        : DEFAULT_SETTINGS.maxSessions,
+  redactPreset:
+    typeof obj.redactPreset === "string" &&
+    ["secrets", "pii", "strict"].includes(obj.redactPreset)
+      ? (obj.redactPreset as "secrets" | "pii" | "strict")
+      : DEFAULT_SETTINGS.redactPreset,
+    redactReversible:
+      typeof obj.redactReversible === "boolean"
+        ? obj.redactReversible
+        : DEFAULT_SETTINGS.redactReversible,
+    captureCleanupEnabled:
+      typeof obj.captureCleanupEnabled === "boolean"
+        ? obj.captureCleanupEnabled
+        : DEFAULT_SETTINGS.captureCleanupEnabled,
+    captureCleanupIntervalHours:
+      typeof obj.captureCleanupIntervalHours === "number" &&
+      Number.isInteger(obj.captureCleanupIntervalHours) &&
+      obj.captureCleanupIntervalHours >= 1 &&
+      obj.captureCleanupIntervalHours <= 168
+        ? obj.captureCleanupIntervalHours
+        : DEFAULT_SETTINGS.captureCleanupIntervalHours,
+    captureCleanupMaxAgeDays:
+      typeof obj.captureCleanupMaxAgeDays === "number" &&
+      Number.isInteger(obj.captureCleanupMaxAgeDays) &&
+      obj.captureCleanupMaxAgeDays >= 1 &&
+      obj.captureCleanupMaxAgeDays <= 365
+        ? obj.captureCleanupMaxAgeDays
+        : DEFAULT_SETTINGS.captureCleanupMaxAgeDays,
+  };
 }

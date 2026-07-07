@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 
 import { DEFAULT_SETTINGS, validateSettings, mergeWithDefaults } from "@/lib/settings";
+import { applyLogDir } from "@/lib/sessions/utils";
 
 const SETTINGS_FILE = join(homedir(), ".contextio-next", "settings.json");
 
@@ -17,18 +18,6 @@ async function ensureSettingsFile(): Promise<void> {
   }
 }
 
-function validateField<K extends keyof typeof DEFAULT_SETTINGS>(
-  obj: Record<string, unknown>,
-  key: K,
-  validator: (v: unknown) => typeof DEFAULT_SETTINGS[K]
-): typeof DEFAULT_SETTINGS[K] {
-  try {
-    return validator(obj[key]);
-  } catch {
-    return DEFAULT_SETTINGS[key];
-  }
-}
-
 export async function GET(): Promise<NextResponse> {
   try {
     await ensureSettingsFile();
@@ -39,37 +28,38 @@ export async function GET(): Promise<NextResponse> {
     }
     // Per-field validation with defaults fallback - never fail the whole request
     const obj = parsed as Record<string, unknown>;
-    const settings = {
-      logDir: validateField(obj, "logDir", (v) => {
-        if (typeof v !== "string" || !v.length) throw new Error("invalid");
-        return v;
-      }),
-      maxSessions: validateField(obj, "maxSessions", (v) => {
-        if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 10000) throw new Error("invalid");
-        return v;
-      }),
-      redactPreset: validateField(obj, "redactPreset", (v) => {
-        if (typeof v !== "string" || !["secrets", "pii", "strict"].includes(v)) throw new Error("invalid");
-        return v as "secrets" | "pii" | "strict";
-      }),
-      redactReversible: validateField(obj, "redactReversible", (v) => {
-        if (typeof v !== "boolean") throw new Error("invalid");
-        return v;
-      }),
-      captureCleanupEnabled: validateField(obj, "captureCleanupEnabled", (v) => {
-        if (typeof v !== "boolean") throw new Error("invalid");
-        return v;
-      }),
-      captureCleanupIntervalHours: validateField(obj, "captureCleanupIntervalHours", (v) => {
-        if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 168) throw new Error("invalid");
-        return v;
-      }),
-      captureCleanupMaxAgeDays: validateField(obj, "captureCleanupMaxAgeDays", (v) => {
-        if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 365) throw new Error("invalid");
-        return v;
-      }),
-    };
-    return NextResponse.json({ settings });
+  const settings = {
+    logDir: validateField(obj, "logDir", (v) => {
+      if (typeof v !== "string" || !v.length) throw new Error("invalid");
+      return v;
+    }),
+    maxSessions: validateField(obj, "maxSessions", (v) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 10000) throw new Error("invalid");
+      return v;
+    }),
+    redactPreset: validateField(obj, "redactPreset", (v) => {
+      if (typeof v !== "string" || !["secrets", "pii", "strict"].includes(v)) throw new Error("invalid");
+      return v as "secrets" | "pii" | "strict";
+    }),
+    redactReversible: validateField(obj, "redactReversible", (v) => {
+      if (typeof v !== "boolean") throw new Error("invalid");
+      return v;
+    }),
+    captureCleanupEnabled: validateField(obj, "captureCleanupEnabled", (v) => {
+      if (typeof v !== "boolean") throw new Error("invalid");
+      return v;
+    }),
+    captureCleanupIntervalHours: validateField(obj, "captureCleanupIntervalHours", (v) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 168) throw new Error("invalid");
+      return v;
+    }),
+    captureCleanupMaxAgeDays: validateField(obj, "captureCleanupMaxAgeDays", (v) => {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 365) throw new Error("invalid");
+      return v;
+    }),
+  };
+  applyLogDir(settings.logDir);
+  return NextResponse.json({ settings });
   } catch (error) {
     console.error("Error reading settings:", error);
     return NextResponse.json({ settings: DEFAULT_SETTINGS });
@@ -86,6 +76,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     await ensureSettingsFile();
     await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    applyLogDir(settings.logDir);
 
     return NextResponse.json({ success: true, settings });
   } catch (error) {

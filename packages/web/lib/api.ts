@@ -25,7 +25,7 @@ function getApiBaseUrl(): string {
 }
 
 // Get the base URL for proxy admin API requests
-// In Docker: proxy runs on localhost:4040, accessible from web container
+// In Docker: proxy runs on port 4040, accessible from web container
 // In development: proxy may run on a different port or host
 function getProxyAdminBaseUrl(): string {
   // For browser: we need absolute URL to proxy (CORS must be enabled on proxy)
@@ -73,30 +73,44 @@ function sleep(ms: number): Promise<void> {
 }
 
 class APIClient {
+  // CSRF nonce supplied by the server and refreshed on every API response.
+  // Must be echoed back as x-csrf-nonce on sensitive mutation requests.
+  private csrfNonce: string | null = null;
+
+  private updateCsrfNonce(response: Response): void {
+    const nonce = response.headers.get("x-csrf-nonce");
+    if (nonce) this.csrfNonce = nonce;
+  }
+
+  private csrfHeaders(): HeadersInit {
+    if (!this.csrfNonce) return {};
+    return { "x-csrf-nonce": this.csrfNonce };
+  }
+
   /**
    * Combines multiple AbortSignals into a single signal.
    * Aborts when any of the provided signals abort.
    */
   private combineSignals(signals: AbortSignal[]): AbortSignal {
     const controller = new AbortController();
-    
+
     const abortHandler = () => {
       controller.abort();
     };
-    
+
     const cleanup = () => {
       signals.forEach(signal => {
         signal.removeEventListener("abort", abortHandler);
       });
     };
-    
+
     signals.forEach(signal => {
       signal.addEventListener("abort", abortHandler);
     });
-    
+
     // Clean up listeners when our controller is aborted
     controller.signal.addEventListener("abort", cleanup);
-    
+
     return controller.signal;
   }
 
@@ -129,9 +143,12 @@ class APIClient {
           signal,
           headers: {
             "Content-Type": "application/json",
+            ...this.csrfHeaders(),
             ...(options?.headers || {}),
           },
         });
+
+        this.updateCsrfNonce(response);
 
         clearTimeout(timeoutId);
 
@@ -144,7 +161,7 @@ class APIClient {
             // Response body is not JSON or empty
           }
           const error = new Error(`API request failed: ${response.status} ${errorMessage}`);
-          
+
           // Check if we should retry for transient errors
           if (attempt < retryConfig.maxRetries && isTransientError(error, response.status)) {
             // Check signal before sleeping
@@ -165,12 +182,12 @@ class APIClient {
         return data;
       } catch (error) {
         clearTimeout(timeoutId);
-        
+
         if (error instanceof Error) {
           if (error.name === "AbortError") {
             throw new Error("Request aborted");
           }
-          
+
           // Check if we should retry for transient network errors
           if (attempt < retryConfig.maxRetries && isTransientError(error)) {
             // Check signal before sleeping
@@ -189,7 +206,7 @@ class APIClient {
         throw new Error("Network error");
       }
     }
-    
+
     throw lastError || new Error("Request failed");
   }
 
@@ -238,14 +255,14 @@ class APIClient {
   async streamLogs(
     containerId: string,
     onChunk: (log: LogEntry) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<void> {
     const params = new URLSearchParams();
     params.set("containerId", encodeURIComponent(containerId));
     params.set("stream", "true");
 
     const controller = new AbortController();
-    
+
     // Combine provided signal with controller signal
     const combinedSignal = signal
       ? this.combineSignals([signal, controller.signal])
@@ -315,22 +332,22 @@ class APIClient {
 
   async exportLogs(containerId: string, format: "json" | "text" | "csv", filter: LogsFilter): Promise<string> {
     const logs = await this.getLogs(containerId, filter);
-    
+
     switch (format) {
-      case "json":
-        return JSON.stringify(logs, null, 2);
-      case "csv":
-        return this.logsToCsv(logs);
-      case "text":
-        return logs.map(l => `[${l.timestamp}] [${l.level.toUpperCase()}] [${l.source}] ${l.message}`).join("\n");
-      default:
-        return JSON.stringify(logs, null, 2);
+    case "json":
+      return JSON.stringify(logs, null, 2);
+    case "csv":
+      return this.logsToCsv(logs);
+    case "text":
+      return logs.map(l => `[${l.timestamp}] [${l.level.toUpperCase()}] [${l.source}] ${l.message}`).join("\n");
+    default:
+      return JSON.stringify(logs, null, 2);
     }
   }
 
   private logsToCsv(logs: LogEntry[]): string {
     const header = "id,timestamp,level,source,message,sessionId";
-    const rows = logs.map(l => 
+    const rows = logs.map(l =>
       `${l.id},${l.timestamp},${l.level},${l.source},"${l.message.replace(/"/g, '""')}",${l.sessionId || ""}`
     );
     return [header, ...rows].join("\n");
@@ -362,15 +379,15 @@ class APIClient {
     return this.request(`/api/captures${query ? `?${query}` : ""}`);
   }
 
-async getCapture(id: string): Promise<Capture & { requestBody: Record<string, unknown>; responseBody: string | null }> {
-  return this.request(`/api/captures/${id}`);
-}
+  async getCapture(id: string): Promise<Capture & { requestBody: Record<string, unknown>; responseBody: string | null }> {
+    return this.request(`/api/captures/${id}`);
+  }
 
-async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: number; message: string }> {
+  async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: number; message: string }> {
     return this.request("/api/captures?action=clear", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirm: true }),
+      body: JSON.stringify({ action: "DELETE_ALL_CAPTURES" }),
     });
   }
 
@@ -414,14 +431,14 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
 
   async streamProxyLogs(
     onChunk: (log: LogEntry) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<void> {
     const baseUrl = getProxyAdminBaseUrl();
     const params = new URLSearchParams();
     params.set("stream", "true");
 
     const controller = new AbortController();
-    
+
     // Combine provided signal with controller signal
     const combinedSignal = signal
       ? this.combineSignals([signal, controller.signal])
@@ -522,9 +539,12 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
           signal,
           headers: {
             "Content-Type": "application/json",
+            ...this.csrfHeaders(),
             ...(options?.headers || {}),
           },
         });
+
+        this.updateCsrfNonce(response);
 
         clearTimeout(timeoutId);
 
@@ -537,7 +557,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
             // Response body is not JSON or empty
           }
           const error = new Error(`API request failed: ${response.status} ${errorMessage}`);
-          
+
           // Check if we should retry for transient errors
           if (attempt < retryConfig.maxRetries && isTransientError(error, response.status)) {
             // Check signal before sleeping
@@ -558,12 +578,12 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
         return data;
       } catch (error) {
         clearTimeout(timeoutId);
-        
+
         if (error instanceof Error) {
           if (error.name === "AbortError") {
             throw new Error("Request aborted");
           }
-          
+
           // Check if we should retry for transient network errors
           if (attempt < retryConfig.maxRetries && isTransientError(error)) {
             // Check signal before sleeping

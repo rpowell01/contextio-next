@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { CAPTURE_DIR } from "@/lib/sessions/utils";
+import { CAPTURE_DIR, metaFilenameFor } from "@/lib/sessions/utils";
 import {
   computeCaptureRedactionCounts,
   getCaptureRedactionStats,
@@ -38,8 +38,7 @@ function processCapture(
   stats: BackfillStats,
 ): void {
   const captureBasename = path.basename(capturePath);
-  const metaBasename = `${captureBasename}.redact-meta.json`;
-  const metaPath = path.join(path.dirname(capturePath), metaBasename);
+  const metaPath = path.join(path.dirname(capturePath), metaFilenameFor(captureBasename));
 
   if (fs.existsSync(metaPath)) {
     stats.skippedExisting++;

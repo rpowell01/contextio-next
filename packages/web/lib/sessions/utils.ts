@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import type { Session, Capture } from "@/types/api";
 import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
@@ -10,7 +10,24 @@ export type { Session, Capture } from "@/types/api";
 
 // Allow override via environment variable (used in Docker environments)
 // Falls back to default ~/.contextio/captures for local development
-export const CAPTURE_DIR = process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
+let _captureDir: string = process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
+export let CAPTURE_DIR = _captureDir;
+
+/** Read the capture directory currently in effect. */
+export function getCaptureDir(): string {
+  return _captureDir;
+}
+
+/** Update the capture directory seen by all server-side helpers.
+ *
+ * ESM live bindings ensure existing `import { CAPTURE_DIR }` call sites
+ * observe the new value without additional changes.
+ */
+export function setCaptureDir(dir: string): void {
+  _captureDir = dir;
+  CAPTURE_DIR = dir;
+}
+
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const MAX_FILENAME_LENGTH = 255;
 
@@ -75,10 +92,7 @@ export function extractCaptureMetadata(
     return 0;
   };
 
-  const rawTimings =
-    data.timings && typeof data.timings === "object"
-      ? (data.timings as Record<string, unknown>)
-      : {};
+  const rawTimings = data.timings && typeof data.timings === "object" ? (data.timings as Record<string, unknown>) : {};
 
   return {
     id: filename,
@@ -91,10 +105,7 @@ export function extractCaptureMetadata(
     requestBytes: getNumber(data, "requestBytes"),
     responseBytes: getNumber(data, "responseBytes"),
     responseStatus: typeof data.responseStatus === "number" ? data.responseStatus : Number(data.responseStatus) || 0,
-    responseIsStreaming:
-      typeof data.responseIsStreaming === "boolean"
-        ? data.responseIsStreaming
-        : data.responseIsStreaming === true || data.responseIsStreaming === "true",
+    responseIsStreaming: typeof data.responseIsStreaming === "boolean" ? data.responseIsStreaming : data.responseIsStreaming === true || data.responseIsStreaming === "true",
     timestamp: typeof data.timestamp === "string" ? data.timestamp : new Date().toISOString(),
     timings: {
       send_ms: getNumber(rawTimings, "send_ms"),
@@ -104,6 +115,24 @@ export function extractCaptureMetadata(
     },
   };
 }
+
+/** Canonical `logDir` → absolute capture-directory resolver. */
+export function resolveLogDir(logDir: string): string {
+  const trimmed = logDir.trim();
+  if (!trimmed) {
+    return process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
+  }
+  if (trimmed === "~") return homedir();
+  if (trimmed.startsWith("~/")) return join(homedir(), trimmed.slice(2));
+  if (trimmed.startsWith("/")) return trimmed;
+  return resolve(process.cwd(), trimmed);
+}
+
+/** Resolve and apply a Settings `logDir` value as the active capture directory. */
+export function applyLogDir(logDir: string): void {
+  setCaptureDir(resolveLogDir(logDir));
+}
+
 
 /**
  * Safely extract session ID from filename or data.

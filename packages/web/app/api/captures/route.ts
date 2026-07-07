@@ -5,6 +5,7 @@ import type { Capture, CaptureWithRedaction, RedactionDetails, PaginationMeta } 
 
 import { getCaptureRedactionStats, computeCaptureRedactionCounts } from "@/lib/sessions/redaction-utils";
 import { CAPTURE_DIR, MAX_FILE_SIZE, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
+import { consumeNonce } from "@/middleware";
 
 function extractCaptureMetadata(
   filename: string,
@@ -233,10 +234,15 @@ export async function POST(request: Request) {
       return Response.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const body = (await request.json().catch(() => ({}))) as { confirm?: boolean };
-    if (!body.confirm) {
-      return Response.json({ error: "Confirmation required" }, { status: 400 });
-    }
+  const csrfNonce = request.headers.get("x-csrf-nonce");
+  if (!consumeNonce(csrfNonce ?? "")) {
+    return Response.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as { action?: string };
+  if (body.action !== "DELETE_ALL_CAPTURES") {
+    return Response.json({ error: "Confirmation required" }, { status: 400 });
+  }
 
     const files = await listCaptureFiles();
     let deleted = 0;

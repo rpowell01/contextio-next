@@ -13,6 +13,15 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Trash2 } from "lucide-react";
 
+// NOTE: /api/settings (GET and POST) has no authentication. Any client that can reach
+// the web server can read or overwrite settings. Treat the settings file as sensitive
+// and restrict network access to the web UI accordingly.
+// NOTE: /api/captures?action=clear also has no authentication. The client-side
+// "Remove All Captures" confirmation dialog is a usability control, not a security
+// control. The server requires a typed action ("DELETE_ALL_CAPTURES") plus a
+// per-request CSRF nonce issued by the server middleware to prevent cross-origin
+// or accidental invocation.
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({
     logDir: "./captures",
