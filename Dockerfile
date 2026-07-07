@@ -46,6 +46,7 @@ COPY packages/web/lib packages/web/lib
 COPY packages/web/types packages/web/types
 COPY packages/web/globals.css packages/web/globals.css
 COPY packages/web/config packages/web/config
+COPY packages/web/middleware.ts packages/web/middleware.ts
 COPY packages/web/public packages/web/public
 
 # Copy cli package source files
