@@ -36,7 +36,7 @@ mitmdump --version  # run once to generate the CA cert
 
 ### Where are capture files stored?
 
-By default: `~/.contextio/captures/`
+By default: `~/.contextio-next/captures/`
 
 Override with `--log-dir`:
 
@@ -59,11 +59,11 @@ This verifies:
 
 ### Can I use a different port?
 
-Yes, set the `CONTEXTIO_PORT` environment variable:
+Yes, set the `CONTEXTIO_NEXT_PORT` environment variable:
 
 ```bash
 export CONTEXTIO_PORT=5000
-ctxio proxy -- claude
+ ctxio proxy -- claude
 ```
 
 The proxy will listen on port 5000 instead of the default 4040.
@@ -240,7 +240,7 @@ On startup, the oldest sessions are pruned if the total exceeds 10. Sessions are
 Or delete manually:
 
 ```bash
-rm -rf ~/.contextio/captures/
+rm -rf ~/.contextio-next/captures/
 ```
 
 ### Can I share captures?
@@ -288,7 +288,7 @@ Useful for understanding what prompts your tools are sending.
 Yes (experimental):
 
 ```bash
-ctxio replay ~/.contextio/captures/claude_a1b2c3d4_1739000000000-000001.json
+ctxio replay ~/.contextio-next/captures/claude_a1b2c3d4_1739000000000-000001.json
 ```
 
 Re-sends the exact same request to the API and shows the new response. Requires the correct API key for that provider.
@@ -315,7 +315,7 @@ Or use a different port:
 
 ```bash
 export CONTEXTIO_PORT=5000
-ctxio proxy -- claude
+ ctxio proxy -- claude
 ```
 
 ### mitmproxy certificate errors

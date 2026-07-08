@@ -85,7 +85,7 @@ Same value always maps to the same placeholder within a session. Works across An
 const redact = createRedactPlugin({ policyFile: './my-rules.json' });
 ```
 
-Full policy reference: [redaction-policy.md](https://github.com/larsderidder/contextio/blob/main/docs/redaction-policy.md)
+Full policy reference: [redaction-policy.md](https://github.com/larsderidder/contextio-next/blob/main/docs/redaction-policy.md)
 
 ## Standalone usage
 

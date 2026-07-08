@@ -164,7 +164,7 @@ A JSON Schema is available for validation and IDE autocomplete. Save this URL in
 
 ```json
 {
-  "$schema": "https://contextio.dev/schemas/redaction-policy.json"
+  "$schema": "https://contextio-next.dev/schemas/redaction-policy.json"
 }
 ```
 
@@ -202,7 +202,7 @@ curl -X POST http://127.0.0.1:4040/v1/messages \
   -d '{"messages":[{"role":"user","content":"Test: john@test.com, 123-45-6789"}]}'
 
 # Check the capture file
-ls -t ~/.contextio/captures/ | head -1 | xargs cat
+ls -t ~/.contextio-next/captures/ | head -1 | xargs cat
 ```
 
 ### 2. Validate JSON syntax

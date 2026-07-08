@@ -1,4 +1,4 @@
-# ContextIO-Next - Control your context
+# ContextIO Next - Control your context
 
 [![CI](https://github.com/larsderidder/contextio-next/actions/workflows/ci.yml/badge.svg)](https://github.com/larsderidder/contextio-next/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@contextio/cli)](https://www.npmjs.com/package/@contextio/cli)
@@ -8,7 +8,7 @@
 
 This project is forked from [contextio](https://github.com/larsderidder/contextio) by larsderidder, which is released under the MIT License. The original copyright and license are preserved in [LICENSE](LICENSE).
 
-The visual identity has been renamed to ContextIO-Next. All code, documentation, and references to the project identity on `github.com/larsderidder/contextio-next` reflect this fork.
+This project is now maintained as **ContextIO Next**. All code, documentation, and references to the project identity on `github.com/larsderidder/contextio-next` reflect this fork.
 
 A local proxy that sits between your AI coding tools and the LLM APIs they call. Logs every request and response, optionally strips PII and secrets before anything leaves your machine.
 
@@ -16,7 +16,7 @@ I built this because I get nervous sending data I don't see to LLMs. Now at leas
 
 All your stuff passes through this thing, so the proxy has zero external dependencies. Read the code, it's small.
 
-**Looking for full observability?** Check out [Context Lens](https://github.com/larsderidder/context-lens), a web-based tracing and analytics platform built on top of contextio (well I'm working on porting things over).
+**Looking for full observability?** Check out [Context Lens](https://github.com/larsderidder/context-lens), a web-based tracing and analytics platform built on top of contextio-next (well I'm working on porting things over).
 
 ## Install
 
@@ -326,4 +326,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for dependency policy and guidelines.
 
 MIT. Copyright (c) larsderidder and contributors.
 
-This project is forked from [contextio](https://github.com/larsderidder/contextio). The original project and its authorship are acknowledged and preserved in compliance with the MIT License.
+This project is forked from [contextio-next](https://github.com/larsderidder/contextio-next). The original project and its authorship are acknowledged and preserved in compliance with the MIT License.

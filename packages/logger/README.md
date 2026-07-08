@@ -17,7 +17,7 @@ import { createProxy } from '@contextio/proxy';
 import { createLoggerPlugin } from '@contextio/logger';
 
 const logger = createLoggerPlugin({
-  captureDir: '~/.contextio/captures',  // default
+  captureDir: '~/.contextio-next/captures', // default
   maxSessions: 20,                       // prune old sessions on startup; 0 = keep all
 });
 

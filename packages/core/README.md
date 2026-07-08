@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@contextio/core)](https://www.npmjs.com/package/@contextio/core)
 
-Shared types, routing, and utility functions for the contextio packages. Zero npm dependencies.
+Shared types, routing, and utility functions for the contextio-next packages. Zero npm dependencies.
 
 This is the contract layer. It defines the plugin interface, request/response types, provider routing, header filtering, model pricing, token estimation, and security scanning. Every other `@contextio/*` package depends on this.
 
