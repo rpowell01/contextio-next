@@ -3,7 +3,7 @@
 # Test redaction by sending a request with sensitive data through the proxy.
 #
 # Usage:
-#   1. Start the proxy:  contextio proxy --redact --port 4040
+# 1. Start the proxy: ctxio proxy --redact --port 4040
 #   2. Run this script:  ./examples/test-redaction.sh
 #
 # The script sends a fake Anthropic API request containing PII and secrets,
@@ -32,5 +32,5 @@ curl -s -X POST "${URL}" \
 
 echo ""
 echo ""
-echo "Check the latest capture file in ~/.contextio/captures/ to see what was redacted."
-echo "You can use: ls -t ~/.contextio/captures/ | head -1 | xargs -I{} cat ~/.contextio/captures/{} | python3 -m json.tool"
+echo "Check the latest capture file in ~/.contextio-next/captures/ to see what was redacted."
+echo "You can use: ls -t ~/.contextio-next/captures/ | head -1 | xargs -I{} cat ~/.contextio-next/captures/{} | python3 -m json.tool"

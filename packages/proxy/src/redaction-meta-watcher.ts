@@ -144,26 +144,91 @@ async function reapStaleTmpFiles(dir: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Lazy-computed helper: importing computeCaptureRedactionCounts only when
-// the watcher actually runs avoids the proxy package depending on the web
-// package at build time. We require() it inside the loop so the function
-// is fetched from the shared workspace at runtime.
+// Local redaction counting. The proxy previously called require("@contextio/web")
+// at runtime, but the proxy is built as an ES module (type: "module") where
+// require is undefined, and @contextio/web has no consumable entry point.
+// Counts are computed locally instead: prefer the capture's persisted
+// redactionStats (written by the redact plugin) and otherwise scan the
+// request body for [RULE_REDACTED] placeholders and SSNs. This keeps the
+// proxy free of a build/runtime dependency on the web package.
 // ---------------------------------------------------------------------------
+
+const PLACEHOLDER_REGEX = /\[([A-Z][A-Z0-9_]*)_REDACTED\]/g;
+const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/g;
+
+/** Recursively collect every string leaf value from an arbitrary value. */
+function collectStrings(value: unknown, out: string[]): void {
+  if (typeof value === "string") {
+    out.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectStrings(item, out);
+  } else if (value !== null && typeof value === "object") {
+    for (const item of Object.values(value)) collectStrings(item, out);
+  }
+}
+
+interface RawRedactionStats {
+  totalRedactions?: unknown;
+  byRule?: unknown;
+}
+
+/**
+ * Derive redaction counts for a capture.
+ *
+ * Prefers the persisted redactionStats field when present (matching the web
+ * API's source of truth), otherwise falls back to scanning the request body
+ * for redacted placeholders and SSNs.
+ */
+function computeCaptureRedactionCounts(rawData: unknown): {
+  totalRedactions: number;
+  byRule: Record<string, number>;
+} {
+  const capture = (rawData ?? null) as Record<string, unknown> | null;
+  const stats = capture?.redactionStats as RawRedactionStats | undefined;
+  if (stats && typeof stats.byRule === "object" && stats.byRule !== null) {
+    const statsObj = stats as Record<string, unknown>;
+    const total =
+      typeof stats.totalRedactions === "number"
+        ? stats.totalRedactions
+        : typeof statsObj.total === "number"
+          ? statsObj.total
+          : undefined;
+    if (typeof total === "number") {
+      const byRule: Record<string, number> = {};
+      for (const [rule, count] of Object.entries(
+        stats.byRule as Record<string, unknown>,
+      )) {
+        const n = typeof count === "number" ? count : Number(count);
+        if (Number.isFinite(n)) byRule[rule] = n;
+      }
+      return { totalRedactions: total, byRule };
+    }
+  }
+
+  const strings: string[] = [];
+  collectStrings(capture?.requestBody ?? null, strings);
+  const byRule: Record<string, number> = {};
+  let total = 0;
+  for (const text of strings) {
+    PLACEHOLDER_REGEX.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
+      const rule = (m[1] ?? "unknown").toLowerCase();
+      byRule[rule] = (byRule[rule] ?? 0) + 1;
+      total++;
+    }
+    SSN_REGEX.lastIndex = 0;
+    while ((m = SSN_REGEX.exec(text)) !== null) {
+      byRule["ssn"] = (byRule["ssn"] ?? 0) + 1;
+      total++;
+    }
+  }
+  return { totalRedactions: total, byRule };
+}
 
 function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedactionMetadata | null {
   try {
-    // Use dynamic require so that the proxy package does not need to
-    // re-package redaction-utils at build time.
-    const {
-      computeCaptureRedactionCounts,
-    }: {
-      computeCaptureRedactionCounts: (raw: unknown) => {
-        totalRedactions: number;
-        byRule: Record<string, number>;
-      };
-    } = require("@contextio/web");
-
-    const result = computeCaptureRedactionCounts(rawData as never);
+    const result = computeCaptureRedactionCounts(rawData);
     return {
       captureId,
       totalRedactions: result.totalRedactions,

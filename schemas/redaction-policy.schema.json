@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://contextio.dev/schemas/redaction-policy.json",
+  "$id": "https://contextio-next.dev/schemas/redaction-policy.json",
   "title": "ContextIO Redaction Policy",
   "description": "Redaction policy for ContextIO - controls what PII/secrets are redacted from LLM API requests",
   "type": "object",

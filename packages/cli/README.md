@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@contextio/cli)](https://www.npmjs.com/package/@contextio/cli)
 
-CLI for contextio. Wraps your AI coding tools with a local proxy that logs and optionally redacts LLM API calls. One command, no code changes.
+CLI for contextio-next. Wraps your AI coding tools with a local proxy that logs and optionally redacts LLM API calls. One command, no code changes.
 
 ## Install
 
@@ -46,9 +46,9 @@ ctxio doctor                        # check ports, certs, capture dir
 | OpenCode | mitmproxy + proxy | Requires `pipx install mitmproxy` |
 | Copilot CLI | mitmproxy + proxy | Requires `pipx install mitmproxy` |
 
-**Proxy mode** sets the tool's base URL environment variable to route traffic through contextio.
+**Proxy mode** sets the tool's base URL environment variable to route traffic through contextio-next.
 
-**Mitmproxy mode** is for tools that ignore base URL overrides but respect `HTTPS_PROXY`. contextio starts mitmproxy to terminate TLS, then chains all traffic through the contextio proxy for redaction and logging. mitmproxy startup and shutdown is handled automatically.
+**Mitmproxy mode** is for tools that ignore base URL overrides but respect `HTTPS_PROXY`. contextio-next starts mitmproxy to terminate TLS, then chains all traffic through the contextio-next proxy for redaction and logging. mitmproxy startup and shutdown is handled automatically.
 
 Unknown tools fall through to a default that sets both `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL`.
 
@@ -66,7 +66,7 @@ See [@contextio/redact](https://www.npmjs.com/package/@contextio/redact) for det
 
 ## Logging
 
-On by default. Captures go to `~/.contextio/captures/`.
+On by default. Captures go to `~/.contextio-next/captures/`.
 
 ```bash
 ctxio proxy --log-dir ./my-captures -- claude      # custom directory
@@ -100,7 +100,7 @@ ctxio proxy stop               # stop the proxy
 
 ## Aliases
 
-`contextio` is a longer alias for `ctxio`.
+`contextio-next` is a longer alias for `ctxio`.
 
 ## License
 
