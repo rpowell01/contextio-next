@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "es2015", "downlevelIteration": true,
     "module": "esnext",
     "moduleResolution": "node",
     "lib": [
@@ -19,7 +19,7 @@
     "moduleDetection": "auto",
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
       {

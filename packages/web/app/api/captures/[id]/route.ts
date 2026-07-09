@@ -67,7 +67,7 @@ function buildRedactionMeta(
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ id: string>} },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
@@ -155,6 +155,7 @@ export async function GET(
       requestBody,
       responseBody,
       redactionMeta,
+      redaction: redactionDetails,
       redactions: redactionDetails,
     });
   } catch (error) {
@@ -165,7 +166,7 @@ export async function GET(
 
 export async function PUT(
   _request: Request,
-  { params }: { params: Promise<{ id: string>} },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
@@ -228,7 +229,7 @@ export async function PUT(
 //   • action:redact – apply explicit redaction rules (mirrors original redact POST).
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string>} },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
@@ -353,7 +354,7 @@ export async function POST(
     await fs.writeFile(tmpPath, JSON.stringify(patched, null, 2), "utf8");
     await fs.rename(tmpPath, filepath);
 
-    const persistedStats = getCaptureRedactionCounts(patched);
+    const persistedStats = getCaptureRedactionStats(patched);
     const redaction = computeCaptureRedactionCounts(
       patched,
       false,

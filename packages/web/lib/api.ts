@@ -390,6 +390,7 @@ async getCapture(id: string): Promise<Capture & {
   requestBody: Record<string, unknown>;
   responseBody: string | null;
   redactionMeta?: { totalRedactions: number; byRule: Record<string, number>; generatedAt: string };
+  redaction?: RedactionDetails;
   redactions: { totalRedactions: number; byRule: Record<string, number>; matches: unknown[] };
 }> {
   return this.request(`/api/captures/${id}`);
