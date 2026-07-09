@@ -239,13 +239,16 @@ export function computeCaptureRedactionCounts(
   const requestBody = rawData.requestBody;
   const responseBody = rawData.responseBody;
 
+  // `originalRequestBody` is only useful for parallel-tree traversal when
+  // the body is a plain object (or nested object). Arrays/roots primitives
+  // share no parallel key structure, so we fall back to regex-only in that case.
   const originalObj =
     typeof originalRequestBody === "object" &&
     originalRequestBody !== null &&
     !Array.isArray(originalRequestBody)
       ? (originalRequestBody as Record<string, unknown>)
-      : undefined;
-
+: undefined;
+ 
   const matches: RedactionMatch[] = [];
   const byRule: Record<string, number> = {};
 
@@ -273,7 +276,9 @@ export function computeCaptureRedactionCounts(
   // Capture request-only matches for use when persistedStats is present
   const requestOnlyMatches = [...matches];
 
-  // Scan response body if requested
+  // Scan response body if requested (for response-body matches in detail view)
+  // When persistedStats is present, it already includes response body redactions in totals
+  // but we still scan to get the match details for the detail view
   let resCounts: RedactionCounts | null = null;
   if (countResponseBody && responseBody && typeof responseBody === "string") {
     resCounts = countRedactionsInResponse(responseBody, undefined, true);
@@ -286,7 +291,10 @@ export function computeCaptureRedactionCounts(
     }
   }
 
+  // If persisted stats provided, use them as authoritative for totals/byRule
+  // but include both request and response body matches for the detail view
   // If persisted stats provided, reconcile totals/byRule with matches
+  // to ensure consistency between header counts and detail matches
   if (persistedStats) {
     const allMatches = [...requestOnlyMatches, ...(resCounts?.matches ?? [])];
     const byRule: Record<string, number> = {};
@@ -296,11 +304,14 @@ export function computeCaptureRedactionCounts(
       total++;
     }
     return { totalRedactions: total, byRule, matches: allMatches };
-  }
-
+}
   // No persisted stats - use scanned totals
   return { totalRedactions: matches.length, byRule, matches };
 }
+
+/**
+ * Count redactions in both the request and response bodies.
+ */
 export function countRedactionsInResponse(
   responseBody: string | null | undefined,
   requestBody?: unknown,
