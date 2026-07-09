@@ -386,12 +386,23 @@ export interface CaptureDetail extends Capture {
   requestBody: Record<string, unknown>;
   /** Response body as string, or null if not available */
   responseBody: string | null;
+  /** Redaction details (computed on read) */
+  redaction?: RedactionDetails;
+  /** Persisted redaction metadata from sidecar */
+  redactionMeta?: {
+    captureId: string;
+    totalRedactions: number;
+    byRule: Record<string, number>;
+    generatedAt?: string;
+  };
   /** Redaction summary */
   totalRedactions: number;
   /** Count of redactions grouped by rule ID */
   byRule: Record<string, number>;
   /** Individual redaction matches with details */
   matches: RedactionMatch[];
+  /** Alias for redaction (returned by API for compatibility) */
+  redactions?: RedactionDetails;
 }
 
 /**

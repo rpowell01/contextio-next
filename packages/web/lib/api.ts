@@ -1,4 +1,4 @@
-import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails } from "@/types/api";
+import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails } from "@/types/api";
 import type { Settings } from "@/lib/settings";
 
 // API routes are served by the same web server that serves the frontend
@@ -386,13 +386,7 @@ class APIClient {
     return this.request(`/api/captures${query ? `?${query}` : ""}`);
   }
 
-async getCapture(id: string): Promise<Capture & {
-  requestBody: Record<string, unknown>;
-  responseBody: string | null;
-  redactionMeta?: { totalRedactions: number; byRule: Record<string, number>; generatedAt: string };
-  redaction?: RedactionDetails;
-  redactions: { totalRedactions: number; byRule: Record<string, number>; matches: unknown[] };
-}> {
+  async getCapture(id: string): Promise<CaptureDetail> {
   return this.request(`/api/captures/${id}`);
 }
 
