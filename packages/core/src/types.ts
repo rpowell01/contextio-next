@@ -230,6 +230,7 @@ export interface EncryptionAtRestConfig {
   keyEnvVar?: string;
   /** Encryption key length in bytes. Defaults to 32 (AES-256). */
   keyLength: number;
+}
 // --- OIDC auth config ---
 
 /**
