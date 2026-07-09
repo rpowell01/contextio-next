@@ -150,14 +150,17 @@ export async function GET(
       })),
     };
 
-    return Response.json({
-      ...capture,
-      requestBody,
-      responseBody,
-      redactionMeta,
-      redaction: redactionDetails,
-      redactions: redactionDetails,
-    });
+return Response.json({
+  ...capture,
+  requestBody,
+  responseBody,
+  totalRedactions: redactionDetails.totalRedactions,
+  byRule: redactionDetails.byRule,
+  matches: redactionDetails.matches,
+  redactionMeta,
+  redaction: redactionDetails,
+  redactions: redactionDetails,
+});
   } catch (error) {
     console.error("Error in capture detail API:", error);
     return Response.json({ error: "Internal server error" }, { status: 500 });
@@ -281,11 +284,11 @@ export async function POST(
       const originalRes =
         rawData.originalResponseBody ?? rawData.responseBody;
 
-      const redacted = applyRedaction(
-        originalReq,
-        typeof originalRes === "string" ? originalRes : null,
-        rules,
-      );
+  const redacted = applyRedaction(
+    originalReq,
+    originalRes as string | null,
+    rules,
+  );
 
       const redactionDetails: RedactionDetails = {
         totalRedactions: redacted.matches.length,

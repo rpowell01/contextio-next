@@ -367,13 +367,31 @@ export interface RedactionDetails {
 }
 
 /**
- * A capture with full details including request/response body.
+ * Redaction summary surfaced at the top level of capture detail responses.
+ */
+export interface CaptureRedactionSummary {
+  /** Total number of redactions in this capture */
+  totalRedactions: number;
+  /** Count of redactions grouped by rule ID */
+  byRule: Record<string, number>;
+  /** Individual redaction matches with details */
+  matches: RedactionMatch[];
+}
+
+/**
+ * A capture with full details including request/response body and redaction info.
  */
 export interface CaptureDetail extends Capture {
   /** Request body as key-value pairs */
   requestBody: Record<string, unknown>;
   /** Response body as string, or null if not available */
   responseBody: string | null;
+  /** Redaction summary */
+  totalRedactions: number;
+  /** Count of redactions grouped by rule ID */
+  byRule: Record<string, number>;
+  /** Individual redaction matches with details */
+  matches: RedactionMatch[];
 }
 
 /**

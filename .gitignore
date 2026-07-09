@@ -13,3 +13,6 @@ __pycache__/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Temporary export files
+issue-export*.jsonl

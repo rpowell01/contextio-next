@@ -66,5 +66,9 @@
 # - github.token    → use GITHUB_TOKEN env var instead
 
 sync.remote: "git+https://github.com/rpowell01/contextio.git"
-
 export.auto: true
+repos:
+  primary: "."
+  additional:
+    - "/home/russ/.beads-planning"
+    - "/home/russ/code/contextio-next/.beads"
