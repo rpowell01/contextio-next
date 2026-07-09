@@ -427,7 +427,7 @@ export function applyRedaction(
         try {
           const regex = new RegExp(rule.pattern, "g");
           const scannablePlaceholder = `[${scannableRuleId(rule.id)}_REDACTED]`;
-          // If user provides a custom replacement, use it in the body; otherwise use scannable placeholder
+          // Fixed: use rule.replacement if provided, else scannablePlaceholder
           const bodyReplacement = rule.replacement && rule.replacement.trim() !== ""
             ? rule.replacement
             : scannablePlaceholder;
