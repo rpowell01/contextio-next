@@ -29,14 +29,16 @@ export interface MappingEntry {
  * single-threaded within the event loop.
  */
 export class ReplacementMap {
-  /** original -> placeholder */
+  /** original -> canonical placeholder */
   private forward = new Map<string, string>();
-  /** placeholder -> original */
+  /** canonical placeholder -> original */
   private reverse = new Map<string, string>();
   /** ruleId -> next counter (for generating [EMAIL_1], [EMAIL_2], etc.) */
   private counters = new Map<string, number>();
   /** All entries in insertion order. */
   private entries: MappingEntry[] = [];
+  /** When true, also remember user-specified replacements as canonical values. */
+  readonly emitCustom = false;
 
   /**
    * Get or create a placeholder for the given original value.

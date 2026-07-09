@@ -6,14 +6,71 @@
  * Preserves structure; does not mutate the original.
  */
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import { join } from "node:path";
-import { shannonEntropy } from "@contextio/core";
+import { shannonEntropy, type Provider } from "@contextio/core";
 
 import type { ReplacementMap } from "./mapping.js";
 import type { CompiledPolicy } from "./policy.js";
 import type { RedactionRule } from "./rules.js";
 
+// ---------------------------------------------------------------------------
+// RedactionMetadata schema
+// ---------------------------------------------------------------------------
+
+/**
+ * A single redaction match record captured at write time.
+ *
+ * Mirrors the fields saved in `{captureId}.redact-meta.json`.
+ */
+export interface MatchEntry {
+  /** Canonical rule ID/name token (e.g. `SSN_4`). */
+  ruleId: string;
+  /** Original raw value before replacement. */
+  preValue: string;
+  /** Replacement value written into the capture. */
+  postValue: string;
+  /** JSON path to the affected leaf, dot-delimited. */
+  path: string;
+}
+
+/**
+ * Persistent redaction metadata sidecar schema.
+ *
+ * Written to `{captureId}.redact-meta.json` in CAPTURE_DIR alongside each
+ * capture file.  All fields are optional so that older capture data that
+ * lacks them remains readable by any consumer.
+ */
+export interface RedactionMetadata {
+  /** Version of the metadata schema. Currently `"1"`. */
+  schemaVersion: string;
+  /** Capture file identifier (derived from the capture filename). */
+  captureId: string;
+  /** Session ID extracted from the capture data, or a placeholder. */
+  sessionId: string;
+  /** ISO-8601 timestamp of the redaction pass, or the capture timestamp. */
+  timestamp: string;
+  /** Provider name from the capture (e.g. `openai`, `anthropic`). */
+  provider: string;
+  /** Upstream URL the request was forwarded to. */
+  targetUrl: string;
+  /** Raw values matched before redaction, in the order they were encountered. */
+  preValues: string[];
+  /** Replacement values written, aligned 1-to-1 with `preValues`. */
+  postValues: string[];
+  /** Primary rule identifier (first rule matched, or "none" if no matches). */
+  ruleId: "none" | string;
+  /** SHA-256 hex-encoded checksum of the canonical payload for integrity verification. */
+  checksum: string;
+}
+
+/**
+ * Internal statistics accumulator used during a single redact pass.
+ *
+ * This is a superset of RedactionMetadata pre-conditions; the sidecar
+ * schema is produced by `serializeRedactionMetadata()`.
+ */
 export interface RedactionStats {
   /** Total number of replacements made across all rules. */
   totalReplacements: number;
@@ -23,25 +80,64 @@ export interface RedactionStats {
   matches?: MatchEntry[];
 }
 
-export interface MatchEntry {
-  rule: string;
-  original: string;
-  path: string;
-}
-
 export function createStats(): RedactionStats {
   return { totalReplacements: 0, byRule: {} };
+}
+
+/**
+ * Compute a SHA-256 hex checksum of the canonical metadata payload
+ * for integrity verification after the metadata file is written.
+ */
+export function computeMetadataChecksum(payload: object): string {
+  return crypto.createHash("sha256").update(JSON.stringify(payload, Object.keys(payload).sort())).digest("hex");
+}
+
+/**
+ * Build a `CaptureRedactionMetadata` record from redaction stats that can
+ * be passed to `atomicWriteMetadata` in the proxy watcher.
+ *
+ * The `getCaptureRedactionCounts` function in the watcher is the consumer
+ * for this structure:
+ *    { captureId, totalRedactions, byRule, generatedAt }
+ *
+ * It is intentionally a subset of the full `RedactionMetadata` schema so
+ * that the proxy (which has no provider/targetUrl context) can write it
+ * without extra plumbing.  Consumers that need the full schema should use
+ * `buildFullRedactionMetadata()`.
+ */
+export interface CaptureRedactionMetadata {
+  /** Unique capture identifier, derived from the capture filename. */
+  captureId: string;
+  /** Total number of redaction replacements performed. */
+  totalRedactions: number;
+  /** Per-rule replacement counts, keyed by rule name. */
+  byRule: Record<string, number>;
+  /** ISO-8601 timestamp of when this metadata record was generated. */
+  generatedAt: string;
+}
+
+export function toCaptureRedactionMetadata(
+  captureId: string,
+  stats: RedactionStats,
+): CaptureRedactionMetadata {
+  return {
+    captureId,
+    totalRedactions: stats.totalReplacements,
+    byRule: { ...stats.byRule },
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 function recordMatch(
   stats: RedactionStats,
   rule: RedactionRule,
-  originalValue: string,
+  preValue: string,
+  postValue: string,
   path: string[],
 ): void {
   if (!stats.matches) stats.matches = [];
   if (stats.matches.length >= 10) return;
-  stats.matches.push({ rule: rule.name, original: originalValue, path: path.join(".") });
+  stats.matches.push({ ruleId: rule.name, preValue, postValue, path: path.join(".") });
 }
 
 export function buildRedactMetaPayload(
@@ -57,13 +153,28 @@ export function buildRedactMetaPayload(
 export function writeRedactionMeta(
   captureDir: string,
   captureId: string | undefined,
+  ctx: { provider?: Provider | string; sessionId?: string | null; targetUrl?: string },
   payload: { totalRedactions: number; byRule: Readonly<Record<string, number>>; matches?: MatchEntry[] },
 ): boolean {
   if (!captureId) return false;
   const filePath = join(captureDir, `${captureId}.redact-meta.json`);
   const tmpPath = `${filePath}.tmp`;
   try {
-    fs.writeFileSync(tmpPath, JSON.stringify(payload));
+    /** Canonical field ordering for stable (therefore comparable) checksums. */
+    const checksumInput = {
+      schemaVersion: "1",
+      captureId,
+      sessionId: ctx.sessionId ?? "_unknown",
+      timestamp: new Date().toISOString(),
+      provider: ctx.provider ?? "unknown",
+      targetUrl: ctx.targetUrl ?? "",
+      totalRedactions: payload.totalRedactions,
+      byRule: payload.byRule,
+      ...(payload.matches && payload.matches.length > 0 ? { matches: payload.matches } : {}),
+    };
+    const checksum = computeMetadataChecksum(checksumInput);
+    const meta: object = { ...checksumInput, checksum };
+    fs.writeFileSync(tmpPath, JSON.stringify(meta, null, 2));
     fs.renameSync(tmpPath, filePath);
     return true;
   } catch (err: unknown) {
@@ -197,10 +308,10 @@ function redactString(
         if (rule.allowlist && isRuleAllowlisted(match, captured, rule.allowlist)) continue;
         if (rule.minEntropy !== undefined && shannonEntropy(captured ?? match) < rule.minEntropy) continue;
         if (!hasContextNearby(result, start, end, rule.context, window)) continue;
+        const replacement = resolveReplacement(match, rule, map);
         stats.totalReplacements++;
         stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
-        recordMatch(stats, rule, match, currentPath);
-        const replacement = resolveReplacement(match, rule, map);
+        recordMatch(stats, rule, match, replacement, currentPath);
         result = result.slice(0, start) + replacement + result.slice(end);
       }
     } else {
@@ -210,10 +321,11 @@ function redactString(
         if (isAllowlisted(matchArg, allowlistStrings, allowlistPatterns)) return matchArg;
         if (rule.allowlist && isRuleAllowlisted(matchArg, captured, rule.allowlist)) return matchArg;
         if (rule.minEntropy !== undefined && shannonEntropy(captured ?? matchArg) < rule.minEntropy) return matchArg;
-        stats.totalReplacements++;
-        stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
-        recordMatch(stats, rule, matchArg, currentPath);
-        return resolveReplacement(matchArg, rule, map);
+      const replacement = resolveReplacement(matchArg, rule, map);
+      stats.totalReplacements++;
+      stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
+      recordMatch(stats, rule, matchArg, replacement, currentPath);
+      return replacement;
       });
     }
   }

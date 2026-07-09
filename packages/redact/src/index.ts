@@ -166,9 +166,13 @@ onRequest(ctx: RequestContext): RequestContext {
 
   const redactionStats = buildRedactMetaPayload(stats);
 
-if (config?.captureDir && ctx.captureId) {
-  writeRedactionMeta(config.captureDir, ctx.captureId, redactionStats);
-}
+  if (config?.captureDir && ctx.captureId) {
+    writeRedactionMeta(config.captureDir, ctx.captureId, {
+      provider: ctx.provider,
+      sessionId: ctx.sessionId,
+            targetUrl: ctx.targetUrl,
+    }, redactionStats);
+  }
 
   if (stats.totalReplacements > 0 && verbose) {
     const details = Object.entries(stats.byRule)

@@ -1,7 +1,7 @@
 {
   "name": "@contextio/web",
   "version": "0.1.0",
-  "description": "Web interface for ContextIO proxy monitoring and inspection",
+  "description": "Web interface for ContextIO-Next proxy monitoring and inspection",
   "license": "MIT",
   "type": "module",
   "scripts": {

@@ -160,6 +160,10 @@ export interface SessionDetail extends Session {
     };
     source?: string | null;
     metrics?: CaptureMetrics;
+    redactionStats?: {
+      totalRedactions: number;
+      byRule: Record<string, number>;
+    };
   }>;
 }
 

@@ -475,16 +475,17 @@ export function createProxyHandler(
 
       // Build the request context for plugins
   const reqCtx: RequestContext = {
-    provider,
-    apiFormat,
-    path: cleanPath,
-    source,
-    sessionId,
-    headers: { ...req.headers } as HeaderMap,
-    body: bodyJson,
-    rawBody: bodyBuffer,
-    captureId: captureId ?? undefined,
-  };
+  provider,
+  apiFormat,
+  path: cleanPath,
+  source,
+  sessionId,
+  headers: { ...req.headers } as HeaderMap,
+  body: bodyJson,
+  rawBody: bodyBuffer,
+  captureId: captureId ?? undefined,
+  targetUrl,
+};
 
       // Run the async plugin pipeline, then forward.
       // doForward is a closure so it can reference bodyBuffer, bodyJson,

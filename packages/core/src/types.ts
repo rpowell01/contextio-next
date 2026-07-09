@@ -148,6 +148,9 @@ export interface RequestContext {
   body: JsonValue | null;
   rawBody: Buffer;
   captureId?: string;
+  /** Upstream URL the request was forwarded to — optional so that existing
+   *  producers are not required to populate it. */
+  targetUrl?: string;
   redactionStats?: { totalRedactions: number; byRule: Record<string, number> };
 }
 
@@ -204,6 +207,56 @@ export interface ProxyPlugin {
   onCapture?: (capture: CaptureData) => void | Promise<void>;
 }
 
+// --- Encryption at rest ---
+
+/**
+ * Configuration for encrypting capture log files at rest.
+ *
+ * Actual encryption is implemented by the logger plugin; this interface
+ * defines the shape of the config passed from the proxy.
+ */
+export interface EncryptionAtRestConfig {
+  /** Whether encryption at rest is enabled. Defaults to false. */
+  enabled: boolean;
+  /** Key provider strategy. Defaults to 'env'. */
+  keyProvider: "static" | "env" | "kms";
+  /**
+   * Raw encryption key bytes, used only when keyProvider is 'static'.
+   * The consuming logger plugin is responsible for interpreting this value
+   * (e.g. as a hex/base64-encoded key).
+   */
+  staticKey?: string;
+  /** Environment variable name holding the encryption key. Defaults to 'CONTEXTIO_ENCRYPTION_KEY'. */
+  keyEnvVar?: string;
+  /** Encryption key length in bytes. Defaults to 32 (AES-256). */
+  keyLength: number;
+// --- OIDC auth config ---
+
+/**
+ * Configuration for a single OpenID Connect identity provider.
+ *
+ * Consumers should treat `sessionSecret` as sensitive and inject it
+ * from a secrets manager or environment variable — never hard-code it.
+ */
+export interface OidcProviderConfig {
+  /** OIDC issuer URL (e.g. `https://accounts.google.com`). */
+  issuer: string;
+  /** OAuth2 client identifier registered with the provider. */
+  clientId: string;
+  /** OAuth2 client secret. Treat as sensitive. */
+  clientSecret: string;
+  /** Redirect URI registered with the provider for the authorization callback. */
+  callbackUrl: string;
+  /**
+   * OIDC scopes to request.
+   *
+   * @default ['openid', 'profile', 'email']
+   */
+  scope: string[];
+  /** Secret used to sign/encrypt session cookies during the auth flow. */
+  sessionSecret: string;
+}
+
 // --- Proxy config ---
 
 export interface ProxyConfig {
@@ -217,6 +270,10 @@ export interface ProxyConfig {
   loggerCaptureMaxAgeMs?: number;
   loggerCaptureCleanupIntervalMs?: number;
   loggerCaptureCleanupEnabled?: boolean;
+  /** Encryption-at-rest configuration forwarded to the logger plugin. */
+  loggerEncryption?: EncryptionAtRestConfig;
+  /** Optional OpenID Connect authentication configuration. */
+  oidc?: OidcProviderConfig;
 }
 
 // --- Routing helpers (re-exported from routing.ts) ---

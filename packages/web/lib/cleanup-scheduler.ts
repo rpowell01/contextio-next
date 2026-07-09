@@ -1,10 +1,11 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import { join } from "node:path";
 
 import { applyLogDir, getCaptureDir, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 
-const SETTINGS_FILE = join(process.env.HOME ?? "~/.contextio-next", ".contextio-next", "settings.json");
+const SETTINGS_FILE = join(process.env.HOME ?? os.homedir(), ".contextio-next", "settings.json");
 
 let cleanupTimer: NodeJS.Timeout | null = null;
 let schedulerStarted = false;

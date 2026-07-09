@@ -5,49 +5,27 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api";
+import type { CaptureDetail } from "@/types/api";
 
 interface RedactionSummary {
-  totalRedactions: number;
-  byType: Record<string, number>;
+totalRedactions: number;
+byType: Record<string, number>;
 }
 
 interface RedactionDetailRow {
-  redactionType: string;
-  requestSource: string | null;
-  requestProvider: string;
-  requestTarget: string;
-  sessionId: string | null;
-  captureId: string;
-  preRedactionValue: string;
-  postRedactionValue: string;
+redactionType: string;
+requestSource: string | null;
+requestProvider: string;
+requestTarget: string;
+sessionId: string | null;
+captureId: string;
+preRedactionValue: string;
+postRedactionValue: string;
 }
 
 interface RedactionsData {
-  summary: RedactionSummary;
-  details: RedactionDetailRow[];
-}
-
-interface CaptureDetail {
-  id: string;
-  sessionId: string | null;
-  source: string | null;
-  provider: string;
-  apiFormat: string;
-  targetUrl: string;
-  method: string;
-  requestBytes: number;
-  responseBytes: number;
-  responseStatus: number;
-  responseIsStreaming: boolean;
-  timestamp: string;
-  timings: {
-    send_ms: number;
-    wait_ms: number;
-    receive_ms: number;
-    total_ms: number;
-  };
-  requestBody: Record<string, unknown>;
-  responseBody: string | null;
+summary: RedactionSummary;
+details: RedactionDetailRow[];
 }
 
 export default function RedactionsPage() {

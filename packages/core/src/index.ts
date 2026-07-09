@@ -76,10 +76,12 @@ export {
 export type {
   ApiFormat,
   CaptureData,
+  EncryptionAtRestConfig,
   ExtractSourceResult,
   HeaderMap,
   JsonObject,
   JsonValue,
+  OidcProviderConfig,
   Provider,
   ProxyConfig,
   ProxyPlugin,

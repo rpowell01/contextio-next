@@ -1,4 +1,4 @@
-import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar } from "@/types/api";
+import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails } from "@/types/api";
 import type { Settings } from "@/lib/settings";
 
 // API routes are served by the same web server that serves the frontend
@@ -386,11 +386,27 @@ class APIClient {
     return this.request(`/api/captures${query ? `?${query}` : ""}`);
   }
 
-  async getCapture(id: string): Promise<Capture & { requestBody: Record<string, unknown>; responseBody: string | null }> {
-    return this.request(`/api/captures/${id}`);
-  }
+async getCapture(id: string): Promise<Capture & {
+  requestBody: Record<string, unknown>;
+  responseBody: string | null;
+  redactionMeta?: { totalRedactions: number; byRule: Record<string, number>; generatedAt: string };
+  redactions: { totalRedactions: number; byRule: Record<string, number>; matches: unknown[] };
+}> {
+  return this.request(`/api/captures/${id}`);
+}
 
-  async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: number; message: string }> {
+async redactCapture(
+  id: string,
+  rules: Array<{ id: string; pattern: string; replacement: string }> = []
+): Promise<Capture & { requestBody: Record<string, unknown>; responseBody: string | null; redaction?: RedactionDetails }> {
+  return this.request(`/api/captures/${id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "redact", rules }),
+  });
+}
+
+async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: number; message: string }> {
     return this.request("/api/captures?action=clear", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

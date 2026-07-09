@@ -22,7 +22,7 @@ import fs from "node:fs";
 import { stat, readdir, readFile, writeFile, rename, unlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { CaptureData } from "@contextio/core";
+
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -56,6 +56,13 @@ export interface CaptureRedactionMetadata {
   totalRedactions: number;
   byRule: Record<string, number>;
   generatedAt: string;
+  provider?: string;
+  targetUrl?: string;
+  schemaVersion?: string;
+  sessionId?: string;
+  timestamp?: string;
+  checksum?: string;
+  matches?: Array<{ rule: string; original: string; path: string }>;
 }
 
 export interface RedactionMetaWatcher {
@@ -270,6 +277,51 @@ export function createRedactionMetaWatcher(
     await reapStaleTmpFiles(dir);
   };
 
+async function mergeExistingMetadata(
+  metaPath: string,
+  computed: CaptureRedactionMetadata,
+): Promise<CaptureRedactionMetadata> {
+  try {
+    const raw = await readFile(metaPath, "utf8");
+    const existing = JSON.parse(raw) as Partial<CaptureRedactionMetadata>;
+    if (typeof existing !== "object" || existing === null || Array.isArray(existing)) return computed;
+
+    const enriched: CaptureRedactionMetadata = { ...computed };
+
+    if (!enriched.matches && Array.isArray(existing.matches) && existing.matches.length > 0) {
+      enriched.matches = existing.matches;
+    }
+
+    if (!enriched.checksum && typeof existing.checksum === "string") {
+      enriched.checksum = existing.checksum;
+    }
+
+    if (!enriched.provider && typeof existing.provider === "string") {
+      enriched.provider = existing.provider;
+    }
+
+    if (!enriched.targetUrl && typeof existing.targetUrl === "string") {
+      enriched.targetUrl = existing.targetUrl;
+    }
+
+    if (!enriched.schemaVersion && typeof existing.schemaVersion === "string") {
+      enriched.schemaVersion = existing.schemaVersion;
+    }
+
+    if (!enriched.sessionId && typeof existing.sessionId === "string") {
+      enriched.sessionId = existing.sessionId;
+    }
+
+    if (!enriched.timestamp && typeof existing.timestamp === "string") {
+      enriched.timestamp = existing.timestamp;
+    }
+
+    return enriched;
+  } catch {
+    return computed;
+  }
+}
+
   const flush = async (captureFilename: string): Promise<void> => {
     const metaPath = join(dir, metaFilenameFor(captureFilename));
     const state = pending.get(captureFilename);
@@ -281,9 +333,14 @@ export function createRedactionMetaWatcher(
     if (state.metadata === null) return;
 
     try {
-      await atomicWriteMetadata(metaPath, state.metadata);
+      const metadata = await mergeExistingMetadata(
+        metaPath,
+        state.metadata,
+      );
+
+      await atomicWriteMetadata(metaPath, metadata);
       if (opts.onMetadataReady) {
-        opts.onMetadataReady(state.metadata);
+        opts.onMetadataReady(metadata);
       }
     } catch (err) {
       console.error(

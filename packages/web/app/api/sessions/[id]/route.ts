@@ -293,18 +293,27 @@ export async function GET(
       metrics,
       contextValues,
       redactionStats,
-      captures: sessionCaptures.map((c) => ({
-        id: c.filename,
-        timestamp: c.timestamp,
-        targetUrl: c.targetUrl,
-        requestBytes: c.requestBytes,
-        responseBytes: c.responseBytes,
-        responseStatus: c.responseStatus,
-        responseIsStreaming: c.responseIsStreaming,
-        timings: c.timings,
-        source: c.source,
-        metrics: computeCaptureMetrics(c),
-      })),
+  captures: sessionCaptures.map((c) => ({
+    id: c.filename,
+    timestamp: c.timestamp,
+    targetUrl: c.targetUrl,
+    requestBytes: c.requestBytes,
+    responseBytes: c.responseBytes,
+    responseStatus: c.responseStatus,
+    responseIsStreaming: c.responseIsStreaming,
+    timings: c.timings,
+    source: c.source,
+    metrics: computeCaptureMetrics(c),
+    redactionStats: (() => {
+      const redaction = computeCaptureRedactionCounts(
+        c as unknown as Record<string,unknown>,
+        true,
+        getCaptureRedactionStats(c as unknown as Record<string, unknown>) ?? undefined,
+        c.originalRequestBody,
+      );
+      return { totalRedactions: redaction.totalRedactions, byRule: redaction.byRule };
+    })(),
+  })),
     };
 
     return Response.json(sessionDetail);

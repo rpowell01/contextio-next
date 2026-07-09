@@ -21,6 +21,26 @@ export interface RedactionCounts {
   matches: RedactionMatch[];
 }
 
+/**
+ * Normalize a rule ID to the canonical form used in redaction placeholders.
+ * Replaces non-alphanumeric/underscore chars with underscore, ensures it starts with a letter,
+ * and returns lowercase for canonical consistency (scannable placeholders use uppercase).
+ */
+export function normalizeRuleId(id: string): string {
+  let normalized = id.replace(/[^A-Za-z0-9_]/g, "_");
+  if (!/^[A-Z]/i.test(normalized)) {
+    normalized = "R_" + normalized;
+  }
+  return normalized.toLowerCase();
+}
+
+/**
+ * Get the scannable (uppercase) form of a rule ID for use in redaction placeholders.
+ */
+export function scannableRuleId(id: string): string {
+  return normalizeRuleId(id).toUpperCase();
+}
+
 // Matches redacted placeholders: [RULE_REDACTED] where RULE is uppercase with underscores.
 // Also matches bare SSN without brackets.
 const PLACEHOLDER_REGEX =
@@ -203,21 +223,21 @@ export function findRedactedValues(
 /**
  * Compute redaction counts for a single capture's raw data.
  *
- * Scans the request body for matches. When `persistedStats` is provided,
- * aggregate totals come from the persisted capture stats; otherwise they
- * are derived from the scanned request body. Response body is never scanned
- * by this helper.
+ * Scans the request body and optionally the response body for matches.
+ * When `persistedStats` is provided, aggregate totals come from the
+ * persisted capture stats; otherwise they are derived from the scanned bodies.
  *
  * When `originalRequestBody` is present, the helper uses it to recover real
  * pre-redaction values for display in the Pre-Redaction column.
  */
 export function computeCaptureRedactionCounts(
   rawData: Record<string, unknown>,
-  _countResponseBody = false,
+  countResponseBody = false,
   persistedStats?: CaptureRedactionStats,
   originalRequestBody?: unknown,
 ): RedactionCounts {
   const requestBody = rawData.requestBody;
+  const responseBody = rawData.responseBody;
 
   // `originalRequestBody` is only useful for parallel-tree traversal when
   // the body is a plain object (or nested object). Arrays/roots primitives
@@ -227,11 +247,12 @@ export function computeCaptureRedactionCounts(
     originalRequestBody !== null &&
     !Array.isArray(originalRequestBody)
       ? (originalRequestBody as Record<string, unknown>)
-      : undefined;
-
+: undefined;
+ 
   const matches: RedactionMatch[] = [];
   const byRule: Record<string, number> = {};
 
+  // Scan request body
   if (requestBody && typeof requestBody === "object") {
     if (originalObj) {
       // Walk the redacted tree and original tree in parallel so leaf-string
@@ -252,17 +273,33 @@ export function computeCaptureRedactionCounts(
     }
   }
 
-  const totalRedactions = persistedStats
-    ? persistedStats.totalRedactions
-    : matches.length;
+  // Capture request-only matches for use when persistedStats is present
+  const requestOnlyMatches = [...matches];
 
-  if (persistedStats) {
-    for (const [rule, count] of Object.entries(persistedStats.byRule)) {
-      byRule[rule] = count;
+  // Scan response body if requested (for response-body matches in detail view)
+  // When persistedStats is present, it already includes response body redactions in totals
+  // but we still scan to get the match details for the detail view
+  let resCounts: RedactionCounts | null = null;
+  if (countResponseBody && responseBody && typeof responseBody === "string") {
+    resCounts = countRedactionsInResponse(responseBody, undefined, true);
+    matches.push(...resCounts.matches);
+    // Only add response body counts to byRule if no persisted stats (legacy captures)
+    if (!persistedStats) {
+      for (const [rule, count] of Object.entries(resCounts.byRule)) {
+        byRule[rule] = (byRule[rule] ?? 0) + count;
+      }
     }
   }
 
-  return { totalRedactions, byRule, matches };
+  // If persisted stats provided, use them as authoritative for totals/byRule
+  // but include both request and response body matches for the detail view
+  if (persistedStats) {
+    const allMatches = [...requestOnlyMatches, ...(resCounts?.matches ?? [])];
+    return { totalRedactions: persistedStats.totalRedactions, byRule: { ...persistedStats.byRule }, matches: allMatches };
+  }
+
+  // No persisted stats - use scanned totals
+  return { totalRedactions: matches.length, byRule, matches };
 }
 
 /**
@@ -339,4 +376,127 @@ export function countRedactionsInResponse(
   }
 
   return { totalRedactions: matches.length, byRule, matches };
+}
+
+/**
+ * Re-apply redaction to a capture's request and/or response body.
+ * This can be used to re-run redaction with different rules.
+ * Always emits scannable [RULEID_REDACTED] placeholders for the scanner,
+ * but tracks and returns matches with custom replacements for the API.
+ */
+export function applyRedaction(
+  requestBody: unknown,
+  responseBody: string | null | undefined,
+  rules: Array<{ id: string; pattern: string; replacement: string }>,
+): { requestBody: unknown; responseBody: string | null; matches: Array<{ ruleId: string; original: string; replacement: string; path: string }> } {
+  const matches: Array<{ ruleId: string; original: string; replacement: string; path: string }> = [];
+
+  // Initialize result object
+  const result: { requestBody: unknown; responseBody: string | null } = {
+    requestBody,
+    responseBody: responseBody ?? null,
+  };
+
+  // Normalize rule ID to be scannable: [A-Z][A-Z0-9_]* 
+  // Replace non-alphanumeric/underscore with underscore, ensure starts with letter
+  // Returns lowercase for canonical consistency with scanner
+  const normalizeRuleId = (id: string): string => {
+    let normalized = id.replace(/[^A-Za-z0-9_]/g, "_");
+    if (!/^[A-Z]/i.test(normalized)) {
+      normalized = "R_" + normalized;
+    }
+    return normalized.toLowerCase();
+  };
+
+  // For scannable placeholder in body (must be UPPERCASE for scanner regex)
+  const scannableRuleId = (id: string): string => normalizeRuleId(id).toUpperCase();
+
+// Simple implementation: convert to JSON string, apply regex replacements, parse back
+  // This is a simplified version - in production you'd want more robust handling
+  const applyToValue = (value: unknown, path: string = ""): unknown => {
+    if (typeof value === "string") {
+      let redacted = value;
+      for (const rule of rules) {
+        try {
+          const regex = new RegExp(rule.pattern, "g");
+          const scannablePlaceholder = `[${scannableRuleId(rule.id)}_REDACTED]`;
+          // If user provides a custom replacement, use it in the body; otherwise use scannable placeholder
+          const bodyReplacement = rule.replacement && rule.replacement.trim() !== ""
+            ? rule.replacement
+            : scannablePlaceholder;
+          
+          // Find all matches and track them with custom replacement
+          let match: RegExpExecArray | null;
+          while ((match = regex.exec(value)) !== null) {
+            matches.push({
+              ruleId: normalizeRuleId(rule.id),
+              original: match[0],
+              replacement: bodyReplacement,
+              path: path || "root",
+            });
+            // Zero-width guard: prevent infinite loop on patterns like a*, \s*, ^
+            if (match.index === regex.lastIndex) {
+              regex.lastIndex++;
+            }
+          }
+          
+          // Write custom replacement to body when provided; scannable placeholder as fallback
+          redacted = redacted.replace(regex, bodyReplacement);
+        } catch {
+          // Invalid regex, skip
+        }
+      }
+      return redacted;
+    }
+    if (Array.isArray(value)) {
+      return value.map((v, i) => applyToValue(v, `${path}[${i}]`));
+    }
+    if (value && typeof value === "object") {
+      const obj: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(value)) {
+        obj[key] = applyToValue(val, path ? `${path}.${key}` : key);
+      }
+      return obj;
+    }
+    return value;
+  };
+
+  result.requestBody = applyToValue(requestBody, "requestBody");
+  
+  if (responseBody && typeof responseBody === "string") {
+    let redacted = responseBody;
+    for (const rule of rules) {
+      try {
+        const regex = new RegExp(rule.pattern, "g");
+        const scannablePlaceholder = `[${scannableRuleId(rule.id)}_REDACTED]`;
+        // If user provides a custom replacement, use it in the body; otherwise use scannable placeholder
+        const bodyReplacement = rule.replacement && rule.replacement.trim() !== ""
+          ? rule.replacement
+          : scannablePlaceholder;
+        
+        // Track matches with custom replacement
+        let match: RegExpExecArray | null;
+        while ((match = regex.exec(responseBody)) !== null) {
+          matches.push({
+            ruleId: normalizeRuleId(rule.id),
+            original: match[0],
+            replacement: bodyReplacement,
+            path: "responseBody",
+          });
+          // Zero-width guard: prevent infinite loop on patterns like a*, \s*, ^
+          if (match.index === regex.lastIndex) {
+            regex.lastIndex++;
+          }
+        }
+        
+        // Write custom replacement to body when provided; scannable placeholder as fallback
+        redacted = redacted.replace(regex, bodyReplacement);
+      } catch {
+        // Invalid regex, skip
+      }
+    }
+    result.responseBody = redacted;
+  }
+
+  return { ...result, matches };
 }
