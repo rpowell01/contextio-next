@@ -1,67 +1,35 @@
+import { NextRequest, NextResponse } from "next/server";
+
+import { apiClient } from "@/lib/api";
 import type { ProxyEnvVar } from "@/types/api";
 
-// Proxy admin API URL (for server-side requests)
-const PROXY_ADMIN_URL =
-  process.env.NEXT_PUBLIC_PROXY_ADMIN_URL || "http://localhost:4040";
+// Fallback env vars when proxy is unreachable — mirrors the resilience pattern
+// used by /api/status so the container env page doesn't hard-error when the
+// proxy admin API is temporarily down.
+const FALLBACK_ENV_VARS: ProxyEnvVar[] = [
+  { key: "NEXT_PUBLIC_SITE_URL", value: "http://localhost:4041", source: "default" },
+  { key: "CONTEXT_PROXY_PORT", value: "4040", source: "default" },
+  { key: "CONTEXT_PROXY_BIND_HOST", value: "0.0.0.0", source: "default" },
+  { key: "LOGGER_CAPTURE_DIR", value: "/app/captures", source: "default" },
+  { key: "REDACT_POLICY_FILE", value: "/app/custom-policy/custom-policy.json", source: "default" },
+  { key: "REDACT_PRESET", value: "pii", source: "default" },
+  { key: "REDACT_REVERSIBLE", value: "false", source: "default" },
+  { key: "LOG_TRAFFIC", value: "false", source: "default" },
+  { key: "DEBUG_ROUTING", value: "false", source: "default" },
+  { key: "LOG_LEVEL", value: "info", source: "default" },
+];
 
 export async function GET(
-  _request: Request,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  await params; // consume params but we don't need the ID since we query the proxy directly
-
+  await params;
   try {
-    // Fetch real environment variables from the proxy admin API (server-side)
-    const response = await fetch(`${PROXY_ADMIN_URL}/admin/env`);
-    if (!response.ok) {
-      throw new Error(`Proxy admin API returned ${response.status}`);
-    }
-    let envVars: ProxyEnvVar[];
-    try {
-      envVars = await response.json();
-    } catch (e: unknown) {
-      throw new Error(
-        `Failed to parse environment variables JSON: ${
-          e instanceof Error ? e.message : "Unknown error"
-        }`,
-      );
-    }
-    return Response.json(envVars);
+    const envVars = await apiClient.getProxyEnvVars();
+    return NextResponse.json(envVars);
   } catch (error) {
-    console.error("Error in container env API:", error);
-    // Fallback to mock data if proxy is unreachable
-    const mockEnvVars: ProxyEnvVar[] = [
-      { key: "CONTEXT_PROXY_BIND_HOST", value: "0.0.0.0", source: "default" },
-      { key: "CONTEXT_PROXY_PORT", value: "4040", source: "default" },
-      {
-        key: "CONTEXT_PROXY_PLUGINS",
-        value: "/app/logger-plugin.js,/app/redact-plugin.js",
-        source: "default",
-      },
-      {
-        key: "REDACT_POLICY_FILE",
-        value: "/app/custom-policy.json",
-        source: "default",
-      },
-      { key: "REDACT_REVERSIBLE", value: "true", source: "default" },
-      {
-        key: "LOGGER_CAPTURE_DIR",
-        value: "/home/node/.contextio/captures",
-        source: "default",
-      },
-      { key: "LOGGER_MAX_SESSIONS", value: "0", source: "default" },
-      { key: "REDACT_PRESET", value: "pii", source: "default" },
-      {
-        key: "UPSTREAM_OPENAI_URL",
-        value: "https://api.openai.com/v1",
-        source: "default",
-      },
-      {
-        key: "UPSTREAM_ANTHROPIC_URL",
-        value: "https://api.anthropic.com",
-        source: "default",
-      },
-    ];
-    return Response.json(mockEnvVars);
+    console.error("Error fetching proxy env vars:", error);
+    // Graceful fallback — returns default config values when proxy is down
+    return NextResponse.json(FALLBACK_ENV_VARS);
   }
 }

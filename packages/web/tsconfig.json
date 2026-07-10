@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
-    "target": "es2015", "downlevelIteration": true,
+    "target": "es2015",
+    "downlevelIteration": true,
     "module": "esnext",
     "moduleResolution": "node",
     "lib": [
@@ -19,7 +20,7 @@
     "moduleDetection": "auto",
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "incremental": true,
     "plugins": [
       {
@@ -28,7 +29,9 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     },
     "resolveJsonModule": true,
     "isolatedModules": true
