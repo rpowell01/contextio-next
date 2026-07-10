@@ -231,7 +231,13 @@ class APIClient {
     summaries: SessionSummary[];
     metrics: Record<string, SessionMetrics>;
   }> {
-    return this.request("/api/sessions?groupBySourceDest=true");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes for grouped sessions
+    try {
+      return await this.request("/api/sessions?groupBySourceDest=true", { signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   async getSession(id: string): Promise<Session> {

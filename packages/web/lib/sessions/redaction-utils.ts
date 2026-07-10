@@ -373,7 +373,11 @@ export function countRedactionsInResponse(
 
   try {
     if (requestBody !== null && requestBody !== undefined) {
-      searchText(JSON.stringify(requestBody));
+      try {
+        searchText(JSON.stringify(requestBody));
+      } catch {
+        // JSON.stringify threw (likely RangeError), skip
+      }
     }
     if (responseBody && countResponseBody) {
       searchText(responseBody);
