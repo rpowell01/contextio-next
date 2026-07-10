@@ -22,7 +22,7 @@ export function Header({ navigationConfig }: HeaderProps) {
       <div className="container flex h-14 items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-label="ContextIO-Next logo">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="ContextIO-Next logo">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H3m12 0l-3 3m3-3l-3-3" />
             </svg>
           </div>

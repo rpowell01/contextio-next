@@ -11,8 +11,7 @@ body {
 }
 
 /* Constrain images and pre content to prevent huge display */
-img,
-svg[role="img"] {
+img {
   max-width: 100%;
 }
 
