@@ -1,11 +1,13 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import { join } from "node:path";
+import fs from "fs/promises";
+import { join } from "path";
 
 import { applyLogDir, getCaptureDir, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 
-const SETTINGS_FILE = join(process.env.HOME ?? os.homedir(), ".contextio-next", "settings.json");
+function getSettingsFile(): string {
+  const { homedir } = require("os");
+  return join(process.env.HOME ?? homedir(), ".contextio-next", "settings.json");
+}
 
 let cleanupTimer: NodeJS.Timeout | null = null;
 let schedulerStarted = false;
@@ -26,7 +28,7 @@ async function loadSettings(): Promise<{
   let capturedLogDir: string | undefined;
   let cleanupSettings: { enabled: boolean; maxAgeDays: number; intervalHours: number } | null = null;
   try {
-    const raw = await fs.readFile(SETTINGS_FILE, "utf8");
+    const raw = await fs.readFile(getSettingsFile(), "utf8");
     const parsed = JSON.parse(raw);
     if (typeof parsed === "object" && parsed !== null) {
       const obj = parsed as Record<string, unknown>;

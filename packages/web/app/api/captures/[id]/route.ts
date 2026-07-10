@@ -1,5 +1,5 @@
-import fs from "node:fs/promises";
-import { join, basename } from "node:path";
+import fs from "fs/promises";
+import { join, basename } from "path";
 
 import {
   getCaptureDir,
@@ -17,7 +17,7 @@ import {
   normalizeRuleId,
 } from "@/lib/sessions/redaction-utils";
 import type { RedactionDetails } from "@/types/api";
-import { consumeNonce } from "@/middleware";
+import { consumeToken } from "@/lib/csrf";
 
 async function readRedactionMetaSidecar(
   captureFilepath: string,
@@ -178,8 +178,8 @@ export async function PUT(
       return Response.json({ error: "Invalid capture id" }, { status: 400 });
     }
 
-    const csrfNonce = _request.headers.get("x-csrf-nonce");
-    if (!consumeNonce(csrfNonce ?? "")) {
+    const csrfToken = _request.headers.get("x-csrf-token");
+    if (!(await consumeToken(csrfToken ?? ""))) {
       return Response.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
     }
 
@@ -241,8 +241,8 @@ export async function POST(
       return Response.json({ error: "Invalid capture id" }, { status: 400 });
     }
 
-    const csrfNonce = request.headers.get("x-csrf-nonce");
-    if (!consumeNonce(csrfNonce ?? "")) {
+    const csrfToken = request.headers.get("x-csrf-token");
+    if (!(await consumeToken(csrfToken ?? ""))) {
       return Response.json(
         { error: "Invalid or missing CSRF token" },
         { status: 400 },

@@ -1,8 +1,8 @@
-import fs from "node:fs/promises";
+import fs from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { policySchema } from "@/lib/schema";
 import type { RedactionPolicy } from "@/types/api";
-import { join } from "node:path";
+import { join } from "path";
 
 // Default policy - bundled with the application (used as fallback)
 const bundledDefaultPolicy: RedactionPolicy = {

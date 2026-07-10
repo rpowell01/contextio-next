@@ -73,18 +73,18 @@ function sleep(ms: number): Promise<void> {
 }
 
 class APIClient {
-  // CSRF nonce supplied by the server and refreshed on every API response.
-  // Must be echoed back as x-csrf-nonce on sensitive mutation requests.
-  private csrfNonce: string | null = null;
+  // CSRF token supplied by the server and refreshed on every API response.
+  // Must be echoed back as x-csrf-token on sensitive mutation requests.
+  private csrfToken: string | null = null;
 
-  private updateCsrfNonce(response: Response): void {
-    const nonce = response.headers.get("x-csrf-nonce");
-    if (nonce) this.csrfNonce = nonce;
+  private updateCsrfToken(response: Response): void {
+    const token = response.headers.get("x-csrf-token");
+    if (token) this.csrfToken = token;
   }
 
   private csrfHeaders(): HeadersInit {
-    if (!this.csrfNonce) return {};
-    return { "x-csrf-nonce": this.csrfNonce };
+    if (!this.csrfToken) return {};
+    return { "x-csrf-token": this.csrfToken };
   }
 
   /**
@@ -148,7 +148,7 @@ class APIClient {
           },
         });
 
-        this.updateCsrfNonce(response);
+        this.updateCsrfToken(response);
 
         clearTimeout(timeoutId);
 
@@ -567,7 +567,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
           },
         });
 
-        this.updateCsrfNonce(response);
+        this.updateCsrfToken(response);
 
         clearTimeout(timeoutId);
 

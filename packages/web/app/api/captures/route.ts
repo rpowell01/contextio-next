@@ -1,11 +1,11 @@
-import fs from "node:fs/promises";
-import { join } from "node:path";
+import fs from "fs/promises";
+import { join } from "path";
 
 import type { Capture, CaptureWithRedaction, RedactionDetails, PaginationMeta } from "@/types/api";
 
 import { getCaptureRedactionStats, computeCaptureRedactionCounts } from "@/lib/sessions/redaction-utils";
 import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
-import { consumeNonce } from "@/middleware";
+import { consumeToken } from "@/lib/csrf";
 
 function extractCaptureMetadata(
   filename: string,
@@ -234,8 +234,8 @@ export async function POST(request: Request) {
       return Response.json({ error: "Invalid action" }, { status: 400 });
     }
 
-  const csrfNonce = request.headers.get("x-csrf-nonce");
-  if (!consumeNonce(csrfNonce ?? "")) {
+  const csrfToken = request.headers.get("x-csrf-token");
+  if (!(await consumeToken(csrfToken ?? ""))) {
     return Response.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
   }
 

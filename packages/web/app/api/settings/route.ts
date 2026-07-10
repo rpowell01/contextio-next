@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "node:fs/promises";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import fs from "fs/promises";
+import { join } from "path";
+import { homedir } from "os";
 
 import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults } from "@/lib/settings";
 import { applyLogDir } from "@/lib/sessions/utils";

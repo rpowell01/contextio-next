@@ -1,6 +1,5 @@
-import fs from "node:fs/promises";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import fs from "fs/promises";
+import { join, resolve } from "path";
 
 import type { Session, Capture } from "@/types/api";
 import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
@@ -10,10 +9,18 @@ export type { Session, Capture } from "@/types/api";
 
 // Allow override via environment variable (used in Docker environments)
 // Falls back to default ~/.contextio/captures for local development
-let _captureDir: string = process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
+let _captureDir: string | undefined;
+
+function getDefaultCaptureDir(): string {
+  const { homedir } = require("os");
+  return process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
+}
 
 /** Read the capture directory currently in effect. */
 export function getCaptureDir(): string {
+  if (!_captureDir) {
+    _captureDir = getDefaultCaptureDir();
+  }
   return _captureDir;
 }
 
@@ -27,7 +34,7 @@ export function setCaptureDir(dir: string): void {
 /** @deprecated Use `getCaptureDir()` — live ESM binding kept for external
  *  callers that haven't migrated. Internal code should call `getCaptureDir()`
  *  directly to avoid relying on live-binding propagation quirks. */
-export let CAPTURE_DIR: string = _captureDir;
+export let CAPTURE_DIR: string = getCaptureDir();
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const MAX_FILENAME_LENGTH = 255;
@@ -119,9 +126,10 @@ export function extractCaptureMetadata(
 
 /** Canonical `logDir` → absolute capture-directory resolver. */
 export function resolveLogDir(logDir: string): string {
+  const { homedir } = require("os");
   const trimmed = logDir.trim();
   if (!trimmed) {
-    return process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
+    return process.env.LOGGER_CAPTURE_DIR || getDefaultCaptureDir();
   }
   if (trimmed === "~") return homedir();
   if (trimmed.startsWith("~/")) return join(homedir(), trimmed.slice(2));

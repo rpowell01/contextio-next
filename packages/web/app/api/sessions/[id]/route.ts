@@ -1,5 +1,5 @@
-import fs from "node:fs/promises";
-import { join } from "node:path";
+import fs from "fs/promises";
+import { join } from "path";
 import type { SessionDetail, SessionMetrics, CaptureMetrics } from "@/types/api";
 import { listCaptureFiles, getCaptureDir, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
 import {
