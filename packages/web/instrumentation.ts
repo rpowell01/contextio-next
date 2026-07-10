@@ -30,8 +30,8 @@ function validateCsrfSecret(): void {
 }
 
 export async function register(): Promise<void> {
-  // Only run in Node.js runtime (not Edge)
-  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // Validate CSRF secret in ALL runtimes (including Edge) before middleware runs
+  validateCsrfSecret();
 
   // Validate CSRF secret before any middleware runs
   validateCsrfSecret();
