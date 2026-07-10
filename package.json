@@ -11,13 +11,15 @@
     "clean": "turbo clean"
   },
   "dependencies": {
+    "@contextio/cli": "workspace:*",
     "@contextio/core": "workspace:*",
+    "@contextio/logger": "workspace:*",
     "@contextio/proxy": "workspace:*",
     "@contextio/redact": "workspace:*",
-    "@contextio/logger": "workspace:*",
-    "@contextio/cli": "workspace:*"
+    "mime-types": "^2.1.35"
   },
   "devDependencies": {
+    "@types/mime-types": "^3.0.1",
     "@types/node": "^22",
     "turbo": "^2",
     "typescript": "^5.7"
