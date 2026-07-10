@@ -119,7 +119,6 @@ export function createCombinedProxy(
         port: 0,
         hostname: "0.0.0.0",
         customServer: false,
-        minimalMode: true,
       }));
       
       // Prepare the server (loads routes, compiles, etc.)
