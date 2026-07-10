@@ -182,9 +182,14 @@ class APIClient {
         try {
           data = await response.json();
         } catch {
-          throw new Error(
-            `Response body could not be parsed as JSON (HTTP ${response.status})`,
-          );
+		let bodySnippet = "";
+		try {
+			const text = await response.clone().text();
+			bodySnippet = text.slice(0, 500);
+		} catch {}
+		throw new Error(
+			`Response body could not be parsed as JSON (HTTP ${response.status})\nBody preview: ${bodySnippet}`,
+		);
         }
         return data;
       } catch (error) {
@@ -596,9 +601,14 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
         try {
           data = await response.json();
         } catch {
-          throw new Error(
-            `Response body could not be parsed as JSON (HTTP ${response.status})`,
-          );
+		let bodySnippet = "";
+		try {
+			const text = await response.clone().text();
+			bodySnippet = text.slice(0, 500);
+		} catch {}
+		throw new Error(
+			`Response body could not be parsed as JSON (HTTP ${response.status})\nBody preview: ${bodySnippet}`,
+		);
         }
         return data;
       } catch (error) {
