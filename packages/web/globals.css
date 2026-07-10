@@ -11,7 +11,8 @@ body {
 }
 
 /* Constrain images and pre content to prevent huge display */
-img {
+img,
+svg[role="img"] {
   max-width: 100%;
   height: auto;
 }
@@ -19,14 +20,6 @@ img {
 pre {
   max-width: 100%;
   overflow-x: auto;
-}
-
-/* Limit base64/image data display in pre blocks */
-pre code,
-pre {
-  max-width: 100%;
-  word-break: break-word;
-  white-space: pre-wrap;
 }
 
 /* Focus styles */
@@ -56,14 +49,3 @@ button:focus {
   background: #555;
 }
 
-/* Constrain images to container width */
-img {
-  max-width: 100%;
-  height: auto;
-}
-
-/* Constrain pre/code blocks */
-pre {
-  max-width: 100%;
-  overflow-x: auto;
-}

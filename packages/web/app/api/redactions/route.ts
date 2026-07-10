@@ -56,11 +56,20 @@ export async function GET(_request: Request) {
       byType[rule] = (byType[rule] ?? 0) + count;
     }
 
+    let originalBody: unknown | undefined;
+    if (
+      typeof data.originalRequestBody === "object" &&
+      data.originalRequestBody !== null &&
+      JSON.stringify(data.originalRequestBody).length <= MAX_FILE_SIZE
+    ) {
+      originalBody = data.originalRequestBody;
+    }
+
     const redaction = computeCaptureRedactionCounts(
       data,
       false,
       cached,
-      data.originalRequestBody,
+      originalBody,
     );
     for (const match of redaction.matches) {
       detailRows.push({
@@ -76,11 +85,20 @@ export async function GET(_request: Request) {
     }
   } else {
     // Legacy capture without redactionStats; recompute from raw bodies
+    let originalBody: unknown | undefined;
+    if (
+      typeof data.originalRequestBody === "object" &&
+      data.originalRequestBody !== null &&
+      JSON.stringify(data.originalRequestBody).length <= MAX_FILE_SIZE
+    ) {
+      originalBody = data.originalRequestBody;
+    }
+
     const redaction = computeCaptureRedactionCounts(
       data,
       false,
       undefined,
-      data.originalRequestBody,
+      originalBody,
     );
 
           totalRedactions += redaction.totalRedactions;
