@@ -64,6 +64,9 @@ RUN GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") \
 FROM node:22-alpine AS runtime
 WORKDIR /app
 
+ARG CSRF_SECRET
+ENV CSRF_SECRET=${CSRF_SECRET}
+
 ENV NODE_ENV=production
 ENV CONTEXT_PROXY_BIND_HOST=0.0.0.0
 ENV CONTEXT_PROXY_PORT=4040
