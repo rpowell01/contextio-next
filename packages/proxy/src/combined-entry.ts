@@ -11,18 +11,8 @@
  */
 
 import type { ProxyPlugin } from "@contextio/core";
-import { readFileSync } from "node:fs";
 
 import { createCombinedProxy } from "./combined-server.js";
-
-function readSecretFromFile(secretName: string): string | undefined {
-  try {
-    const secretPath = `/run/secrets/${secretName}`;
-    return readFileSync(secretPath, "utf8").trim();
-  } catch {
-    return undefined;
-  }
-}
 
 async function loadPluginsFromEnv(): Promise<ProxyPlugin[]> {
   const pluginsEnv = process.env.CONTEXT_PROXY_PLUGINS;
@@ -68,12 +58,8 @@ async function loadPluginsFromEnv(): Promise<ProxyPlugin[]> {
 }
 
 async function main(): Promise<void> {
-  // Load CSRF_SECRET from Docker secret file if available
-  const csrfSecret = readSecretFromFile("CSRF_SECRET");
-  if (csrfSecret) {
-    process.env.CSRF_SECRET = csrfSecret;
-    console.log("CSRF_SECRET loaded from Docker secret file");
-  } else if (process.env.CSRF_SECRET) {
+  // CSRF_SECRET is provided via environment variable (set by Coolify at runtime)
+  if (process.env.CSRF_SECRET) {
     console.log("CSRF_SECRET found in environment");
   } else {
     console.warn("CSRF_SECRET not found - CSRF protection will fail in production");

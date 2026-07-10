@@ -21,13 +21,11 @@ COPY packages/cli/package.json packages/cli/package.json
 # Set PNPM_MINIMUM_RELEASE_AGE=0 to allow newer packages in lockfile
 # Export PATH to include pnpm global bin directory
 # Use --ignore-scripts then rebuild for native modules (sharp, unrs-resolver)
-RUN --mount=type=secret,id=CSRF_SECRET,env=CSRF_SECRET \
-    corepack enable && \
+RUN corepack enable && \
     export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     pnpm config set minimum-release-age 0 --global && \
     pnpm install --ignore-scripts && \
-    pnpm rebuild sharp unrs-resolver && \
-    echo "$CSRF_SECRET" > /app/csrf-secret.txt
+    pnpm rebuild sharp unrs-resolver
 
 # Copy source files
 COPY packages/core/src packages/core/src

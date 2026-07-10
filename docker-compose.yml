@@ -23,6 +23,8 @@ services:
       CONTEXT_PROXY_PLUGINS: /app/logger-plugin.js
       # Web UI configuration
       NEXT_PUBLIC_SITE_URL: http://localhost:4041
+      # CSRF protection (set via Coolify environment variables)
+      CSRF_SECRET: ${CSRF_SECRET}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4040"]
