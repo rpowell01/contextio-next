@@ -57,12 +57,16 @@ export async function GET(_request: Request) {
     }
 
     let originalBody: unknown | undefined;
-    if (
-      typeof data.originalRequestBody === "object" &&
-      data.originalRequestBody !== null &&
-      JSON.stringify(data.originalRequestBody).length <= MAX_FILE_SIZE
-    ) {
-      originalBody = data.originalRequestBody;
+    try {
+      if (
+        typeof data.originalRequestBody === "object" &&
+        data.originalRequestBody !== null &&
+        JSON.stringify(data.originalRequestBody).length <= MAX_FILE_SIZE
+      ) {
+        originalBody = data.originalRequestBody;
+      }
+    } catch {
+      // JSON.stringify threw (likely RangeError), skip original body
     }
 
     const redaction = computeCaptureRedactionCounts(
@@ -86,12 +90,16 @@ export async function GET(_request: Request) {
   } else {
     // Legacy capture without redactionStats; recompute from raw bodies
     let originalBody: unknown | undefined;
-    if (
-      typeof data.originalRequestBody === "object" &&
-      data.originalRequestBody !== null &&
-      JSON.stringify(data.originalRequestBody).length <= MAX_FILE_SIZE
-    ) {
-      originalBody = data.originalRequestBody;
+    try {
+      if (
+        typeof data.originalRequestBody === "object" &&
+        data.originalRequestBody !== null &&
+        JSON.stringify(data.originalRequestBody).length <= MAX_FILE_SIZE
+      ) {
+        originalBody = data.originalRequestBody;
+      }
+    } catch {
+      // JSON.stringify threw (likely RangeError), skip original body
     }
 
     const redaction = computeCaptureRedactionCounts(

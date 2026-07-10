@@ -14,7 +14,6 @@ body {
 img,
 svg[role="img"] {
   max-width: 100%;
-  height: auto;
 }
 
 pre {
