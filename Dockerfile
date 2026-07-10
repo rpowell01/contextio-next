@@ -21,11 +21,13 @@ COPY packages/cli/package.json packages/cli/package.json
 # Set PNPM_MINIMUM_RELEASE_AGE=0 to allow newer packages in lockfile
 # Export PATH to include pnpm global bin directory
 # Use --ignore-scripts then rebuild for native modules (sharp, unrs-resolver)
-RUN corepack enable && \
+RUN --mount=type=secret,id=CSRF_SECRET,env=CSRF_SECRET \
+    corepack enable && \
     export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     pnpm config set minimum-release-age 0 --global && \
     pnpm install --ignore-scripts && \
-    pnpm rebuild sharp unrs-resolver
+    pnpm rebuild sharp unrs-resolver && \
+    echo "$CSRF_SECRET" > /app/csrf-secret.txt
 
 # Copy source files
 COPY packages/core/src packages/core/src
@@ -72,9 +74,6 @@ ENV LOG_TRAFFIC=false
 ENV DEBUG_ROUTING=false
 ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
-# Propagate CSRF_SECRET from build arg to runtime env
-ARG CSRF_SECRET
-ENV CSRF_SECRET=${CSRF_SECRET}
 
 LABEL org.opencontainers.image.title="contextio-next"
 LABEL org.opencontainers.image.description="LLM API proxy with redaction, logging, and web UI. Zero external dependencies."
