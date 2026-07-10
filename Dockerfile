@@ -72,9 +72,9 @@ ENV LOG_TRAFFIC=false
 ENV DEBUG_ROUTING=false
 ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
-# The following CSRF_SECRET is required for web UI protection and must be set to a 32+ character random string
-# use: openssl rand -hex 32 and set the CSRF_SECRET environment variable value
-# CSRF_SECRET=<32+ character random string>
+# Propagate CSRF_SECRET from build arg to runtime env
+ARG CSRF_SECRET
+ENV CSRF_SECRET=${CSRF_SECRET}
 
 LABEL org.opencontainers.image.title="contextio-next"
 LABEL org.opencontainers.image.description="LLM API proxy with redaction, logging, and web UI. Zero external dependencies."
