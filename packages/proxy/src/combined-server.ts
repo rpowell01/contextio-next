@@ -9,6 +9,7 @@
 
 import http from "node:http";
 import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
+import { lookup } from "mime-types";
 
 import { createProxy } from "./proxy.js";
 import { resolveConfig } from "./config.js";
@@ -17,6 +18,8 @@ import { createAdminHandler, enableLogCapture } from "./admin.js";
 import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
 import { join } from "node:path";
 import fs from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 
 async function cleanupCaptureFiles(config: {
   loggerCaptureDir: string;
@@ -72,6 +75,49 @@ export interface ProxyInstance {
 }
 
 /**
+ * Serve static files from Next.js build output (.next/static)
+ */
+async function serveStaticFile(req: http.IncomingMessage, res: http.ServerResponse, staticRoot: string): Promise<boolean> {
+  const url = req.url || "";
+  if (!url.startsWith("/_next/static/")) return false;
+
+  try {
+    // Remove the /_next/static prefix to get the relative file path
+    const relativePath = url.slice("/_next/static/".length);
+    // Prevent path traversal
+    if (relativePath.includes("..")) return false;
+    
+    const filePath = join(staticRoot, relativePath);
+    const stats = await stat(filePath);
+    
+    if (!stats.isFile()) return false;
+
+    const contentType = lookup(filePath) || "application/octet-stream";
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Length": stats.size,
+    });
+    
+    const stream = createReadStream(filePath);
+    stream.pipe(res);
+    
+    return new Promise((resolve, reject) => {
+      stream.on("end", () => resolve(true));
+      stream.on("error", (err) => {
+        if (!res.writableEnded) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+        reject(err);
+      });
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Create a combined proxy + Next.js server on a single port.
  */
 export function createCombinedProxy(
@@ -82,6 +128,41 @@ export function createCombinedProxy(
   const logTraffic = !!config?.logTraffic;
 
   const startTime = Date.now();
+
+  // Static file serving for Next.js assets (fallback if Next.js handler fails)
+  const staticDir = join(process.cwd(), "packages/web/.next/static");
+
+  async function serveStaticFile(req: http.IncomingMessage, res: http.ServerResponse): Promise<boolean> {
+    const url = req.url || "";
+    if (!url.startsWith("/_next/static/")) return false;
+    
+    try {
+      // Remove query string
+      const pathname = url.split("?")[0];
+      const filePath = join(staticDir, pathname.replace("/_next/static/", ""));
+      
+      // Security: ensure path is within staticDir
+      const resolvedPath = await fs.realpath(filePath).catch(() => null);
+      const resolvedStaticDir = await fs.realpath(staticDir).catch(() => null);
+      if (!resolvedPath || !resolvedStaticDir || !resolvedPath.startsWith(resolvedStaticDir)) {
+        return false;
+      }
+      
+      const stats = await stat(resolvedPath);
+      if (!stats.isFile()) return false;
+      
+      const mimeType = lookup(resolvedPath) || "application/octet-stream";
+      res.writeHead(200, { 
+        "Content-Type": mimeType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      });
+      
+      createReadStream(resolvedPath).pipe(res);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   // Start background redaction metadata watcher
   const redactionMetaWatcher = createRedactionMetaWatcher({
@@ -135,9 +216,16 @@ export function createCombinedProxy(
   // Initialize Next.js immediately
   const initPromise = initNextJs();
 
-  // Combined handler: routes based on path
-  const combinedHandler: http.RequestListener = (req, res) => {
+// Combined handler: routes based on path
+  const combinedHandler: http.RequestListener = async (req, res) => {
     const url = req.url || "";
+    
+    // Serve Next.js static assets directly (faster, bypasses Next.js handler)
+    if (url.startsWith("/_next/static/")) {
+      const served = await serveStaticFile(req, res);
+      if (served) return;
+      // If not found, fall through to Next.js for 404 handling
+    }
     
     // Proxy admin API
     if (url.startsWith("/admin/")) {
@@ -151,7 +239,7 @@ export function createCombinedProxy(
       return;
     }
     
-    // Everything else → Next.js (web UI, /api/*, static assets, etc.)
+    // Everything else → Next.js (web UI, /api/*, etc.)
     if (nextHandler) {
       nextHandler(req, res);
     } else {

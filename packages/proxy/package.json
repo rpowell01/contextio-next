@@ -40,9 +40,11 @@
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
-    "@contextio/core": "workspace:*"
+    "@contextio/core": "workspace:*",
+    "mime-types": "^2.1.35"
   },
   "devDependencies": {
+    "@types/mime-types": "^3.0.1",
     "@types/node": "^22",
     "typescript": "^5.7"
   }
