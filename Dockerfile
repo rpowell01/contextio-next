@@ -72,7 +72,6 @@ ENV LOG_TRAFFIC=false
 ENV DEBUG_ROUTING=false
 ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
-ENV NEXT_PUBLIC_SITE_URL=http://localhost:4041
 
 LABEL org.opencontainers.image.title="contextio-next"
 LABEL org.opencontainers.image.description="LLM API proxy with redaction, logging, and web UI. Zero external dependencies."
@@ -88,13 +87,11 @@ RUN corepack enable
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
 
-# Copy proxy dist to root for server entry
+# Copy proxy dist to root for combined entry
 COPY --from=build /app/packages/proxy/dist ./dist
 
-# Copy web standalone (preserving symlink structure)
-COPY --from=build /app/packages/web/.next/standalone ./standalone
-COPY --from=build /app/packages/web/.next/static ./standalone/.next/static
-COPY --from=build /app/packages/web/.next/static ./standalone/packages/web/.next/static
+# Copy full web package (needs full node_modules for Next.js server)
+COPY --from=build /app/packages/web ./packages/web
 
 # Copy bundled default policy file
 COPY --from=build /app/packages/web/public/default-policy.json /app/default-policy.json
@@ -121,10 +118,7 @@ RUN mkdir -p /app/captures /app/custom-policy && \
     chmod 700 /app/captures /app/custom-policy && \
     ls -la /app/captures /app/custom-policy
 
-# Create a startup script that runs both proxy and web server
-# Note: API routes are served by the web server on port 4041, so we use relative URLs
-# NEXT_PUBLIC_API_URL is left empty to use relative URLs for same-origin API calls
-# Policy file is in mounted directory /app/custom-policy/custom-policy.json
+# Single entry point: combined proxy + web UI on port 4040
 RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'echo "Setting up runtime files..."' >> /app/start.sh && \
     echo '# Use CAPTURE_DIR from env or default to /app/captures' >> /app/start.sh && \
@@ -149,10 +143,8 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'cat "$POLICY_FILE"' >> /app/start.sh && \
     echo 'mkdir -p "$CAPTURE_DIR"' >> /app/start.sh && \
     echo 'chmod 700 "$CAPTURE_DIR" 2>/dev/null || true' >> /app/start.sh && \
-    echo 'echo "Starting ContextIO-Next Proxy on port 4040..."' >> /app/start.sh && \
-    echo 'node dist/server.js &' >> /app/start.sh && \
-    echo 'echo "Starting ContextIO-Next Web UI on port 4041..."' >> /app/start.sh && \
-    echo 'cd standalone/packages/web && NEXT_PUBLIC_API_URL="" NEXT_PUBLIC_SITE_URL=http://localhost:4041 PORT=4041 REDACT_POLICY_FILE="$POLICY_FILE" LOGGER_CAPTURE_DIR="$CAPTURE_DIR" node server.js' >> /app/start.sh && \
+    echo 'echo "Starting ContextIO-Next (Proxy + Web UI) on port 4040..."' >> /app/start.sh && \
+    echo 'node dist/combined-entry.js' >> /app/start.sh && \
     chmod +x /app/start.sh
 
 # Fix permissions for node user (after all files are created)
@@ -162,6 +154,5 @@ RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /a
 
 USER node
 EXPOSE 4040
-EXPOSE 4041
 
 CMD ["/app/start.sh"]

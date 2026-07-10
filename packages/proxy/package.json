@@ -16,7 +16,8 @@
     "dist/"
   ],
   "bin": {
-    "context-proxy": "dist/server.js"
+    "context-proxy": "dist/server.js",
+    "context-proxy-combined": "dist/combined-entry.js"
   },
   "repository": {
     "type": "git",
