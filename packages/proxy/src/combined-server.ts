@@ -139,7 +139,9 @@ export function createCombinedProxy(
     try {
       // Remove query string
       const pathname = url.split("?")[0];
-      const filePath = join(staticDir, pathname.replace("/_next/static/", ""));
+      // URL-decode to handle encoded brackets like %5Bid%5D -> [id]
+      const decodedPathname = decodeURIComponent(pathname);
+      const filePath = join(staticDir, decodedPathname.replace("/_next/static/", ""));
       
       // Security: ensure path is within staticDir
       const resolvedPath = await fs.realpath(filePath).catch(() => null);
