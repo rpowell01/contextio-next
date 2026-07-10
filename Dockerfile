@@ -5,6 +5,8 @@ WORKDIR /app
 ARG BUILDTIME
 ARG VERSION
 ARG REVISION
+# CSRF secret for runtime (passed as build arg so Coolify can inject it)
+ARG CSRF_SECRET
 
 # Copy root package files for pnpm install
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json .npmrc ./
