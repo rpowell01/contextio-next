@@ -95,8 +95,11 @@ COPY --from=build /app/packages ./packages
 # Copy proxy dist to root for combined entry
 COPY --from=build /app/packages/proxy/dist ./dist
 
-# Copy full web package (needs full node_modules for Next.js server)
+# Copy full web package (needs .next build output for Next.js server)
 COPY --from=build /app/packages/web ./packages/web
+
+# Copy Next.js build output (.next directory) for web server
+COPY --from=build /app/packages/web/.next ./packages/web/.next
 
 # Copy bundled default policy file
 COPY --from=build /app/packages/web/public/default-policy.json /app/default-policy.json
