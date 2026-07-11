@@ -1,6 +1,9 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
+# Enable Node.js middleware for CSRF (requires Next.js canary)
+ENV ENABLE_NODE_MIDDLEWARE=1
+
 # Build args for version info
 ARG BUILDTIME
 ARG VERSION
