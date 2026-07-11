@@ -62,9 +62,9 @@ export interface ResolvedProxyConfig {
  *
  * Capture retention:
  * - `LOGGER_CAPTURE_DIR` overrides the capture directory
- * - `LOGGER_CAPTURE_MAX_AGE_MS` enable time-based retention when > 0
- * - `LOGGER_CAPTURE_CLEANUP_INTERVAL_MS` controls how often the cleanup
- *   pass runs (default: 3600000 ms = 1 hour)
+ * - `LOGGER_CAPTURE_MAX_AGE` enable time-based retention when > 0
+ * - `LOGGER_CAPTURE_CLEANUP_INTERVAL` controls cleanup interval (milliseconds,
+ *   default: 3600000)
  * - `LOGGER_CAPTURE_CLEANUP_ENABLED` allows disabling cleanup while keeping
  *   the config values in place
  */
@@ -116,19 +116,20 @@ export function resolveConfig(
     process.env.LOGGER_CAPTURE_DIR ||
     `${process.env.HOME || process.env.USERPROFILE || "~"}/.contextio/captures`;
 
-  const loggerCaptureMaxAgeMs = overrides?.loggerCaptureMaxAgeMs ?? (() => {
-    const raw = process.env.LOGGER_CAPTURE_MAX_AGE_MS;
-    const parsed = raw ? Number.parseInt(raw, 10) : 0;
-    return Number.isFinite(parsed) ? parsed : 0;
-  })();
+const loggerCaptureMaxAgeMs = overrides?.loggerCaptureMaxAgeMs ?? (() => {
+  // `captureCleanupMaxAgeDays` in settings.json → days pushed via `LOGGER_CAPTURE_MAX_AGE`
+  const raw = process.env.LOGGER_CAPTURE_MAX_AGE;
+  const parsed = raw ? Number.parseInt(raw, 10) : 0;
+  return Number.isFinite(parsed) ? parsed * 24 * 60 * 60 * 1000 : 0;
+})();
 
-  const loggerCaptureCleanupIntervalMs =
-    overrides?.loggerCaptureCleanupIntervalMs ?? (() => {
-      const raw =
-        process.env.LOGGER_CAPTURE_CLEANUP_INTERVAL_MS || "3600000";
-      const parsed = Number.parseInt(raw, 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : 3600000;
-    })();
+const loggerCaptureCleanupIntervalMs = overrides?.loggerCaptureCleanupIntervalMs ?? (() => {
+  // `captureCleanupIntervalHours` in settings.json → hours pushed via `LOGGER_CAPTURE_CLEANUP_INTERVAL`
+  const raw = process.env.LOGGER_CAPTURE_CLEANUP_INTERVAL || "24";
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+})();
+
 
   const loggerCaptureCleanupEnabled =
     (overrides?.loggerCaptureCleanupEnabled ??

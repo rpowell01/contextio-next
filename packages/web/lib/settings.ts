@@ -25,8 +25,8 @@ export const SETTING_ENV_MAP: Record<keyof Settings, { envVar: string; dynamic: 
   redactPreset: { envVar: "REDACT_PRESET", dynamic: true },
   redactReversible: { envVar: "REDACT_REVERSIBLE", dynamic: true },
   captureCleanupEnabled: { envVar: "LOGGER_CAPTURE_CLEANUP_ENABLED", dynamic: true },
-  captureCleanupIntervalHours: { envVar: "LOGGER_CAPTURE_CLEANUP_INTERVAL_MS", dynamic: true },
-  captureCleanupMaxAgeDays: { envVar: "LOGGER_CAPTURE_MAX_AGE_MS", dynamic: true },
+  captureCleanupIntervalHours: { envVar: "LOGGER_CAPTURE_CLEANUP_INTERVAL", dynamic: true },
+  captureCleanupMaxAgeDays: { envVar: "LOGGER_CAPTURE_MAX_AGE", dynamic: true },
 };
 
 // Computes per-setting metadata: where the active value comes from, which env

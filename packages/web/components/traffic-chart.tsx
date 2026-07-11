@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { formatBytes } from "@/lib/utils";
 import type { TrafficMetric } from "@/types/api";
@@ -31,7 +33,9 @@ export function TrafficChart({ data }: TrafficChartProps) {
 
   const copyToClipboard = async () => {
     try {
-      const dataToCopy = chartData.map(({ formattedRequest, formattedResponse, ...rest }) => rest);
+      const dataToCopy = chartData.map(
+        ({ formattedRequest, formattedResponse, ...rest }) => rest
+      );
       await navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -46,16 +50,24 @@ export function TrafficChart({ data }: TrafficChartProps) {
         <button
           onClick={copyToClipboard}
           className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-muted"
-          aria-label={copied ? "Chart data copied to clipboard" : "Copy chart data to clipboard"}
-          title={copied ? "Chart data copied to clipboard" : "Copy chart data to clipboard"}
+          aria-label={
+            copied ? "Chart data copied to clipboard" : "Copy chart data to clipboard"
+          }
+          title={
+            copied ? "Chart data copied to clipboard" : "Copy chart data to clipboard"
+          }
         >
           <Copy className="h-4 w-4" />
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <div id="traffic-chart-description" className="sr-only">
-        Bar chart displaying request and response bytes over time. Each bar represents a time period
-        with blue indicating request bytes and green indicating response bytes.
+      <div
+        id="traffic-chart-description"
+        className="sr-only"
+      >
+        Bar chart displaying request and response bytes over time. Each bar
+        represents a time period with blue indicating request bytes and green
+        indicating response bytes.
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart
@@ -89,7 +101,10 @@ export function TrafficChart({ data }: TrafficChartProps) {
           <Tooltip
             formatter={(value: number) => formatBytes(value)}
             labelFormatter={(label) => `Date: ${label}`}
-            contentStyle={{ backgroundColor: "rgba(255, 255, 255, 0.95)", border: "1px solid #ccc" }}
+            contentStyle={{
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              border: "1px solid #ccc",
+            }}
             cursor={{ fill: "rgba(0, 0, 0, 0.1)" }}
           />
           <Legend

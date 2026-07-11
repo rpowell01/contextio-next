@@ -30,15 +30,24 @@ export const defaultNavigation: NavigationItem[] = [
   {
     name: "Dashboard",
     href: "/",
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Dashboard">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-      </svg>
-    ),
-  },
-  {
-    name: "Sessions",
-    href: "/sessions",
+  icon: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Dashboard">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+    </svg>
+  ),
+},
+{
+  name: "Metrics",
+  href: "/metrics",
+  icon: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Metrics">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 002 2v6m0 0h14m-7 0V7a2 2 0 012-2h2a2 2 0 012 2v10" />
+    </svg>
+  ),
+},
+{
+  name: "Sessions",
+  href: "/sessions",
     icon: (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Sessions">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h5.5a2 2 0 002-2V9a2 2 0 00-2-2z" />

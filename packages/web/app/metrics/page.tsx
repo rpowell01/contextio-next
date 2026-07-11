@@ -6,12 +6,11 @@ import type {
   RedactionMetric,
   TrafficMetric,
 } from "@/types/api";
+import { TrafficChart } from "@/components/traffic-chart";
 
-/**
- * Fetch metrics data from the API.
- */
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4040";
+
 async function fetchMetrics(): Promise<MetricsData> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4040";
   const response = await fetch(`${API_URL}/api/metrics`, {
     next: { revalidate: 30 },
   });
@@ -22,7 +21,6 @@ async function fetchMetrics(): Promise<MetricsData> {
 
   const data = await response.json();
 
-  // Validate the response matches the expected MetricsData structure
   if (!isValidMetricsData(data)) {
     throw new Error("Invalid metrics data received from API");
   }
@@ -30,9 +28,6 @@ async function fetchMetrics(): Promise<MetricsData> {
   return data;
 }
 
-/**
- * Type guard to validate MetricsData structure.
- */
 function isValidMetricsData(data: unknown): data is MetricsData {
   if (!data || typeof data !== "object") return false;
   const metrics = data as Record<string, unknown>;
@@ -51,12 +46,10 @@ function isValidMetricsData(data: unknown): data is MetricsData {
   );
 }
 
-/**
- * Validates a ProviderUsage object.
- */
 function isValidProviderUsage(p: unknown): p is ProviderUsage {
   if (!p || typeof p !== "object") return false;
   const provider = p as Record<string, unknown>;
+
   return (
     typeof provider.provider === "string" &&
     typeof provider.requestCount === "number" &&
@@ -65,24 +58,19 @@ function isValidProviderUsage(p: unknown): p is ProviderUsage {
   );
 }
 
-/**
- * Validates a RedactionMetric object.
- */
 function isValidRedactionMetric(r: unknown): r is RedactionMetric {
   if (!r || typeof r !== "object") return false;
   const redaction = r as Record<string, unknown>;
+
   return (
-    typeof redaction.timestamp === "string" &&
-    typeof redaction.count === "number"
+    typeof redaction.timestamp === "string" && typeof redaction.count === "number"
   );
 }
 
-/**
- * Validates a TrafficMetric object.
- */
 function isValidTrafficMetric(t: unknown): t is TrafficMetric {
   if (!t || typeof t !== "object") return false;
   const traffic = t as Record<string, unknown>;
+
   return (
     typeof traffic.timestamp === "string" &&
     typeof traffic.requestBytes === "number" &&
@@ -117,13 +105,15 @@ export default async function MetricsPage() {
         )}
 
         {metrics && (
-          <>
+          <div>
             {/* Summary Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg border p-4">
                 <div className="text-sm text-muted-foreground">Total Requests</div>
                 <div className="text-2xl font-bold">
-                  {formatNumber(metrics.providers.reduce((sum, p) => sum + p.requestCount, 0))}
+                  {formatNumber(
+                    metrics.providers.reduce((sum, p) => sum + p.requestCount, 0)
+                  )}
                 </div>
               </div>
               <div className="rounded-lg border p-4">
@@ -141,10 +131,20 @@ export default async function MetricsPage() {
               <div className="rounded-lg border p-4">
                 <div className="text-sm text-muted-foreground">Total Redactions</div>
                 <div className="text-2xl font-bold">
-                  {formatNumber(metrics.redactions.reduce((sum, r) => sum + r.count, 0))}
+                  {formatNumber(
+                    metrics.redactions.reduce((sum, r) => sum + r.count, 0)
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* Traffic Chart */}
+            {metrics.traffic.length > 0 && (
+              <div className="rounded-lg border p-4">
+                <h3 className="text-lg font-semibold mb-4">Traffic Over Time</h3>
+                <TrafficChart data={metrics.traffic} />
+              </div>
+            )}
 
             {/* Traffic Summary */}
             <div className="rounded-lg border p-4">
@@ -176,7 +176,9 @@ export default async function MetricsPage() {
                   >
                     <span className="font-medium">{provider.provider}</span>
                     <div className="text-right text-sm">
-                      <div>{formatNumber(provider.requestCount)} requests</div>
+                      <div>
+                        {formatNumber(provider.requestCount)} requests
+                      </div>
                       <div className="text-muted-foreground">
                         {formatNumber(provider.totalInputTokens)} in,{" "}
                         {formatNumber(provider.totalOutputTokens)} out
@@ -186,7 +188,7 @@ export default async function MetricsPage() {
                 ))}
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
     </MainLayout>
