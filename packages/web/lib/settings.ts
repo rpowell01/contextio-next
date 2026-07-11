@@ -8,6 +8,47 @@ export interface Settings {
   captureCleanupMaxAgeDays: number;
 }
 
+export type SettingSource = "settings-file" | "environment-variable" | "default";
+
+export interface SettingMeta {
+  source: SettingSource;
+  envVar: string | null;
+  // true = changes take effect immediately without a restart
+  dynamic: boolean;
+}
+
+// Maps each persisted setting to its environment-variable override (if any) and
+// whether changing it is applied dynamically or requires a restart.
+export const SETTING_ENV_MAP: Record<keyof Settings, { envVar: string; dynamic: boolean }> = {
+  logDir: { envVar: "LOGGER_CAPTURE_DIR", dynamic: false },
+  maxSessions: { envVar: "LOGGER_MAX_SESSIONS", dynamic: false },
+  redactPreset: { envVar: "REDACT_PRESET", dynamic: true },
+  redactReversible: { envVar: "REDACT_REVERSIBLE", dynamic: true },
+  captureCleanupEnabled: { envVar: "LOGGER_CAPTURE_CLEANUP_ENABLED", dynamic: true },
+  captureCleanupIntervalHours: { envVar: "LOGGER_CAPTURE_CLEANUP_INTERVAL_MS", dynamic: true },
+  captureCleanupMaxAgeDays: { envVar: "LOGGER_CAPTURE_MAX_AGE_MS", dynamic: true },
+};
+
+// Computes per-setting metadata: where the active value comes from, which env
+// var overrides it, and whether it is applied dynamically.
+export function getSettingMetadata(settings: Settings): Record<keyof Settings, SettingMeta> {
+  const meta = {} as Record<keyof Settings, SettingMeta>;
+  (Object.keys(SETTING_ENV_MAP) as (keyof Settings)[]).forEach((key) => {
+    const { envVar, dynamic } = SETTING_ENV_MAP[key];
+    const overridden = process.env[envVar] !== undefined;
+    let source: SettingSource;
+    if (overridden) {
+      source = "environment-variable";
+    } else if (JSON.stringify(settings[key]) !== JSON.stringify(DEFAULT_SETTINGS[key])) {
+      source = "settings-file";
+    } else {
+      source = "default";
+    }
+    meta[key] = { source, envVar: overridden ? envVar : null, dynamic };
+  });
+  return meta;
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   logDir: "",
   maxSessions: 0,

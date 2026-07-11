@@ -3,7 +3,7 @@
 import { MainLayout } from "@/components/main-layout";
 import { PolicyEditor } from "@/components/policy-editor";
 import { apiClient } from "@/lib/api";
-import type { Settings } from "@/lib/settings";
+import type { Settings, SettingMeta } from "@/lib/settings";
 import { useState, useEffect, useRef } from "react";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,50 @@ import { Loader2, Trash2 } from "lucide-react";
 // per-request CSRF nonce issued by the server middleware to prevent cross-origin
 // or accidental invocation.
 
+// "Bottom Line" descriptions shown beneath each setting.
+const SETTING_DESCRIPTIONS: Record<keyof Settings, string> = {
+  logDir: "Where captured API traffic files are written. Changing this only takes effect after the proxy is restarted.",
+  maxSessions: "Maximum number of capture sessions kept concurrently (0 = unlimited). Requires a proxy restart to apply.",
+  redactPreset: "Built-in redaction rules applied to captures. Re-read on every request, so changes apply immediately.",
+  redactReversible: "Store originals so redacted values can be restored in responses. Applied dynamically per request.",
+  captureCleanupEnabled: "Automatically delete old capture files on a schedule. The cleanup scheduler re-reads this, so it is applied dynamically.",
+  captureCleanupIntervalHours: "How often the cleanup job runs. Takes effect on the next cleanup cycle.",
+  captureCleanupMaxAgeDays: "Capture files older than this are deleted. Takes effect on the next cleanup cycle.",
+};
+
+function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
+  if (!meta) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      {meta.source === "environment-variable" && meta.envVar && (
+        <span
+          className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+          title={`This value is controlled by the ${meta.envVar} environment variable and cannot be changed here`}
+        >
+          Overridden by {meta.envVar}
+        </span>
+      )}
+      <span
+        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+          meta.dynamic ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800"
+        }`}
+        title={meta.dynamic ? "Changes take effect immediately" : "Requires an app/proxy restart to take effect"}
+      >
+        {meta.dynamic ? "Dynamic" : "Requires restart"}
+      </span>
+    </div>
+  );
+}
+
+function SettingHelp({ meta, description }: { meta: SettingMeta | undefined; description: string }) {
+  return (
+    <div className="mt-1">
+      <p className="text-xs text-muted-foreground">{description}</p>
+      <SettingBadges meta={meta} />
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({
     logDir: "./captures",
@@ -32,6 +76,7 @@ export default function SettingsPage() {
     captureCleanupIntervalHours: 24,
     captureCleanupMaxAgeDays: 30,
   });
+  const [metadata, setMetadata] = useState<Record<keyof Settings, SettingMeta> | null>(null);
   const [isCleaning, setIsCleaning] = useState(false);
   const [cleanupMessage, setCleanupMessage] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,6 +89,9 @@ export default function SettingsPage() {
         const data = await apiClient.getSettings();
         if (data.settings) {
           setSettings(data.settings);
+        }
+        if (data.metadata) {
+          setMetadata(data.metadata as Record<keyof Settings, SettingMeta>);
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
@@ -68,6 +116,9 @@ export default function SettingsPage() {
       const result = await apiClient.saveSettings(settings);
       if (result.success) {
         setCleanupMessage({ type: "success", message: "Settings saved successfully" });
+        if (result.metadata) {
+          setMetadata(result.metadata as Record<keyof Settings, SettingMeta>);
+        }
       } else {
         setCleanupMessage({ type: "error", message: "Failed to save settings" });
       }
@@ -78,6 +129,21 @@ export default function SettingsPage() {
       clearTimeout(messageTimeoutRef.current);
     }
     messageTimeoutRef.current = setTimeout(() => setCleanupMessage(null), 3000);
+  };
+
+  const getMeta = (key: keyof Settings): SettingMeta | undefined => {
+    return metadata?.[key];
+  };
+
+  const isOverridden = (key: keyof Settings): boolean => {
+    return metadata?.[key]?.source === "environment-variable"; 
+  };
+
+  const updateSetting = (key: keyof Settings, value: Settings[keyof Settings]) => {
+    if (isOverridden(key)) {
+      return;
+    }
+    setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleCleanupAll = async () => {
@@ -94,6 +160,148 @@ export default function SettingsPage() {
     } finally {
       setIsCleaning(false);
       setDeleteDialogOpen(false);
+    }
+  };
+
+  const renderSetting = (key: keyof Settings) => {
+    switch (key) {
+      case "logDir":
+        return (
+          <div>
+            <Label htmlFor="logDir" className="block text-sm font-medium mb-2">
+              Capture Directory
+            </Label>
+            <Input
+              id="logDir"
+              value={settings.logDir}
+              onChange={(e) => updateSetting("logDir", e.target.value)}
+              placeholder="./captures"
+              disabled={isOverridden("logDir")}
+              className={isOverridden("logDir") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("logDir")} description={SETTING_DESCRIPTIONS.logDir} />
+          </div>
+        );
+      case "maxSessions":
+        return (
+          <div>
+            <Label htmlFor="maxSessions" className="block text-sm font-medium mb-2">
+              Max Sessions (0 = unlimited)
+            </Label>
+            <Input
+              id="maxSessions"
+              type="number"
+              value={settings.maxSessions}
+              onChange={(e) => updateSetting("maxSessions", parseInt(e.target.value) || 0)}
+              min="0"
+              disabled={isOverridden("maxSessions")}
+              className={isOverridden("maxSessions") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("maxSessions")} description={SETTING_DESCRIPTIONS.maxSessions} />
+          </div>
+        );
+      case "redactPreset":
+        return (
+          <div>
+            <Label htmlFor="redactPreset" className="block text-sm font-medium mb-2">
+              Preset
+            </Label>
+            <select
+              id="redactPreset"
+              value={settings.redactPreset}
+              onChange={(e) => updateSetting("redactPreset", e.target.value as "secrets" | "pii" | "strict")}
+              className={`w-full px-3 py-2 border rounded-md ${isOverridden("redactPreset") ? "bg-muted cursor-not-allowed" : ""}`}
+              disabled={isOverridden("redactPreset")}
+            >
+              <option value="secrets">secrets - API keys and tokens only</option>
+              <option value="pii">pii - Email, SSN, credit cards, phone numbers</option>
+              <option value="strict">strict - PII + IP addresses, dates of birth</option>
+            </select>
+            <SettingHelp meta={getMeta("redactPreset")} description={SETTING_DESCRIPTIONS.redactPreset} />
+          </div>
+        );
+      case "redactReversible":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="redactReversible"
+              checked={settings.redactReversible}
+              onChange={(e) => updateSetting("redactReversible", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isOverridden("redactReversible")}
+            />
+            <Label htmlFor="redactReversible" className="text-sm">
+              Reversible redaction (restore originals in responses)
+            </Label>
+            <SettingHelp meta={getMeta("redactReversible")} description={SETTING_DESCRIPTIONS.redactReversible} />
+          </div>
+        );
+      case "captureCleanupEnabled":
+        return (
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-semibold mb-1">Capture File Cleanup</h3>
+              <p className="text-sm text-muted-foreground">
+                Manage automatic and manual cleanup of captured API traffic files
+              </p>
+              <SettingHelp meta={getMeta("captureCleanupEnabled")} description={SETTING_DESCRIPTIONS.captureCleanupEnabled} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="captureCleanupEnabled"
+                checked={settings.captureCleanupEnabled}
+                onCheckedChange={(checked) => updateSetting("captureCleanupEnabled", checked)}
+                disabled={isOverridden("captureCleanupEnabled")}
+              />
+              <Label htmlFor="captureCleanupEnabled" className="text-sm">
+                Enable Automatic Cleanup
+              </Label>
+            </div>
+          </div>
+        );
+      case "captureCleanupIntervalHours":
+        return (
+          <div>
+            <Label htmlFor="cleanupIntervalHours" className="block text-sm font-medium mb-2">
+              Cleanup Interval (hours)
+            </Label>
+            <Input
+              id="cleanupIntervalHours"
+              type="number"
+              value={settings.captureCleanupIntervalHours}
+              onChange={(e) => updateSetting("captureCleanupIntervalHours", Math.max(1, parseInt(e.target.value) || 1))}
+              min="1"
+              max="168"
+              placeholder="24"
+              disabled={isOverridden("captureCleanupIntervalHours")}
+              className={isOverridden("captureCleanupIntervalHours") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("captureCleanupIntervalHours")} description={SETTING_DESCRIPTIONS.captureCleanupIntervalHours} />
+          </div>
+        );
+      case "captureCleanupMaxAgeDays":
+        return (
+          <div>
+            <Label htmlFor="cleanupMaxAgeDays" className="block text-sm font-medium mb-2">
+              Max Age (days)
+            </Label>
+            <Input
+              id="cleanupMaxAgeDays"
+              type="number"
+              value={settings.captureCleanupMaxAgeDays}
+              onChange={(e) => updateSetting("captureCleanupMaxAgeDays", Math.max(1, parseInt(e.target.value) || 1))}
+              min="1"
+              max="365"
+              placeholder="30"
+              disabled={isOverridden("captureCleanupMaxAgeDays")}
+              className={isOverridden("captureCleanupMaxAgeDays") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("captureCleanupMaxAgeDays")} description={SETTING_DESCRIPTIONS.captureCleanupMaxAgeDays} />
+          </div>
+        );
+      default:
+        return null;
     }
   };
 
@@ -135,61 +343,16 @@ export default function SettingsPage() {
           <div className="rounded-lg border p-6">
             <h3 className="font-semibold mb-4">Logging</h3>
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="logDir" className="block text-sm font-medium mb-2">
-                  Capture Directory
-                </Label>
-                <Input
-                  id="logDir"
-                  value={settings.logDir}
-                  onChange={(e) => setSettings({ ...settings, logDir: e.target.value })}
-                  placeholder="./captures"
-                />
-              </div>
-              <div>
-                <Label htmlFor="maxSessions" className="block text-sm font-medium mb-2">
-                  Max Sessions (0 = unlimited)
-                </Label>
-                <Input
-                  id="maxSessions"
-                  type="number"
-                  value={settings.maxSessions}
-                  onChange={(e) => setSettings({ ...settings, maxSessions: parseInt(e.target.value) || 0 })}
-                  min="0"
-                />
-              </div>
+              {renderSetting("logDir")}
+              {renderSetting("maxSessions")}
             </div>
           </div>
 
           <div className="rounded-lg border p-6">
             <h3 className="font-semibold mb-4">Redaction</h3>
             <div className="space-y-4">
-              <div>
-                <Label className="block text-sm font-medium mb-2">
-                  Preset
-                </Label>
-                <select
-                  value={settings.redactPreset}
-                  onChange={(e) => setSettings({ ...settings, redactPreset: e.target.value as "secrets" | "pii" | "strict" })}
-                  className="w-full px-3 py-2 border rounded-md"
-                >
-                  <option value="secrets">secrets - API keys and tokens only</option>
-                  <option value="pii">pii - Email, SSN, credit cards, phone numbers</option>
-                  <option value="strict">strict - PII + IP addresses, dates of birth</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="redactReversible"
-                  checked={settings.redactReversible}
-                  onChange={(e) => setSettings({ ...settings, redactReversible: e.target.checked })}
-                  className="w-4 h-4"
-                />
-                <Label htmlFor="redactReversible" className="text-sm">
-                  Reversible redaction (restore originals in responses)
-                </Label>
-              </div>
+              {renderSetting("redactPreset")}
+              {renderSetting("redactReversible")}
             </div>
           </div>
 
@@ -201,65 +364,16 @@ export default function SettingsPage() {
           <Separator />
 
           <div className="rounded-lg border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-semibold mb-1">Capture File Cleanup</h3>
-                <p className="text-sm text-muted-foreground">
-                  Manage automatic and manual cleanup of captured API traffic files
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="captureCleanupEnabled"
-                  checked={settings.captureCleanupEnabled}
-                  onCheckedChange={(checked) => setSettings({ ...settings, captureCleanupEnabled: checked })}
-                />
-                <Label htmlFor="captureCleanupEnabled" className="text-sm">
-                  Enable Automatic Cleanup
-                </Label>
-              </div>
-            </div>
+            {renderSetting("captureCleanupEnabled")}
 
             {settings.captureCleanupEnabled && (
               <div className="space-y-4 pt-4 border-t">
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <Label htmlFor="cleanupIntervalHours" className="block text-sm font-medium mb-2">
-                      Cleanup Interval (hours)
-                    </Label>
-                    <Input
-                      id="cleanupIntervalHours"
-                      type="number"
-                      value={settings.captureCleanupIntervalHours}
-                      onChange={(e) => setSettings({ ...settings, captureCleanupIntervalHours: Math.max(1, parseInt(e.target.value) || 1) })}
-                      min="1"
-                      max="168"
-                      placeholder="24"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      How often to run the cleanup job
-                    </p>
-                  </div>
-                  <div>
-                    <Label htmlFor="cleanupMaxAgeDays" className="block text-sm font-medium mb-2">
-                      Max Age (days)
-                    </Label>
-                    <Input
-                      id="cleanupMaxAgeDays"
-                      type="number"
-                      value={settings.captureCleanupMaxAgeDays}
-                      onChange={(e) => setSettings({ ...settings, captureCleanupMaxAgeDays: Math.max(1, parseInt(e.target.value) || 1) })}
-                      min="1"
-                      max="365"
-                      placeholder="30"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Delete capture files older than this many days
-                    </p>
-                  </div>
+                  {renderSetting("captureCleanupIntervalHours")}
+                  {renderSetting("captureCleanupMaxAgeDays")}
                 </div>
 
-<div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
                   <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                     <AlertDialogTrigger asChild>
                       <Button

@@ -1,5 +1,5 @@
 import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails } from "@/types/api";
-import type { Settings } from "@/lib/settings";
+import type { Settings, SettingMeta } from "@/lib/settings";
 
 // API routes are served by the same web server that serves the frontend
 // In Docker: web server on port 4041, API routes are internal (/api/*)
@@ -420,11 +420,11 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     });
   }
 
-  async getSettings(): Promise<{ settings: Settings }> {
+  async getSettings(): Promise<{ settings: Settings; metadata: Record<keyof Settings, SettingMeta> }> {
     return this.request("/api/settings");
   }
 
-  async saveSettings(settings: Settings): Promise<{ success: boolean; settings: Settings }> {
+  async saveSettings(settings: Settings): Promise<{ success: boolean; settings: Settings; metadata: Record<keyof Settings, SettingMeta> }> {
     return this.request("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

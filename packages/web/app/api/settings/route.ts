@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 
-import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults } from "@/lib/settings";
+import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults, getSettingMetadata } from "@/lib/settings";
 import { applyLogDir } from "@/lib/sessions/utils";
 
 const SETTINGS_FILE = join(homedir(), ".contextio-next", "settings.json");
@@ -24,15 +24,15 @@ export async function GET(): Promise<NextResponse> {
     const data = await fs.readFile(SETTINGS_FILE, "utf8");
     const parsed = JSON.parse(data);
     if (typeof parsed !== "object" || parsed === null) {
-      return NextResponse.json({ settings: DEFAULT_SETTINGS });
+      return NextResponse.json({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS) });
     }
   // Lenient per-field validation with defaults fallback - never fail the whole request
   const settings = validateSettingsLenient(parsed);
   applyLogDir(settings.logDir);
-  return NextResponse.json({ settings });
+  return NextResponse.json({ settings, metadata: getSettingMetadata(settings) });
   } catch (error) {
     console.error("Error reading settings:", error);
-    return NextResponse.json({ settings: DEFAULT_SETTINGS });
+    return NextResponse.json({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS) });
   }
 }
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
     applyLogDir(settings.logDir);
 
-    return NextResponse.json({ success: true, settings });
+    return NextResponse.json({ success: true, settings, metadata: getSettingMetadata(settings) });
   } catch (error) {
     console.error("Error saving settings:", error);
     const message = error instanceof Error ? error.message : "Failed to save settings";

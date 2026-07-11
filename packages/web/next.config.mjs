@@ -1,29 +1,32 @@
 import path from "path";
 
 const nextConfig = {
+  experimental: { nodeMiddleware: true },
   reactStrictMode: true,
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.alias["@"] = path.join(process.cwd(), "");
-    // Handle Node.js built-in modules (node: protocol) for Next.js 15+
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      path: false,
-      os: false,
-      crypto: false,
-      stream: false,
-      util: false,
-      buffer: false,
-      querystring: false,
-      url: false,
-      zlib: false,
-      http: false,
-      https: false,
-      assert: false,
-      constants: false,
-      process: false,
-      "fs/promises": false,
-    };
+    if (!isServer) {
+      // Handle Node.js built-in modules (node: protocol) for Next.js 15+
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        os: false,
+        crypto: false,
+        stream: false,
+        util: false,
+        buffer: false,
+        querystring: false,
+        url: false,
+        zlib: false,
+        http: false,
+        https: false,
+        assert: false,
+        constants: false,
+        process: false,
+        "fs/promises": false,
+      };
+    }
     return config;
   },
 };
