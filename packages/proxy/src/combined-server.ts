@@ -188,14 +188,14 @@ export function createCombinedProxy(
 
   const initNextJs = async (): Promise<void> => {
     try {
-      // Import Next.js dynamically
+      // Import Next.js dynamically - use root node_modules where next is hoisted
       const { default: createServer } = await import(
-        join(process.cwd(), "packages/web/node_modules/next/dist/server/next.js")
+        join(process.cwd(), "node_modules/next/dist/server/next.js")
       );
       
       // Create Next.js server instance using the exported createServer function
       const nextServer = await import(
-        join(process.cwd(), "packages/web/node_modules/next/dist/server/next.js")
+        join(process.cwd(), "node_modules/next/dist/server/next.js")
       ).then(mod => mod.default({
         dir: join(process.cwd(), "packages/web"),
         dev: false,
