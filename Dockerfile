@@ -29,6 +29,10 @@ RUN corepack enable && \
     pnpm install --ignore-scripts && \
     pnpm rebuild sharp unrs-resolver
 
+# Install Next.js canary for experimental.nodeMiddleware support
+RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
+    pnpm add -w next@canary react@canary react-dom@canary
+
 # Copy source files
 COPY packages/core/src packages/core/src
 COPY packages/core/tsconfig.json packages/core/tsconfig.json
