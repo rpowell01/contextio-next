@@ -2,7 +2,7 @@ import path from "path";
 
 const nextConfig = {
   reactStrictMode: true,
-  turbopack: false,
+  turbopack: {},
   webpack: (config, { isServer }) => {
     config.resolve.alias["@"] = path.join(process.cwd(), "");
     if (!isServer) {
