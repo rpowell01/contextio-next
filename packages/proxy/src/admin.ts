@@ -195,7 +195,7 @@ case "env": {
   // Coolify-set variables (e.g. MY_TEST) and production-critical values like CSRF_SECRET
   // are blocked by the SECRET pattern.
   const BLACKLISTED_PATTERNS: RegExp[] = [
-    /(^|_)(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DATABASE_URL|CREDENTIAL|ACCESS_KEY)(_|$)/i,
+    /(^|_)(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DATABASE_URL|CREDENTIAL|ACCESS_KEY|CSRF_SECRET)(_|$)/i,
   ];
 
   const envVars: ProxyEnvVar[] = Object.entries(process.env)
