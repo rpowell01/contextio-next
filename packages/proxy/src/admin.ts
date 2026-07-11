@@ -184,63 +184,54 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
           break;
         }
 
-        case "env": {
-          if (req.method !== "GET") {
-            res.writeHead(405, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Method not allowed" }));
-            return;
-          }
+case "env": {
+  if (req.method !== "GET") {
+    res.writeHead(405, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Method not allowed" }));
+    return;
+  }
 
-          // Filter relevant environment variables
-          const relevantKeys = [
-            "CONTEXT_PROXY_BIND_HOST",
-            "CONTEXT_PROXY_PORT",
-            "CONTEXT_PROXY_PLUGINS",
-            "LOG_TRAFFIC",
-            "DEBUG_ROUTING",
-            "LOGGER_CAPTURE_DIR",
-            "LOGGER_MAX_SESSIONS",
-            "REDACT_POLICY_FILE",
-            "REDACT_REVERSIBLE",
-            "REDACT_PRESET",
-            "UPSTREAM_OPENAI_URL",
-            "UPSTREAM_ANTHROPIC_URL",
-            "UPSTREAM_GEMINI_URL",
-            "UPSTREAM_VERTEX_URL",
-            "UPSTREAM_NVIDIA_URL",
-            "UPSTREAM_KILO_URL",
-            "UPSTREAM_OPENROUTER_URL",
-            "UPSTREAM_CHATGPT_URL",
-            "UPSTREAM_GEMINI_CODE_ASSIST_URL",
-          ];
+  // Blacklist keys that look sensitive so they can't be leaked via the admin API.
+  // Coolify-set variables (e.g. MY_TEST) and production-critical values like CSRF_SECRET
+  // pass through the blacklist unchanged.
+  const BLACKLISTED_PATTERNS: RegExp[] = [
+    /(^|_)(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DATABASE_URL|CREDENTIAL|ACCESS_KEY)(_|$)/i,
+  ];
+  const ALLOWLISTED_KEYS: Set<string> = new Set([
+    "CSRF_SECRET",
+  ]);
 
-          const envVars: ProxyEnvVar[] = relevantKeys
-            .filter((key) => process.env[key] !== undefined)
-            .map((key) => ({
-              key,
-              value: process.env[key] || "",
-              source: "process" as const,
-            }));
+  const envVars: ProxyEnvVar[] = Object.entries(process.env)
+    .filter(([key]) => {
+      if (ALLOWLISTED_KEYS.has(key)) return true;
+      return !BLACKLISTED_PATTERNS.some((pattern) => pattern.test(key));
+    })
+    .map(([key, value]) => ({
+      key,
+      value: value ?? "",
+      source: "process" as const,
+    }));
 
-          // Add defaults for keys that might not be set
-          const defaults: Record<string, string> = {
-            CONTEXT_PROXY_BIND_HOST: "0.0.0.0",
-            CONTEXT_PROXY_PORT: "4040",
-            LOGGER_MAX_SESSIONS: "0",
-            REDACT_REVERSIBLE: "false",
-            REDACT_PRESET: "pii",
-          };
+  // Add defaults for keys that might not be set, preserving the previous contract
+  // so the env page doesn't regress when the proxy is launched with a minimal env.
+  const defaults: Record<string, string> = {
+    CONTEXT_PROXY_BIND_HOST: "0.0.0.0",
+    CONTEXT_PROXY_PORT: "4040",
+    LOGGER_MAX_SESSIONS: "0",
+    REDACT_REVERSIBLE: "false",
+    REDACT_PRESET: "pii",
+  };
 
-          for (const [key, value] of Object.entries(defaults)) {
-            if (!envVars.some((v) => v.key === key)) {
-              envVars.push({ key, value, source: "default" });
-            }
-          }
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!envVars.some((v) => v.key === key)) {
+      envVars.push({ key, value, source: "default" });
+    }
+  }
 
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(envVars));
-          break;
-        }
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(envVars));
+  break;
+}
 
         case "logs": {
           if (req.method !== "GET") {
