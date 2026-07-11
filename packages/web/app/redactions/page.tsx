@@ -2,39 +2,35 @@
 
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
-import { formatDateTime } from "@/lib/utils";
 import { useState, useEffect } from "react";
-import { apiClient } from "@/lib/api";
-import type { CaptureDetail } from "@/types/api";
+import { useRouter } from "next/navigation";
 
 interface RedactionSummary {
-totalRedactions: number;
-byType: Record<string, number>;
+  totalRedactions: number;
+  byType: Record<string, number>;
 }
 
 interface RedactionDetailRow {
-redactionType: string;
-requestSource: string | null;
-requestProvider: string;
-requestTarget: string;
-sessionId: string | null;
-captureId: string;
-preRedactionValue: string;
-postRedactionValue: string;
+  redactionType: string;
+  requestSource: string | null;
+  requestProvider: string;
+  requestTarget: string;
+  sessionId: string | null;
+  captureId: string;
+  preRedactionValue: string;
+  postRedactionValue: string;
 }
 
 interface RedactionsData {
-summary: RedactionSummary;
-details: RedactionDetailRow[];
+  summary: RedactionSummary;
+  details: RedactionDetailRow[];
 }
 
 export default function RedactionsPage() {
   const [data, setData] = useState<RedactionsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedRow, setSelectedRow] = useState<RedactionDetailRow | null>(null);
-  const [captureDetail, setCaptureDetail] = useState<CaptureDetail | null>(null);
-  const [captureLoading, setCaptureLoading] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     async function fetchRedactions() {
@@ -54,23 +50,10 @@ export default function RedactionsPage() {
     fetchRedactions();
   }, []);
 
-  const handleRowClick = async (row: RedactionDetailRow) => {
-    setSelectedRow(row);
-    setCaptureLoading(true);
-    try {
-      const detail = await apiClient.getCapture(row.captureId);
-      setCaptureDetail(detail);
-    } catch (e) {
-      console.error("Error fetching capture detail:", e);
-      setCaptureDetail(null);
-    } finally {
-      setCaptureLoading(false);
+  const handleRowClick = (row: RedactionDetailRow) => {
+    if (row.sessionId) {
+      router.push(`/sessions/${row.sessionId}?captureId=${row.captureId}`);
     }
-  };
-
-  const closeModal = () => {
-    setSelectedRow(null);
-    setCaptureDetail(null);
   };
 
   if (loading) {
@@ -219,115 +202,6 @@ export default function RedactionsPage() {
             </table>
           </div>
         </div>
-
-        {/* Modal for Capture Details */}
-        {selectedRow && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            onClick={closeModal}
-          >
-            <div
-              className="bg-background rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b p-4">
-                <h2 className="text-lg font-semibold">Capture Details</h2>
-                <button
-                  onClick={closeModal}
-                  className="text-muted-foreground hover:text-foreground p-1"
-                >
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="p-4 overflow-auto max-h-[70vh]">
-                {captureLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <svg className="h-8 w-8 text-primary animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </div>
-                ) : captureDetail ? (
-                  <div className="space-y-6">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="rounded-lg border p-4">
-                        <h3 className="font-semibold mb-3">Request Details</h3>
-                        <div className="space-y-2 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Provider:</span>{" "}
-                            {captureDetail.provider}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Method:</span>{" "}
-                            {captureDetail.method}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Target:</span>{" "}
-                            {captureDetail.targetUrl}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Source:</span>{" "}
-                            {captureDetail.source ?? "—"}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Request Size:</span>{" "}
-                            {captureDetail.requestBytes.toLocaleString()} bytes
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Timestamp:</span>{" "}
-                            {formatDateTime(captureDetail.timestamp)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-lg border p-4">
-                        <h3 className="font-semibold mb-3">Response Details</h3>
-                        <div className="space-y-2 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Status:</span>{" "}
-                            {captureDetail.responseStatus}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Streaming:</span>{" "}
-                            {captureDetail.responseIsStreaming ? "Yes" : "No"}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Response Size:</span>{" "}
-                            {captureDetail.responseBytes.toLocaleString()} bytes
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Total Time:</span>{" "}
-                            {captureDetail.timings.total_ms.toLocaleString()} ms
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border p-4">
-                      <h3 className="font-semibold mb-3">Request Body</h3>
-                      <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
-                        {JSON.stringify(captureDetail.requestBody, null, 2)}
-                      </pre>
-                    </div>
-
-                    <div className="rounded-lg border p-4">
-                      <h3 className="font-semibold mb-3">Response Body</h3>
-                      <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-96 whitespace-pre-wrap break-words">
-                        {captureDetail.responseBody ? JSON.stringify(JSON.parse(captureDetail.responseBody), null, 2) : "No response body"}
-                      </pre>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center text-muted-foreground py-8">
-                    Failed to load capture details
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </MainLayout>
   );
