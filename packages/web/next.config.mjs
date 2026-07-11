@@ -1,8 +1,8 @@
 import path from "path";
 
 const nextConfig = {
-  experimental: { nodeMiddleware: true },
   reactStrictMode: true,
+  turbopack: false,
   webpack: (config, { isServer }) => {
     config.resolve.alias["@"] = path.join(process.cwd(), "");
     if (!isServer) {
