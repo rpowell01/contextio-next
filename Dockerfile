@@ -1,9 +1,6 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
-# Enable Node.js middleware for CSRF (requires Next.js canary)
-ENV ENABLE_NODE_MIDDLEWARE=1
-
 # Build args for version info
 ARG BUILDTIME
 ARG VERSION
@@ -31,10 +28,6 @@ RUN corepack enable && \
     pnpm config set minimum-release-age 0 --global && \
     pnpm install --ignore-scripts && \
     pnpm rebuild sharp unrs-resolver
-
-# Install Next.js canary for experimental.nodeMiddleware support
-RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
-    pnpm add -w next@canary react@canary react-dom@canary
 
 # Copy source files
 COPY packages/core/src packages/core/src
