@@ -193,17 +193,13 @@ case "env": {
 
   // Blacklist keys that look sensitive so they can't be leaked via the admin API.
   // Coolify-set variables (e.g. MY_TEST) and production-critical values like CSRF_SECRET
-  // pass through the blacklist unchanged.
+  // are blocked by the SECRET pattern.
   const BLACKLISTED_PATTERNS: RegExp[] = [
     /(^|_)(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DATABASE_URL|CREDENTIAL|ACCESS_KEY)(_|$)/i,
   ];
-  const ALLOWLISTED_KEYS: Set<string> = new Set([
-    "CSRF_SECRET",
-  ]);
 
   const envVars: ProxyEnvVar[] = Object.entries(process.env)
     .filter(([key]) => {
-      if (ALLOWLISTED_KEYS.has(key)) return true;
       return !BLACKLISTED_PATTERNS.some((pattern) => pattern.test(key));
     })
     .map(([key, value]) => ({
