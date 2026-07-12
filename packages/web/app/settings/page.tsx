@@ -28,9 +28,9 @@ const SETTING_DESCRIPTIONS: Record<keyof Settings, string> = {
   maxSessions: "Maximum number of capture sessions kept concurrently (0 = unlimited). Requires a proxy restart to apply.",
   redactPreset: "Built-in redaction rules applied to captures. Re-read on every request, so changes apply immediately.",
   redactReversible: "Store originals so redacted values can be restored in responses. Applied dynamically per request.",
-  captureCleanupEnabled: "Automatically delete old capture files on a schedule. The cleanup scheduler re-reads this, so it is applied dynamically.",
-  captureCleanupIntervalHours: "How often the cleanup job runs. Takes effect on the next cleanup cycle.",
-  captureCleanupMaxAgeDays: "Capture files older than this are deleted. Takes effect on the next cleanup cycle.",
+  captureCleanupEnabled: "Automatically delete old capture files on a schedule. Changing this only takes effect after the proxy is restarted.",
+  captureCleanupIntervalHours: "How often the cleanup job runs. Changing this only takes effect after the proxy is restarted.",
+  captureCleanupMaxAgeDays: "Capture files older than this are deleted. Changing this only takes effect after the proxy is restarted.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {

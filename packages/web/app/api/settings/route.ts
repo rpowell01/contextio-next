@@ -3,8 +3,9 @@ import fs from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 
-import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults, getSettingMetadata } from "@/lib/settings";
+import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults, getSettingMetadata, applyEnvOverrides } from "@/lib/settings";
 import { applyLogDir } from "@/lib/sessions/utils";
+import { consumeToken } from "@/lib/csrf";
 
 const SETTINGS_FILE = join(homedir(), ".contextio-next", "settings.json");
 
@@ -28,8 +29,9 @@ export async function GET(): Promise<NextResponse> {
     }
   // Lenient per-field validation with defaults fallback - never fail the whole request
   const settings = validateSettingsLenient(parsed);
-  applyLogDir(settings.logDir);
-  return NextResponse.json({ settings, metadata: getSettingMetadata(settings) });
+  const { settings: effectiveSettings, appliedKeys } = applyEnvOverrides(settings);
+  applyLogDir(effectiveSettings.logDir);
+  return NextResponse.json({ settings: effectiveSettings, metadata: getSettingMetadata(effectiveSettings, appliedKeys) });
   } catch (error) {
     console.error("Error reading settings:", error);
     return NextResponse.json({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS) });
@@ -38,17 +40,22 @@ export async function GET(): Promise<NextResponse> {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    const csrfToken = request.headers.get("x-csrf-token");
+    if (!(await consumeToken(csrfToken ?? ""))) {
+      return NextResponse.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+    }
     const body = await request.json();
   // Validate the incoming settings
   const validated = validateSettingsLenient(body);
-    // Merge with defaults for any missing fields
-    const settings = mergeWithDefaults(validated);
+  // Merge with defaults for any missing fields
+  const settings = mergeWithDefaults(validated);
 
-    await ensureSettingsFile();
-    await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
-    applyLogDir(settings.logDir);
+  await ensureSettingsFile();
+  await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 
-    return NextResponse.json({ success: true, settings, metadata: getSettingMetadata(settings) });
+  const { settings: effectiveSettings, appliedKeys } = applyEnvOverrides(settings);
+  applyLogDir(effectiveSettings.logDir);
+  return NextResponse.json({ success: true, settings: effectiveSettings, metadata: getSettingMetadata(effectiveSettings, appliedKeys) });
   } catch (error) {
     console.error("Error saving settings:", error);
     const message = error instanceof Error ? error.message : "Failed to save settings";

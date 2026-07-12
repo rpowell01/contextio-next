@@ -24,27 +24,104 @@ export const SETTING_ENV_MAP: Record<keyof Settings, { envVar: string; dynamic: 
   maxSessions: { envVar: "LOGGER_MAX_SESSIONS", dynamic: false },
   redactPreset: { envVar: "REDACT_PRESET", dynamic: true },
   redactReversible: { envVar: "REDACT_REVERSIBLE", dynamic: true },
-  captureCleanupEnabled: { envVar: "LOGGER_CAPTURE_CLEANUP_ENABLED", dynamic: true },
-  captureCleanupIntervalHours: { envVar: "LOGGER_CAPTURE_CLEANUP_INTERVAL", dynamic: true },
-  captureCleanupMaxAgeDays: { envVar: "LOGGER_CAPTURE_MAX_AGE", dynamic: true },
+  captureCleanupEnabled: { envVar: "LOGGER_CAPTURE_CLEANUP_ENABLED", dynamic: false },
+  captureCleanupIntervalHours: { envVar: "LOGGER_CAPTURE_CLEANUP_INTERVAL", dynamic: false },
+  captureCleanupMaxAgeDays: { envVar: "LOGGER_CAPTURE_MAX_AGE", dynamic: false },
 };
+
+/**
+ * Override settings values with corresponding environment variables where defined.
+ * Returns a new Settings object with env var values applied, together with the set
+ * of keys whose env values were successfully applied.  Treats numeric env vars as
+ * their raw unit (hours / days) to stay consistent with the proxy config; string
+ * and boolean fields are passed through directly.
+ */
+function strictInteger(raw: string): boolean {
+  return /^\d+$/.test(raw);
+}
+
+export function applyEnvOverrides(settings: Settings): { settings: Settings; appliedKeys: Set<keyof Settings> } {
+  const override: Partial<Settings> = {};
+  const appliedKeys = new Set<keyof Settings>();
+  (Object.entries(SETTING_ENV_MAP) as [keyof Settings, { envVar: string; dynamic: boolean }][]).forEach(([key, { envVar }]) => {
+    const raw = process.env[envVar];
+    if (raw === undefined) return;
+    let accepted = false;
+    switch (key) {
+      case "logDir":
+        override.logDir = raw;
+        accepted = true;
+        break;
+case "maxSessions": {
+  const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+  if (Number.isFinite(n) && n >= 0 && n <= 10000) {
+    override.maxSessions = n;
+    accepted = true;
+  }
+  break;
+}
+      case "redactPreset":
+        if (["secrets", "pii", "strict"].includes(raw)) {
+          override.redactPreset = raw as "secrets" | "pii" | "strict";
+          accepted = true;
+        }
+        break;
+      case "redactReversible":
+        if (raw === "true" || raw === "false") {
+          override.redactReversible = raw === "true";
+          accepted = true;
+        }
+        break;
+      case "captureCleanupEnabled":
+        if (raw === "true" || raw === "false") {
+          override.captureCleanupEnabled = raw === "true";
+          accepted = true;
+        }
+        break;
+case "captureCleanupIntervalHours": {
+  const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+  if (Number.isFinite(n) && n >= 1 && n <= 168) {
+    override.captureCleanupIntervalHours = n;
+    accepted = true;
+  }
+  break;
+}
+case "captureCleanupMaxAgeDays": {
+  const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+  if (Number.isFinite(n) && n >= 1 && n <= 365) {
+    override.captureCleanupMaxAgeDays = n;
+    accepted = true;
+  }
+  break;
+}
+      default:
+        break;
+    }
+    if (accepted) appliedKeys.add(key);
+  });
+  return { settings: { ...settings, ...override }, appliedKeys };
+}
 
 // Computes per-setting metadata: where the active value comes from, which env
 // var overrides it, and whether it is applied dynamically.
-export function getSettingMetadata(settings: Settings): Record<keyof Settings, SettingMeta> {
+export function getSettingMetadata(
+  settings: Settings,
+  appliedEnvKeys?: Set<keyof Settings>,
+): Record<keyof Settings, SettingMeta> {
   const meta = {} as Record<keyof Settings, SettingMeta>;
   (Object.keys(SETTING_ENV_MAP) as (keyof Settings)[]).forEach((key) => {
     const { envVar, dynamic } = SETTING_ENV_MAP[key];
-    const overridden = process.env[envVar] !== undefined;
+    const envSet = process.env[envVar] !== undefined;
+    const effective = appliedEnvKeys?.has(key) ?? envSet;
     let source: SettingSource;
-    if (overridden) {
+    if (effective) {
       source = "environment-variable";
     } else if (JSON.stringify(settings[key]) !== JSON.stringify(DEFAULT_SETTINGS[key])) {
       source = "settings-file";
     } else {
       source = "default";
     }
-    meta[key] = { source, envVar: overridden ? envVar : null, dynamic };
+    meta[key] = { source, envVar: effective ? envVar : null, dynamic };
   });
   return meta;
 }

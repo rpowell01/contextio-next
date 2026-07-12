@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { LogEntry, LogLevel } from "@/types/api";
 import { apiClient } from "@/lib/api";
+import { consumeToken } from "@/lib/csrf";
 
 // Input validation helpers
 function sanitizeString(value: string | null, maxLength = 256): string | null {
@@ -117,6 +118,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const csrfToken = request.headers.get("x-csrf-token");
+    if (!(await consumeToken(csrfToken ?? ""))) {
+      return NextResponse.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+    }
     const body = await request.json();
     const { action, containerId } = body;
 

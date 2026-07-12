@@ -30,28 +30,66 @@ export const defaultNavigation: NavigationItem[] = [
   {
     name: "Dashboard",
     href: "/",
-  icon: (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Dashboard">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-    </svg>
-  ),
-},
-{
-  name: "Metrics",
-  href: "/metrics",
-  icon: (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Metrics">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 002 2v6m0 0h14m-7 0V7a2 2 0 012-2h2a2 2 0 012 2v10" />
-    </svg>
-  ),
-},
-{
-  name: "Sessions",
-  href: "/sessions",
     icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Sessions">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h5.5a2 2 0 002-2V9a2 2 0 00-2-2z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7v10a2 2 0 002 2H9" />
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-label="Dashboard"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"
+        />
+      </svg>
+    ),
+  },
+  {
+    name: "Metrics",
+    href: "/metrics",
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-label="Metrics"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 002 2v6m0 0h14m-7 0V7a2 2 0 012-2h2a2 2 0 012 2v10"
+        />
+      </svg>
+    ),
+  },
+  {
+    name: "Sessions",
+    href: "/sessions",
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-label="Sessions"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h5.5a2 2 0 002-2V9a2 2 0 00-2-2z"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M16 7v10a2 2 0 002 2H9"
+        />
       </svg>
     ),
   },
@@ -59,9 +97,25 @@ export const defaultNavigation: NavigationItem[] = [
     name: "Settings",
     href: "/settings",
     icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Settings">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.755 2.872-1.755 3.246 0l.527 2.147a1 1 0 00.956.69h2.178a1.978 1.978 0 001.928-1.427l.825-2.906a1.978 1.978 0 00-1.77-2.465h-2.178a1 1 0 00-.956.69l-.527 2.147zM15 13.5H9a1 1 0 000 2h6a1 1 0 000-2z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 17.27L5.937 20 7 14.074l-5.937-4.074 6.069-.825A1 1 0 018.5 9.05V3.12a1 1 0 011.648-.89l4.957 2.715a1 1 0 01.352.602z" />
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-label="Settings"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M10.325 4.317c.426-1.755 2.872-1.755 3.246 0l.527 2.147a1 1 0 00.956.69h2.178a1.978 1.978 0 001.928-1.427l.825-2.906a1.978 1.978 0 00-1.77-2.465h-2.178a1 1 0 00-.956.69l-.527 2.147zM15 13.5H9a1 1 0 000 2h6a1 1 0 000-2z"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 17.27L5.937 20 7 14.074l-5.937-4.074 6.069-.825A1 1 0 018.5 9.05V3.12a1 1 0 011.648-.89l4.957 2.715a1 1 0 01.352.602z"
+        />
       </svg>
     ),
   },
@@ -69,8 +123,19 @@ export const defaultNavigation: NavigationItem[] = [
     name: "Env Vars",
     href: "/env-vars",
     icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Env Vars">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-label="Env Vars"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M4 6h16M4 12h16M4 18h16"
+        />
       </svg>
     ),
   },
@@ -78,8 +143,19 @@ export const defaultNavigation: NavigationItem[] = [
     name: "Logs",
     href: "/logs",
     icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Logs">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h4m5-6v-4a1 1 0 00-1-1h-4a1 1 0 00-1 1v4m-6 4h2m8 0h2" />
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-label="Logs"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 12h6m-6 4h4m5-6v-4a1 1 0 00-1-1h-4a1 1 0 00-1 1v4m-6 4h2m8 0h2"
+        />
       </svg>
     ),
   },
@@ -98,7 +174,9 @@ export const defaultNavigationConfig: NavigationConfig = {
  * @param config - Optional navigation configuration
  * @returns Filtered array of navigation items
  */
-export function getNavigationItems(config?: NavigationConfig): NavigationItem[] {
+export function getNavigationItems(
+  config?: NavigationConfig,
+): NavigationItem[] {
   const items = config?.items ?? defaultNavigation;
   return items.filter((item) => item.enabled !== false);
 }

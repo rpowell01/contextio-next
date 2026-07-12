@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { policySchema } from "@/lib/schema";
 import type { RedactionPolicy } from "@/types/api";
 import { join } from "path";
+import { consumeToken } from "@/lib/csrf";
 
 // Default policy - bundled with the application (used as fallback)
 const bundledDefaultPolicy: RedactionPolicy = {
@@ -160,6 +161,10 @@ export async function POST(_request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const csrfToken = request.headers.get("x-csrf-token");
+    if (!(await consumeToken(csrfToken ?? ""))) {
+      return NextResponse.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+    }
     const body = await request.json();
     
     // Validate the policy
