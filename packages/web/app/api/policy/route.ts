@@ -113,7 +113,11 @@ export async function GET(_request: NextRequest) {
 
 // Debug endpoint to check file status
 export async function POST(_request: NextRequest) {
-  const debugInfo: Record<string, unknown> = {
+const csrfToken = _request.headers.get("x-csrf-token");
+if (!(await consumeToken(csrfToken ?? ""))) {
+return NextResponse.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+}
+const debugInfo: Record<string, unknown> = {
     customPolicyPath: CUSTOM_POLICY_PATH,
     bundledPolicyPath: BUNDLED_POLICY_PATH,
   };

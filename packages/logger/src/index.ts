@@ -54,6 +54,8 @@ export interface LoggerPlugin extends ProxyPlugin {
  * console.log(logger.captureDir); // ~/.contextio/captures
  * ```
  */
+export { deriveKey, encrypt, decrypt, validateKey } from "./crypto.js";
+
 export function createLoggerPlugin(config?: LoggerConfig): LoggerPlugin {
   const captureDir =
     config?.captureDir || join(homedir(), ".contextio", "captures");
