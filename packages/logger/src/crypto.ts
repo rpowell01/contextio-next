@@ -15,6 +15,7 @@
  * Key derivation: PBKDF2 + HMAC-SHA256, 600 000 iterations, 32-byte key.
  */
 
+import { promisify } from "node:util";
 import {
   pbkdf2,
   randomBytes,
@@ -22,6 +23,8 @@ import {
   createDecipheriv,
 } from "node:crypto";
 import { Buffer } from "node:buffer";
+
+const pbkdf2Async = promisify(pbkdf2);
 
 const KEY_LENGTH = 32; // AES-256
 const IV_LENGTH = 12; // 96 bits — recommended for GCM
@@ -47,7 +50,7 @@ export async function deriveKey(
   salt?: Uint8Array,
 ): Promise<{ key: Buffer; salt: Uint8Array }> {
   const resolvedSalt = salt ?? randomBytes(SALT_LENGTH);
-  const key = await pbkdf2(
+  const key = await pbkdf2Async(
     keyMaterial,
     resolvedSalt,
     PBKDF2_ITERATIONS,
