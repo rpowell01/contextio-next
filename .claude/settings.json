@@ -1,14 +1,37 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(timeout 300 cat /tmp/claude-1000/-home-russ-code-contextio-next/1c4badbe-e5cd-4b79-a4b3-01c28ea4d292/tasks/b692kimde.output)",
+      "Bash(python3 -c \"import sys, json; data = json.load\\(sys.stdin\\); [print\\(f\\\\\"{d['id']}: {d['title']} [{d['status']}]\\\\\"\\) for d in data if 'contextio-mol' in d['id']]\")",
+      "Bash(node test-perf.js)",
+      "Bash(pnpm dev *)",
+      "Bash(curl -s http://localhost:3001)",
+      "Bash(curl -s \"http://localhost:3001/api/redactions?summary=true\")",
+      "Bash(pkill -f \"next\")",
+      "Bash(cat /tmp/dev-server.log | head -100)",
+      "Read(//tmp/**)",
+      "Bash(cat /tmp/dev-server.log)",
+      "Bash(cat /tmp/web-dev.log 2>/dev/null | head -50)",
+      "Bash(lsof -ti:3001)",
+      "Bash(xargs -r kill -9)",
+      "Bash(kill -9 471617)",
+      "Bash(cat /tmp/web-dev.log | tail -100)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(fuser -k 3001/tcp)",
+      "Bash(rm -rf /home/russ/code/contextio-next/packages/web/.next)",
+      "Bash(grep -n \"const { fs, path }\" /home/russ/code/contextio-next/packages/web/lib/sessions/utils.ts)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "",
         "hooks": [
           {
-            "command": "bd prime --hook-json",
-            "type": "command"
+            "type": "command",
+            "command": "bd prime --hook-json"
           }
-        ],
-        "matcher": ""
+        ]
       }
     ]
   }

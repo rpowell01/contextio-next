@@ -27,7 +27,7 @@ export default function HomePage() {
   }, []);
 
 useEffect(() => {
-  fetch("/api/redactions")
+  fetch("/api/redactions?summary=true")
   .then((res) => res.json())
   .then((data: { summary: { totalRedactions: number; byType: Record<string, number> } }) => setRedactionsSummary(data.summary))
   .catch(console.error);

@@ -1,13 +1,6 @@
-import fs from "fs/promises";
-import { join } from "path";
-
 import { applyLogDir, getCaptureDir, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
-
-function getSettingsFile(): string {
-  const { homedir } = require("os");
-  return join(process.env.HOME ?? homedir(), ".contextio-next", "settings.json");
-}
+import { ensureSettingsFile, readSettingsFile } from "@/lib/node-utils";
 
 let cleanupTimer: NodeJS.Timeout | null = null;
 let schedulerStarted = false;
@@ -28,25 +21,28 @@ async function loadSettings(): Promise<{
   let capturedLogDir: string | undefined;
   let cleanupSettings: { enabled: boolean; maxAgeDays: number; intervalHours: number } | null = null;
   try {
-    const raw = await fs.readFile(getSettingsFile(), "utf8");
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null) {
-      const obj = parsed as Record<string, unknown>;
-      if (typeof obj.logDir === "string") capturedLogDir = obj.logDir;
-      cleanupSettings = {
-        enabled:
-          typeof obj.captureCleanupEnabled === "boolean"
-            ? obj.captureCleanupEnabled
-            : defaultSettings().enabled,
-        maxAgeDays:
-          typeof obj.captureCleanupMaxAgeDays === "number" && Number.isInteger(obj.captureCleanupMaxAgeDays)
-            ? obj.captureCleanupMaxAgeDays
-            : defaultSettings().maxAgeDays,
-        intervalHours:
-          typeof obj.captureCleanupIntervalHours === "number" && Number.isInteger(obj.captureCleanupIntervalHours)
-            ? obj.captureCleanupIntervalHours
-            : defaultSettings().intervalHours,
-      };
+    await ensureSettingsFile(DEFAULT_SETTINGS);
+    const raw = await readSettingsFile();
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === "object" && parsed !== null) {
+        const obj = parsed as Record<string, unknown>;
+        if (typeof obj.logDir === "string") capturedLogDir = obj.logDir;
+        cleanupSettings = {
+          enabled:
+            typeof obj.captureCleanupEnabled === "boolean"
+              ? obj.captureCleanupEnabled
+              : defaultSettings().enabled,
+          maxAgeDays:
+            typeof obj.captureCleanupMaxAgeDays === "number" && Number.isInteger(obj.captureCleanupMaxAgeDays)
+              ? obj.captureCleanupMaxAgeDays
+              : defaultSettings().maxAgeDays,
+          intervalHours:
+            typeof obj.captureCleanupIntervalHours === "number" && Number.isInteger(obj.captureCleanupIntervalHours)
+              ? obj.captureCleanupIntervalHours
+              : defaultSettings().intervalHours,
+        };
+      }
     }
   } catch {
     // ignore settings read errors; fall back to cleanup defaults below
@@ -65,13 +61,16 @@ async function runCleanup(): Promise<void> {
   const cutoff = Date.now() - settings.maxAgeDays * 24 * 60 * 60 * 1000;
   const files = await listCaptureFiles();
   const captureDir = getCaptureDir();
+  const [fsModule, pathModule] = await Promise.all([import("fs/promises"), import("path")]);
+  const fs = fsModule.default;
+  const path = pathModule.join;
   for (const file of files) {
-    const filepath = join(captureDir, file);
+    const filepath = path(captureDir, file);
     try {
       const stats = await fs.stat(filepath);
       if (stats.mtimeMs >= cutoff) continue;
       await fs.unlink(filepath);
-      await fs.unlink(join(captureDir, metaFilenameFor(file))).catch(() => {});
+      await fs.unlink(path(captureDir, metaFilenameFor(file))).catch(() => {});
     } catch {
       // ignore individual file errors (e.g., already deleted, permissions)
     }

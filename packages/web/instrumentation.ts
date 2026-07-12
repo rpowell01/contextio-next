@@ -1,24 +1,7 @@
 async function applyPersistedSettings(): Promise<void> {
-  // Dynamic imports for Node.js only
-  const { homedir } = await import("os");
-  const fs = await import("fs/promises");
-  const { join } = await import("path");
-  const { applyLogDir } = await import("@/lib/sessions/utils");
-  
-  const SETTINGS_FILE = join(homedir(), ".contextio-next", "settings.json");
-  
-  try {
-    const raw = await fs.readFile(SETTINGS_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null) {
-      const obj = parsed as Record<string, unknown>;
-      if (typeof obj.logDir === "string") {
-        applyLogDir(obj.logDir);
-      }
-    }
-  } catch {
-    // Ignore settings read errors
-  }
+  // Dynamic import to avoid bundling Node.js modules in edge runtime
+  const { applyPersistedSettings: applySettingsNode } = await import("@/lib/node-utils");
+  await applySettingsNode(applyLogDir);
 }
 
 function validateCsrfSecret(): void {
@@ -43,3 +26,5 @@ export async function register(): Promise<void> {
   const { startCleanupScheduler } = await import("@/lib/cleanup-scheduler");
   await startCleanupScheduler();
 }
+
+import { applyLogDir } from "@/lib/sessions/utils";

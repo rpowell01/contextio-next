@@ -21,34 +21,63 @@ interface RedactionDetailRow {
   postRedactionValue: string;
 }
 
-interface RedactionsData {
-  summary: RedactionSummary;
+interface PaginatedDetailResponse {
   details: RedactionDetailRow[];
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totalCount: number;
 }
 
+const PAGE_SIZE = 50;
+
 export default function RedactionsPage() {
-  const [data, setData] = useState<RedactionsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<RedactionSummary | null>(null);
+  const [details, setDetails] = useState<RedactionDetailRow[]>([]);
+  const [loadingSummary, setLoadingSummary] = useState(true);
+  const [loadingDetails, setLoadingDetails] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const router = useRouter();
 
+  // Fetch summary (fast, cached)
   useEffect(() => {
-    async function fetchRedactions() {
+    async function fetchSummary() {
       try {
-        setLoading(true);
-        const response = await fetch("/api/redactions");
-        if (!response.ok) throw new Error("Failed to fetch redactions");
+        const response = await fetch("/api/redactions?summary=true");
+        if (!response.ok) throw new Error("Failed to fetch redaction summary");
         const json = await response.json();
-        setData(json);
+        setSummary(json.summary);
+      } catch (e) {
+        console.error("Error fetching summary:", e);
+      }
+    }
+    fetchSummary();
+  }, []);
+
+  // Fetch details for current page
+  useEffect(() => {
+    async function fetchDetails() {
+      try {
+        setLoadingDetails(true);
+        const response = await fetch(`/api/redactions/detail?page=${page}&pageSize=${PAGE_SIZE}`);
+        if (!response.ok) throw new Error("Failed to fetch redaction details");
+        const json: PaginatedDetailResponse = await response.json();
+        setDetails(json.details);
+        setTotalPages(json.totalPages);
+        setTotalCount(json.totalCount);
         setError(null);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Unknown error");
       } finally {
-        setLoading(false);
+        setLoadingDetails(false);
+        setLoadingSummary(false);
       }
     }
-    fetchRedactions();
-  }, []);
+    fetchDetails();
+  }, [page]);
 
   const handleRowClick = (row: RedactionDetailRow) => {
     if (row.sessionId) {
@@ -56,7 +85,13 @@ export default function RedactionsPage() {
     }
   };
 
-  if (loading) {
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setPage(newPage);
+    }
+  };
+
+  if (loadingSummary || loadingDetails) {
     return (
       <MainLayout>
         <div className="space-y-6">
@@ -120,9 +155,9 @@ export default function RedactionsPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border p-4 bg-red-50 border-red-200">
             <div className="text-sm text-muted-foreground">Total Redactions</div>
-            <div className="text-3xl font-bold text-red-600">{data?.summary.totalRedactions ?? 0}</div>
+            <div className="text-3xl font-bold text-red-600">{summary?.totalRedactions ?? 0}</div>
           </div>
-          {Object.entries(data?.summary.byType ?? {}).slice(0, 3).map(([type, count]) => (
+          {Object.entries(summary?.byType ?? {}).slice(0, 3).map(([type, count]) => (
             <div key={type} className="rounded-lg border p-4 bg-muted/50">
               <div className="text-sm text-muted-foreground capitalize">{type}</div>
               <div className="text-2xl font-bold">{count}</div>
@@ -134,13 +169,13 @@ export default function RedactionsPage() {
         <div className="rounded-lg border p-4">
           <h2 className="text-xl font-semibold mb-4">Breakdown by Redaction Type</h2>
           <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-5">
-            {Object.entries(data?.summary.byType ?? {}).map(([type, count]) => (
+            {Object.entries(summary?.byType ?? {}).map(([type, count]) => (
               <div key={type} className="rounded-lg border p-3 hover:bg-accent transition-colors">
                 <div className="text-sm text-muted-foreground capitalize">{type.replace(/_/g, " ")}</div>
                 <div className="text-2xl font-bold">{count}</div>
               </div>
             ))}
-            {Object.keys(data?.summary.byType ?? {}).length === 0 && (
+            {Object.keys(summary?.byType ?? {}).length === 0 && (
               <div className="col-span-full text-center text-muted-foreground py-8">
                 No redactions found
               </div>
@@ -148,12 +183,12 @@ export default function RedactionsPage() {
           </div>
         </div>
 
-        {/* Details Table */}
+        {/* Details Table with Pagination */}
         <div className="rounded-lg border">
           <div className="border-b p-4">
             <h2 className="text-xl font-semibold">Redaction Details</h2>
             <p className="text-sm text-muted-foreground">
-              {data?.details.length ?? 0} total redaction entries
+              {totalCount} total redaction entries • Page {page} of {totalPages || 1}
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -171,7 +206,7 @@ export default function RedactionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data?.details.map((row, index) => (
+                {details.map((row, index) => (
                   <tr
                     key={`${row.captureId}-${index}`}
                     className="border-b hover:bg-accent/50 cursor-pointer transition-colors"
@@ -191,7 +226,7 @@ export default function RedactionsPage() {
                     </td>
                   </tr>
                 ))}
-                {(!data?.details || data.details.length === 0) && (
+                {(!details || details.length === 0) && (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-muted-foreground">
                       No redaction details found
@@ -201,6 +236,34 @@ export default function RedactionsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="border-t p-4 flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                Showing {Math.min((page - 1) * PAGE_SIZE + 1, totalCount)} to {Math.min(page * PAGE_SIZE, totalCount)} of {totalCount} entries
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page <= 1}
+                  className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ← Previous
+                </button>
+                <span className="px-3 text-sm">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page >= totalPages}
+                  className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </MainLayout>

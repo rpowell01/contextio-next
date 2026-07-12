@@ -13,6 +13,7 @@ import {
   MAX_FILE_SIZE,
   computeContextValues,
   computeTokenUsage,
+  aggregateRedactionMetaBySession,
 } from "@/lib/sessions/utils";
 import {
   countRedactionsInResponse,
@@ -86,8 +87,15 @@ interface RawCaptureData extends Record<string, unknown> {
 
 /**
  * Group captures by session ID and compute summary metrics.
+ * Uses pre-aggregated redaction metadata when provided to avoid rescanning captures.
  */
-function groupCapturesIntoSessions(captures: RawCaptureData[]): {
+function groupCapturesIntoSessions(
+  captures: RawCaptureData[],
+  redactionMetaBySession?: Map<
+    string,
+    { totalRedactions: number; byRule: Record<string, number> }
+  >,
+): {
   summaries: SessionSummary[];
   metrics: Record<string, SessionMetrics>;
 } {
@@ -112,9 +120,7 @@ function groupCapturesIntoSessions(captures: RawCaptureData[]): {
     let totalRequestBytes = 0;
     let totalResponseBytes = 0;
     let totalTimeMs = 0;
-    let totalRedactions = 0;
     let totalContextValues = 0;
-    const byRule: Record<string, number> = {};
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
@@ -134,30 +140,37 @@ function groupCapturesIntoSessions(captures: RawCaptureData[]): {
       }
 
       // Count context values from request body
-      // Uses the same scalar-leaf counting logic as /api/sessions/[id] so list
-      // and detail views agree for the same session (replaces prior
-      // messages.reduce(...) formula that under-counted non-message captures).
       totalContextValues += computeContextValues(c.requestBody).count;
 
       const usage = computeTokenUsage(c.responseBody, c.requestBody);
       totalInputTokens += usage.input;
       totalOutputTokens += usage.output;
+    }
 
-      // Prefer canonical capture.redactionStats; fall back to recomputation for legacy captures
-      const cachedStats = getCaptureRedactionStats(
-        c as unknown as Record<string, unknown>,
-      );
-      const redactionCounts: CaptureRedactionStats =
-        cachedStats ??
-        countRedactionsInResponse(c.responseBody, c.requestBody, false);
-      totalRedactions += redactionCounts.totalRedactions;
-      for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
-        byRule[rule] = (byRule[rule] || 0) + count;
+    // Use pre-aggregated redaction metadata if available
+    let totalRedactions = 0;
+    const byRule: Record<string, number> = {};
+    if (redactionMetaBySession && redactionMetaBySession.has(sessionId)) {
+      const meta = redactionMetaBySession.get(sessionId)!;
+      totalRedactions = meta.totalRedactions;
+      Object.assign(byRule, meta.byRule);
+    } else {
+      // Fallback: compute from captures (legacy behavior)
+      for (const c of sessionCaptures) {
+        const cachedStats = getCaptureRedactionStats(
+          c as unknown as Record<string, unknown>,
+        );
+        const redactionCounts: CaptureRedactionStats =
+          cachedStats ??
+          countRedactionsInResponse(c.responseBody, c.requestBody, false);
+        totalRedactions += redactionCounts.totalRedactions;
+        for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
+          byRule[rule] = (byRule[rule] || 0) + count;
+        }
       }
     }
 
     // Compute throughput (bytes/sec)
-
     const timeSec = totalTimeMs / 1000 || 1;
     const inboundThroughput = totalRequestBytes / timeSec;
     const outboundThroughput = totalResponseBytes / timeSec;
@@ -433,6 +446,9 @@ export async function GET(request: Request) {
     );
     // Return grouped summaries if requested
     if (groupBySourceDest) {
+      // Load pre-aggregated redaction metadata from .redact-meta.json files
+      const redactionMetaBySession = await aggregateRedactionMetaBySession();
+
       const rawCaptures: RawCaptureData[] = sessions.map((s) => ({
         sessionId: s.sessionId || null,
         source: s.source,
@@ -446,7 +462,10 @@ export async function GET(request: Request) {
         responseBody: undefined,
       }));
 
-      const { summaries, metrics } = groupCapturesIntoSessions(rawCaptures);
+      const { summaries, metrics } = groupCapturesIntoSessions(
+        rawCaptures,
+        redactionMetaBySession,
+      );
       summaries.sort(
         (a, b) =>
           new Date(b.lastTimestamp).getTime() -

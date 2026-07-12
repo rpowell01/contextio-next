@@ -1,8 +1,6 @@
-import fs from "fs/promises";
-import { join, resolve } from "path";
+import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
 
 import type { Session, Capture } from "@/types/api";
-import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
 
 // Re-export Session and Capture types for convenience
 export type { Session, Capture } from "@/types/api";
@@ -11,15 +9,29 @@ export type { Session, Capture } from "@/types/api";
 // Falls back to default ~/.contextio/captures for local development
 let _captureDir: string | undefined;
 
-function getDefaultCaptureDir(): string {
-  const { homedir } = require("os");
-  return process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
+// Import Node.js built-ins dynamically inside functions to avoid bundling issues
+function getNodeUtils(): Promise<{
+  fs: typeof import("fs/promises");
+  path: { join: typeof import("path").join; resolve: typeof import("path").resolve };
+  os: { homedir: typeof import("os").homedir };
+}> {
+  return Promise.all([
+    import("fs/promises"),
+    import("path"),
+    import("os"),
+  ]).then(([fs, path, os]) => ({
+    fs,
+    path: { join: path.join, resolve: path.resolve },
+    os: { homedir: os.homedir },
+  }));
 }
 
 /** Read the capture directory currently in effect. */
 export function getCaptureDir(): string {
   if (!_captureDir) {
-    _captureDir = getDefaultCaptureDir();
+    // We can't call getDefaultCaptureDir here because it needs Node.js modules
+    // The caller should call applyLogDir or setCaptureDir to set it properly
+    _captureDir = process.env.LOGGER_CAPTURE_DIR || ".contextio/captures";
   }
   return _captureDir;
 }
@@ -73,14 +85,103 @@ export function metaFilenameFor(captureFilename: string): string {
  * List capture files from the capture directory.
  */
 export async function listCaptureFiles(): Promise<string[]> {
+  const { fs } = await getNodeUtils();
   try {
-  const files = await fs.readdir(getCaptureDir());
+    const files = await fs.readdir(getCaptureDir());
     return files
       .filter((f) => isValidFilename(f) && !f.endsWith(".tmp") && !f.includes("redact-meta"))
       .sort();
   } catch {
     return [];
   }
+}
+
+/**
+ * List redaction metadata files (*.redact-meta.json) from the capture directory.
+ */
+export async function listRedactionMetaFiles(): Promise<string[]> {
+  const { fs } = await getNodeUtils();
+  try {
+    const files = await fs.readdir(getCaptureDir());
+    return files
+      .filter((f) => f.endsWith(".redact-meta.json"))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Load redaction metadata from a metadata file.
+ */
+export async function loadRedactionMeta(
+  filename: string,
+): Promise<{
+  totalRedactions: number;
+  byRule: Record<string, number>;
+  sessionId: string | null;
+  provider?: string;
+  targetUrl?: string;
+  timestamp?: string;
+} | null> {
+  const { fs, path } = await getNodeUtils();
+  try {
+    const filepath = path.join(getCaptureDir(), filename);
+    const raw = await fs.readFile(filepath, "utf8");
+    const meta = JSON.parse(raw) as {
+      totalRedactions?: number;
+      byRule?: Record<string, number>;
+      sessionId?: string;
+      provider?: string;
+      targetUrl?: string;
+      timestamp?: string;
+    };
+
+    if (typeof meta.totalRedactions !== "number") return null;
+    if (!meta.byRule || typeof meta.byRule !== "object") return null;
+
+    return {
+      totalRedactions: meta.totalRedactions,
+      byRule: meta.byRule as Record<string, number>,
+      sessionId: typeof meta.sessionId === "string" ? meta.sessionId : null,
+      provider: meta.provider,
+      targetUrl: meta.targetUrl,
+      timestamp: meta.timestamp,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Aggregate redaction counts from metadata files, grouped by sessionId.
+ * Returns a map of sessionId -> { totalRedactions, byRule }.
+ */
+export async function aggregateRedactionMetaBySession(): Promise<
+  Map<string, { totalRedactions: number; byRule: Record<string, number> }>
+> {
+  const metaFiles = await listRedactionMetaFiles();
+  const sessionMap = new Map<
+    string,
+    { totalRedactions: number; byRule: Record<string, number> }
+  >();
+
+  for (const filename of metaFiles) {
+    const meta = await loadRedactionMeta(filename);
+    if (!meta || !meta.sessionId) continue;
+
+    const existing = sessionMap.get(meta.sessionId) ?? {
+      totalRedactions: 0,
+      byRule: {},
+    };
+    existing.totalRedactions += meta.totalRedactions;
+    for (const [rule, count] of Object.entries(meta.byRule)) {
+      existing.byRule[rule] = (existing.byRule[rule] ?? 0) + count;
+    }
+    sessionMap.set(meta.sessionId, existing);
+  }
+
+  return sessionMap;
 }
 
 /**
@@ -125,23 +226,28 @@ export function extractCaptureMetadata(
 }
 
 /** Canonical `logDir` → absolute capture-directory resolver. */
-export function resolveLogDir(logDir: string): string {
-  const { homedir } = require("os");
+export async function resolveLogDir(logDir: string): Promise<string> {
+  const { path, os } = await getNodeUtils();
   const trimmed = logDir.trim();
   if (!trimmed) {
-    return process.env.LOGGER_CAPTURE_DIR || getDefaultCaptureDir();
+    return process.env.LOGGER_CAPTURE_DIR || (await getDefaultCaptureDirAsync());
   }
-  if (trimmed === "~") return homedir();
-  if (trimmed.startsWith("~/")) return join(homedir(), trimmed.slice(2));
+  if (trimmed === "~") return os.homedir();
+  if (trimmed.startsWith("~/")) return path.join(os.homedir(), trimmed.slice(2));
   if (trimmed.startsWith("/")) return trimmed;
-  return resolve(process.cwd(), trimmed);
+  return path.resolve(process.cwd(), trimmed);
+}
+
+async function getDefaultCaptureDirAsync(): Promise<string> {
+  const { path, os } = await getNodeUtils();
+  return path.join(os.homedir(), ".contextio", "captures");
 }
 
 /** Resolve and apply a Settings `logDir` value as the active capture directory. */
-export function applyLogDir(logDir: string): void {
-  setCaptureDir(resolveLogDir(logDir));
+export async function applyLogDir(logDir: string): Promise<void> {
+  const resolved = await resolveLogDir(logDir);
+  setCaptureDir(resolved);
 }
-
 
 /**
  * Safely extract session ID from filename or data.

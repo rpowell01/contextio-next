@@ -3,6 +3,7 @@ import path from "path";
 const nextConfig = {
   reactStrictMode: true,
   turbopack: {},
+  serverExternalPackages: ["fs/promises", "path", "os", "crypto", "stream", "util", "buffer", "querystring", "url", "zlib", "http", "https", "assert", "constants", "process"],
   webpack: (config, { isServer }) => {
     config.resolve.alias["@"] = path.join(process.cwd(), "");
     if (!isServer) {
