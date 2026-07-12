@@ -3,15 +3,20 @@
  *
  * Uses Node.js built-in `node:crypto` — zero external dependencies.
  *
+ * All crypto operations are async (deriveKey, encrypt, decrypt) using the
+ * non-blocking `pbkdf2` API. This aligns with the parent spec (contextio-mol-6rd)
+ * and avoids blocking the event loop during PBKDF2 key derivation (see
+ * contextio-mol-6rd.2 hardening bead).
+ *
  * Wire format: JSON object with base64url-encoded `ciphertext` (GCM auth tag
  * prepended to ciphertext bytes), `salt`, and `iv`. The caller **must**
  * persist the salt alongside the ciphertext and provide it back to `decrypt`.
  *
- * Key derivation: PBKDF2 + HMAC-SHA256, 100 000 iterations, 32-byte key.
+ * Key derivation: PBKDF2 + HMAC-SHA256, 600 000 iterations, 32-byte key.
  */
 
 import {
-  pbkdf2Sync,
+  pbkdf2,
   randomBytes,
   createCipheriv,
   createDecipheriv,
@@ -21,7 +26,11 @@ import { Buffer } from "node:buffer";
 const KEY_LENGTH = 32; // AES-256
 const IV_LENGTH = 12; // 96 bits — recommended for GCM
 const SALT_LENGTH = 16;
-const PBKDF2_ITERATIONS = 100_000;
+
+// OWASP (2023) recommends >= 600,000 iterations for PBKDF2-HMAC-SHA256
+// to provide adequate resistance against GPU-based password cracking.
+// See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Based_Key_Derivation_Cheat_Sheet.html
+const PBKDF2_ITERATIONS = 600_000;
 const DIGEST_ALGO = "sha256";
 
 /**
@@ -29,22 +38,23 @@ const DIGEST_ALGO = "sha256";
  *
  * If no salt is provided a fresh random salt is generated and returned.
  * The caller must persist this salt with the ciphertext.
+ *
+ * Uses the async `pbkdf2` variant to avoid blocking the event loop
+ * during the expensive key-derivation operation.
  */
-export function deriveKey(
+export async function deriveKey(
   keyMaterial: string,
   salt?: Uint8Array,
-): { key: Uint8Array; salt: Uint8Array } {
+): Promise<{ key: Buffer; salt: Uint8Array }> {
   const resolvedSalt = salt ?? randomBytes(SALT_LENGTH);
-
-  const key = pbkdf2Sync(
+  const key = await pbkdf2(
     keyMaterial,
     resolvedSalt,
     PBKDF2_ITERATIONS,
     KEY_LENGTH,
     DIGEST_ALGO,
   );
-
-  return { key: new Uint8Array(key), salt: resolvedSalt };
+  return { key, salt: resolvedSalt };
 }
 
 /**
@@ -54,13 +64,13 @@ export function deriveKey(
  * - the 16-byte GCM authentication tag at the start
  * - followed by the AES-GCM ciphertext bytes
  */
-export function encrypt(
+export async function encrypt(
   plaintext: string,
   keyMaterial: string,
-): { ciphertext: string; salt: string; iv: string } {
+): Promise<{ ciphertext: string; salt: string; iv: string }> {
   validateKey(keyMaterial);
 
-  const { key, salt } = deriveKey(keyMaterial);
+  const { key, salt } = await deriveKey(keyMaterial);
   const iv = randomBytes(IV_LENGTH);
 
   const cipher = createCipheriv("aes-256-gcm", key, iv);
@@ -84,10 +94,10 @@ export function encrypt(
  * authentication tag, and returns the plaintext.
  * Throws on auth failure or tampering.
  */
-export function decrypt(
+export async function decrypt(
   encryptedJson: string,
   keyMaterial: string,
-): string {
+): Promise<string> {
   validateKey(keyMaterial);
 
   let payload: { ciphertext: string; salt: string; iv: string };
@@ -119,11 +129,9 @@ export function decrypt(
   const actualCiphertext = sealed.subarray(16);
 
   // Derive the key using the stored salt
-  const { key } = deriveKey(keyMaterial, saltBuf);
-
-  const decipher = createDecipheriv("aes-256-gcm", key, ivFromPayload);
+  const { key } = await deriveKey(keyMaterial, saltBuf);
+const decipher = createDecipheriv("aes-256-gcm", key, ivFromPayload);
   decipher.setAuthTag(tag);
-
   try {
     return decipher.update(actualCiphertext, undefined, "utf8") + decipher.final();
   } catch {
@@ -144,7 +152,7 @@ export function validateKey(keyMaterial: string): boolean {
 }
 
 /* ----------------------------------------------------------------------- */
-/* Helpers                                                                */
+/* Helpers */
 /* ----------------------------------------------------------------------- */
 
 function base64url(buf: Buffer): string {
