@@ -4,7 +4,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Search, ChevronLeft, ChevronRight, Lock, EyeOff, ShieldAlert } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import type { ContainerEnvVar } from "@/types/api";
 
@@ -79,17 +79,31 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
     return ["all", ...Array.from(allSources)];
   }, [envVars]);
 
-  const filteredEnvVars = useMemo(() => {
-    return envVars.filter((v) => {
+  // Sort environment variables by key (alphabetically) for consistent ordering
+  const sortedEnvVars = useMemo(() => {
+    return [...envVars].sort((a, b) => a.key.localeCompare(b.key));
+  }, [envVars]);
+
+  // Separate regular and blacklisted variables
+  const regularEnvVars = useMemo(() => {
+    return sortedEnvVars.filter((v) => v.source !== "blacklisted");
+  }, [sortedEnvVars]);
+
+  const blacklistedEnvVars = useMemo(() => {
+    return sortedEnvVars.filter((v) => v.source === "blacklisted");
+  }, [sortedEnvVars]);
+
+  const filteredRegularEnvVars = useMemo(() => {
+    return regularEnvVars.filter((v) => {
       const matchesSearch =
         v.key.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.value.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesSource = filterSource === "all" || v.source === filterSource;
       return matchesSearch && matchesSource;
     });
-  }, [envVars, searchTerm, filterSource]);
+  }, [regularEnvVars, searchTerm, filterSource]);
 
-  const paginatedEnvVars = filteredEnvVars.slice(
+  const paginatedRegularEnvVars = filteredRegularEnvVars.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
@@ -193,7 +207,7 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
       </div>
 
       <div className="text-sm text-muted-foreground mb-2">
-        Showing {paginatedEnvVars.length} of {filteredEnvVars.length} variables
+        Showing {paginatedRegularEnvVars.length} of {filteredRegularEnvVars.length} variables
       </div>
 
       <div className="max-h-96 overflow-y-auto">
@@ -207,14 +221,14 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
             </tr>
           </thead>
           <tbody>
-            {paginatedEnvVars.length === 0 ? (
+            {paginatedRegularEnvVars.length === 0 ? (
               <tr>
                 <td colSpan={4} className="py-8 text-center text-muted-foreground">
                   No environment variables found
                 </td>
               </tr>
             ) : (
-              paginatedEnvVars.map((envVar) => (
+              paginatedRegularEnvVars.map((envVar) => (
                 <tr key={envVar.key} className="border-b">
                   <td className="py-2 font-mono text-sm">{envVar.key}</td>
                   <td className="py-2">
@@ -222,26 +236,28 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
                       <code className="font-mono text-sm max-w-[200px] truncate">
                         {envVar.value}
                       </code>
-                      <button
-                        onClick={() => copyToClipboard(envVar.value)}
-                        className="opacity-50 hover:opacity-100"
-                        aria-label={`Copy ${envVar.key} value`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          strokeWidth={2}
+                      {envVar.value && envVar.value !== "[REDACTED]" && (
+                        <button
+                          onClick={() => copyToClipboard(envVar.value)}
+                          className="opacity-50 hover:opacity-100"
+                          aria-label={`Copy ${envVar.key} value`}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
-                      </button>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="py-2 text-muted-foreground">
@@ -253,6 +269,87 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls for regular variables */}
+      {(() => {
+        const totalPages = Math.ceil(filteredRegularEnvVars.length / ITEMS_PER_PAGE);
+        if (totalPages <= 1) return null;
+
+        return (
+          <div className="flex items-center justify-between mt-4 pt-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages} (showing {paginatedRegularEnvVars.length} of {filteredRegularEnvVars.length} variables)
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="inline-flex items-center gap-1 px-2 py-1 text-sm border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="inline-flex items-center gap-1 px-2 py-1 text-sm border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Next page"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Blacklisted/Hidden Variables Section */}
+      {blacklistedEnvVars.length > 0 && (
+        <div className="mt-6 pt-4 border-t">
+          <div className="flex items-center gap-2 mb-3 text-sm text-muted-foreground">
+            <ShieldAlert className="h-5 w-5 text-amber-500" />
+            <span className="font-medium text-foreground">Hidden Variables ({blacklistedEnvVars.length})</span>
+          </div>
+          <p className="text-sm text-muted-foreground mb-3">
+            The following environment variables exist but their values are hidden for security reasons.
+            These keys match sensitive patterns (passwords, secrets, tokens, API keys, etc.).
+          </p>
+          <div className="max-h-48 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th scope="col" className="text-left py-2 font-medium">Key</th>
+                  <th scope="col" className="text-left py-2 font-medium">Value</th>
+                  <th scope="col" className="text-left py-2 font-medium">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {blacklistedEnvVars.map((envVar) => (
+                  <tr key={envVar.key} className="border-b">
+                    <td className="py-2 font-mono text-sm">{envVar.key}</td>
+                    <td className="py-2">
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono text-sm max-w-[200px] truncate text-muted-foreground">
+                          [REDACTED]
+                        </code>
+                        <Lock className="h-4 w-4 text-muted-foreground" />
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </td>
+                    <td className="py-2 text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                        <ShieldAlert className="h-3 w-3" />
+                        Hidden (Security)
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

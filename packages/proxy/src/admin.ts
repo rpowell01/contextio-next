@@ -27,7 +27,7 @@ export interface ProxyStatus {
 export interface ProxyEnvVar {
   key: string;
   value: string;
-  source: "process" | "default";
+  source: "process" | "default" | "blacklisted";
 }
 
 // Log entry for the admin API
@@ -191,21 +191,24 @@ case "env": {
     return;
   }
 
-  // Blacklist keys that look sensitive so they can't be leaked via the admin API.
+  // Blacklist keys that look sensitive so their values can't be leaked via the admin API.
   // Coolify-set variables (e.g. MY_TEST) and production-critical values like CSRF_SECRET
   // are blocked by the SECRET pattern.
   const BLACKLISTED_PATTERNS: RegExp[] = [
-    /(^|_)(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DATABASE_URL|CREDENTIAL|ACCESS_KEY|CSRF_SECRET)(_|$)/i,
+    /(^|_)(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DATABASE_URL|CREDENTIAL|ACCESS_KEY|CSRF_SECRET|ENCRYPTION_KEY)(_|$)/i,
   ];
 
+  const isBlacklisted = (key: string): boolean => {
+    return BLACKLISTED_PATTERNS.some((pattern) => pattern.test(key));
+  };
+
+  const MASKED_VALUE = "[REDACTED]";
+
   const envVars: ProxyEnvVar[] = Object.entries(process.env)
-    .filter(([key]) => {
-      return !BLACKLISTED_PATTERNS.some((pattern) => pattern.test(key));
-    })
     .map(([key, value]) => ({
       key,
-      value: value ?? "",
-      source: "process" as const,
+      value: isBlacklisted(key) ? MASKED_VALUE : (value ?? ""),
+      source: isBlacklisted(key) ? ("blacklisted" as const) : ("process" as const),
     }));
 
   // Add defaults for keys that might not be set, preserving the previous contract

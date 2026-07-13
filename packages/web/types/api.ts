@@ -593,7 +593,7 @@ export interface ProxyEnvVar {
   /** The environment variable value */
   value: string;
   /** Source of the environment variable */
-  source: "process" | "default";
+  source: "process" | "default" | "blacklisted";
 }
 
 /**

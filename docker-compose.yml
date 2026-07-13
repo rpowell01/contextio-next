@@ -11,6 +11,8 @@ services:
       - captures:/app/captures
       # Policy directory - writable by node user
       - policy:/app/custom-policy
+      # Settings directory - persists settings.json across restarts
+      - settings:/home/node/.contextio-next
     environment:
       # Logging configuration
       LOGGER_CAPTURE_DIR: /app/captures
@@ -36,4 +38,6 @@ volumes:
   captures:
     driver: local
   policy:
+    driver: local
+  settings:
     driver: local

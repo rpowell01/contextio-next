@@ -126,9 +126,9 @@ RUN echo 'import { createRedactPlugin } from "@contextio/redact";' > /app/redact
 
 # Create directories at build time with proper permissions
 # This avoids permission issues when volumes are mounted by external tools like Coolify
-RUN mkdir -p /app/captures /app/custom-policy && \
-    chmod 700 /app/captures /app/custom-policy && \
-    ls -la /app/captures /app/custom-policy
+RUN mkdir -p /app/captures /app/custom-policy /home/node/.contextio-next && \
+    chmod 700 /app/captures /app/custom-policy /home/node/.contextio-next && \
+    ls -la /app/captures /app/custom-policy /home/node/.contextio-next
 
 # Single entry point: combined proxy + web UI on port 4040
 RUN echo '#!/bin/sh' > /app/start.sh && \
@@ -161,7 +161,7 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
 
 # Fix permissions for node user (after all files are created)
 # Only change ownership of files we control, not mounted volumes
-RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /app/default-policy.json /app/captures && \
+RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /app/default-policy.json /app/captures /home/node/.contextio-next && \
     chmod +x /app/start.sh
 
 USER node
