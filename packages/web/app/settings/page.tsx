@@ -8,7 +8,17 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Loader2, Trash2 } from "lucide-react";
 
 // NOTE: /api/settings (GET and POST) has no authentication. Any client that can reach
 // the web server can read or overwrite settings. Treat the settings file as sensitive
@@ -110,6 +120,8 @@ export default function SettingsPage() {
   const [policyFileContents, setPolicyFileContents] = useState<string | null>(null);
   const [policyFileLoadError, setPolicyFileLoadError] = useState<string | null>(null);
   const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
 
   useEffect(() => {
     async function loadSettings() {
@@ -220,6 +232,30 @@ useEffect(() => {
       return;
     }
     setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleCleanupAll = async () => {
+    setIsCleaning(true);
+    try {
+      const result = await apiClient.clearCaptures();
+      if (result.success) {
+        setCleanupMessage({ type: "success", message: result.message });
+      } else {
+        setCleanupMessage({
+          type: "error",
+          message: `Error: ${result.message}`,
+        });
+      }
+    } catch (error) {
+      setCleanupMessage({
+        type: "error",
+        message:
+          error instanceof Error ? error.message : "Failed to clean captures",
+      });
+    } finally {
+      setIsCleaning(false);
+      setDeleteDialogOpen(false);
+    }
   };
 
   const renderSetting = (key: keyof Settings) => {
@@ -543,12 +579,59 @@ case "encryptionAtRest":
             <div className="space-y-4">
               {renderSetting("logDir")}
               {renderSetting("maxSessions")}
+              {renderSetting("captureCleanupEnabled")}
               {settings.captureCleanupEnabled && (
                 <div className="grid gap-4 md:grid-cols-2 pt-2 border-t">
                   {renderSetting("captureCleanupIntervalHours")}
                   {renderSetting("captureCleanupMaxAgeDays")}
                 </div>
               )}
+
+              <div className="pt-4 border-t">
+                <AlertDialog
+                  open={deleteDialogOpen}
+                  onOpenChange={setDeleteDialogOpen}
+                >
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="flex items-center gap-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remove All Captures
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete ALL capture files in the
+                        capture directory. This action cannot be undone. All
+                        captured API requests and responses will be lost.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <Button
+                        variant="destructive"
+                        disabled={isCleaning}
+                        onClick={handleCleanupAll}
+                        className="flex items-center gap-2"
+                      >
+                        {isCleaning ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Cleaning...
+                          </>
+                        ) : (
+                          "Yes, delete all captures"
+                        )}
+                      </Button>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </div>
           </div>
 
@@ -557,6 +640,7 @@ case "encryptionAtRest":
             <div className="space-y-4">
               {renderSetting("redactPreset")}
               {renderSetting("redactReversible")}
+              {renderSetting("redactPolicyFile")}
             </div>
           </div>
           <div className="rounded-lg border p-6">
