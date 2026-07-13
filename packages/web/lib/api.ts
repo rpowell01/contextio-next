@@ -88,6 +88,13 @@ class APIClient {
   }
 
   /**
+   * Get CSRF headers for external use (e.g., direct fetch calls)
+   */
+  public getCsrfHeaders(): HeadersInit {
+    return this.csrfHeaders();
+  }
+
+  /**
    * Combines multiple AbortSignals into a single signal.
    * Aborts when any of the provided signals abort.
    */

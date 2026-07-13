@@ -119,6 +119,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [policyFileContents, setPolicyFileContents] = useState<string | null>(null);
   const [policyFileLoadError, setPolicyFileLoadError] = useState<string | null>(null);
+  const [editedPolicyContent, setEditedPolicyContent] = useState<string>("");
   const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
@@ -172,6 +173,7 @@ useEffect(() => {
      }
      const payload = await response.json();
      if (!cancelled) setPolicyFileContents(JSON.stringify(payload, null, 2));
+     if (!cancelled) setEditedPolicyContent(JSON.stringify(payload, null, 2));
    } catch (error) {
      if (!cancelled) {
        setPolicyFileLoadError(error instanceof Error ? error.message : "Unable to load policy file");
@@ -310,79 +312,146 @@ useEffect(() => {
             />
           </div>
         );
- case "redactPreset": {
-   const presetDisabled =
-     isOverridden("redactPreset") || Boolean(settings.redactPolicyFile?.trim());
-   return (
-     <div>
-       <Label
-         htmlFor="redactPreset"
-         className="block text-sm font-medium mb-2"
-       >
-         Preset
-       </Label>
-       <select
-         id="redactPreset"
-         value={settings.redactPreset}
-         onChange={(e) =>
-           updateSetting(
-             "redactPreset",
-             e.target.value as "secrets" | "pii" | "strict",
-           )
-         }
-         className={`w-full px-3 py-2 border rounded-md ${presetDisabled ? "bg-muted cursor-not-allowed" : ""}`}
-         disabled={presetDisabled}
-       >
-         <option value="secrets">
-           secrets - API keys and tokens only
-         </option>
-         <option value="pii">
-           pii - Email, SSN, credit cards, phone numbers
-         </option>
-         <option value="strict">
-           strict - PII + IP addresses, dates of birth
-         </option>
-       </select>
-       <SettingHelp
-         meta={getMeta("redactPreset")}
-         description={SETTING_DESCRIPTIONS.redactPreset}
-       />
-     </div>
-   );
- }
+case "redactPreset": {
+        const presetDisabled = isOverridden("redactPreset") || Boolean(settings.redactPolicyFile?.trim());
+        const presetOverrideReason = isOverridden("redactPreset")
+          ? "Set by environment variable"
+          : settings.redactPolicyFile?.trim()
+            ? "Overridden by custom policy file"
+            : null;
+        return (
+          <div>
+            <Label
+              htmlFor="redactPreset"
+              className="block text-sm font-medium mb-2"
+            >
+              Redaction Preset
+              {presetOverrideReason && (
+                <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-normal">
+                  ({presetOverrideReason})
+                </span>
+              )}
+            </Label>
+            <select
+              id="redactPreset"
+              value={settings.redactPreset}
+              onChange={(e) =>
+                updateSetting("redactPreset", e.target.value as "secrets" | "pii" | "strict")
+              }
+              disabled={presetDisabled}
+              className={`w-full rounded-md px-3 py-2 text-sm border rounded-md ${
+                presetDisabled ? "bg-muted cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-primary"
+              }`}
+            >
+              <option value="secrets">Secrets (API keys, tokens, passwords)</option>
+              <option value="pii">PII (emails, names, phones, SSN)</option>
+              <option value="strict">Strict (all of the above + more)</option>
+            </select>
+            <SettingHelp
+              meta={getMeta("redactPreset")}
+              description={SETTING_DESCRIPTIONS.redactPreset}
+            />
+          </div>
+        );
+      }
 case "redactPolicyFile":
- return (
-   <div>
-     <Label htmlFor="redactPolicyFile" className="block text-sm font-medium mb-2" >
-       Redaction Policy File
-     </Label>
-     <Input id="redactPolicyFile" value={settings.redactPolicyFile} onChange={(e) => updateSetting("redactPolicyFile", e.target.value) } placeholder="/path/to/policy.yaml" disabled={isOverridden("redactPolicyFile")} className={
-       isOverridden("redactPolicyFile")
-         ? "bg-muted cursor-not-allowed"
-         : ""
-     } />
-     <SettingHelp
-       meta={getMeta("redactPolicyFile")}
-       description={SETTING_DESCRIPTIONS.redactPolicyFile}
-     />
-     {(policyFileContents || policyFileLoadError) && (
-       <div className="mt-3 space-y-2">
-         <h4 className="text-sm font-medium text-muted-foreground">
-           Active redaction policy
-         </h4>
-         {policyFileLoadError ? (
-           <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-             {policyFileLoadError}
-           </div>
-         ) : (
-           <pre className="rounded-md border bg-muted p-3 text-xs overflow-auto">
-             {policyFileContents}
-           </pre>
-         )}
-       </div>
-     )}
-   </div>
- );
+        return (
+          <div>
+            <Label htmlFor="redactPolicyFile" className="block text-sm font-medium mb-2">
+              Redaction Policy File
+            </Label>
+            <Input
+              id="redactPolicyFile"
+              value={settings.redactPolicyFile}
+              onChange={(e) => updateSetting("redactPolicyFile", e.target.value)}
+              placeholder="/path/to/policy.yaml"
+              disabled={isOverridden("redactPolicyFile")}
+              className={
+                isOverridden("redactPolicyFile")
+                  ? "bg-muted cursor-not-allowed"
+                  : ""
+              }
+            />
+            <SettingHelp
+              meta={getMeta("redactPolicyFile")}
+              description={SETTING_DESCRIPTIONS.redactPolicyFile}
+            />
+            {(policyFileContents || policyFileLoadError) && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-muted-foreground">
+                    Active redaction policy
+                  </h4>
+                  {policyFileContents && !policyFileLoadError && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(policyFileContents);
+                      }}
+                    >
+                      Copy
+                    </Button>
+                  )}
+                </div>
+                {policyFileLoadError ? (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                    {policyFileLoadError}
+                  </div>
+                ) : (
+                  <>
+                    <textarea
+                      value={editedPolicyContent}
+                      onChange={(e) => setEditedPolicyContent(e.target.value)}
+                      className="font-mono text-xs min-h-[200px] p-2 border rounded"
+                      disabled={isOverridden("redactPolicyFile")}
+                    />
+                    {editedPolicyContent && editedPolicyContent !== policyFileContents && (
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const response = await fetch("/api/policy", {
+                              method: "PUT",
+                              headers: {
+                                "Content-Type": "application/json",
+                                "x-csrf-token": (apiClient.getCsrfHeaders() as Record<string, string>)["x-csrf-token"] || "",
+                              },
+                              body: JSON.stringify(JSON.parse(editedPolicyContent)),
+                            });
+                            if (response.ok) {
+                              setPolicyFileContents(editedPolicyContent);
+                              setCleanupMessage({
+                                type: "success",
+                                message: "Policy file saved successfully",
+                              });
+                            } else {
+                              const error = await response.json();
+                              setCleanupMessage({
+                                type: "error",
+                                message: `Failed to save policy: ${error.error || "Unknown error"}`,
+                              });
+                            }
+                          } catch (err) {
+                            setCleanupMessage({
+                              type: "error",
+                              message: err instanceof Error ? err.message : "Failed to save policy",
+                            });
+                          }
+                        }}
+                      >
+                        Save Policy
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
 case "redactReversible":
   return (
     <div className="flex items-center gap-2">
