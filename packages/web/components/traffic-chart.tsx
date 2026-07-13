@@ -113,38 +113,38 @@ export function TrafficChart({ data }: TrafficChartProps) {
             iconSize={12}
             wrapperStyle={{ fontSize: 12, fontWeight: 500 }}
           />
-          <Bar
-            dataKey="requestBytes"
-            name="Request Bytes"
-            fill="#3b82f6"
-            stroke="#1d4ed8"
-            strokeDasharray="4 4"
-            strokeWidth={1}
-            opacity={0.85}
-            radius={[4, 4, 0, 0]}
-            aria-label="Request bytes"
-          >
-            <LabelList
-              position="top"
-              formatter={(value: number) => formatBytes(value)}
-            />
-          </Bar>
-          <Bar
-            dataKey="responseBytes"
-            name="Response Bytes"
-            fill="#10b981"
-            stroke="#059669"
-            strokeDasharray="8 2"
-            strokeWidth={1}
-            opacity={0.85}
-            radius={[4, 4, 0, 0]}
-            aria-label="Response bytes"
-          >
-            <LabelList
-              position="top"
-              formatter={(value: number) => formatBytes(value)}
-            />
-          </Bar>
+      <Bar
+        dataKey="requestBytes"
+        name="Request Bytes"
+        fill="#3b82f6"
+        stroke="#1d4ed8"
+        strokeDasharray="4 4"
+        strokeWidth={1}
+        opacity={0.85}
+        radius={[4, 4, 0, 0]}
+        aria-label="Request bytes"
+      >
+        <LabelList
+          position="insideTop"
+          formatter={(value: number) => formatBytes(value)}
+        />
+      </Bar>
+      <Bar
+        dataKey="responseBytes"
+        name="Response Bytes"
+        fill="#10b981"
+        stroke="#059669"
+        strokeDasharray="8 2"
+        strokeWidth={1}
+        opacity={0.85}
+        radius={[4, 4, 0, 0]}
+        aria-label="Response bytes"
+      >
+        <LabelList
+          position="insideTop"
+          formatter={(value: number) => formatBytes(value)}
+        />
+      </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>

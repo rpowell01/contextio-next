@@ -15,7 +15,12 @@ import fs from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { CaptureData, ProxyPlugin } from "@contextio/core";
+import { encrypt } from "./crypto.js";
+import type {
+  CaptureData,
+  ProxyPlugin,
+  EncryptionAtRestConfig,
+} from "@contextio/core";
 
 /** Configuration for {@link createLoggerPlugin}. */
 export interface LoggerConfig {
@@ -24,6 +29,13 @@ export interface LoggerConfig {
    * Default: `~/.contextio/captures`
    */
   captureDir?: string;
+
+  /**
+   * Encryption-at-rest configuration. When `enabled` is true,
+   * captures are AES-256-GCM encrypted before being written to disk.
+   * Default: disabled (plaintext JSON files).
+   */
+  encryption?: EncryptionAtRestConfig;
 
   /**
    * Maximum number of sessions to retain. On startup, the plugin
@@ -54,12 +66,43 @@ export interface LoggerPlugin extends ProxyPlugin {
  * console.log(logger.captureDir); // ~/.contextio/captures
  * ```
  */
-export { deriveKey, encrypt, decrypt, validateKey } from "./crypto.js";
+export {
+  deriveKey,
+  encrypt,
+  decrypt,
+  validateKey,
+} from "./crypto.js";
 
 export function createLoggerPlugin(config?: LoggerConfig): LoggerPlugin {
   const captureDir =
     config?.captureDir || join(homedir(), ".contextio", "captures");
   const maxSessions = config?.maxSessions ?? 0;
+  const encryption = config?.encryption;
+
+  const encryptionEnabled = encryption?.enabled ?? false;
+  let keyMaterial: string | undefined;
+  if (encryptionEnabled) {
+    const enc = encryption!;
+    switch (enc.keyProvider) {
+      case "static":
+        keyMaterial = enc.staticKey;
+        break;
+      case "env":
+      default:
+        keyMaterial =
+          process.env[enc.keyEnvVar ?? "CONTEXTIO_ENCRYPTION_KEY"];
+        break;
+      case "kms":
+        throw new Error(
+          "[logger] KMS key provider not yet implemented",
+        );
+    }
+    if (!keyMaterial) {
+      throw new Error(
+        "[logger] Encryption enabled but no key material resolved",
+      );
+    }
+  }
 
   let dirReady = false;
   let counter = 0;
@@ -175,33 +218,47 @@ function buildFilename(capture: CaptureData): string {
     }
   }
 
-  /**
-   * Write a capture to disk atomically (write to .tmp, then rename).
-   * Returns the filename on success, null on failure.
-   */
-  function write(capture: CaptureData): string | null {
-    ensureDir();
-    const filename = buildFilename(capture);
-    const filePath = join(captureDir, filename);
-    const tmpPath = `${filePath}.tmp`;
+/**
+ * Write a capture to disk atomically (write to .tmp, then rename).
+ * Returns the filename on success, null on failure.
+ *
+ * When encryption is enabled, the plaintext is encrypted with AES-256-GCM
+ * before writing. The file extension remains `.json` but the content is the
+ * `{ ciphertext, salt, iv }` payload envelope.
+ */
+async function write(
+  capture: CaptureData,
+): Promise<string | null> {
+  ensureDir();
+  const filename = buildFilename(capture);
+  const filePath = join(captureDir, filename);
+  const tmpPath = `${filePath}.tmp`;
 
-    try {
-      fs.writeFileSync(tmpPath, JSON.stringify(capture));
-      fs.renameSync(tmpPath, filePath);
-      return filename;
-    } catch (err: unknown) {
-      console.error(
-        "Capture write error:",
-        err instanceof Error ? err.message : String(err),
-      );
-      try {
-        fs.unlinkSync(tmpPath);
-      } catch {
-        /* may not exist */
-      }
-      return null;
+  try {
+    let content: string;
+    if (keyMaterial) {
+      const encrypted = await encrypt(JSON.stringify(capture), keyMaterial);
+      content = JSON.stringify(encrypted);
+    } else {
+      content = JSON.stringify(capture);
     }
+
+    fs.writeFileSync(tmpPath, content);
+    fs.renameSync(tmpPath, filePath);
+    return filename;
+  } catch (err: unknown) {
+    console.error(
+      "Capture write error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      /* may not exist */
+    }
+    return null;
   }
+}
 
   // Eagerly create directory and prune on construction, not first write.
   ensureDir();
@@ -209,8 +266,9 @@ function buildFilename(capture: CaptureData): string {
   return {
     name: "logger",
     captureDir,
-    onCapture(capture: CaptureData): void {
-      write(capture);
-    },
+  onCapture(capture: CaptureData): void | Promise<void> {
+    // fire-and-forget: errors are logged inside write()
+    void write(capture);
+  },
   };
 }

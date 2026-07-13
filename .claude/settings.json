@@ -19,7 +19,8 @@
       "Bash(pkill -f \"next dev\")",
       "Bash(fuser -k 3001/tcp)",
       "Bash(rm -rf /home/russ/code/contextio-next/packages/web/.next)",
-      "Bash(grep -n \"const { fs, path }\" /home/russ/code/contextio-next/packages/web/lib/sessions/utils.ts)"
+      "Bash(grep -n \"const { fs, path }\" /home/russ/code/contextio-next/packages/web/lib/sessions/utils.ts)",
+      "Bash(git push *)"
     ]
   },
   "hooks": {

@@ -14,7 +14,6 @@
  *
  * Key derivation: PBKDF2 + HMAC-SHA256, 600 000 iterations, 32-byte key.
  */
-
 import { promisify } from "node:util";
 import {
   pbkdf2,
@@ -23,7 +22,6 @@ import {
   createDecipheriv,
 } from "node:crypto";
 import { Buffer } from "node:buffer";
-
 const pbkdf2Async = promisify(pbkdf2);
 
 const KEY_LENGTH = 32; // AES-256
