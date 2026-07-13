@@ -101,6 +101,9 @@ importers:
       '@contextio/core':
         specifier: workspace:*
         version: link:../core
+      '@contextio/logger':
+        specifier: workspace:*
+        version: link:../logger
       mime-types:
         specifier: ^2.1.35
         version: 2.1.35

@@ -4,21 +4,21 @@ import { ReactNode } from "react";
  * Represents a single navigation item in the header.
  */
 export interface NavigationItem {
- /**
-     * The display name of the navigation item
-     */
+  /**
+   * The display name of the navigation item
+  */
     name: string;
- /**
-     * The URL path for the navigation item
-     */
+  /**
+   * The URL path for the navigation item
+  */
     href: string;
- /**
-     * Optional icon element to display alongside the name
-     */
+  /**
+   * Optional icon element to display alongside the name
+  */
     icon?: ReactNode;
- /**
-     * Whether the item is enabled. Set to false to hide the item
-     */
+  /**
+   * Whether the item is enabled. Set to false to hide the item
+  */
     enabled?: boolean;
 }
 
