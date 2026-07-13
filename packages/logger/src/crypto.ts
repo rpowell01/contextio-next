@@ -121,6 +121,18 @@ export async function decrypt(
   const saltBuf = fromBase64url(salt);
   const ivFromPayload = fromBase64url(iv);
 
+  // Validate decoded buffer lengths to catch malformed/corrupt payloads early
+  if (ivFromPayload.length !== IV_LENGTH) {
+    throw new Error(
+      `Invalid encrypted payload: IV must be ${IV_LENGTH} bytes (got ${ivFromPayload.length})`,
+    );
+  }
+  if (saltBuf.length !== SALT_LENGTH) {
+    throw new Error(
+      `Invalid encrypted payload: salt must be ${SALT_LENGTH} bytes (got ${saltBuf.length})`,
+    );
+  }
+
   // Need auth tag (16 bytes); empty plaintext is valid so 16 is the minimum
   if (sealed.length < 16) {
     throw new Error("Invalid encrypted payload: ciphertext too short");
@@ -129,12 +141,15 @@ export async function decrypt(
   const tag = sealed.subarray(0, 16);
   const actualCiphertext = sealed.subarray(16);
 
-  // Derive the key using the stored salt
-  const { key } = await deriveKey(keyMaterial, saltBuf);
-const decipher = createDecipheriv("aes-256-gcm", key, ivFromPayload);
-  decipher.setAuthTag(tag);
+  // Derive the key using the stored salt; wrap derivation + decipher setup
+  // inside the same try/catch so Invalid IV/key errors produce friendly messages.
   try {
-    return decipher.update(actualCiphertext, undefined, "utf8") + decipher.final();
+    const { key } = await deriveKey(keyMaterial, saltBuf);
+    const decipher = createDecipheriv("aes-256-gcm", key, ivFromPayload);
+    decipher.setAuthTag(tag);
+    return (
+      decipher.update(actualCiphertext, undefined, "utf8") + decipher.final("utf8")
+    );
   } catch {
     throw new Error(
       "Decryption failed: authentication tag mismatch (wrong key or tampered ciphertext)",

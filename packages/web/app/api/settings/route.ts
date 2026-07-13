@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import type { Settings } from "@/lib/settings";
 import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults, getSettingMetadata, applyEnvOverrides } from "@/lib/settings";
 import { applyLogDir } from "@/lib/sessions/utils";
 import { consumeToken } from "@/lib/csrf";
@@ -18,22 +19,22 @@ export async function GET(): Promise<NextResponse> {
     await ensureSettingsFile();
     const { readSettingsFile } = await getNodeUtils();
     const data = await readSettingsFile();
-    if (!data) {
-      return NextResponse.json({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS) });
-    }
-    const parsed = JSON.parse(data);
-    if (typeof parsed !== "object" || parsed === null) {
-      return NextResponse.json({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS) });
-    }
+  if (!data) {
+    return NextResponse.json({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS, new Set()) });
+  }
+  const parsed = JSON.parse(data);
+  if (typeof parsed !== "object" || parsed === null) {
+    return NextResponse.json({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS, new Set()) });
+  }
     // Lenient per-field validation with defaults fallback - never fail the whole request
     const settings = validateSettingsLenient(parsed);
     const { settings: effectiveSettings, appliedKeys } = applyEnvOverrides(settings);
     applyLogDir(effectiveSettings.logDir);
     return NextResponse.json({ settings: effectiveSettings, metadata: getSettingMetadata(effectiveSettings, appliedKeys) });
   } catch (error) {
-    console.error("Error reading settings:", error);
-    return NextResponse.json({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS) });
-  }
+  console.error("Error reading settings:", error);
+  return NextResponse.json({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS, new Set<keyof Settings>()) });
+}
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

@@ -106,13 +106,12 @@ case "captureCleanupMaxAgeDays": {
 // var overrides it, and whether it is applied dynamically.
 export function getSettingMetadata(
   settings: Settings,
-  appliedEnvKeys?: Set<keyof Settings>,
+  appliedEnvKeys: Set<keyof Settings>,
 ): Record<keyof Settings, SettingMeta> {
   const meta = {} as Record<keyof Settings, SettingMeta>;
   (Object.keys(SETTING_ENV_MAP) as (keyof Settings)[]).forEach((key) => {
     const { envVar, dynamic } = SETTING_ENV_MAP[key];
-    const envSet = process.env[envVar] !== undefined;
-    const effective = appliedEnvKeys?.has(key) ?? envSet;
+    const effective = appliedEnvKeys.has(key);
     let source: SettingSource;
     if (effective) {
       source = "environment-variable";

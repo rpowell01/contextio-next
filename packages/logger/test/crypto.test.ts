@@ -2,7 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { encrypt, decrypt, deriveKey, validateKey } from "../dist/crypto.js";
 
-const TEST_KEY = "a-very-long-test-key-that-is-definitely-32-chars";
+function base64url(buf: Uint8Array): string {
+  return Buffer.from(buf).toString("base64url");
+}
+
+const TEST_KEY = "a-very-long-test-[API_KEY_REDACTED]";
 const SHORT_KEY = "short-key";
 
 describe("crypto module", () => {
@@ -132,7 +136,7 @@ describe("crypto module", () => {
         async () =>
           await decrypt(
             JSON.stringify({ ciphertext: tampered, salt, iv }),
-            TEST_KEY,
+            TEST_KEY
           ),
         /authentication tag mismatch/i,
       );
@@ -147,70 +151,88 @@ describe("crypto module", () => {
         async () =>
           await decrypt(
             JSON.stringify({ ciphertext, salt, iv: tamperedIv }),
-            TEST_KEY,
+            TEST_KEY
           ),
         /authentication tag mismatch/i,
       );
     });
 
-  it("throws when salt is modified", async () => {
-    const { ciphertext, salt, iv } = await encrypt("secret payload", TEST_KEY);
-    const last = salt[salt.length - 1];
-    const alt = last === "A" ? "B" : "A";
-    const tamperedSalt = salt.slice(0, -1) + alt;
-    await assert.rejects(
-      async () =>
-        await decrypt(
-          JSON.stringify({ ciphertext, salt: tamperedSalt, iv }),
-          TEST_KEY,
-        ),
-      /authentication tag mismatch/i,
-    );
-  });
+    it("throws when salt is modified", async () => {
+      const { ciphertext, salt, iv } = await encrypt("secret payload", TEST_KEY);
+      const last = salt[salt.length - 1];
+      const alt = last === "A" ? "B" : "A";
+      const tamperedSalt = salt.slice(0, -1) + alt;
+      await assert.rejects(
+        async () =>
+          await decrypt(
+            JSON.stringify({ ciphertext, salt: tamperedSalt, iv }),
+            TEST_KEY
+          ),
+        /authentication tag mismatch/i,
+      );
+    });
 
-  it("throws on malformed JSON input", async () => {
-    await assert.rejects(
-      async () => await decrypt("not-json", TEST_KEY),
-      /Invalid encrypted payload/i,
-    );
-  });
+    it("throws on malformed JSON input", async () => {
+      await assert.rejects(
+        async () => await decrypt("not-json", TEST_KEY),
+        /Invalid encrypted payload/i,
+      );
+    });
 
-  it("throws on missing fields", async () => {
-    await assert.rejects(
-      async () => await decrypt("{}", TEST_KEY),
-      /missing required fields/i,
-    );
-  });
+    it("throws on missing fields", async () => {
+      await assert.rejects(
+        async () => await decrypt("{}", TEST_KEY),
+        /missing required fields/i,
+      );
+    });
 
-  it("throws on short ciphertext", async () => {
-    await assert.rejects(
-      async () =>
-        await decrypt(
-          JSON.stringify({
-            ciphertext: "short", // too short to contain 16-byte auth tag
-            salt: new Uint8Array(16).toString("base64url"),
-            iv: new Uint8Array(12).toString("base64url"),
-          }),
-          TEST_KEY,
-        ),
-      /ciphertext too short/i,
-    );
-  });
-});
+    it("throws on short ciphertext", async () => {
+      await assert.rejects(
+        async () =>
+          await decrypt(
+            JSON.stringify({
+              ciphertext: "short", // too short to contain 16-byte auth tag
+              salt: base64url(new Uint8Array(16)),
+              iv: base64url(new Uint8Array(12)),
+            }),
+            TEST_KEY
+          ),
+        /ciphertext too short/i,
+      );
+    });
 
-it("throws when salt is modified", async () => {
-  const { ciphertext, salt, iv } = await encrypt("secret payload", TEST_KEY);
-  const last = salt[salt.length - 1];
-  const alt = last === "A" ? "B" : "A";
-  const tamperedSalt = salt.slice(0, -1) + alt;
-  await assert.rejects(
-    async () =>
-      await decrypt(
-        JSON.stringify({ ciphertext, salt: tamperedSalt, iv }),
-        TEST_KEY,
-      ),
-    /authentication tag mismatch/i,
-  );
-});
+    it("throws when IV has wrong length (not 12 bytes)", async () => {
+      // 8-byte IV: valid base64url but wrong length for GCM
+      const badIv = base64url(new Uint8Array(8));
+      await assert.rejects(
+        async () =>
+          await decrypt(
+            JSON.stringify({
+              ciphertext: "AQIDBAUGBwgJ", // valid base64url (dummy)
+              salt: base64url(new Uint8Array(16)),
+              iv: badIv,
+            }),
+            TEST_KEY
+          ),
+        /IV must be 12 bytes/i,
+      );
+    });
+
+    it("throws when salt has wrong length (not 16 bytes)", async () => {
+      // 8-byte salt: valid base64url but wrong length
+      const badSalt = base64url(new Uint8Array(8));
+      await assert.rejects(
+        async () =>
+          await decrypt(
+            JSON.stringify({
+              ciphertext: "AQIDBAUGBwgJ", // valid base64url (dummy)
+              salt: badSalt,
+              iv: base64url(new Uint8Array(12)),
+            }),
+            TEST_KEY
+          ),
+        /salt must be 16 bytes/i,
+      );
+    });
   });
 });

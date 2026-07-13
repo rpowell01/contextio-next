@@ -371,8 +371,8 @@ export function computeTokenUsage(
   responseBody: string | null | undefined,
   requestBody?: unknown,
 ): TokenUsageResult {
-  // If we have a response body, parse it for actual usage data
-  if (responseBody) {
+  // If we have a response body string, parse it for actual usage data
+  if (typeof responseBody === "string" && responseBody.length > 0) {
     const parsed = parseResponseUsage(responseBody);
     const fallback = estimateTokensFromText(responseBody);
 
@@ -385,7 +385,7 @@ export function computeTokenUsage(
     return { input, output, model: parsed.model };
   }
 
-  // No response body - estimate from request body if available
+  // No response body string - estimate from request body if available
   if (requestBody) {
     const requestText = JSON.stringify(requestBody);
     const estimatedInput = estimateTokensFromText(requestText);
