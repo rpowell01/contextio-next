@@ -44,6 +44,29 @@ function readWebUISettings(): WebUICaptureCleanupSettings {
 	}
 }
 
+/** Fallback to web UI settings for capture cleanup config. */
+function getCaptureCleanupMaxAgeMs(): number {
+	const raw = process.env.LOGGER_CAPTURE_MAX_AGE ?? readWebUISettings().captureCleanupMaxAgeDays?.toString();
+	const parsed = raw ? Number.parseInt(raw, 10) : 0;
+	return Number.isFinite(parsed) ? parsed * 24 * 60 * 60 * 1000 : 0;
+}
+
+function getCaptureCleanupIntervalMs(): number {
+	const raw = process.env.LOGGER_CAPTURE_CLEANUP_INTERVAL ?? readWebUISettings().captureCleanupIntervalHours?.toString() ?? "24";
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isFinite(parsed) && parsed > 0
+		? parsed * 60 * 60 * 1000
+		: 24 * 60 * 60 * 1000;
+}
+
+function getCaptureCleanupEnabled(maxAgeMs: number): boolean {
+	const envEnabled = process.env.LOGGER_CAPTURE_CLEANUP_ENABLED;
+	if (envEnabled !== undefined) return envEnabled === "true";
+	const settingsEnabled = readWebUISettings().captureCleanupEnabled;
+	if (settingsEnabled !== undefined) return settingsEnabled;
+	return maxAgeMs > 0;
+}
+
 /** Fully resolved config with all defaults applied. */
 export interface ResolvedProxyConfig {
 	upstreams: Upstreams;
@@ -122,28 +145,11 @@ export function resolveConfig(
 		process.env.LOGGER_CAPTURE_DIR ||
 		`${process.env.HOME || process.env.USERPROFILE || "~"}/.contextio/captures`;
 
-	const loggerCaptureMaxAgeMs = overrides?.loggerCaptureMaxAgeMs ?? (() => {
-		// `captureCleanupMaxAgeDays` in settings.json → days pushed via `LOGGER_CAPTURE_MAX_AGE`
-		const raw = process.env.LOGGER_CAPTURE_MAX_AGE;
-		const parsed = raw ? Number.parseInt(raw, 10) : 0;
-		return Number.isFinite(parsed) ? parsed * 24 * 60 * 60 * 1000 : 0;
-	})();
+	const loggerCaptureMaxAgeMs = overrides?.loggerCaptureMaxAgeMs ?? getCaptureCleanupMaxAgeMs();
 
-	const loggerCaptureCleanupIntervalMs =
-		overrides?.loggerCaptureCleanupIntervalMs ?? (() => {
-			// `captureCleanupIntervalHours` in settings.json → hours pushed via `LOGGER_CAPTURE_CLEANUP_INTERVAL`
-			const raw =
-				process.env.LOGGER_CAPTURE_CLEANUP_INTERVAL || "24";
-			const parsed = Number.parseInt(raw, 10);
-			return Number.isFinite(parsed) && parsed > 0
-				? parsed * 60 * 60 * 1000
-				: 24 * 60 * 60 * 1000;
-		})();
+	const loggerCaptureCleanupIntervalMs = overrides?.loggerCaptureCleanupIntervalMs ?? getCaptureCleanupIntervalMs();
 
-	const loggerCaptureCleanupEnabled =
-		(overrides?.loggerCaptureCleanupEnabled ??
-			process.env.LOGGER_CAPTURE_CLEANUP_ENABLED === "true") &&
-		loggerCaptureMaxAgeMs > 0;
+	const loggerCaptureCleanupEnabled = overrides?.loggerCaptureCleanupEnabled ?? getCaptureCleanupEnabled(loggerCaptureMaxAgeMs);
 
 	const loggerEncryption: EncryptionAtRestConfig = {
 		enabled:
