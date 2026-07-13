@@ -404,7 +404,7 @@ case "redactPolicyFile":
                     <textarea
                       value={editedPolicyContent}
                       onChange={(e) => setEditedPolicyContent(e.target.value)}
-                      className="font-mono text-xs min-h-[200px] p-2 border rounded"
+                      className="font-mono text-xs min-h-[300px] p-2 border rounded"
                       disabled={isOverridden("redactPolicyFile")}
                     />
                     {editedPolicyContent && editedPolicyContent !== policyFileContents && (
