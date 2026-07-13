@@ -3,6 +3,7 @@ export interface Settings {
   maxSessions: number;
   redactPreset: "secrets" | "pii" | "strict";
   redactReversible: boolean;
+  redactPolicyFile: string;
   encryptionAtRest: boolean;
   captureCleanupEnabled: boolean;
   captureCleanupIntervalHours: number;
@@ -29,6 +30,7 @@ export const SETTING_ENV_MAP: Record<
   maxSessions: { envVar: "LOGGER_MAX_SESSIONS", dynamic: false },
   redactPreset: { envVar: "REDACT_PRESET", dynamic: true },
   redactReversible: { envVar: "REDACT_REVERSIBLE", dynamic: true },
+  redactPolicyFile: { envVar: "REDACT_POLICY_FILE", dynamic: true },
   encryptionAtRest: {
     envVar: "CONTEXTIO_LOGGER_ENCRYPTION_ENABLED",
     dynamic: false,
@@ -92,13 +94,17 @@ export function applyEnvOverrides(settings: Settings): {
           accepted = true;
         }
         break;
-      case "redactReversible":
-        if (raw === "true" || raw === "false") {
-          override.redactReversible = raw === "true";
-          accepted = true;
-        }
-        break;
-      case "encryptionAtRest":
+  case "redactReversible":
+    if (raw === "true" || raw === "false") {
+      override.redactReversible = raw === "true";
+      accepted = true;
+    }
+    break;
+  case "redactPolicyFile":
+    override.redactPolicyFile = raw;
+    accepted = true;
+    break;
+  case "encryptionAtRest":
         if (raw === "true" || raw === "false") {
           override.encryptionAtRest = raw === "true";
           accepted = true;
@@ -164,6 +170,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxSessions: 0,
   redactPreset: "pii",
   redactReversible: false,
+  redactPolicyFile: "",
   encryptionAtRest: false,
   captureCleanupEnabled: false,
   captureCleanupIntervalHours: 24,
@@ -215,6 +222,7 @@ export function validateSettings(input: unknown): Settings {
     maxSessions: validateNumber("maxSessions", 0, 10000),
     redactPreset: validateEnum("redactPreset", ["secrets", "pii", "strict"]),
     redactReversible: validateBoolean("redactReversible"),
+    redactPolicyFile: validateString("redactPolicyFile", 0),
     encryptionAtRest: validateBoolean("encryptionAtRest"),
     captureCleanupEnabled: validateBoolean("captureCleanupEnabled"),
     captureCleanupIntervalHours: validateNumber(
@@ -257,11 +265,15 @@ export function validateSettingsLenient(input: unknown): Settings {
       ["secrets", "pii", "strict"].includes(obj.redactPreset)
         ? (obj.redactPreset as "secrets" | "pii" | "strict")
         : DEFAULT_SETTINGS.redactPreset,
-    redactReversible:
-      typeof obj.redactReversible === "boolean"
-        ? obj.redactReversible
-        : DEFAULT_SETTINGS.redactReversible,
-    encryptionAtRest:
+  redactReversible:
+    typeof obj.redactReversible === "boolean"
+    ? obj.redactReversible
+    : DEFAULT_SETTINGS.redactReversible,
+  redactPolicyFile:
+    typeof obj.redactPolicyFile === "string"
+    ? obj.redactPolicyFile
+    : DEFAULT_SETTINGS.redactPolicyFile,
+  encryptionAtRest:
       typeof obj.encryptionAtRest === "boolean"
         ? obj.encryptionAtRest
         : DEFAULT_SETTINGS.encryptionAtRest,

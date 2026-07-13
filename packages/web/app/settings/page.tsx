@@ -40,6 +40,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Settings, string> = {
     "Built-in redaction rules applied to captures. Re-read on every request, so changes apply immediately.",
   redactReversible:
     "Store originals so redacted values can be restored in responses. Applied dynamically per request.",
+  redactPolicyFile:
+    "Path to a custom redaction policy YAML file. When set, it overrides the preset dropdown and is applied per request.",
   encryptionAtRest:
     "Encrypt captured API traffic files at rest using AES-256. Requires a proxy restart to apply.",
   captureCleanupEnabled:
@@ -101,6 +103,7 @@ export default function SettingsPage() {
     maxSessions: 0,
     redactPreset: "pii",
     redactReversible: false,
+    redactPolicyFile: "",
     encryptionAtRest: false,
     captureCleanupEnabled: false,
     captureCleanupIntervalHours: 24,
@@ -308,29 +311,58 @@ export default function SettingsPage() {
             />
           </div>
         );
-      case "redactReversible":
-        return (
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="redactReversible"
-              checked={settings.redactReversible}
-              onChange={(e) =>
-                updateSetting("redactReversible", e.target.checked)
-              }
-              className="w-4 h-4"
-              disabled={isOverridden("redactReversible")}
-            />
-            <Label htmlFor="redactReversible" className="text-sm">
-              Reversible redaction (restore originals in responses)
-            </Label>
-            <SettingHelp
-              meta={getMeta("redactReversible")}
-              description={SETTING_DESCRIPTIONS.redactReversible}
-            />
-          </div>
-        );
-      case "encryptionAtRest":
+case "redactPolicyFile":
+  return (
+    <div>
+      <Label
+        htmlFor="redactPolicyFile"
+        className="block text-sm font-medium mb-2"
+      >
+        Redaction Policy File
+      </Label>
+      <Input
+        id="redactPolicyFile"
+        value={settings.redactPolicyFile}
+        onChange={(e) =>
+          updateSetting("redactPolicyFile", e.target.value)
+        }
+        placeholder="/path/to/policy.yaml"
+        disabled={isOverridden("redactPolicyFile")}
+        className={
+          isOverridden("redactPolicyFile")
+            ? "bg-muted cursor-not-allowed"
+            : ""
+        }
+      />
+      <SettingHelp
+        meta={getMeta("redactPolicyFile")}
+        description={SETTING_DESCRIPTIONS.redactPolicyFile}
+      />
+    </div>
+  );
+case "redactReversible":
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        id="redactReversible"
+        checked={settings.redactReversible}
+        onChange={(e) =>
+          updateSetting("redactReversible", e.target.checked)
+        }
+        className="w-4 h-4"
+        disabled={isOverridden("redactReversible")}
+      />
+      <Label htmlFor="redactReversible" className="text-sm">
+        Reversible redaction (restore originals in responses)
+      </Label>
+      <SettingHelp
+        meta={getMeta("redactReversible")}
+        description={SETTING_DESCRIPTIONS.redactReversible}
+      />
+    </div>
+  );
+case "encryptionAtRest":
         return (
           <div className="flex items-center gap-2">
             <input
