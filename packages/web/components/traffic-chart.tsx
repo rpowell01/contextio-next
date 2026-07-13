@@ -127,6 +127,7 @@ export function TrafficChart({ data, maxDataPoints = 50 }: TrafficChartProps) {
             label={{
               value: "Bytes",
               position: "outsideBottom",
+              offset: 40,
               style: { textAnchor: "middle", fill: "#333" },
             }}
             tick={{ fill: "#333", fontSize: 12 }}
@@ -137,11 +138,12 @@ export function TrafficChart({ data, maxDataPoints = 50 }: TrafficChartProps) {
           <YAxis
             dataKey="timestamp"
             type="category"
-            width={80}
+            width={100}
             label={{
               value: "Date",
               angle: -90,
               position: "outsideLeft",
+              offset: 50,
               style: { textAnchor: "middle", fill: "#333" },
             }}
             tick={{ fill: "#333", fontSize: 11 }}

@@ -4,6 +4,7 @@ import { join } from "path";
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
 import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
 import { countRedactionsInResponse, getCaptureRedactionStats } from "@/lib/sessions/redaction-utils";
+import { computeTokenUsage } from "@/lib/sessions/utils";
 
 /**
  * Parse a single capture file and extract metrics.
@@ -24,32 +25,37 @@ function parseCapture(data: Record<string, unknown>): {
     responseBytes,
   };
 
+  // Extract token usage from response body (and request body as fallback)
+  const responseBody = data.responseBody as string | null | undefined;
+  const requestBody = data.requestBody as Record<string, unknown> | undefined;
+  const tokenUsage = computeTokenUsage(responseBody, requestBody);
+
   const providerUsage: ProviderUsage = {
     provider,
     requestCount: 1,
-    totalInputTokens: 0,
-    totalOutputTokens: 0,
+    totalInputTokens: tokenUsage.input,
+    totalOutputTokens: tokenUsage.output,
   };
 
-// Count redactions from persisted capture stats, falling back to request body only
-let redactionCount = 0;
-try {
-  const cachedStats = getCaptureRedactionStats(data);
-  if (cachedStats) {
-    redactionCount = cachedStats.totalRedactions;
-  } else {
-    redactionCount = countRedactionsInResponse(
-      data.responseBody as string | null | undefined,
-      data.requestBody,
-      false,
-    ).totalRedactions;
+  // Count redactions from persisted capture stats, falling back to request body only
+  let redactionCount = 0;
+  try {
+    const cachedStats = getCaptureRedactionStats(data);
+    if (cachedStats) {
+      redactionCount = cachedStats.totalRedactions;
+    } else {
+      redactionCount = countRedactionsInResponse(
+        data.responseBody as string | null | undefined,
+        data.requestBody,
+        false,
+      ).totalRedactions;
+    }
+  } catch (error) {
+    console.error(
+      `Error counting redactions for ${data.timestamp ?? "unknown"} capture:`,
+      error,
+    );
   }
-} catch (error) {
-  console.error(
-    `Error counting redactions for ${data.timestamp ?? "unknown"} capture:`,
-    error,
-  );
-}
 
   const redaction: RedactionMetric = {
     timestamp,
