@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { formatBytes } from "@/lib/utils";
 import type { TrafficMetric } from "@/types/api";
 import {
@@ -11,30 +11,67 @@ import {
   CartesianGrid,
   ResponsiveContainer,
   Legend,
-  LabelList,
   Tooltip,
 } from "recharts";
 import { Copy } from "lucide-react";
 
 interface TrafficChartProps {
   data: TrafficMetric[];
+  /**
+   * Maximum number of data points to render before sampling/aggregating.
+   * Default: 50. Set to a higher value or Infinity to disable.
+   */
+  maxDataPoints?: number;
 }
 
-export function TrafficChart({ data }: TrafficChartProps) {
+interface ChartDataPoint {
+  timestamp: string;
+  requestBytes: number;
+  responseBytes: number;
+}
+
+/**
+ * Downsample data to a maximum number of points by grouping adjacent points
+ * and taking the max value in each group (to preserve peaks).
+ */
+function downsampleData(data: ChartDataPoint[], maxPoints: number): ChartDataPoint[] {
+  if (data.length <= maxPoints) return data;
+
+  const step = Math.ceil(data.length / maxPoints);
+  const result: ChartDataPoint[] = [];
+
+  for (let i = 0; i < data.length; i += step) {
+    const chunk = data.slice(i, i + step);
+    const maxRequest = Math.max(...chunk.map((d) => d.requestBytes));
+    const maxResponse = Math.max(...chunk.map((d) => d.responseBytes));
+    // Use the timestamp from the last item in the chunk for labeling
+    const timestamp = chunk[chunk.length - 1].timestamp;
+    result.push({ timestamp, requestBytes: maxRequest, responseBytes: maxResponse });
+  }
+
+  return result;
+}
+
+export function TrafficChart({ data, maxDataPoints = 50 }: TrafficChartProps) {
   const [copied, setCopied] = useState(false);
 
-  const chartData = data.map((item) => ({
-    timestamp: new Date(item.timestamp).toLocaleDateString(),
-    requestBytes: item.requestBytes,
-    responseBytes: item.responseBytes,
-    formattedRequest: formatBytes(item.requestBytes),
-    formattedResponse: formatBytes(item.responseBytes),
-  }));
+  const chartData = useMemo(() => {
+    const raw = data.map((item) => ({
+      timestamp: new Date(item.timestamp).toLocaleDateString(),
+      requestBytes: item.requestBytes,
+      responseBytes: item.responseBytes,
+    }));
+    return downsampleData(raw, maxDataPoints);
+  }, [data, maxDataPoints]);
 
   const copyToClipboard = async () => {
     try {
       const dataToCopy = chartData.map(
-        ({ formattedRequest, formattedResponse, ...rest }) => rest
+        ({ timestamp, requestBytes, responseBytes }) => ({
+          timestamp,
+          requestBytes,
+          responseBytes,
+        })
       );
       await navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
       setCopied(true);
@@ -44,9 +81,12 @@ export function TrafficChart({ data }: TrafficChartProps) {
     }
   };
 
+  // Show a note if data was downsampled
+  const isDownsampled = chartData.length < data.length;
+
   return (
     <div className="w-full">
-      <div className="flex justify-end mb-2">
+      <div className="flex justify-between items-center mb-2">
         <button
           onClick={copyToClipboard}
           className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-muted"
@@ -60,6 +100,11 @@ export function TrafficChart({ data }: TrafficChartProps) {
           <Copy className="h-4 w-4" />
           {copied ? "Copied" : "Copy"}
         </button>
+        {isDownsampled && (
+          <span className="text-xs text-muted-foreground">
+            Showing {chartData.length} of {data.length} data points (peaked-sampled)
+          </span>
+        )}
       </div>
       <div
         id="traffic-chart-description"
@@ -67,34 +112,39 @@ export function TrafficChart({ data }: TrafficChartProps) {
       >
         Bar chart displaying request and response bytes over time. Each bar
         represents a time period with blue indicating request bytes and green
-        indicating response bytes.
+        indicating response bytes. Hover bars for exact values.
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart
           data={chartData}
           aria-labelledby="traffic-chart-description"
           role="img"
+          layout="vertical"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
           <XAxis
-            dataKey="timestamp"
+            type="number"
             label={{
-              value: "Date",
+              value: "Bytes",
               position: "outsideBottom",
               style: { textAnchor: "middle", fill: "#333" },
             }}
             tick={{ fill: "#333", fontSize: 12 }}
             tickLine={{ stroke: "#666" }}
             axisLine={{ stroke: "#666" }}
+            tickFormatter={(value) => formatBytes(value)}
           />
           <YAxis
+            dataKey="timestamp"
+            type="category"
+            width={80}
             label={{
-              value: "Bytes",
+              value: "Date",
               angle: -90,
               position: "outsideLeft",
               style: { textAnchor: "middle", fill: "#333" },
             }}
-            tick={{ fill: "#333", fontSize: 12 }}
+            tick={{ fill: "#333", fontSize: 11 }}
             tickLine={{ stroke: "#666" }}
             axisLine={{ stroke: "#666" }}
           />
@@ -113,38 +163,28 @@ export function TrafficChart({ data }: TrafficChartProps) {
             iconSize={12}
             wrapperStyle={{ fontSize: 12, fontWeight: 500 }}
           />
-      <Bar
-        dataKey="requestBytes"
-        name="Request Bytes"
-        fill="#3b82f6"
-        stroke="#1d4ed8"
-        strokeDasharray="4 4"
-        strokeWidth={1}
-        opacity={0.85}
-        radius={[4, 4, 0, 0]}
-        aria-label="Request bytes"
-      >
-        <LabelList
-          position="insideTop"
-          formatter={(value: number) => formatBytes(value)}
-        />
-      </Bar>
-      <Bar
-        dataKey="responseBytes"
-        name="Response Bytes"
-        fill="#10b981"
-        stroke="#059669"
-        strokeDasharray="8 2"
-        strokeWidth={1}
-        opacity={0.85}
-        radius={[4, 4, 0, 0]}
-        aria-label="Response bytes"
-      >
-        <LabelList
-          position="insideTop"
-          formatter={(value: number) => formatBytes(value)}
-        />
-      </Bar>
+          <Bar
+            dataKey="requestBytes"
+            name="Request Bytes"
+            fill="#3b82f6"
+            stroke="#1d4ed8"
+            strokeDasharray="4 4"
+            strokeWidth={1}
+            opacity={0.85}
+            radius={[0, 4, 4, 0]}
+            aria-label="Request bytes"
+          />
+          <Bar
+            dataKey="responseBytes"
+            name="Response Bytes"
+            fill="#10b981"
+            stroke="#059669"
+            strokeDasharray="8 2"
+            strokeWidth={1}
+            opacity={0.85}
+            radius={[0, 4, 4, 0]}
+            aria-label="Response bytes"
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
