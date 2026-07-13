@@ -120,6 +120,8 @@ export default function SettingsPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [policyFileContents, setPolicyFileContents] = useState<string | null>(null);
+  const [policyFileLoadError, setPolicyFileLoadError] = useState<string | null>(null);
   const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -148,6 +150,41 @@ export default function SettingsPage() {
       }
     };
   }, []);
+
+useEffect(() => {
+ if (loading) return;
+ const policyPath = (settings.redactPolicyFile ?? "").trim();
+ if (!policyPath) {
+   setPolicyFileContents(null);
+   setPolicyFileLoadError(null);
+   return;
+ }
+ setPolicyFileLoadError(null);
+ const controller = new AbortController();
+ let cancelled = false;
+ (async () => {
+   try {
+     const response = await fetch("/api/policy", {
+       signal: controller.signal,
+     });
+     if (!response.ok) {
+       const errorBody = (await response.json().catch(() => ({}))) as { error?: string };
+       throw new Error(errorBody.error ?? `Request failed with status ${response.status}`);
+     }
+     const payload = await response.json();
+     if (!cancelled) setPolicyFileContents(JSON.stringify(payload, null, 2));
+   } catch (error) {
+     if (!cancelled) {
+       setPolicyFileLoadError(error instanceof Error ? error.message : "Unable to load policy file");
+       setPolicyFileContents(null);
+     }
+   }
+ })();
+ return () => {
+   cancelled = true;
+   controller.abort();
+ };
+}, [loading, settings.redactPolicyFile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -312,34 +349,38 @@ export default function SettingsPage() {
           </div>
         );
 case "redactPolicyFile":
-  return (
-    <div>
-      <Label
-        htmlFor="redactPolicyFile"
-        className="block text-sm font-medium mb-2"
-      >
-        Redaction Policy File
-      </Label>
-      <Input
-        id="redactPolicyFile"
-        value={settings.redactPolicyFile}
-        onChange={(e) =>
-          updateSetting("redactPolicyFile", e.target.value)
-        }
-        placeholder="/path/to/policy.yaml"
-        disabled={isOverridden("redactPolicyFile")}
-        className={
-          isOverridden("redactPolicyFile")
-            ? "bg-muted cursor-not-allowed"
-            : ""
-        }
-      />
-      <SettingHelp
-        meta={getMeta("redactPolicyFile")}
-        description={SETTING_DESCRIPTIONS.redactPolicyFile}
-      />
-    </div>
-  );
+ return (
+   <div>
+     <Label htmlFor="redactPolicyFile" className="block text-sm font-medium mb-2" >
+       Redaction Policy File
+     </Label>
+     <Input id="redactPolicyFile" value={settings.redactPolicyFile} onChange={(e) => updateSetting("redactPolicyFile", e.target.value) } placeholder="/path/to/policy.yaml" disabled={isOverridden("redactPolicyFile")} className={
+       isOverridden("redactPolicyFile")
+         ? "bg-muted cursor-not-allowed"
+         : ""
+     } />
+     <SettingHelp
+       meta={getMeta("redactPolicyFile")}
+       description={SETTING_DESCRIPTIONS.redactPolicyFile}
+     />
+     {(policyFileContents || policyFileLoadError) && (
+       <div className="mt-3 space-y-2">
+         <h4 className="text-sm font-medium text-muted-foreground">
+           Active redaction policy
+         </h4>
+         {policyFileLoadError ? (
+           <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+             {policyFileLoadError}
+           </div>
+         ) : (
+           <pre className="rounded-md border bg-muted p-3 text-xs overflow-auto">
+             {policyFileContents}
+           </pre>
+         )}
+       </div>
+     )}
+   </div>
+ );
 case "redactReversible":
   return (
     <div className="flex items-center gap-2">
@@ -528,9 +569,9 @@ case "encryptionAtRest":
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="rounded-lg border p-6">
-            <h3 className="font-semibold mb-4">Logging</h3>
+<form onSubmit={handleSubmit} className="space-y-6">
+  <div className="rounded-lg border p-6">
+   <h3 className="font-semibold mb-4">Logging</h3>
             <div className="space-y-4">
               {renderSetting("logDir")}
               {renderSetting("maxSessions")}
