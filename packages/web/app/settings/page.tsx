@@ -311,43 +311,46 @@ useEffect(() => {
             />
           </div>
         );
-      case "redactPreset":
-        return (
-          <div>
-            <Label
-              htmlFor="redactPreset"
-              className="block text-sm font-medium mb-2"
-            >
-              Preset
-            </Label>
-            <select
-              id="redactPreset"
-              value={settings.redactPreset}
-              onChange={(e) =>
-                updateSetting(
-                  "redactPreset",
-                  e.target.value as "secrets" | "pii" | "strict",
-                )
-              }
-              className={`w-full px-3 py-2 border rounded-md ${isOverridden("redactPreset") ? "bg-muted cursor-not-allowed" : ""}`}
-              disabled={isOverridden("redactPreset")}
-            >
-              <option value="secrets">
-                secrets - API keys and tokens only
-              </option>
-              <option value="pii">
-                pii - Email, SSN, credit cards, phone numbers
-              </option>
-              <option value="strict">
-                strict - PII + IP addresses, dates of birth
-              </option>
-            </select>
-            <SettingHelp
-              meta={getMeta("redactPreset")}
-              description={SETTING_DESCRIPTIONS.redactPreset}
-            />
-          </div>
-        );
+ case "redactPreset": {
+   const presetDisabled =
+     isOverridden("redactPreset") || Boolean(settings.redactPolicyFile?.trim());
+   return (
+     <div>
+       <Label
+         htmlFor="redactPreset"
+         className="block text-sm font-medium mb-2"
+       >
+         Preset
+       </Label>
+       <select
+         id="redactPreset"
+         value={settings.redactPreset}
+         onChange={(e) =>
+           updateSetting(
+             "redactPreset",
+             e.target.value as "secrets" | "pii" | "strict",
+           )
+         }
+         className={`w-full px-3 py-2 border rounded-md ${presetDisabled ? "bg-muted cursor-not-allowed" : ""}`}
+         disabled={presetDisabled}
+       >
+         <option value="secrets">
+           secrets - API keys and tokens only
+         </option>
+         <option value="pii">
+           pii - Email, SSN, credit cards, phone numbers
+         </option>
+         <option value="strict">
+           strict - PII + IP addresses, dates of birth
+         </option>
+       </select>
+       <SettingHelp
+         meta={getMeta("redactPreset")}
+         description={SETTING_DESCRIPTIONS.redactPreset}
+       />
+     </div>
+   );
+ }
 case "redactPolicyFile":
  return (
    <div>
