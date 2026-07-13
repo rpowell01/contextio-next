@@ -57,11 +57,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     applyLogDir(effectiveSettings.logDir);
     return NextResponse.json({ success: true, settings: effectiveSettings, metadata: getSettingMetadata(effectiveSettings, appliedKeys) });
   } catch (error) {
-    console.error("Error saving settings:", error);
-    const message = error instanceof Error ? error.message : "Failed to save settings";
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorCode = (error as NodeJS.ErrnoException)?.code;
+    const errorErrno = (error as NodeJS.ErrnoException)?.errno;
+    const errorSyscall = (error as NodeJS.ErrnoException)?.syscall;
+    const errorPath = (error as NodeJS.ErrnoException)?.path;
+    console.error("Failed to save settings:", error);
     return NextResponse.json(
-      { error: message },
-      { status: 400 }
+      { 
+        error: "Failed to save settings", 
+        details: errorMessage, 
+        stack: errorStack,
+        code: errorCode,
+        errno: errorErrno,
+        syscall: errorSyscall,
+        path: errorPath
+      },
+      { status: 500 }
     );
   }
 }
