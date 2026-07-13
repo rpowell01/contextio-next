@@ -20,7 +20,13 @@
       "Bash(fuser -k 3001/tcp)",
       "Bash(rm -rf /home/russ/code/contextio-next/packages/web/.next)",
       "Bash(grep -n \"const { fs, path }\" /home/russ/code/contextio-next/packages/web/lib/sessions/utils.ts)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'fix\\(traffic-chart\\): fix overlapping labels by switching to vertical layout with downsampling *)",
+      "Bash(git commit -m 'fix\\(metrics\\): fix chart label overlap and extract token usage from captures *)",
+      "Bash(node -e ' *)",
+      "Bash(find /home/russ -name \"*.json\" -path \"*captures*\" -type f 2>/dev/null | head -20)",
+      "Read(//home/russ/**)"
     ]
   },
   "hooks": {

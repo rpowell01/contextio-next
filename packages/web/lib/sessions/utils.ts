@@ -1,4 +1,5 @@
 import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
+import { homedir } from "os";
 
 import type { Session, Capture } from "@/types/api";
 
@@ -13,25 +14,21 @@ let _captureDir: string | undefined;
 function getNodeUtils(): Promise<{
   fs: typeof import("fs/promises");
   path: { join: typeof import("path").join; resolve: typeof import("path").resolve };
-  os: { homedir: typeof import("os").homedir };
 }> {
   return Promise.all([
     import("fs/promises"),
     import("path"),
-    import("os"),
-  ]).then(([fs, path, os]) => ({
+  ]).then(([fs, path]) => ({
     fs,
     path: { join: path.join, resolve: path.resolve },
-    os: { homedir: os.homedir },
   }));
 }
 
 /** Read the capture directory currently in effect. */
 export function getCaptureDir(): string {
   if (!_captureDir) {
-    // We can't call getDefaultCaptureDir here because it needs Node.js modules
-    // The caller should call applyLogDir or setCaptureDir to set it properly
-    _captureDir = process.env.LOGGER_CAPTURE_DIR || ".contextio/captures";
+    _captureDir = process.env.LOGGER_CAPTURE_DIR || `${homedir()}/.contextio/captures`;
+    CAPTURE_DIR = _captureDir;
   }
   return _captureDir;
 }
@@ -46,7 +43,7 @@ export function setCaptureDir(dir: string): void {
 /** @deprecated Use `getCaptureDir()` — live ESM binding kept for external
  *  callers that haven't migrated. Internal code should call `getCaptureDir()`
  *  directly to avoid relying on live-binding propagation quirks. */
-export let CAPTURE_DIR: string = getCaptureDir();
+export let CAPTURE_DIR: string;
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const MAX_FILENAME_LENGTH = 255;
@@ -227,20 +224,15 @@ export function extractCaptureMetadata(
 
 /** Canonical `logDir` → absolute capture-directory resolver. */
 export async function resolveLogDir(logDir: string): Promise<string> {
-  const { path, os } = await getNodeUtils();
+  const { path } = await getNodeUtils();
   const trimmed = logDir.trim();
   if (!trimmed) {
-    return process.env.LOGGER_CAPTURE_DIR || (await getDefaultCaptureDirAsync());
+    return process.env.LOGGER_CAPTURE_DIR || `${homedir()}/.contextio/captures`;
   }
-  if (trimmed === "~") return os.homedir();
-  if (trimmed.startsWith("~/")) return path.join(os.homedir(), trimmed.slice(2));
+  if (trimmed === "~") return homedir();
+  if (trimmed.startsWith("~/")) return path.join(homedir(), trimmed.slice(2));
   if (trimmed.startsWith("/")) return trimmed;
   return path.resolve(process.cwd(), trimmed);
-}
-
-async function getDefaultCaptureDirAsync(): Promise<string> {
-  const { path, os } = await getNodeUtils();
-  return path.join(os.homedir(), ".contextio", "captures");
 }
 
 /** Resolve and apply a Settings `logDir` value as the active capture directory. */
