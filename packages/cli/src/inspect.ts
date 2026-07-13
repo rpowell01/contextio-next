@@ -34,14 +34,14 @@ interface ToolDefinition {
 }
 
 /** Find capture files matching the inspect arguments (session, source, --last). */
-function findSessionFiles(args: InspectArgs): string[] {
+async function findSessionFiles(args: InspectArgs): Promise<string[]> {
   const dir = captureDir();
   const files = listCaptureFiles(dir);
 
   const captures: { file: string; capture: CaptureData }[] = [];
 
   for (const file of files) {
-    const capture = readCapture(join(dir, file));
+    const capture = await readCapture(join(dir, file));
     if (!capture) continue;
     if (args.session && capture.sessionId !== args.session) continue;
     if (args.source && capture.source !== args.source) continue;
@@ -287,7 +287,7 @@ function printContextOverhead(system: string | null, tools: ToolDefinition[], fi
 }
 
 /** List all sessions in a table (session ID, source, provider, request count, time). */
-function listSessions(args: InspectArgs): void {
+async function listSessions(args: InspectArgs): Promise<void> {
   const dir = captureDir();
   const files = listCaptureFiles(dir);
 
@@ -295,7 +295,7 @@ function listSessions(args: InspectArgs): void {
   const sessions = new Map<string, { source: string; provider: string; count: number; firstTime: string; lastTime: string }>();
 
   for (const file of files) {
-    const capture = readCapture(join(dir, file));
+    const capture = await readCapture(join(dir, file));
     if (!capture || !capture.sessionId) continue;
     if (args.source && capture.source !== args.source) continue;
 
@@ -355,17 +355,17 @@ export async function runInspect(args: InspectArgs): Promise<void> {
 
   // No session specified: list all sessions
   if (!args.session && !args.last && !args.source) {
-    listSessions(args);
+    await listSessions(args);
     return;
   }
 
   // Source without --last or --session: list sessions for that source
   if (args.source && !args.last && !args.session) {
-    listSessions(args);
+    await listSessions(args);
     return;
   }
 
-  const files = findSessionFiles(args);
+  const files = await findSessionFiles(args);
 
   if (files.length === 0) {
     if (args.session) {
@@ -381,7 +381,7 @@ export async function runInspect(args: InspectArgs): Promise<void> {
   const captures: CaptureData[] = [];
 
   for (const filepath of files) {
-    const capture = readCapture(filepath);
+    const capture = await readCapture(filepath);
     if (capture) captures.push(capture);
   }
 

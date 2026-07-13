@@ -122,12 +122,15 @@ export function TrafficChart({ data, maxDataPoints = 50 }: TrafficChartProps) {
           layout="vertical"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
+          {/* With layout="vertical", axes are swapped: XAxis is vertical (left), YAxis is horizontal (bottom) */}
           <XAxis
             type="number"
             label={{
+              // XAxis is vertical on the LEFT in vertical layout
               value: "Bytes",
-              position: "outsideBottom",
-              offset: 80,
+              position: "outsideLeft",
+              offset: 70,
+              angle: -90,
               style: { textAnchor: "middle", fill: "#333" },
             }}
             tick={{ fill: "#333", fontSize: 12 }}
@@ -140,10 +143,10 @@ export function TrafficChart({ data, maxDataPoints = 50 }: TrafficChartProps) {
             type="category"
             width={160}
             label={{
+              // YAxis is horizontal on the BOTTOM in vertical layout
               value: "Date",
-              angle: -90,
-              position: "outsideLeft",
-              offset: 90,
+              position: "outsideBottom",
+              offset: 30,
               style: { textAnchor: "middle", fill: "#333" },
             }}
             tick={{ fill: "#333", fontSize: 11 }}

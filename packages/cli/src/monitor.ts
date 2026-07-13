@@ -66,8 +66,8 @@ function formatTime(timestamp: string): string {
 }
 
 /** Parse a capture file into a display row. Returns null on read errors. */
-function loadCaptureDisplay(filepath: string): CaptureDisplay | null {
-  const capture = readCapture(filepath);
+async function loadCaptureDisplay(filepath: string): Promise<CaptureDisplay | null> {
+  const capture = await readCapture(filepath);
   if (!capture) return null;
 
   // Parse usage from response body
@@ -198,7 +198,7 @@ export async function runMonitor(args: MonitorArgs): Promise<void> {
     const existingFiles = listExistingCaptures(args);
 
     for (const filepath of existingFiles) {
-      const display = loadCaptureDisplay(filepath);
+      const display = await loadCaptureDisplay(filepath);
       if (display && matchesFilter(display, args)) {
         displays.push(display);
       }
@@ -226,11 +226,11 @@ export async function runMonitor(args: MonitorArgs): Promise<void> {
   const watched = new Set<string>();
   let watcher: fs.FSWatcher | null = null;
 
-  const processFile = (filepath: string): void => {
+  const processFile = async (filepath: string): Promise<void> => {
     if (watched.has(filepath)) return;
     watched.add(filepath);
 
-    const display = loadCaptureDisplay(filepath);
+    const display = await loadCaptureDisplay(filepath);
     if (display && matchesFilter(display, args)) {
       displays.push(display);
       console.log(formatDisplayRow(display));
