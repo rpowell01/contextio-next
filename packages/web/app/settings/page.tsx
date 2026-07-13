@@ -1,7 +1,6 @@
 "use client";
 
 import { MainLayout } from "@/components/main-layout";
-import { PolicyEditor } from "@/components/policy-editor";
 import { apiClient } from "@/lib/api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 import { useState, useEffect, useRef } from "react";
