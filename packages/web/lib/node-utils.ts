@@ -4,14 +4,17 @@
 async function getNodeModules(): Promise<{
   fs: typeof import("fs/promises");
   path: { join: typeof import("path").join };
+  os: { homedir: typeof import("os").homedir };
 }> {
-  const [fs, path] = await Promise.all([
+  const [fs, path, os] = await Promise.all([
     import("fs/promises"),
     import("path"),
+    import("os"),
   ]);
   return {
     fs,
     path: { join: path.join },
+    os: { homedir: os.homedir },
   };
 }
 
@@ -32,7 +35,7 @@ export async function getDefaultCaptureDir(): Promise<string> {
 }
 
 export async function applyPersistedSettings(applyLogDir: (dir: string) => void): Promise<void> {
-  const { fs, path } = await getNodeModules();
+  const { fs } = await getNodeModules();
 
   try {
     const raw = await fs.readFile(SETTINGS_FILE, "utf8");
@@ -49,7 +52,7 @@ export async function applyPersistedSettings(applyLogDir: (dir: string) => void)
 }
 
 export async function ensureSettingsFile(defaultSettings: unknown): Promise<void> {
-  const { fs, path } = await getNodeModules();
+  const { fs } = await getNodeModules();
   try {
     await fs.mkdir(SETTINGS_DIR, { recursive: true });
     await fs.access(SETTINGS_FILE);
