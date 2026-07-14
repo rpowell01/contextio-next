@@ -27,6 +27,11 @@ interface TrafficChartProps {
    * Default: false.
    */
   loading?: boolean;
+  /**
+   * Time range in hours for the data. Used to determine timestamp formatting.
+   * Default: 24 (show hours for ≤24h, dates for longer ranges).
+   */
+  timeRangeHours?: number;
 }
 
 interface ChartDataPoint {
@@ -57,17 +62,29 @@ function downsampleData(data: ChartDataPoint[], maxPoints: number): ChartDataPoi
   return result;
 }
 
-export function TrafficChart({ data, maxDataPoints = 50, loading = false }: TrafficChartProps) {
+export function TrafficChart({
+  data,
+  maxDataPoints = 50,
+  loading = false,
+  timeRangeHours = 24,
+}: TrafficChartProps) {
   const [copied, setCopied] = useState(false);
 
   const chartData = useMemo(() => {
-    const raw = data.map((item) => ({
-      timestamp: new Date(item.timestamp).toLocaleDateString(),
-      requestBytes: item.requestBytes,
-      responseBytes: item.responseBytes,
-    }));
+    const raw = data.map((item) => {
+      const date = new Date(item.timestamp);
+      // For short time ranges (≤24h), show time; otherwise show date
+      const timestamp = timeRangeHours <= 24
+        ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : date.toLocaleDateString();
+      return {
+        timestamp,
+        requestBytes: item.requestBytes,
+        responseBytes: item.responseBytes,
+      };
+    });
     return downsampleData(raw, maxDataPoints);
-  }, [data, maxDataPoints]);
+  }, [data, maxDataPoints, timeRangeHours]);
 
   const copyToClipboard = async () => {
     try {
@@ -144,7 +161,7 @@ export function TrafficChart({ data, maxDataPoints = 50, loading = false }: Traf
               // XAxis is the value axis at the bottom in vertical layout
               value: "Bytes",
               position: "outsideBottom",
-              offset: 40,
+              offset: 80,
               style: { textAnchor: "middle", fill: "#333" },
             }}
             tick={{ fill: "#333", fontSize: 12 }}

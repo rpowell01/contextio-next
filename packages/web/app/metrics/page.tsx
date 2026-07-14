@@ -204,6 +204,7 @@ export default function MetricsPage() {
                   data={metrics.traffic}
                   maxDataPoints={maxDataPoints || undefined}
                   loading={loading}
+                  timeRangeHours={timeRange.hours}
                 />
               </div>
             ) : (
