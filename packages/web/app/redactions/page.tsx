@@ -73,7 +73,7 @@ const PAGE_SIZE = 50;
 /**
  * Highlight component for redacted strings.
  * Highlights the redaction placeholder (e.g., [EMAIL_REDACTED]) in the post-redaction value,
- * and highlights the original value that was replaced in the pre-redaction value.
+ * and shows the original value that was replaced in the pre-redaction value (without extra markup).
  */
 function RedactionHighlight({
   value,
@@ -86,15 +86,9 @@ function RedactionHighlight({
   const redactionPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
 
   if (isPreRedaction) {
-    // For pre-redaction, the value IS the original string that was replaced
-    // Highlight it with a yellow/amber background to indicate "this was replaced"
-    return (
-      <code className="font-mono text-xs">
-        <mark className="bg-amber-100 text-amber-800 px-1 rounded font-medium">
-          {value}
-        </mark>
-      </code>
-    );
+    // For pre-redaction, the value IS the original string that was replaced.
+    // Display it plainly (the dialog already isolates this substring).
+    return <code className="font-mono text-xs">{value}</code>;
   }
 
   // For post-redaction, highlight the redaction placeholders
@@ -118,7 +112,7 @@ function RedactionHighlight({
         </span>
       ))}
     </code>
-);
+  );
 }
 
 export default function RedactionsPage() {
