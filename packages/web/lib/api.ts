@@ -1,4 +1,4 @@
-import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails } from "@/types/api";
+import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData } from "@/types/api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
 // API routes are served by the same web server that serves the frontend
@@ -463,6 +463,15 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     }
     const data = await this.requestWithBase<{ logs: LogEntry[] }>(baseUrl, `/admin/logs?${params.toString()}`, { signal });
     return data.logs;
+  }
+
+  async getMetrics(hours: number = 24, maxPoints?: number, signal?: AbortSignal): Promise<MetricsData> {
+    const params = new URLSearchParams();
+    params.set("hours", String(hours));
+    if (maxPoints !== undefined && maxPoints > 0) {
+      params.set("maxPoints", String(maxPoints));
+    }
+    return this.request(`/api/metrics?${params.toString()}`, { signal });
   }
 
   async streamProxyLogs(

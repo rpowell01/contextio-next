@@ -2,6 +2,7 @@
 
 import { MainLayout } from "@/components/main-layout";
 import { formatBytes, formatNumber } from "@/lib/utils";
+import { apiClient } from "@/lib/api";
 import type {
   MetricsData,
   ProviderUsage,
@@ -11,8 +12,6 @@ import type {
 } from "@/types/api";
 import { TrafficChart } from "@/components/traffic-chart";
 import { useEffect, useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4040";
 
 const TIME_RANGES: TimeRange[] = [
   { value: "1h", label: "Last hour", hours: 1 },
@@ -46,19 +45,8 @@ export default function MetricsPage() {
       setError(null);
 
       try {
-        const url = new URL(`${API_URL}/api/metrics`);
-        url.searchParams.set("hours", String(timeRange.hours));
-        if (maxDataPoints > 0) {
-          url.searchParams.set("maxPoints", String(maxDataPoints));
-        }
-
-        const response = await fetch(url.toString());
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch metrics: ${response.statusText}`);
-        }
-
-        const data = (await response.json()) as MetricsData;
+        const controller = new AbortController();
+        const data = await apiClient.getMetrics(timeRange.hours, maxDataPoints || undefined, controller.signal);
 
         if (!isValidMetricsData(data)) {
           throw new Error("Invalid metrics data received from API");
