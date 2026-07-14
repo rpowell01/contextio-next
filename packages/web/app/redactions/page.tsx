@@ -162,6 +162,35 @@ export default function RedactionsPage() {
     'timestamp',
   ]);
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [resizingKey, setResizingKey] = useState<string | null>(null);
+  const [resizeStartX, setResizeStartX] = useState<number>(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState<number>(0);
+
+  const handleResizeStart = (key: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = e.currentTarget.closest('th') as HTMLElement | null;
+    const startWidth = th ? th.offsetWidth : 100;
+    setResizingKey(key);
+    setResizeStartX(e.clientX);
+    setResizeStartWidth(startWidth);
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+  };
+
+  const handleResizeMove = (e: MouseEvent) => {
+    if (!resizingKey) return;
+    const delta = e.clientX - resizeStartX;
+    const newWidth = Math.max(50, resizeStartWidth + delta);
+    setColumnWidths(prev => ({ ...prev, [resizingKey]: newWidth }));
+  };
+
+  const handleResizeEnd = () => {
+    document.removeEventListener('mousemove', handleResizeMove);
+    document.removeEventListener('mouseup', handleResizeEnd);
+    setResizingKey(null);
+  };
 
   const handleDragStart = (key: string) => setDraggedKey(key);
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
@@ -301,7 +330,7 @@ return (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    {columnOrder.map((key) => {
+                    {columnOrder.map((key, idx) => {
                       const labelMap: Record<string, string> = {
                         redactionType: 'Redaction Type',
                         requestSource: 'Source',
@@ -311,20 +340,28 @@ return (
                         captureId: 'Capture ID',
                         timestamp: 'Date/Time',
                       };
+                      const isLast = idx === columnOrder.length - 1;
                       return (
                         <th
                           key={key}
-                          className="text-left py-3 px-4 cursor-pointer hover:bg-muted"
+                          className="text-left py-3 px-4 cursor-pointer hover:bg-muted relative"
                           onClick={() => handleSort(key)}
                           draggable
                           onDragStart={() => handleDragStart(key)}
                           onDragOver={handleDragOver}
                           onDrop={() => handleDrop(key)}
                           onDragEnd={handleDragEnd}
+                          style={{ width: columnWidths[key] ? `${columnWidths[key]}px` : undefined }}
                         >
                           {labelMap[key]}
                           {sortConfig?.key === key && (
                             <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          {!isLast && (
+                            <div
+                              className="resize-handle absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary"
+                              onMouseDown={(e) => handleResizeStart(key, e)}
+                            />
                           )}
                         </th>
                       );
