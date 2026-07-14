@@ -159,6 +159,7 @@ export default function RedactionsPage() {
   const [postDialogContent, setPostDialogContent] = useState("");
   const [postNeedle, setPostNeedle] = useState("");
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [filters, setFilters] = useState<Record<string, string>>({});
 
   // Fetch summary (fast, cached)
   useEffect(() => {
@@ -256,7 +257,15 @@ export default function RedactionsPage() {
     });
   };
 
-  const sortedDetails = [...details].sort((a, b) => {
+  const filteredDetails = details.filter(row => {
+    return Object.entries(filters).every(([key, val]) => {
+      if (!val) return true;
+      const cell = row[key as keyof RedactionDetailRow];
+      return String(cell ?? '').toLowerCase().includes(val.toLowerCase());
+    });
+  });
+
+  const sortedDetails = [...filteredDetails].sort((a, b) => {
     if (!sortConfig) return 0;
     const aVal = a[sortConfig.key as keyof RedactionDetailRow];
     const bVal = b[sortConfig.key as keyof RedactionDetailRow];
@@ -393,6 +402,73 @@ return (
                     </th>
                     <th className="text-left py-3 px-4">Pre-Redaction</th>
                     <th className="text-left py-3 px-4">Post-Redaction</th>
+                  </tr>
+                  <tr className="border-b bg-muted/50">
+                    <th className="py-1 px-4">
+                      <input
+                        type="text"
+                        placeholder="Filter…"
+                        className="w-full text-xs rounded border px-2 py-1"
+                        value={filters.redactionType || ''}
+                        onChange={e => setFilters(prev => ({...prev, redactionType: e.target.value}))}
+                      />
+                    </th>
+                    <th className="py-1 px-4">
+                      <input
+                        type="text"
+                        placeholder="Filter…"
+                        className="w-full text-xs rounded border px-2 py-1"
+                        value={filters.requestSource || ''}
+                        onChange={e => setFilters(prev => ({...prev, requestSource: e.target.value}))}
+                      />
+                    </th>
+                    <th className="py-1 px-4">
+                      <input
+                        type="text"
+                        placeholder="Filter…"
+                        className="w-full text-xs rounded border px-2 py-1"
+                        value={filters.requestProvider || ''}
+                        onChange={e => setFilters(prev => ({...prev, requestProvider: e.target.value}))}
+                      />
+                    </th>
+                    <th className="py-1 px-4">
+                      <input
+                        type="text"
+                        placeholder="Filter…"
+                        className="w-full text-xs rounded border px-2 py-1"
+                        value={filters.requestTarget || ''}
+                        onChange={e => setFilters(prev => ({...prev, requestTarget: e.target.value}))}
+                      />
+                    </th>
+                    <th className="py-1 px-4">
+                      <input
+                        type="text"
+                        placeholder="Filter…"
+                        className="w-full text-xs rounded border px-2 py-1"
+                        value={filters.sessionId || ''}
+                        onChange={e => setFilters(prev => ({...prev, sessionId: e.target.value}))}
+                      />
+                    </th>
+                    <th className="py-1 px-4">
+                      <input
+                        type="text"
+                        placeholder="Filter…"
+                        className="w-full text-xs rounded border px-2 py-1"
+                        value={filters.captureId || ''}
+                        onChange={e => setFilters(prev => ({...prev, captureId: e.target.value}))}
+                      />
+                    </th>
+                    <th className="py-1 px-4">
+                      <input
+                        type="text"
+                        placeholder="Filter…"
+                        className="w-full text-xs rounded border px-2 py-1"
+                        value={filters.timestamp || ''}
+                        onChange={e => setFilters(prev => ({...prev, timestamp: e.target.value}))}
+                      />
+                    </th>
+                    <th className="py-1 px-4"></th>
+                    <th className="py-1 px-4"></th>
                   </tr>
                 </thead>
                 <tbody>
