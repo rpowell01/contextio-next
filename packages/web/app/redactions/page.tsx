@@ -31,6 +31,53 @@ interface PaginatedDetailResponse {
 
 const PAGE_SIZE = 50;
 
+/**
+ * Highlight component for redacted strings.
+ * Highlights the redaction placeholder (e.g., [REDACTED: email]) in the post-redaction value,
+ * and the original value that was replaced in the pre-redaction value.
+ */
+function RedactionHighlight({
+  value,
+  isPreRedaction = false,
+}: {
+  value: string;
+  isPreRedaction?: boolean;
+}) {
+  // Common redaction patterns - the placeholder format used in the system
+  const redactionPattern = /\[REDACTED:[^\]]+\]/g;
+
+  if (isPreRedaction) {
+    // For pre-redaction, we want to highlight what was replaced
+    // The pre-redaction value IS the original value that got replaced
+    // We can't easily know the exact boundaries without more context,
+    // so we'll just show the value as-is for now
+    return <code className="font-mono text-xs">{value}</code>;
+  }
+
+  // For post-redaction, highlight the redaction placeholders
+  const parts = value.split(redactionPattern);
+  const matches = value.match(redactionPattern);
+
+  if (!matches || matches.length === 0) {
+    return <code className="font-mono text-xs">{value}</code>;
+  }
+
+  return (
+    <code className="font-mono text-xs">
+      {parts.map((part, i) => (
+        <span key={i}>
+          {part}
+          {i < matches.length && (
+            <mark className="bg-red-100 text-red-800 px-1 rounded font-medium">
+              {matches[i]}
+            </mark>
+          )}
+        </span>
+      ))}
+    </code>
+  );
+}
+
 export default function RedactionsPage() {
   const [summary, setSummary] = useState<RedactionSummary | null>(null);
   const [details, setDetails] = useState<RedactionDetailRow[]>([]);
@@ -218,11 +265,11 @@ export default function RedactionsPage() {
                     <td className="py-3 px-4 max-w-xs truncate">{row.requestTarget}</td>
                     <td className="py-3 px-4 font-mono text-xs">{row.sessionId ?? "—"}</td>
                     <td className="py-3 px-4 font-mono text-xs">{row.captureId}</td>
-                    <td className="py-3 px-4 font-mono text-xs max-w-xs truncate" title={row.preRedactionValue}>
-                      {row.preRedactionValue}
+                    <td className="py-3 px-4 max-w-xs truncate" title={row.preRedactionValue}>
+                      <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
                     </td>
-                    <td className="py-3 px-4 font-mono text-xs max-w-xs truncate" title={row.postRedactionValue}>
-                      {row.postRedactionValue}
+                    <td className="py-3 px-4 max-w-xs truncate" title={row.postRedactionValue}>
+                      <RedactionHighlight value={row.postRedactionValue} />
                     </td>
                   </tr>
                 ))}
