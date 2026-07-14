@@ -1,3 +1,5 @@
+"use client";
+
 import { Header, HeaderProps } from "@/components/header";
 
 /**

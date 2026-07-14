@@ -90,7 +90,7 @@ export default function MetricsPage() {
     <MainLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Metrics</h3>
+          <h1 className="text-3xl font-bold tracking-tight">Metrics</h1>
           <p className="text-muted-foreground">
             Monitor API traffic, usage, and redaction statistics
           </p>
@@ -183,7 +183,7 @@ export default function MetricsPage() {
                   Input Tokens
                 </div>
                 <div className="text-2xl font-bold">
-  {formatNumber(metrics.totalInputTokens ?? 0)}
+                  {formatNumber(metrics.totalInputTokens ?? 0)}
                 </div>
               </div>
               <div className="rounded-lg border p-4">
@@ -212,10 +212,10 @@ export default function MetricsPage() {
                 <h3 className="text-lg font-semibold mb-4">
                   Traffic Over Time
                 </h3>
-              <TrafficChart
-                data={metrics.traffic}
-                maxDataPoints={maxDataPoints || undefined}
-              />
+                <TrafficChart
+                  data={metrics.traffic}
+                  maxDataPoints={maxDataPoints || undefined}
+                />
               </div>
             ) : (
               <div className="rounded-lg border p-4">
