@@ -1,9 +1,47 @@
 "use client";
 
+import React from "react";
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { X } from "lucide-react";
+
+/**
+ * Simple dialog component with scrollbars and close button.
+ */
+function ContentDialog({
+  isOpen,
+  onClose,
+  title,
+  content,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  content: string;
+}) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-4 overflow-auto max-h-[70vh] font-mono text-xs whitespace-pre-wrap">
+          {content}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface RedactionSummary {
   totalRedactions: number;
@@ -236,6 +274,10 @@ export default function RedactionsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [preDialogOpen, setPreDialogOpen] = useState(false);
+  const [preDialogContent, setPreDialogContent] = useState("");
+  const [postDialogOpen, setPostDialogOpen] = useState(false);
+  const [postDialogContent, setPostDialogContent] = useState("");
   const router = useRouter();
 
   // Fetch summary (fast, cached)
@@ -286,6 +328,22 @@ export default function RedactionsPage() {
       setPage(newPage);
     }
   };
+
+  const [preDialogOpen, setPreDialogOpen] = useState(false);
+  const [preDialogContent, setPreDialogContent] = useState("");
+  const [postDialogOpen, setPostDialogOpen] = useState(false);
+  const [postDialogContent, setPostDialogContent] = useState("");
+
+  const openPreDialog = (content: string) => {
+    setPreDialogContent(content);
+    setPreDialogOpen(true);
+  };
+  const closePreDialog = () => setPreDialogOpen(false);
+  const openPostDialog = (content: string) => {
+    setPostDialogContent(content);
+    setPostDialogOpen(true);
+  };
+  const closePostDialog = () => setPostDialogOpen(false);
 
   if (loadingSummary || loadingDetails) {
     return (
@@ -402,30 +460,54 @@ export default function RedactionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {details.map((row, index) => (
-                  <tr
-                    key={`${row.captureId}-${index}`}
-                    className="border-b hover:bg-accent/50 cursor-pointer transition-colors"
-                    onClick={() => handleRowClick(row)}
-                  >
-                    <td className="py-3 px-4 font-medium capitalize">{row.redactionType.replace(/_/g, " ")}</td>
-                    <td className="py-3 px-4 text-muted-foreground">{row.requestSource ?? "—"}</td>
-                    <td className="py-3 px-4">{row.requestProvider}</td>
-                    <td className="py-3 px-4 max-w-xs truncate">{row.requestTarget}</td>
-                    <td className="py-3 px-4 font-mono text-xs">{row.sessionId ?? "—"}</td>
-                    <td className="py-3 px-4 font-mono text-xs">{row.captureId}</td>
-                    <td className="py-3 px-4 max-w-xs truncate">
-                      <TooltipWrapper value={row.preRedactionValue} isPreRedaction>
-                        <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
-                      </TooltipWrapper>
-                    </td>
-                    <td className="py-3 px-4 max-w-xs truncate">
-                      <TooltipWrapper value={row.postRedactionValue}>
-                        <RedactionHighlight value={row.postRedactionValue} />
-                      </TooltipWrapper>
-                    </td>
-                  </tr>
-                ))}
+                {details.map((row, index) => {
+                  const rowKey = `${row.captureId}-${index}`;
+                  return (
+                    <tr
+                      key={rowKey}
+                      className="border-b hover:bg-accent/50"
+                    >
+                      <td className="py-3 px-4 font-medium capitalize">{row.redactionType.replace(/_/g, " ")}</td>
+                      <td className="py-3 px-4 text-muted-foreground">{row.requestSource ?? "—"}</td>
+                      <td className="py-3 px-4">{row.requestProvider}</td>
+                      <td className="py-3 px-4 max-w-xs truncate">{row.requestTarget}</td>
+                      <td className="py-3 px-4 font-mono text-xs">{row.sessionId ?? "—"}</td>
+                      <td className="py-3 px-4 font-mono text-xs">
+                        {row.sessionId ? (
+                          <Link
+                            href={`/sessions/${row.sessionId}?captureId=${row.captureId}`}
+                            className="text-primary underline hover:text-primary/80"
+                          >
+                            {row.captureId}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">{row.captureId}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 max-w-xs truncate">
+                        <span
+                          className="text-primary underline cursor-pointer hover:text-primary/80"
+                          onClick={() => {
+                            setPreDialogContent(row.preRedactionValue);
+                            setPreDialogOpen(true);
+                          }}
+                        >
+                          <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 max-w-xs truncate">
+                        <span
+                          className="text-primary underline cursor-pointer hover:text-primary/80"
+                          onClick={() => {
+                            setPostDialogContent(row.postRedactionValue);
+                            setPostDialogOpen(true);
+                          }}
+                        >
+                          <RedactionHighlight value={row.postRedactionValue} />
+                        </span>
+                      </td>
+                    </tr>
+                  })}
                 {(!details || details.length === 0) && (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-muted-foreground">
@@ -467,5 +549,20 @@ export default function RedactionsPage() {
         </div>
       </div>
     </MainLayout>
+    {/* Pre-Redaction Dialog */}
+    <ContentDialog
+      isOpen={preDialogOpen}
+      onClose={() => setPreDialogOpen(false)}
+      title="Pre-Redaction (Original)"
+      content={preDialogContent}
+    />
+
+    {/* Post-Redaction Dialog */}
+    <ContentDialog
+      isOpen={postDialogOpen}
+      onClose={() => setPostDialogOpen(false)}
+      title="Post-Redaction (Redacted)"
+      content={postDialogContent}
+    />
   );
 }
