@@ -158,6 +158,7 @@ export default function RedactionsPage() {
   const [postDialogOpen, setPostDialogOpen] = useState(false);
   const [postDialogContent, setPostDialogContent] = useState("");
   const [postNeedle, setPostNeedle] = useState("");
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   // Fetch summary (fast, cached)
   useEffect(() => {
@@ -246,6 +247,26 @@ export default function RedactionsPage() {
     );
   }
 
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev && prev.key === key && prev.direction === 'asc') {
+        return { key, direction: 'desc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const sortedDetails = [...details].sort((a, b) => {
+    if (!sortConfig) return 0;
+    const aVal = a[sortConfig.key as keyof RedactionDetailRow];
+    const bVal = b[sortConfig.key as keyof RedactionDetailRow];
+    if (aVal === null || aVal === undefined) return sortConfig.direction === 'asc' ? 1 : -1;
+    if (bVal === null || bVal === undefined) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
 return (
     <>
       <MainLayout>
@@ -307,19 +328,75 @@ return (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left py-3 px-4">Redaction Type</th>
-                    <th className="text-left py-3 px-4">Source</th>
-                    <th className="text-left py-3 px-4">Provider</th>
-                    <th className="text-left py-3 px-4">Target</th>
-                    <th className="text-left py-3 px-4">Session ID</th>
-                    <th className="text-left py-3 px-4">Capture ID</th>
-                    <th className="text-left py-3 px-4">Date/Time</th>
+                    <th
+                      className="text-left py-3 px-4 cursor-pointer hover:bg-muted"
+                      onClick={() => handleSort('redactionType')}
+                    >
+                      Redaction Type
+                      {sortConfig?.key === 'redactionType' && (
+                        <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
+                    <th
+                      className="text-left py-3 px-4 cursor-pointer hover:bg-muted"
+                      onClick={() => handleSort('requestSource')}
+                    >
+                      Source
+                      {sortConfig?.key === 'requestSource' && (
+                        <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
+                    <th
+                      className="text-left py-3 px-4 cursor-pointer hover:bg-muted"
+                      onClick={() => handleSort('requestProvider')}
+                    >
+                      Provider
+                      {sortConfig?.key === 'requestProvider' && (
+                        <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
+                    <th
+                      className="text-left py-3 px-4 cursor-pointer hover:bg-muted"
+                      onClick={() => handleSort('requestTarget')}
+                    >
+                      Target
+                      {sortConfig?.key === 'requestTarget' && (
+                        <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
+                    <th
+                      className="text-left py-3 px-4 cursor-pointer hover:bg-muted"
+                      onClick={() => handleSort('sessionId')}
+                    >
+                      Session ID
+                      {sortConfig?.key === 'sessionId' && (
+                        <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
+                    <th
+                      className="text-left py-3 px-4 cursor-pointer hover:bg-muted"
+                      onClick={() => handleSort('captureId')}
+                    >
+                      Capture ID
+                      {sortConfig?.key === 'captureId' && (
+                        <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
+                    <th
+                      className="text-left py-3 px-4 cursor-pointer hover:bg-muted"
+                      onClick={() => handleSort('timestamp')}
+                    >
+                      Date/Time
+                      {sortConfig?.key === 'timestamp' && (
+                        <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                      )}
+                    </th>
                     <th className="text-left py-3 px-4">Pre-Redaction</th>
                     <th className="text-left py-3 px-4">Post-Redaction</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {details.map((row, index) => {
+                  {sortedDetails.map((row, index) => {
                     const rowKey = `${row.captureId}-${index}`;
                     return (
                       <tr
