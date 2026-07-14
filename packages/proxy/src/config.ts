@@ -34,12 +34,15 @@ function readWebUISettings(): WebUICaptureCleanupSettings {
 	try {
 		const data = fs.readFileSync(settingsPath, "utf8");
 		const parsed = JSON.parse(data);
-		return {
+		const result = {
 			captureCleanupEnabled: parsed.captureCleanupEnabled,
 			captureCleanupIntervalHours: parsed.captureCleanupIntervalHours,
 			captureCleanupMaxAgeDays: parsed.captureCleanupMaxAgeDays,
 		};
-	} catch {
+		console.log(`[config] read settings.json: ${JSON.stringify(result)}`);
+		return result;
+	} catch (err) {
+		console.log(`[config] failed to read settings.json at ${settingsPath}: ${err instanceof Error ? err.message : String(err)}`);
 		return {};
 	}
 }
@@ -150,6 +153,8 @@ export function resolveConfig(
 	const loggerCaptureCleanupIntervalMs = overrides?.loggerCaptureCleanupIntervalMs ?? getCaptureCleanupIntervalMs();
 
 	const loggerCaptureCleanupEnabled = overrides?.loggerCaptureCleanupEnabled ?? getCaptureCleanupEnabled(loggerCaptureMaxAgeMs);
+
+	console.log(`[config] capture cleanup: enabled=${loggerCaptureCleanupEnabled}, maxAgeDays=${loggerCaptureMaxAgeMs / (24 * 60 * 60 * 1000)}, intervalHours=${loggerCaptureCleanupIntervalMs / (60 * 60 * 1000)}`);
 
 	const loggerEncryption: EncryptionAtRestConfig = {
 		enabled:
