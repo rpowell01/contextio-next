@@ -203,6 +203,7 @@ export default function MetricsPage() {
                 <TrafficChart
                   data={metrics.traffic}
                   maxDataPoints={maxDataPoints || undefined}
+                  loading={loading}
                 />
               </div>
             ) : (

@@ -13,7 +13,7 @@ import {
   Legend,
   Tooltip,
 } from "recharts";
-import { Copy } from "lucide-react";
+import { Copy, Loader2 } from "lucide-react";
 
 interface TrafficChartProps {
   data: TrafficMetric[];
@@ -22,6 +22,11 @@ interface TrafficChartProps {
    * Default: 50. Set to undefined to disable client-side sampling.
    */
   maxDataPoints?: number;
+  /**
+   * Show a loading spinner while data is being fetched/processed.
+   * Default: false.
+   */
+  loading?: boolean;
 }
 
 interface ChartDataPoint {
@@ -52,7 +57,7 @@ function downsampleData(data: ChartDataPoint[], maxPoints: number): ChartDataPoi
   return result;
 }
 
-export function TrafficChart({ data, maxDataPoints = 50 }: TrafficChartProps) {
+export function TrafficChart({ data, maxDataPoints = 50, loading = false }: TrafficChartProps) {
   const [copied, setCopied] = useState(false);
 
   const chartData = useMemo(() => {
@@ -83,6 +88,16 @@ export function TrafficChart({ data, maxDataPoints = 50 }: TrafficChartProps) {
 
   // Show a note if data was downsampled
   const isDownsampled = chartData.length < data.length;
+
+  // Show loading spinner when data is being fetched/processed
+  if (loading) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-2 text-sm text-muted-foreground">Loading traffic data...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
@@ -125,13 +140,13 @@ export function TrafficChart({ data, maxDataPoints = 50 }: TrafficChartProps) {
           {/* With layout="vertical" (horizontal bars): XAxis is the value axis at the bottom, YAxis is the category axis on the left */}
           <XAxis
             type="number"
-      label={{
-        // XAxis is the value axis at the bottom in vertical layout
-        value: "Bytes",
-        position: "outsideBottom",
-        offset: 20,
-        style: { textAnchor: "middle", fill: "#333" },
-      }}
+            label={{
+              // XAxis is the value axis at the bottom in vertical layout
+              value: "Bytes",
+              position: "outsideBottom",
+              offset: 40,
+              style: { textAnchor: "middle", fill: "#333" },
+            }}
             tick={{ fill: "#333", fontSize: 12 }}
             tickLine={{ stroke: "#666" }}
             axisLine={{ stroke: "#666" }}
