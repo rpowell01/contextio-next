@@ -94,8 +94,6 @@ export function isValidMetricsData(data: unknown): data is MetricsData {
   if (!data || typeof data !== "object") return false;
   const metrics = data as Record<string, unknown>;
   return (
-    typeof metrics.totalInputTokens === "number" &&
-    typeof metrics.totalOutputTokens === "number" &&
     typeof metrics.totalRequestBytes === "number" &&
     typeof metrics.totalResponseBytes === "number" &&
     Array.isArray(metrics.providers) &&

@@ -91,18 +91,20 @@ function aggregateMetrics(
       totalResponseBytes += capture.traffic.responseBytes;
     }
 
-    if (capture.providerUsage) {
-      const existing = providerMap.get(capture.providerUsage.provider);
-      if (existing) {
-        existing.requestCount += capture.providerUsage.requestCount;
-        existing.totalInputTokens += capture.providerUsage.totalInputTokens;
-        existing.totalOutputTokens += capture.providerUsage.totalOutputTokens;
-      } else {
-        providerMap.set(capture.providerUsage.provider, {
-          ...capture.providerUsage,
-        });
-      }
+  if (capture.providerUsage) {
+    const existing = providerMap.get(capture.providerUsage.provider);
+    if (existing) {
+      existing.requestCount += capture.providerUsage.requestCount;
+      existing.totalInputTokens += capture.providerUsage.totalInputTokens;
+      existing.totalOutputTokens += capture.providerUsage.totalOutputTokens;
+    } else {
+      providerMap.set(capture.providerUsage.provider, {
+        ...capture.providerUsage,
+      });
     }
+    totalInputTokens += capture.providerUsage.totalInputTokens;
+    totalOutputTokens += capture.providerUsage.totalOutputTokens;
+  }
 
     if (capture.redaction) {
       redactions.push(capture.redaction);
@@ -117,13 +119,50 @@ function aggregateMetrics(
     redactions,
     totalRequestBytes,
     totalResponseBytes,
-    totalInputTokens,
-    totalOutputTokens,
+    totalInputTokens: totalInputTokens === 0 ? undefined : totalInputTokens,
+    totalOutputTokens: totalOutputTokens === 0 ? undefined : totalOutputTokens,
   };
 }
 
-export async function GET(_request: Request): Promise<Response> {
+/** Shared peak-sampling strategy: group adjacent points and take the max in each group.
+ * Mirrors the client-side `downsampleData` in `traffic-chart.tsx` so server and
+ * client produce identical chart representations for the same data. */
+function downsampleTraffic(
+  data: TrafficMetric[],
+  maxPoints: number,
+): TrafficMetric[] {
+  if (data.length <= maxPoints) return data;
+  const step = Math.ceil(data.length / maxPoints);
+  const result: TrafficMetric[] = [];
+  for (let i = 0; i < data.length; i += step) {
+    const chunk = data.slice(i, i + step);
+    const maxRequest = Math.max(...chunk.map((d) => d.requestBytes));
+    const maxResponse = Math.max(...chunk.map((d) => d.responseBytes));
+    result.push({
+      timestamp: chunk[chunk.length - 1].timestamp,
+      requestBytes: maxRequest,
+      responseBytes: maxResponse,
+    });
+  }
+  return result;
+}
+
+export async function GET(request: Request): Promise<Response> {
   try {
+    const url = new URL(request.url);
+
+    // Parse query params
+    const hoursValue = Number(url.searchParams.get("hours"));
+    const hours =
+      Number.isFinite(hoursValue) && hoursValue > 0 ? Math.trunc(hoursValue) : 24;
+    const maxPointsValue = Number(url.searchParams.get("maxPoints"));
+    const maxPoints =
+      Number.isFinite(maxPointsValue) && maxPointsValue > 0
+        ? Math.trunc(maxPointsValue)
+        : undefined;
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
+
     const files = await listCaptureFiles();
     const captures: Array<{
       traffic: TrafficMetric | null;
@@ -142,7 +181,17 @@ export async function GET(_request: Request): Promise<Response> {
 
         const raw = await fs.readFile(filepath, "utf8");
         const data = JSON.parse(raw) as Record<string, unknown>;
-        captures.push(parseCapture(data));
+        const parsed = parseCapture(data);
+
+        // Filter by timestamp on the server side
+        if (parsed.traffic) {
+          const ts = new Date(parsed.traffic.timestamp);
+          if (ts < cutoff) {
+            continue;
+          }
+        }
+
+        captures.push(parsed);
       } catch (error) {
         console.error(`Error processing capture ${filename}:`, error);
         continue;
@@ -150,7 +199,33 @@ export async function GET(_request: Request): Promise<Response> {
     }
 
     const metrics = aggregateMetrics(captures);
-    return Response.json(metrics);
+    const totalTrafficPoints = metrics.traffic.length;
+
+    // Server-side downsampling
+    if (maxPoints && metrics.traffic.length > maxPoints) {
+      const step = Math.ceil(metrics.traffic.length / maxPoints);
+      const sampled: TrafficMetric[] = [];
+      for (let i = 0; i < metrics.traffic.length; i += step) {
+        const chunk = metrics.traffic.slice(i, i + step);
+        const maxRequest = Math.max(...chunk.map((d) => d.requestBytes));
+        const maxResponse = Math.max(...chunk.map((d) => d.responseBytes));
+        sampled.push({
+          timestamp: chunk[chunk.length - 1].timestamp,
+          requestBytes: maxRequest,
+          responseBytes: maxResponse,
+        });
+      }
+      metrics.traffic = sampled;
+    }
+
+    const response = Response.json(metrics);
+    if (maxPoints) {
+      response.headers.set(
+        "X-Data-Points-Total",
+        String(totalTrafficPoints),
+      );
+    }
+    return response;
   } catch (error) {
     console.error("Error in metrics API:", error);
     return Response.json({ error: "Internal server error" }, { status: 500 });

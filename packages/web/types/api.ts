@@ -458,9 +458,9 @@ export type MetricsData = {
   /** Total bytes received in responses */
   totalResponseBytes: number;
   /** Total input tokens across all requests */
-  totalInputTokens: number;
+  totalInputTokens?: number;
   /** Total output tokens across all responses */
-  totalOutputTokens: number;
+  totalOutputTokens?: number;
 };
 
 /**

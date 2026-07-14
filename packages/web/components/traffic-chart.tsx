@@ -19,7 +19,7 @@ interface TrafficChartProps {
   data: TrafficMetric[];
   /**
    * Maximum number of data points to render before sampling/aggregating.
-   * Default: 50. Set to a higher value or Infinity to disable.
+   * Default: 50. Set to undefined to disable client-side sampling.
    */
   maxDataPoints?: number;
 }
@@ -122,17 +122,16 @@ export function TrafficChart({ data, maxDataPoints = 50 }: TrafficChartProps) {
           layout="vertical"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
-          {/* With layout="vertical", axes are swapped: XAxis is vertical (left), YAxis is horizontal (bottom) */}
+          {/* With layout="vertical" (horizontal bars): XAxis is the value axis at the bottom, YAxis is the category axis on the left */}
           <XAxis
             type="number"
-            label={{
-              // XAxis is vertical on the LEFT in vertical layout
-              value: "Bytes",
-              position: "outsideLeft",
-              offset: 70,
-              angle: -90,
-              style: { textAnchor: "middle", fill: "#333" },
-            }}
+      label={{
+        // XAxis is the value axis at the bottom in vertical layout
+        value: "Bytes",
+        position: "outsideBottom",
+        offset: 20,
+        style: { textAnchor: "middle", fill: "#333" },
+      }}
             tick={{ fill: "#333", fontSize: 12 }}
             tickLine={{ stroke: "#666" }}
             axisLine={{ stroke: "#666" }}
