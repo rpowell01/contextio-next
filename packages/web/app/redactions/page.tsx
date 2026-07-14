@@ -3,7 +3,7 @@
 
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 
 /**
@@ -166,6 +166,65 @@ export default function RedactionsPage() {
   const [resizingKey, setResizingKey] = useState<string | null>(null);
   const [resizeStartX, setResizeStartX] = useState<number>(0);
   const [resizeStartWidth, setResizeStartWidth] = useState<number>(0);
+
+  // Fetch summary data
+  useEffect(() => {
+    let cancelled = false;
+    const fetchSummary = async () => {
+      try {
+        const res = await fetch("/api/redactions?summary=true");
+        if (!res.ok) throw new Error("Failed to fetch summary");
+        const data = await res.json();
+        if (!cancelled) {
+          _setSummary(data.summary);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          _setError(err instanceof Error ? err.message : "Failed to load summary");
+        }
+      } finally {
+        if (!cancelled) {
+          _setLoadingSummary(false);
+        }
+      }
+    };
+    fetchSummary();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Fetch detail data with pagination
+  useEffect(() => {
+    let cancelled = false;
+    const fetchDetails = async () => {
+      try {
+        _setLoadingDetails(true);
+        const res = await fetch(`/api/redactions/detail?page=${page}&pageSize=${PAGE_SIZE}`);
+        if (!res.ok) throw new Error("Failed to fetch details");
+        const data = await res.json();
+        if (!cancelled) {
+          _setDetails(data.details);
+          setTotalPages(data.totalPages);
+          setTotalCount(data.totalCount);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          _setError(err instanceof Error ? err.message : "Failed to load details");
+        }
+      } finally {
+        if (!cancelled) {
+          _setLoadingDetails(false);
+        }
+      }
+    };
+    fetchDetails();
+    return () => { cancelled = true; };
+  }, [page]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setPage(newPage);
+    }
+  };
 
   const handleResizeStart = (key: string, e: React.MouseEvent) => {
     e.preventDefault();
