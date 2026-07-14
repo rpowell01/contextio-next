@@ -201,21 +201,9 @@ export async function GET(request: Request): Promise<Response> {
     const metrics = aggregateMetrics(captures);
     const totalTrafficPoints = metrics.traffic.length;
 
-    // Server-side downsampling
+    // Server-side downsampling using shared function
     if (maxPoints && metrics.traffic.length > maxPoints) {
-      const step = Math.ceil(metrics.traffic.length / maxPoints);
-      const sampled: TrafficMetric[] = [];
-      for (let i = 0; i < metrics.traffic.length; i += step) {
-        const chunk = metrics.traffic.slice(i, i + step);
-        const maxRequest = Math.max(...chunk.map((d) => d.requestBytes));
-        const maxResponse = Math.max(...chunk.map((d) => d.responseBytes));
-        sampled.push({
-          timestamp: chunk[chunk.length - 1].timestamp,
-          requestBytes: maxRequest,
-          responseBytes: maxResponse,
-        });
-      }
-      metrics.traffic = sampled;
+      metrics.traffic = downsampleTraffic(metrics.traffic, maxPoints);
     }
 
     const response = Response.json(metrics);
