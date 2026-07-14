@@ -83,98 +83,89 @@ function RedactionHighlight({
 }
 
 /**
- * Custom tooltip component for redaction values.
- * Shows highlighted substring with preview context (100 chars before/after).
+ * Compute preview pieces for a redaction value.
+ * Returns pieces for tooltip rendering.
  */
-function RedactionTooltip({
-  value,
-  isPreRedaction = false,
-}: {
-  value: string;
-  isPreRedaction?: boolean;
-}) {
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const tooltipRef = useRef<HTMLDivElement>(null);
-
-  // Preview configuration
+function computePreview(value: string, isPreRedaction: boolean) {
   const PREVIEW_CONTEXT = 100;
+  const redactionPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
 
-  // Find highlighted portion and create preview
-  const getPreviewContent = () => {
-    const redactionPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
-
-    if (isPreRedaction) {
-      // For pre-redaction, the entire value is what was replaced
-      if (value.length <= PREVIEW_CONTEXT * 2 + 20) {
-        return { beforeHighlight: "", highlighted: value, afterHighlight: "", previewStart: 0, previewEnd: value.length };
-      }
-      const mid = Math.floor(value.length / 2);
-      const start = Math.max(0, mid - PREVIEW_CONTEXT);
-      const end = Math.min(value.length, mid + PREVIEW_CONTEXT);
-      return {
-        beforeHighlight: value.slice(0, start),
-        highlighted: value.slice(start, end),
-        afterHighlight: value.slice(end),
-        previewStart: start,
-        previewEnd: end,
-      };
-    }
-
-    // For post-redaction, find the first redaction placeholder
-    const matches = [...value.matchAll(redactionPattern)];
-    if (matches.length === 0) {
+  if (isPreRedaction) {
+    if (value.length <= PREVIEW_CONTEXT * 2 + 20) {
       return { beforeHighlight: "", highlighted: value, afterHighlight: "", previewStart: 0, previewEnd: value.length };
     }
-
-    const match = matches[0];
-    const matchIndex = match.index ?? 0;
-    const matchLength = match[0].length;
-
-    const start = Math.max(0, matchIndex - PREVIEW_CONTEXT);
-    const end = Math.min(value.length, matchIndex + matchLength + PREVIEW_CONTEXT);
-
+    const mid = Math.floor(value.length / 2);
+    const start = Math.max(0, mid - PREVIEW_CONTEXT);
+    const end = Math.min(value.length, mid + PREVIEW_CONTEXT);
     return {
-      beforeHighlight: value.slice(start, matchIndex),
-      highlighted: value.slice(matchIndex, matchIndex + matchLength),
-      afterHighlight: value.slice(matchIndex + matchLength, end),
+      beforeHighlight: value.slice(0, start),
+      highlighted: value.slice(start, end),
+      afterHighlight: value.slice(end),
       previewStart: start,
       previewEnd: end,
     };
+  }
+
+  const matches = [...value.matchAll(redactionPattern)];
+  if (matches.length === 0) {
+    return { beforeHighlight: "", highlighted: value, afterHighlight: "", previewStart: 0, previewEnd: value.length };
+  }
+
+  const match = matches[0];
+  const matchIndex = match.index ?? 0;
+  const matchLength = match[0].length;
+
+  const start = Math.max(0, matchIndex - PREVIEW_CONTEXT);
+  const end = Math.min(value.length, matchIndex + matchLength + PREVIEW_CONTEXT);
+
+  return {
+    beforeHighlight: value.slice(start, matchIndex),
+    highlighted: value.slice(matchIndex, matchIndex + matchLength),
+    afterHighlight: value.slice(matchIndex + matchLength, end),
+    previewStart: start,
+    previewEnd: end,
   };
+}
 
-  const { beforeHighlight, highlighted, afterHighlight, previewStart, previewEnd } = getPreviewContent();
-
-  // Position tooltip relative to mouse
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setPosition({ x: e.clientX + 10, y: e.clientY + 10 });
-    };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
-
+/**
+ * Pure presentational tooltip component.
+ * Receives pre‑computed preview pieces and renders them.
+ */
+function RedactionTooltip({
+  beforeHighlight,
+  highlighted,
+  afterHighlight,
+  previewStart,
+  previewEnd,
+  isPreRedaction,
+  valueLength,
+}: {
+  beforeHighlight: string;
+  highlighted: string;
+  afterHighlight: string;
+  previewStart: number;
+  previewEnd: number;
+  isPreRedaction: boolean;
+  valueLength: number;
+}) {
   return (
-    <div
-      ref={tooltipRef}
-      className="fixed z-50 max-w-2xl px-3 py-2 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-700 shadow-xl font-mono text-xs whitespace-pre-wrap overflow-auto max-h-64"
-      style={{ left: position.x, top: position.y, pointerEvents: "none" }}
-    >
+    <div className="absolute z-50 max-w-2xl px-3 py-2 bg-popover text-popover-foreground rounded-lg shadow-lg border shadow-xl font-mono text-xs whitespace-pre-wrap overflow-auto max-h-64">
       <div className="flex items-start gap-1">
-        {beforeHighlight && <span className="text-gray-400">{beforeHighlight}</span>}
+        {beforeHighlight && <span className="text-muted-foreground">{beforeHighlight}</span>}
         <mark
           className={`px-1 rounded font-medium ${
             isPreRedaction
-              ? "bg-amber-500 text-amber-950"
-              : "bg-red-500 text-red-50"
+              ? "bg-amber-100 text-amber-800"
+              : "bg-red-100 text-red-800"
           }`}
         >
           {highlighted}
         </mark>
-        {afterHighlight && <span className="text-gray-400">{afterHighlight}</span>}
+        {afterHighlight && <span className="text-muted-foreground">{afterHighlight}</span>}
       </div>
-      {(previewStart > 0 || previewEnd < value.length) && (
-        <div className="mt-1 text-xs text-gray-500 italic">
-          … truncated ({value.length} chars total) …
+      {(previewStart > 0 || previewEnd < valueLength) && (
+        <div className="mt-1 text-xs text-muted-foreground italic">
+          … truncated ({valueLength} chars total) …
         </div>
       )}
     </div>
@@ -182,7 +173,8 @@ function RedactionTooltip({
 }
 
 /**
- * Wrapper component that shows tooltip on hover with proper positioning
+ * Wrapper component that shows tooltip on hover.
+ * Positions tooltip absolutely relative to the wrapper.
  */
 function TooltipWrapper({
   children,
@@ -193,16 +185,30 @@ function TooltipWrapper({
   value: string;
   isPreRedaction?: boolean;
 }) {
-  const [isHovered, setIsHovered] = useState(false);
+  const [show, setShow] = useState(false);
+  const wrapperRef = useRef<HTMLSpanElement>(null);
+
+  const preview = computePreview(value, isPreRedaction);
 
   return (
     <span
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      ref={wrapperRef}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
       className="relative inline-block"
     >
       {children}
-      {isHovered && <RedactionTooltip value={value} isPreRedaction={isPreRedaction} />}
+      {show && (
+        <RedactionTooltip
+          beforeHighlight={preview.beforeHighlight}
+          highlighted={preview.highlighted}
+          afterHighlight={preview.afterHighlight}
+          previewStart={preview.previewStart}
+          previewEnd={preview.previewEnd}
+          isPreRedaction={isPreRedaction}
+          valueLength={value.length}
+        />
+      )}
     </span>
   );
 }
