@@ -7,21 +7,43 @@ import { X } from "lucide-react";
 
 /**
  * Simple dialog component with scrollbars and close button.
- * Renders highlighted redaction content.
+ * Renders full text with a specific needle highlighted.
  */
 function ContentDialog({
   isOpen,
   onClose,
   title,
-  value,
+  fullText,
+  needle,
   isPreRedaction = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  value: string;
+  fullText: string;
+  needle: string;
   isPreRedaction?: boolean;
 }) {
+  if (!isOpen) return null;
+
+  // Compute highlighted parts (first occurrence only)
+  const highlightParts = () => {
+    if (!needle) return <code className="font-mono text-xs">{fullText}</code>;
+    const idx = fullText.indexOf(needle);
+    if (idx === -1) return <code className="font-mono text-xs">{fullText}</code>;
+    const before = fullText.slice(0, idx);
+    const after = fullText.slice(idx + needle.length);
+    return (
+      <code className="font-mono text-xs">
+        {before}
+        <mark className={`px-1 rounded font-medium ${isPreRedaction ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
+          {needle}
+        </mark>
+        {after}
+      </code>
+    );
+  };
+
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -37,7 +59,7 @@ function ContentDialog({
           </button>
         </div>
         <div className="p-4 overflow-auto max-h-[70vh] font-mono text-xs whitespace-pre-wrap">
-          <RedactionHighlight value={value} isPreRedaction={isPreRedaction} />
+          {highlightParts()}
         </div>
       </div>
     </div>
@@ -58,6 +80,8 @@ interface RedactionDetailRow {
   captureId: string;
   preRedactionValue: string;
   postRedactionValue: string;
+  fullOriginal?: string;
+  fullRedacted?: string;
 }
 
 interface PaginatedDetailResponse {
@@ -126,8 +150,10 @@ export default function RedactionsPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [preDialogOpen, setPreDialogOpen] = useState(false);
   const [preDialogContent, setPreDialogContent] = useState("");
+  const [preNeedle, setPreNeedle] = useState("");
   const [postDialogOpen, setPostDialogOpen] = useState(false);
   const [postDialogContent, setPostDialogContent] = useState("");
+  const [postNeedle, setPostNeedle] = useState("");
 
   // Fetch summary (fast, cached)
   useEffect(() => {
@@ -316,7 +342,8 @@ return (
                           <span
                             className="text-primary underline cursor-pointer hover:text-primary/80"
                             onClick={() => {
-                              setPreDialogContent(row.preRedactionValue);
+                              setPreDialogContent(row.fullOriginal || row.preRedactionValue);
+                              setPreNeedle(row.preRedactionValue);
                               setPreDialogOpen(true);
                             }}
                           >
@@ -327,7 +354,8 @@ return (
                           <span
                             className="text-primary underline cursor-pointer hover:text-primary/80"
                             onClick={() => {
-                              setPostDialogContent(row.postRedactionValue);
+                              setPostDialogContent(row.fullRedacted || row.postRedactionValue);
+                              setPostNeedle(row.postRedactionValue);
                               setPostDialogOpen(true);
                             }}
                           >
@@ -384,7 +412,8 @@ return (
         isOpen={preDialogOpen}
         onClose={() => setPreDialogOpen(false)}
         title="Pre-Redaction (Original)"
-        value={preDialogContent}
+        fullText={preDialogContent}
+        needle={preNeedle}
         isPreRedaction={true}
       />
 
@@ -393,7 +422,8 @@ return (
         isOpen={postDialogOpen}
         onClose={() => setPostDialogOpen(false)}
         title="Post-Redaction (Redacted)"
-        value={postDialogContent}
+        fullText={postDialogContent}
+        needle={postNeedle}
         isPreRedaction={false}
       />
     </>

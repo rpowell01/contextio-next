@@ -20,6 +20,8 @@ interface RedactionDetailRow {
   captureId: string;
   preRedactionValue: string;
   postRedactionValue: string;
+  fullOriginal?: string;
+  fullRedacted?: string;
 }
 
 interface PaginatedDetailResponse {
@@ -90,6 +92,14 @@ export async function GET(request: Request): Promise<Response> {
           // JSON.stringify threw (likely RangeError), skip original body
         }
 
+        // Prepare full original and redacted request bodies for dialog context
+        const fullOriginal = data.originalRequestBody !== undefined
+          ? JSON.stringify(data.originalRequestBody, null, 2)
+          : "";
+        const fullRedacted = data.requestBody !== undefined
+          ? JSON.stringify(data.requestBody, null, 2)
+          : "";
+
         const redaction = computeCaptureRedactionCounts(
           data,
           false,
@@ -107,6 +117,8 @@ export async function GET(request: Request): Promise<Response> {
             captureId,
             preRedactionValue: match.original,
             postRedactionValue: match.placeholder,
+            fullOriginal,
+            fullRedacted,
           });
         }
       } catch (error) {
