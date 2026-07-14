@@ -7,8 +7,6 @@
  */
 
 import fs from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 
 import type { EncryptionAtRestConfig, ProxyConfig, Upstreams } from "@contextio/core";
 
@@ -30,7 +28,7 @@ interface WebUICaptureCleanupSettings {
 
 /** Read web UI settings from the JSON file. */
 function readWebUISettings(): WebUICaptureCleanupSettings {
-	const settingsPath = join(homedir(), ".contextio-next", "settings.json");
+	const settingsPath = "/app/custom-policy/settings.json";
 	try {
 		const data = fs.readFileSync(settingsPath, "utf8");
 		const parsed = JSON.parse(data);
