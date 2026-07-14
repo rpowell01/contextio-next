@@ -85,6 +85,7 @@ interface RedactionDetailRow {
   postRedactionValue: string;
   fullOriginal?: string;
   fullRedacted?: string;
+  timestamp: string;
 }
 
 interface PaginatedDetailResponse {
@@ -312,6 +313,7 @@ return (
                     <th className="text-left py-3 px-4">Target</th>
                     <th className="text-left py-3 px-4">Session ID</th>
                     <th className="text-left py-3 px-4">Capture ID</th>
+                    <th className="text-left py-3 px-4">Date/Time</th>
                     <th className="text-left py-3 px-4">Pre-Redaction</th>
                     <th className="text-left py-3 px-4">Post-Redaction</th>
                   </tr>
@@ -340,6 +342,9 @@ return (
                           ) : (
                             <span className="text-muted-foreground">{row.captureId}</span>
                           )}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-xs">
+                          {new Date(row.timestamp).toLocaleString()}
                         </td>
                         <td className="py-3 px-4 max-w-xs truncate">
                           <span

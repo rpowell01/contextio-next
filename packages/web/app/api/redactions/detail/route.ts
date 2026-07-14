@@ -22,6 +22,7 @@ interface RedactionDetailRow {
   postRedactionValue: string;
   fullOriginal?: string;
   fullRedacted?: string;
+  timestamp: string;
 }
 
 interface PaginatedDetailResponse {
@@ -119,6 +120,7 @@ export async function GET(request: Request): Promise<Response> {
             postRedactionValue: match.placeholder,
             fullOriginal,
             fullRedacted,
+            timestamp: stats.mtime.toISOString(),
           });
         }
       } catch (error) {
