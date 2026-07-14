@@ -36,6 +36,7 @@ interface TrafficChartProps {
 
 interface ChartDataPoint {
   timestamp: string;
+  originalTimestamp: string;
   requestBytes: number;
   responseBytes: number;
 }
@@ -56,7 +57,9 @@ function downsampleData(data: ChartDataPoint[], maxPoints: number): ChartDataPoi
     const maxResponse = Math.max(...chunk.map((d) => d.responseBytes));
     // Use the timestamp from the last item in the chunk for labeling
     const timestamp = chunk[chunk.length - 1].timestamp;
-    result.push({ timestamp, requestBytes: maxRequest, responseBytes: maxResponse });
+    // Use the originalTimestamp from the last item for tooltip
+    const originalTimestamp = chunk[chunk.length - 1].originalTimestamp;
+    result.push({ timestamp, originalTimestamp, requestBytes: maxRequest, responseBytes: maxResponse });
   }
 
   return result;
@@ -79,6 +82,7 @@ export function TrafficChart({
         : date.toLocaleDateString();
       return {
         timestamp,
+        originalTimestamp: item.timestamp, // Keep original ISO string for tooltip
         requestBytes: item.requestBytes,
         responseBytes: item.responseBytes,
       };
@@ -185,8 +189,23 @@ export function TrafficChart({
             axisLine={{ stroke: "#666" }}
           />
           <Tooltip
-            formatter={(value: number) => formatBytes(value)}
-            labelFormatter={(label) => `Date: ${label}`}
+            formatter={(value: number, name: string) => [formatBytes(value), name]}
+            labelFormatter={(label, payload) => {
+              // payload contains the data for the hovered bar, including originalTimestamp
+              if (payload && payload.length > 0 && payload[0].payload?.originalTimestamp) {
+                const originalTs = payload[0].payload.originalTimestamp;
+                const date = new Date(originalTs);
+                return date.toLocaleString([], { 
+                  year: 'numeric', 
+                  month: '2-digit', 
+                  day: '2-digit', 
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  second: '2-digit'
+                });
+              }
+              return `Time: ${label}`;
+            }}
             contentStyle={{
               backgroundColor: "rgba(255, 255, 255, 0.95)",
               border: "1px solid #ccc",
