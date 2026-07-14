@@ -7,17 +7,20 @@ import { X } from "lucide-react";
 
 /**
  * Simple dialog component with scrollbars and close button.
+ * Renders highlighted redaction content.
  */
 function ContentDialog({
   isOpen,
   onClose,
   title,
-  content,
+  value,
+  isPreRedaction = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  content: string;
+  value: string;
+  isPreRedaction?: boolean;
 }) {
   if (!isOpen) return null;
   return (
@@ -34,7 +37,7 @@ function ContentDialog({
           </button>
         </div>
         <div className="p-4 overflow-auto max-h-[70vh] font-mono text-xs whitespace-pre-wrap">
-          {content}
+          <RedactionHighlight value={value} isPreRedaction={isPreRedaction} />
         </div>
       </div>
     </div>
@@ -387,7 +390,8 @@ return (
         isOpen={preDialogOpen}
         onClose={() => setPreDialogOpen(false)}
         title="Pre-Redaction (Original)"
-        content={preDialogContent}
+        value={preDialogContent}
+        isPreRedaction={true}
       />
 
       {/* Post-Redaction Dialog */}
@@ -395,7 +399,8 @@ return (
         isOpen={postDialogOpen}
         onClose={() => setPostDialogOpen(false)}
         title="Post-Redaction (Redacted)"
-        content={postDialogContent}
+        value={postDialogContent}
+        isPreRedaction={false}
       />
     </>
   );
