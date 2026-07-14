@@ -7,7 +7,7 @@ import { X } from "lucide-react";
 
 /**
  * Simple dialog component with scrollbars and close button.
- * Renders full text with a specific needle highlighted.
+ * Renders full text with a specific needle highlighted (all occurrences).
  */
 function ContentDialog({
   isOpen,
@@ -26,20 +26,23 @@ function ContentDialog({
 }) {
   if (!isOpen) return null;
 
-  // Compute highlighted parts (first occurrence only)
+  // Highlight all occurrences of needle in fullText
   const highlightParts = () => {
     if (!needle) return <code className="font-mono text-xs">{fullText}</code>;
-    const idx = fullText.indexOf(needle);
-    if (idx === -1) return <code className="font-mono text-xs">{fullText}</code>;
-    const before = fullText.slice(0, idx);
-    const after = fullText.slice(idx + needle.length);
+    const parts = fullText.split(needle);
+    if (parts.length === 1) return <code className="font-mono text-xs">{fullText}</code>;
     return (
       <code className="font-mono text-xs">
-        {before}
-        <mark className={`px-1 rounded font-medium ${isPreRedaction ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
-          {needle}
-        </mark>
-        {after}
+        {parts.map((part, i) => (
+          <>
+            {part}
+            {i < parts.length - 1 && (
+              <mark className={`px-1 rounded font-medium ${isPreRedaction ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
+                {needle}
+              </mark>
+            )}
+          </>
+        ))}
       </code>
     );
   };
