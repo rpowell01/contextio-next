@@ -156,24 +156,24 @@ function RedactionTooltip({
   return (
     <div
       ref={tooltipRef}
-      className="fixed z-50 max-w-2xl px-3 py-2 bg-popover text-popover-foreground rounded-lg shadow-lg border shadow-xl font-mono text-xs whitespace-pre-wrap overflow-auto max-h-64"
+      className="fixed z-50 max-w-2xl px-3 py-2 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-700 shadow-xl font-mono text-xs whitespace-pre-wrap overflow-auto max-h-64"
       style={{ left: position.x, top: position.y, pointerEvents: "none" }}
     >
       <div className="flex items-start gap-1">
-        {beforeHighlight && <span className="text-muted-foreground">{beforeHighlight}</span>}
+        {beforeHighlight && <span className="text-gray-400">{beforeHighlight}</span>}
         <mark
           className={`px-1 rounded font-medium ${
             isPreRedaction
-              ? "bg-amber-100 text-amber-800"
-              : "bg-red-100 text-red-800"
+              ? "bg-amber-500 text-amber-950"
+              : "bg-red-500 text-red-50"
           }`}
         >
           {highlighted}
         </mark>
-        {afterHighlight && <span className="text-muted-foreground">{afterHighlight}</span>}
+        {afterHighlight && <span className="text-gray-400">{afterHighlight}</span>}
       </div>
       {(previewStart > 0 || previewEnd < value.length) && (
-        <div className="mt-1 text-xs text-muted-foreground italic">
+        <div className="mt-1 text-xs text-gray-500 italic">
           … truncated ({value.length} chars total) …
         </div>
       )}
@@ -394,12 +394,12 @@ export default function RedactionsPage() {
                     <td className="py-3 px-4 max-w-xs truncate">{row.requestTarget}</td>
                     <td className="py-3 px-4 font-mono text-xs">{row.sessionId ?? "—"}</td>
                     <td className="py-3 px-4 font-mono text-xs">{row.captureId}</td>
-                    <td className="py-3 px-4 max-w-xs truncate" title={row.preRedactionValue}>
+                    <td className="py-3 px-4 max-w-xs truncate">
                       <TooltipWrapper value={row.preRedactionValue} isPreRedaction>
                         <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
                       </TooltipWrapper>
                     </td>
-                    <td className="py-3 px-4 max-w-xs truncate" title={row.postRedactionValue}>
+                    <td className="py-3 px-4 max-w-xs truncate">
                       <TooltipWrapper value={row.postRedactionValue}>
                         <RedactionHighlight value={row.postRedactionValue} />
                       </TooltipWrapper>
