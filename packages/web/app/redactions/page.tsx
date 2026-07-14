@@ -129,7 +129,7 @@ function computePreview(value: string, isPreRedaction: boolean) {
 
 /**
  * Pure presentational tooltip component.
- * Receives pre‑computed preview pieces and a fixed position, renders fixed positioned tooltip.
+ * Receives pre‑computed preview pieces and renders absolute positioned tooltip.
  */
 function RedactionTooltip({
   beforeHighlight,
@@ -139,7 +139,7 @@ function RedactionTooltip({
   previewEnd,
   isPreRedaction,
   valueLength,
-  position,
+  positionAbove,
 }: {
   beforeHighlight: string;
   highlighted: string;
@@ -148,12 +148,17 @@ function RedactionTooltip({
   previewEnd: number;
   isPreRedaction: boolean;
   valueLength: number;
-  position: { x: number; y: number };
+  positionAbove: boolean;
 }) {
   return (
     <div
-      className="fixed z-50 max-w-2xl px-3 py-2 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-700 shadow-xl font-mono text-xs whitespace-pre-wrap overflow-auto max-h-64"
-      style={{ left: position.x, top: position.y, pointerEvents: 'none' }}
+      className="absolute z-50 max-w-2xl px-3 py-2 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-700 font-mono text-xs whitespace-pre-wrap overflow-auto max-h-64"
+      style={{
+        left: 0,
+        ...(positionAbove ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }),
+        minWidth: 'max-content',
+        maxWidth: 600,
+      }}
     >
       <div className="flex items-start gap-1">
         {beforeHighlight && <span className="text-gray-400">{beforeHighlight}</span>}
@@ -179,7 +184,7 @@ function RedactionTooltip({
 
 /**
  * Wrapper component that shows tooltip on hover.
- * Positions tooltip fixed relative to viewport using the wrapper's bounding rect.
+ * Renders tooltip as an absolute-positioned child so the hover stays active.
  */
 function TooltipWrapper({
   children,
@@ -191,27 +196,33 @@ function TooltipWrapper({
   isPreRedaction?: boolean;
 }) {
   const [show, setShow] = useState(false);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const wrapperRef = useRef<HTMLSpanElement>(null);
+  const [positionAbove, setPositionAbove] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   const preview = computePreview(value, isPreRedaction);
 
-  const handleMouseEnter = (e: React.MouseEvent<HTMLSpanElement>) => {
+  const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    // Position tooltip just below the cell
-    setPos({ x: rect.left + window.scrollX, y: rect.bottom + window.scrollY + 4 });
+    // Decide whether to show above (if near bottom of viewport)
+    const estimatedHeight = 200;
+    setPositionAbove(rect.bottom + estimatedHeight > window.innerHeight);
     setShow(true);
   };
 
   const handleMouseLeave = () => {
     setShow(false);
-    setPos(null);
   };
 
   return (
-    <span ref={wrapperRef} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} className="relative inline-block">
+    <div
+      ref={wrapperRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="relative inline-block"
+      style={{ overflow: 'visible', zIndex: 20 }}
+    >
       {children}
-      {show && pos && (
+      {show && (
         <RedactionTooltip
           beforeHighlight={preview.beforeHighlight}
           highlighted={preview.highlighted}
@@ -220,10 +231,10 @@ function TooltipWrapper({
           previewEnd={preview.previewEnd}
           isPreRedaction={isPreRedaction}
           valueLength={value.length}
-          position={pos}
+          positionAbove={positionAbove}
         />
       )}
-    </span>
+    </div>
   );
 }
 
@@ -414,12 +425,12 @@ export default function RedactionsPage() {
                     <td className="py-3 px-4 max-w-xs truncate">{row.requestTarget}</td>
                     <td className="py-3 px-4 font-mono text-xs">{row.sessionId ?? "—"}</td>
                     <td className="py-3 px-4 font-mono text-xs">{row.captureId}</td>
-                    <td className="py-3 px-4 max-w-xs truncate">
+                    <td className="py-3 px-4 max-w-xs whitespace-nowrap overflow-visible">
                       <TooltipWrapper value={row.preRedactionValue} isPreRedaction>
                         <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
                       </TooltipWrapper>
                     </td>
-                    <td className="py-3 px-4 max-w-xs truncate">
+                    <td className="py-3 px-4 max-w-xs whitespace-nowrap overflow-visible">
                       <TooltipWrapper value={row.postRedactionValue}>
                         <RedactionHighlight value={row.postRedactionValue} />
                       </TooltipWrapper>
