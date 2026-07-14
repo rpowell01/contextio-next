@@ -2,7 +2,7 @@
 
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 interface RedactionSummary {
@@ -79,6 +79,131 @@ function RedactionHighlight({
         </span>
       ))}
     </code>
+);
+}
+
+/**
+ * Custom tooltip component for redaction values.
+ * Shows highlighted substring with preview context (100 chars before/after).
+ */
+function RedactionTooltip({
+  value,
+  isPreRedaction = false,
+}: {
+  value: string;
+  isPreRedaction?: boolean;
+}) {
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  // Preview configuration
+  const PREVIEW_CONTEXT = 100;
+
+  // Find highlighted portion and create preview
+  const getPreviewContent = () => {
+    const redactionPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
+
+    if (isPreRedaction) {
+      // For pre-redaction, the entire value is what was replaced
+      if (value.length <= PREVIEW_CONTEXT * 2 + 20) {
+        return { beforeHighlight: "", highlighted: value, afterHighlight: "", previewStart: 0, previewEnd: value.length };
+      }
+      const mid = Math.floor(value.length / 2);
+      const start = Math.max(0, mid - PREVIEW_CONTEXT);
+      const end = Math.min(value.length, mid + PREVIEW_CONTEXT);
+      return {
+        beforeHighlight: value.slice(0, start),
+        highlighted: value.slice(start, end),
+        afterHighlight: value.slice(end),
+        previewStart: start,
+        previewEnd: end,
+      };
+    }
+
+    // For post-redaction, find the first redaction placeholder
+    const matches = [...value.matchAll(redactionPattern)];
+    if (matches.length === 0) {
+      return { beforeHighlight: "", highlighted: value, afterHighlight: "", previewStart: 0, previewEnd: value.length };
+    }
+
+    const match = matches[0];
+    const matchIndex = match.index ?? 0;
+    const matchLength = match[0].length;
+
+    const start = Math.max(0, matchIndex - PREVIEW_CONTEXT);
+    const end = Math.min(value.length, matchIndex + matchLength + PREVIEW_CONTEXT);
+
+    return {
+      beforeHighlight: value.slice(start, matchIndex),
+      highlighted: value.slice(matchIndex, matchIndex + matchLength),
+      afterHighlight: value.slice(matchIndex + matchLength, end),
+      previewStart: start,
+      previewEnd: end,
+    };
+  };
+
+  const { beforeHighlight, highlighted, afterHighlight, previewStart, previewEnd } = getPreviewContent();
+
+  // Position tooltip relative to mouse
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setPosition({ x: e.clientX + 10, y: e.clientY + 10 });
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+
+  return (
+    <div
+      ref={tooltipRef}
+      className="fixed z-50 max-w-2xl px-3 py-2 bg-popover text-popover-foreground rounded-lg shadow-lg border shadow-xl font-mono text-xs whitespace-pre-wrap overflow-auto max-h-64"
+      style={{ left: position.x, top: position.y, pointerEvents: "none" }}
+    >
+      <div className="flex items-start gap-1">
+        {beforeHighlight && <span className="text-muted-foreground">{beforeHighlight}</span>}
+        <mark
+          className={`px-1 rounded font-medium ${
+            isPreRedaction
+              ? "bg-amber-100 text-amber-800"
+              : "bg-red-100 text-red-800"
+          }`}
+        >
+          {highlighted}
+        </mark>
+        {afterHighlight && <span className="text-muted-foreground">{afterHighlight}</span>}
+      </div>
+      {(previewStart > 0 || previewEnd < value.length) && (
+        <div className="mt-1 text-xs text-muted-foreground italic">
+          … truncated ({value.length} chars total) …
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Wrapper component that shows tooltip on hover with proper positioning
+ */
+function TooltipWrapper({
+  children,
+  value,
+  isPreRedaction = false,
+}: {
+  children: React.ReactNode;
+  value: string;
+  isPreRedaction?: boolean;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <span
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="relative inline-block"
+    >
+      {children}
+      {isHovered && <RedactionTooltip value={value} isPreRedaction={isPreRedaction} />}
+    </span>
   );
 }
 
@@ -270,10 +395,14 @@ export default function RedactionsPage() {
                     <td className="py-3 px-4 font-mono text-xs">{row.sessionId ?? "—"}</td>
                     <td className="py-3 px-4 font-mono text-xs">{row.captureId}</td>
                     <td className="py-3 px-4 max-w-xs truncate" title={row.preRedactionValue}>
-                      <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
+                      <TooltipWrapper value={row.preRedactionValue} isPreRedaction>
+                        <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
+                      </TooltipWrapper>
                     </td>
                     <td className="py-3 px-4 max-w-xs truncate" title={row.postRedactionValue}>
-                      <RedactionHighlight value={row.postRedactionValue} />
+                      <TooltipWrapper value={row.postRedactionValue}>
+                        <RedactionHighlight value={row.postRedactionValue} />
+                      </TooltipWrapper>
                     </td>
                   </tr>
                 ))}
