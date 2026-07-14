@@ -129,7 +129,7 @@ function computePreview(value: string, isPreRedaction: boolean) {
 
 /**
  * Pure presentational tooltip component.
- * Receives pre‑computed preview pieces and renders them.
+ * Receives pre‑computed preview pieces and a fixed position, renders fixed positioned tooltip.
  */
 function RedactionTooltip({
   beforeHighlight,
@@ -139,6 +139,7 @@ function RedactionTooltip({
   previewEnd,
   isPreRedaction,
   valueLength,
+  position,
 }: {
   beforeHighlight: string;
   highlighted: string;
@@ -147,24 +148,28 @@ function RedactionTooltip({
   previewEnd: number;
   isPreRedaction: boolean;
   valueLength: number;
+  position: { x: number; y: number };
 }) {
   return (
-    <div className="absolute z-50 max-w-2xl px-3 py-2 bg-popover text-popover-foreground rounded-lg shadow-lg border shadow-xl font-mono text-xs whitespace-pre-wrap overflow-auto max-h-64">
+    <div
+      className="fixed z-50 max-w-2xl px-3 py-2 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-700 shadow-xl font-mono text-xs whitespace-pre-wrap overflow-auto max-h-64"
+      style={{ left: position.x, top: position.y, pointerEvents: 'none' }}
+    >
       <div className="flex items-start gap-1">
-        {beforeHighlight && <span className="text-muted-foreground">{beforeHighlight}</span>}
+        {beforeHighlight && <span className="text-gray-400">{beforeHighlight}</span>}
         <mark
           className={`px-1 rounded font-medium ${
             isPreRedaction
-              ? "bg-amber-100 text-amber-800"
-              : "bg-red-100 text-red-800"
+              ? "bg-amber-500 text-amber-950"
+              : "bg-red-500 text-red-50"
           }`}
         >
           {highlighted}
         </mark>
-        {afterHighlight && <span className="text-muted-foreground">{afterHighlight}</span>}
+        {afterHighlight && <span className="text-gray-400">{afterHighlight}</span>}
       </div>
       {(previewStart > 0 || previewEnd < valueLength) && (
-        <div className="mt-1 text-xs text-muted-foreground italic">
+        <div className="mt-1 text-xs text-gray-500 italic">
           … truncated ({valueLength} chars total) …
         </div>
       )}
@@ -174,7 +179,7 @@ function RedactionTooltip({
 
 /**
  * Wrapper component that shows tooltip on hover.
- * Positions tooltip absolutely relative to the wrapper.
+ * Positions tooltip fixed relative to viewport using the wrapper's bounding rect.
  */
 function TooltipWrapper({
   children,
@@ -186,19 +191,27 @@ function TooltipWrapper({
   isPreRedaction?: boolean;
 }) {
   const [show, setShow] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const wrapperRef = useRef<HTMLSpanElement>(null);
 
   const preview = computePreview(value, isPreRedaction);
 
+  const handleMouseEnter = (e: React.MouseEvent<HTMLSpanElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    // Position tooltip just below the cell
+    setPos({ x: rect.left + window.scrollX, y: rect.bottom + window.scrollY + 4 });
+    setShow(true);
+  };
+
+  const handleMouseLeave = () => {
+    setShow(false);
+    setPos(null);
+  };
+
   return (
-    <span
-      ref={wrapperRef}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-      className="relative inline-block"
-    >
+    <span ref={wrapperRef} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} className="relative inline-block">
       {children}
-      {show && (
+      {show && pos && (
         <RedactionTooltip
           beforeHighlight={preview.beforeHighlight}
           highlighted={preview.highlighted}
@@ -207,6 +220,7 @@ function TooltipWrapper({
           previewEnd={preview.previewEnd}
           isPreRedaction={isPreRedaction}
           valueLength={value.length}
+          position={pos}
         />
       )}
     </span>
