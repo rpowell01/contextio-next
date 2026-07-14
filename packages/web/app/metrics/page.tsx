@@ -128,7 +128,7 @@ export default function MetricsPage() {
                     );
                     if (selected) setTimeRange(selected);
                   }}
-                  className="h-9 rounded-md border border-input bg-transparent px-px-px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   {TIME_RANGES.map((range) => (
                     <option key={range.value} value={range.value}>
@@ -281,8 +281,8 @@ export default function MetricsPage() {
                   </div>
                 </div>
               </div>
-            )}
-          }
+            ))}
+          </div>
         </div>
       </div>
     </MainLayout>
