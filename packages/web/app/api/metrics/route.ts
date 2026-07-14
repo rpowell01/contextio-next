@@ -199,6 +199,9 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     const metrics = aggregateMetrics(captures);
+
+    // Sort traffic by timestamp to ensure chronological order
+    metrics.traffic.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     const totalTrafficPoints = metrics.traffic.length;
 
     // Server-side downsampling using shared function
