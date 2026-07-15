@@ -169,6 +169,7 @@ export function createCombinedProxy(
   // Start background redaction metadata watcher
   const redactionMetaWatcher = createRedactionMetaWatcher({
     captureDir: resolved.loggerCaptureDir,
+    encryption: resolved.loggerEncryption,
   });
 
   // Enable log capture for admin API

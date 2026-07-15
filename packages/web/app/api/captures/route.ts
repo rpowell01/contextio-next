@@ -4,7 +4,7 @@ import { join } from "path";
 import type { Capture, CaptureWithRedaction, RedactionDetails, PaginationMeta } from "@/types/api";
 
 import { getCaptureRedactionStats, computeCaptureRedactionCounts } from "@/lib/sessions/redaction-utils";
-import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
+import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, metaFilenameFor, readCaptureFile } from "@/lib/sessions/utils";
 import { consumeToken } from "@/lib/csrf";
 
 function extractCaptureMetadata(
@@ -97,8 +97,10 @@ export async function GET(request: Request) {
         return Response.json({ error: "Capture file too large" }, { status: 413 });
       }
 
-      const raw = await fs.readFile(filepath, "utf8");
-      const data = JSON.parse(raw) as Record<string, unknown>;
+      const data = await readCaptureFile(filepath);
+      if (!data) {
+        return Response.json({ error: "Failed to read capture file" }, { status: 500 });
+      }
       const capture = extractCaptureMetadata(id, data);
 
       return Response.json({
@@ -145,8 +147,8 @@ export async function GET(request: Request) {
           continue;
         }
 
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const data = await readCaptureFile(filepath);
+        if (!data) continue;
 
         capture = extractCaptureMetadata(filename, data);
 

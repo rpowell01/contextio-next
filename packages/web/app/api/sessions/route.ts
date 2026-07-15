@@ -14,6 +14,7 @@ import {
   computeContextValues,
   computeTokenUsage,
   aggregateRedactionMetaBySession,
+  readCaptureFile,
 } from "@/lib/sessions/utils";
 import {
   countRedactionsInResponse,
@@ -241,18 +242,18 @@ export async function GET(request: Request) {
     ) {
       const sessionId = pathParts[2];
 
-      // Get all captures for this session
+// Get all captures for this session
       const files = await listCaptureFiles();
       const sessionCaptures: RawCaptureData[] = [];
 
       for (const filename of files) {
         try {
-  const filepath = join(getCaptureDir(), filename);
+    const filepath = join(getCaptureDir(), filename);
           const stats = await fs.stat(filepath);
           if (stats.size > MAX_FILE_SIZE) continue;
 
-          const raw = await fs.readFile(filepath, "utf8");
-          const data = JSON.parse(raw) as Record<string, unknown>;
+          const data = await readCaptureFile(filepath);
+          if (!data) continue;
 
           // Check if this file belongs to the requested session
           if (
@@ -424,8 +425,8 @@ export async function GET(request: Request) {
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
 
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const data = await readCaptureFile(filepath);
+        if (!data) continue;
         const session = await getSessionMetadata(filename, data);
         sessions.push(session);
       } catch (error) {

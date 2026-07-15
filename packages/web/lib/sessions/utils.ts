@@ -2,6 +2,8 @@ import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
 import { homedir } from "os";
 
 import type { Session, Capture } from "@/types/api";
+// Import decryptCapture for reading encrypted capture files
+import { decryptCapture } from "@contextio/logger";
 
 // Re-export Session and Capture types for convenience
 export type { Session, Capture } from "@/types/api";
@@ -452,4 +454,48 @@ export async function getSessionMetadata(
     timestamp: validatedTimestamp ?? new Date().toISOString(),
     timings,
   };
+}
+
+/**
+ * Read and decrypt a capture file.
+ * Handles both encrypted and plaintext capture files transparently.
+ * 
+ * @param filepath - Path to the capture file
+ * @param keyMaterial - Optional encryption key material. If not provided, attempts to read from CONTEXTIO_LOGGER_ENCRYPTION_KEY env var.
+ * @returns Parsed capture data, or null if file cannot be read/decrypted
+ */
+export async function readCaptureFile(
+  filepath: string,
+  keyMaterial?: string
+): Promise<Record<string, unknown> | null> {
+  const resolvedKey = keyMaterial ?? process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
+  try {
+    const capture = await decryptCapture(filepath, resolvedKey || null);
+    return capture as Record<string, unknown> | null;
+  } catch (error) {
+    console.error(`Error reading capture file ${filepath}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Read and decrypt a redaction metadata file (.redact-meta.json).
+ * Handles both encrypted and plaintext meta files transparently.
+ * 
+ * @param filepath - Path to the .redact-meta.json file
+ * @param keyMaterial - Optional encryption key material. If not provided, attempts to read from CONTEXTIO_LOGGER_ENCRYPTION_KEY env var.
+ * @returns Parsed metadata, or null if file cannot be read/decrypted
+ */
+export async function readRedactionMetaFile(
+  filepath: string,
+  keyMaterial?: string
+): Promise<Record<string, unknown> | null> {
+  const resolvedKey = keyMaterial ?? process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
+  try {
+    const capture = await decryptCapture(filepath, resolvedKey || null);
+    return capture as Record<string, unknown> | null;
+  } catch (error) {
+    console.error(`Error reading redaction meta file ${filepath}:`, error);
+    return null;
+  }
 }

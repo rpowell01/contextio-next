@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import { join } from "path";
 
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
-import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
+import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, readCaptureFile } from "@/lib/sessions/utils";
 import { countRedactionsInResponse, getCaptureRedactionStats } from "@/lib/sessions/redaction-utils";
 import { computeTokenUsage } from "@/lib/sessions/utils";
 
@@ -170,7 +170,7 @@ export async function GET(request: Request): Promise<Response> {
       redaction: RedactionMetric | null;
     }> = [];
 
-    for (const filename of files) {
+for (const filename of files) {
       try {
         const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
@@ -179,8 +179,8 @@ export async function GET(request: Request): Promise<Response> {
           continue;
         }
 
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const data = await readCaptureFile(filepath);
+        if (!data) continue;
         const parsed = parseCapture(data);
 
         // Filter by timestamp on the server side

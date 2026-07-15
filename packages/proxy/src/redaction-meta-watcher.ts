@@ -21,6 +21,8 @@
 import fs from "node:fs";
 import { stat, readdir, readFile, writeFile, rename, unlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { EncryptionAtRestConfig } from "@contextio/core";
+import { encrypt } from "@contextio/logger";
 
 
 
@@ -49,6 +51,12 @@ export interface RedactionMetaWatcherOptions {
    * disk so that the web UI can discover them without a live callback.
    */
   onMetadataReady?: (metadata: CaptureRedactionMetadata) => void;
+  /**
+   * Optional encryption configuration for encrypting metadata files.
+   * When provided, metadata files will be encrypted with AES-256-GCM
+   * using the same key derivation as capture files.
+   */
+  encryption?: EncryptionAtRestConfig;
 }
 
 export interface CaptureRedactionMetadata {
@@ -95,14 +103,39 @@ function metaFilenameFor(captureFilename: string): string {
 async function atomicWriteMetadata(
   targetPath: string,
   metadata: CaptureRedactionMetadata,
+  encryption?: EncryptionAtRestConfig,
 ): Promise<void> {
   const tmpPath = `${targetPath}.tmp-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}`;
 
+  let content: string;
+  if (encryption) {
+    // Resolve key material the same way the logger plugin does
+    let keyMaterial: string | undefined;
+    switch (encryption.keyProvider) {
+      case "static":
+        keyMaterial = encryption.staticKey;
+        break;
+      case "env":
+      default:
+        keyMaterial = process.env[encryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
+        break;
+      case "kms":
+        throw new Error("[redaction-meta-watcher] KMS key provider not yet implemented");
+    }
+    if (!keyMaterial) {
+      throw new Error("[redaction-meta-watcher] Encryption enabled but no key material resolved");
+    }
+    const encrypted = await encrypt(JSON.stringify(metadata), keyMaterial);
+    content = JSON.stringify(encrypted);
+  } else {
+    content = JSON.stringify(metadata, null, 2);
+  }
+
   await writeFile(
     tmpPath,
-    JSON.stringify(metadata, null, 2),
+    content,
     "utf8",
   );
 
@@ -338,7 +371,7 @@ async function mergeExistingMetadata(
         state.metadata,
       );
 
-      await atomicWriteMetadata(metaPath, metadata);
+      await atomicWriteMetadata(metaPath, metadata, opts.encryption);
       if (opts.onMetadataReady) {
         opts.onMetadataReady(metadata);
       }

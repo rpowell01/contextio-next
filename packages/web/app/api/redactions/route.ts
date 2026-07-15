@@ -6,6 +6,8 @@ import {
   listCaptureFiles,
   listRedactionMetaFiles,
   MAX_FILE_SIZE,
+  readCaptureFile,
+  readRedactionMetaFile,
 } from "@/lib/sessions/utils";
 import {
   computeCaptureRedactionCounts,
@@ -29,11 +31,8 @@ const getRedactionsSummary = unstable_cache(
     for (const filename of metaFiles) {
       try {
         const filepath = join(getCaptureDir(), filename);
-        const raw = await fs.readFile(filepath, "utf8");
-        const meta = JSON.parse(raw) as {
-          totalRedactions?: number;
-          byRule?: Record<string, number>;
-        };
+        const meta = await readRedactionMetaFile(filepath);
+        if (!meta) continue;
 
         if (typeof meta.totalRedactions === "number") {
           totalRedactions += meta.totalRedactions;
@@ -92,8 +91,8 @@ export async function GET(request: Request) {
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
 
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const data = await readCaptureFile(filepath);
+        if (!data) continue;
 
         // Extract capture metadata (similar to extractCaptureMetadata in captures/route.ts)
         const sessionId =
@@ -219,8 +218,8 @@ export async function POST(request: Request) {
         const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const data = await readCaptureFile(filepath);
+        if (!data) continue;
         const sessionId = (data.sessionId as string | null) ?? extractSessionFromFilename(filename);
         const source = (data.source as string | null) ?? null;
         const provider = (data.provider as string) ?? "unknown";

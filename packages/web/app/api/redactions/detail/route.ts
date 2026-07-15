@@ -5,6 +5,7 @@ import {
   getCaptureDir,
   listCaptureFiles,
   MAX_FILE_SIZE,
+  readCaptureFile,
 } from "@/lib/sessions/utils";
 import {
   computeCaptureRedactionCounts,
@@ -191,8 +192,8 @@ export async function GET(request: Request): Promise<Response> {
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
 
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const data = await readCaptureFile(filepath);
+        if (!data) continue;
 
         const sessionId =
           (data.sessionId as string | null) ??
@@ -271,8 +272,8 @@ export async function GET(request: Request): Promise<Response> {
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
 
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const data = await readCaptureFile(filepath);
+        if (!data) continue;
 
         captureBodies.set(captureId, {
           originalRequestBody: data.originalRequestBody,

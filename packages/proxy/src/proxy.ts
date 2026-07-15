@@ -99,6 +99,7 @@ export function createProxy(
   // never touches the hot request/response path.
   const redactionMetaWatcher = createRedactionMetaWatcher({
     captureDir: resolved.loggerCaptureDir,
+    encryption: resolved.loggerEncryption,
   });
 
   // Enable log capture for admin API
