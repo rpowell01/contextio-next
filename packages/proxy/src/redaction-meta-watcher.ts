@@ -126,13 +126,14 @@ export interface CaptureRedactionMetadata {
   totalRedactions: number;
   byRule: Record<string, number>;
   generatedAt: string;
+  source?: string;
   provider?: string;
   targetUrl?: string;
   schemaVersion?: string;
   sessionId?: string;
   timestamp?: string;
   checksum?: string;
-  matches?: Array<{ rule: string; original: string; path: string }>;
+  matches?: Array<{ rule: string; original: string; placeholder: string; path: string }>;
 }
 
 export interface RedactionMetaWatcher {
@@ -275,6 +276,56 @@ interface RawRedactionStats {
 }
 
 /**
+ * Extract individual redaction matches with original and placeholder values.
+ * This is used to populate the meta file with detailed match information
+ * for the redactions detail API.
+ */
+function extractRedactionMatches(rawData: unknown): Array<{ rule: string; original: string; placeholder: string; path: string }> {
+  const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
+  const matches: Array<{ rule: string; original: string; placeholder: string; path: string }> = [];
+
+  // Helper to extract matches from a string value
+  function extractFromString(text: string, path: string): void {
+    PLACEHOLDER_REGEX.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
+      const rule = (m[1] ?? "unknown").toLowerCase();
+      const placeholder = m[0];
+      matches.push({ rule, original: text, placeholder, path });
+    }
+    SSN_REGEX.lastIndex = 0;
+    while ((m = SSN_REGEX.exec(text)) !== null) {
+      matches.push({ rule: "ssn", original: text, placeholder: m[0], path });
+    }
+  }
+
+  // Collect all string values and their paths
+  function collectStringsWithPath(value: unknown, path: string): void {
+    if (typeof value === "string") {
+      extractFromString(value, path);
+    } else if (Array.isArray(value)) {
+      value.forEach((item, index) => collectStringsWithPath(item, `${path}[${index}]`));
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+        collectStringsWithPath(val, `${path}.${key}`);
+      }
+    }
+  }
+
+  // Extract from request body and response body
+  if (rawCapture?.requestBody) {
+    collectStringsWithPath(rawCapture.requestBody, "requestBody");
+  }
+  if (rawCapture?.responseBody && typeof rawCapture.responseBody === "string") {
+    extractFromString(rawCapture.responseBody, "responseBody");
+  } else if (rawCapture?.responseBody) {
+    collectStringsWithPath(rawCapture.responseBody, "responseBody");
+  }
+
+  return matches;
+}
+
+/**
  * Derive redaction counts for a capture.
  *
  * Prefers the persisted redactionStats field when present (matching the web
@@ -285,8 +336,8 @@ function computeCaptureRedactionCounts(rawData: unknown): {
   totalRedactions: number;
   byRule: Record<string, number>;
 } {
-  const capture = (rawData ?? null) as Record<string, unknown> | null;
-  const stats = capture?.redactionStats as RawRedactionStats | undefined;
+  const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
+  const stats = rawCapture?.redactionStats as RawRedactionStats | undefined;
   if (stats && typeof stats.byRule === "object" && stats.byRule !== null) {
     const statsObj = stats as Record<string, unknown>;
     const total =
@@ -308,8 +359,8 @@ function computeCaptureRedactionCounts(rawData: unknown): {
   }
 
   const strings: string[] = [];
-  collectStrings(capture?.requestBody ?? null, strings);
-  collectStrings(capture?.responseBody ?? null, strings);
+  collectStrings(rawCapture?.requestBody ?? null, strings);
+  collectStrings(rawCapture?.responseBody ?? null, strings);
   const byRule: Record<string, number> = {};
   let total = 0;
   for (const text of strings) {
@@ -331,12 +382,19 @@ function computeCaptureRedactionCounts(rawData: unknown): {
 
 function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedactionMetadata | null {
   try {
-    const result = computeCaptureRedactionCounts(rawData);
+    const counts = computeCaptureRedactionCounts(rawData);
+    const matches = extractRedactionMatches(rawData);
+    const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
     return {
       captureId,
-      totalRedactions: result.totalRedactions,
-      byRule: result.byRule,
+      totalRedactions: counts.totalRedactions,
+      byRule: counts.byRule,
       generatedAt: new Date().toISOString(),
+      matches,
+      source: (rawCapture?.source as string | null) ?? undefined,
+      provider: (rawCapture?.provider as string) ?? "unknown",
+      targetUrl: (rawCapture?.targetUrl as string) ?? "",
+      sessionId: (rawCapture?.sessionId as string | null) ?? undefined,
     };
   } catch (err) {
     console.error(
