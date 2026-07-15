@@ -25,6 +25,19 @@ interface RedactionDetailRow {
   timestamp: string;
 }
 
+// Minimal row for initial collection (without heavy stringified bodies)
+interface MinimalRedactionRow {
+  redactionType: string;
+  requestSource: string | null;
+  requestProvider: string;
+  requestTarget: string;
+  sessionId: string | null;
+  captureId: string;
+  preRedactionValue: string;
+  postRedactionValue: string;
+  timestamp: string;
+}
+
 interface PaginatedDetailResponse {
   details: RedactionDetailRow[];
   page: number;
@@ -33,35 +46,146 @@ interface PaginatedDetailResponse {
   totalCount: number;
 }
 
+// Valid column keys for filtering/sorting (must match RedactionDetailRow / MinimalRedactionRow)
+const VALID_COLUMN_KEYS = [
+  "redactionType",
+  "requestSource",
+  "requestProvider",
+  "requestTarget",
+  "sessionId",
+  "captureId",
+  "timestamp",
+  "preRedactionValue",
+  "postRedactionValue",
+] as const;
+
+type ValidColumnKey = typeof VALID_COLUMN_KEYS[number];
+
+function isValidColumnKey(key: string): key is ValidColumnKey {
+  return VALID_COLUMN_KEYS.includes(key as ValidColumnKey);
+}
+
+interface SortParams {
+  key: ValidColumnKey;
+  direction: "asc" | "desc";
+}
+
+// Use a stricter type for filters: only valid column keys with string values
+type FilterParams = Partial<Record<ValidColumnKey, string>>;
+
 function extractSessionFromFilename(filename: string): string | null {
   const match = filename.match(/^([a-f0-9-]+)-\d+\.json$/i);
   if (match) return match[1];
   return null;
 }
 
+function applyFilters(rows: MinimalRedactionRow[], filters: FilterParams): MinimalRedactionRow[] {
+  if (!filters || Object.keys(filters).length === 0) return rows;
+  return rows.filter(row => {
+    return Object.entries(filters).every(([key, val]) => {
+      if (!val) return true;
+      const cell = row[key as keyof MinimalRedactionRow];
+      return String(cell ?? "").toLowerCase().includes(val.toLowerCase());
+    });
+  });
+}
+
+function applySort(rows: MinimalRedactionRow[], sort: SortParams | null): MinimalRedactionRow[] {
+  if (!sort) return rows;
+  const { key, direction } = sort;
+  return [...rows].sort((a, b) => {
+    const aVal = a[key];
+    const bVal = b[key];
+    if (aVal === null || aVal === undefined) return direction === "asc" ? 1 : -1;
+    if (bVal === null || bVal === undefined) return direction === "asc" ? -1 : 1;
+    if (aVal < bVal) return direction === "asc" ? -1 : 1;
+    if (aVal > bVal) return direction === "asc" ? 1 : -1;
+    return 0;
+  });
+}
+
+// Enrich page rows with fullOriginal/fullRedacted (stringified bodies)
+function enrichPageRows(
+  pageRows: MinimalRedactionRow[],
+  captureBodies: Map<string, { originalRequestBody: unknown; requestBody: unknown }>
+): RedactionDetailRow[] {
+  return pageRows.map(row => {
+    const bodies = captureBodies.get(row.captureId);
+    
+    // Safely stringify bodies with size/circular guards
+    let fullOriginal = "";
+    if (bodies?.originalRequestBody !== undefined) {
+      try {
+        const str = JSON.stringify(bodies.originalRequestBody, null, 2);
+        fullOriginal = str.length > MAX_FILE_SIZE ? "" : str;
+      } catch {
+        fullOriginal = "";
+      }
+    }
+    
+    let fullRedacted = "";
+    if (bodies?.requestBody !== undefined) {
+      try {
+        const str = JSON.stringify(bodies.requestBody, null, 2);
+        fullRedacted = str.length > MAX_FILE_SIZE ? "" : str;
+      } catch {
+        fullRedacted = "";
+      }
+    }
+    
+    return {
+      redactionType: row.redactionType,
+      requestSource: row.requestSource,
+      requestProvider: row.requestProvider,
+      requestTarget: row.requestTarget,
+      sessionId: row.sessionId,
+      captureId: row.captureId,
+      preRedactionValue: row.preRedactionValue,
+      postRedactionValue: row.postRedactionValue,
+      fullOriginal,
+      fullRedacted,
+      timestamp: row.timestamp,
+    };
+  });
+}
+
 export async function GET(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);
-    const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
-    const pageSize = Math.min(
-      200,
-      Math.max(1, parseInt(url.searchParams.get("pageSize") ?? "50", 10)),
-    );
+    const pageParam = parseInt(url.searchParams.get("page") ?? "1", 10);
+    const pageSizeParam = parseInt(url.searchParams.get("pageSize") ?? "50", 10);
+    const page = Number.isNaN(pageParam) ? 1 : Math.max(1, pageParam);
+    const pageSize = Number.isNaN(pageSizeParam)
+      ? 50
+      : Math.min(200, Math.max(1, pageSizeParam));
+
+    // Parse filter parameters
+    const filters: FilterParams = {};
+    for (const [key, value] of url.searchParams.entries()) {
+      if (key.startsWith("filter_")) {
+        const filterKey = key.replace("filter_", "");
+        // Only accept valid column keys for filtering
+        if (isValidColumnKey(filterKey)) {
+          filters[filterKey] = value;
+        }
+      }
+    }
+
+    // Parse sort parameters
+    let sort: SortParams | null = null;
+    const sortKey = url.searchParams.get("sortKey");
+    const sortDir = url.searchParams.get("sortDir");
+    if (sortKey && isValidColumnKey(sortKey) && (sortDir === "asc" || sortDir === "desc")) {
+      sort = { key: sortKey, direction: sortDir };
+    }
 
     const files = await listCaptureFiles();
-    const totalCount = files.length;
-    const totalPages = Math.ceil(totalCount / pageSize);
 
-    // Clamp page to valid range
-    const clampedPage = Math.min(page, totalPages || 1);
-    const start = (clampedPage - 1) * pageSize;
-    const end = Math.min(start + pageSize, totalCount);
+    // Collect ALL redaction matches across all files (not paginated yet)
+    // This is necessary for correct filtering/sorting across the entire dataset
+    const allDetailRows: MinimalRedactionRow[] = [];
 
-    const pageFiles = files.slice(start, end);
-
-    const detailRows: RedactionDetailRow[] = [];
-
-    for (const filename of pageFiles) {
+    for (const filename of files) {
       try {
         const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
@@ -93,14 +217,6 @@ export async function GET(request: Request): Promise<Response> {
           // JSON.stringify threw (likely RangeError), skip original body
         }
 
-        // Prepare full original and redacted request bodies for dialog context
-        const fullOriginal = data.originalRequestBody !== undefined
-          ? JSON.stringify(data.originalRequestBody, null, 2)
-          : "";
-        const fullRedacted = data.requestBody !== undefined
-          ? JSON.stringify(data.requestBody, null, 2)
-          : "";
-
         const redaction = computeCaptureRedactionCounts(
           data,
           false,
@@ -109,7 +225,7 @@ export async function GET(request: Request): Promise<Response> {
         );
 
         for (const match of redaction.matches) {
-          detailRows.push({
+          allDetailRows.push({
             redactionType: match.ruleId,
             requestSource: source,
             requestProvider: provider,
@@ -118,8 +234,6 @@ export async function GET(request: Request): Promise<Response> {
             captureId,
             preRedactionValue: match.original,
             postRedactionValue: match.placeholder,
-            fullOriginal,
-            fullRedacted,
             timestamp: stats.mtime.toISOString(),
           });
         }
@@ -129,8 +243,51 @@ export async function GET(request: Request): Promise<Response> {
       }
     }
 
+    // Apply filters and sorting to the full dataset
+    const filteredRows = applyFilters(allDetailRows, filters);
+    const sortedRows = applySort(filteredRows, sort);
+
+    const totalCount = sortedRows.length;
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    // Clamp page to valid range
+    const clampedPage = Math.min(page, totalPages || 1);
+    const start = (clampedPage - 1) * pageSize;
+    const end = Math.min(start + pageSize, totalCount);
+
+    const pageRows = sortedRows.slice(start, end);
+
+    // Fetch bodies only for page rows (memory optimization)
+    // Build a Map of captureId -> { originalRequestBody, requestBody } for needed captures
+    const neededCaptureIds = new Set(pageRows.map(r => r.captureId));
+    const captureBodies = new Map<string, { originalRequestBody: unknown; requestBody: unknown }>();
+
+    for (const filename of files) {
+      const captureId = filename;
+      if (!neededCaptureIds.has(captureId)) continue;
+
+      try {
+        const filepath = join(getCaptureDir(), filename);
+        const stats = await fs.stat(filepath);
+        if (stats.size > MAX_FILE_SIZE) continue;
+
+        const raw = await fs.readFile(filepath, "utf8");
+        const data = JSON.parse(raw) as Record<string, unknown>;
+
+        captureBodies.set(captureId, {
+          originalRequestBody: data.originalRequestBody,
+          requestBody: data.requestBody,
+        });
+      } catch (error) {
+        console.error(`Error fetching body for capture ${captureId}:`, error);
+      }
+    }
+
+    // Enrich only the page rows with fullOriginal/fullRedacted (stringified bodies)
+    const enrichedPageRows = enrichPageRows(pageRows, captureBodies);
+
     const response: PaginatedDetailResponse = {
-      details: detailRows,
+      details: enrichedPageRows,
       page: clampedPage,
       pageSize,
       totalPages: totalPages || 1,

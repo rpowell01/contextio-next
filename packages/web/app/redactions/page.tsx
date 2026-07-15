@@ -3,7 +3,7 @@
 
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 
 /**
@@ -152,6 +152,8 @@ export default function RedactionsPage() {
   const [postNeedle, setPostNeedle] = useState("");
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
+  // Debounced filters for API calls - prevents firing on every keystroke
+  const [debouncedFilters, setDebouncedFilters] = useState<Record<string, string>>({});
   const [columnOrder, setColumnOrder] = useState<string[]>([
     'redactionType',
     'requestSource',
@@ -166,6 +168,14 @@ export default function RedactionsPage() {
   const [resizingKey, setResizingKey] = useState<string | null>(null);
   const [resizeStartX, setResizeStartX] = useState<number>(0);
   const [resizeStartWidth, setResizeStartWidth] = useState<number>(0);
+
+  // Debounce filter changes to avoid firing API request on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedFilters(filters);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filters]);
 
   // Fetch summary data
   useEffect(() => {
@@ -198,7 +208,21 @@ export default function RedactionsPage() {
     const fetchDetails = async () => {
       try {
         _setLoadingDetails(true);
-        const res = await fetch(`/api/redactions/detail?page=${page}&pageSize=${PAGE_SIZE}`);
+        // Build query params with filters and sort
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: String(PAGE_SIZE),
+        });
+        // Add filters (using debounced version)
+        Object.entries(debouncedFilters).forEach(([key, val]) => {
+          if (val) params.set(`filter_${key}`, val);
+        });
+        // Add sort
+        if (sortConfig) {
+          params.set("sortKey", sortConfig.key);
+          params.set("sortDir", sortConfig.direction);
+        }
+        const res = await fetch(`/api/redactions/detail?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch details");
         const data = await res.json();
         if (!cancelled) {
@@ -218,7 +242,7 @@ export default function RedactionsPage() {
     };
     fetchDetails();
     return () => { cancelled = true; };
-  }, [page]);
+  }, [page, debouncedFilters, sortConfig]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -307,26 +331,13 @@ const handleDragEnd = () => setDraggedKey(null);
       }
       return { key, direction: 'asc' };
     });
+    setPage(1); // Reset to first page when sort changes
   };
 
-  const filteredDetails = details.filter(row => {
-    return Object.entries(filters).every(([key, val]) => {
-      if (!val) return true;
-      const cell = row[key as keyof RedactionDetailRow];
-      return String(cell ?? '').toLowerCase().includes(val.toLowerCase());
-    });
-  });
-
-  const sortedDetails = [...filteredDetails].sort((a, b) => {
-    if (!sortConfig) return 0;
-    const aVal = a[sortConfig.key as keyof RedactionDetailRow];
-    const bVal = b[sortConfig.key as keyof RedactionDetailRow];
-    if (aVal === null || aVal === undefined) return sortConfig.direction === 'asc' ? 1 : -1;
-    if (bVal === null || bVal === undefined) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-    return 0;
-  });
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setPage(1); // Reset to first page when filter changes
+  };
 
 return (
     <>
@@ -436,7 +447,7 @@ return (
                           placeholder="Filter…"
                           className="w-full text-xs rounded border px-2 py-1"
                           value={filters[key] || ''}
-                          onChange={e => setFilters(prev => ({...prev, [key]: e.target.value}))}
+                          onChange={e => handleFilterChange(key, e.target.value)}
                         />
                       </th>
                     ))}
@@ -445,7 +456,7 @@ return (
                   </tr>
                 </thead>
 <tbody>
-                  {sortedDetails.map((row, index) => {
+                  {details.map((row, index) => {
                     const rowKey = `${row.captureId}-${index}`;
                     return (
                       <tr key={rowKey} className="border-b hover:bg-accent/50">
