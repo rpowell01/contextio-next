@@ -256,9 +256,12 @@ export async function GET(request: Request) {
           if (!data) continue;
 
           // Check if this file belongs to the requested session
+          const dataSessionId = data.sessionId as string | null;
+          const requestedSessionId = sessionId === "unsorted" ? null : sessionId;
           if (
-            data.sessionId === sessionId ||
-            (data.sessionId === null && sessionId === "unsorted")
+            dataSessionId === requestedSessionId ||
+            (dataSessionId === "" && requestedSessionId === "") ||
+            (dataSessionId === null && requestedSessionId === null)
           ) {
             const capture: RawCaptureData = {
               sessionId: data.sessionId as string | null,
@@ -450,18 +453,36 @@ export async function GET(request: Request) {
       // Load pre-aggregated redaction metadata from .redact-meta.json files
       const redactionMetaBySession = await aggregateRedactionMetaBySession();
 
-      const rawCaptures: RawCaptureData[] = sessions.map((s) => ({
-        sessionId: s.sessionId || null,
-        source: s.source,
-        provider: s.provider,
-        targetUrl: s.targetUrl,
-        requestBytes: 0,
-        responseBytes: 0,
-        timings: { total_ms: 0 },
-        timestamp: s.timestamp,
-        requestBody: undefined,
-        responseBody: undefined,
-      }));
+      // Read raw capture data for accurate byte counts
+      const files = await listCaptureFiles();
+      const rawCaptures: RawCaptureData[] = [];
+      
+      for (const filename of files) {
+        try {
+          const filepath = join(getCaptureDir(), filename);
+          const stats = await fs.stat(filepath);
+          if (stats.size > MAX_FILE_SIZE) continue;
+
+          const data = await readCaptureFile(filepath);
+          if (!data) continue;
+
+          rawCaptures.push({
+            sessionId: data.sessionId as string | null,
+            source: data.source as string | null,
+            provider: data.provider as string,
+            targetUrl: data.targetUrl as string,
+            requestBytes: (data.requestBytes as number) || 0,
+            responseBytes: (data.responseBytes as number) || 0,
+            timings: (data.timings as { total_ms: number }) || { total_ms: 0 },
+            timestamp: data.timestamp as string,
+            requestBody: undefined,
+            responseBody: undefined,
+          });
+        } catch (error) {
+          console.error(`Error reading capture for grouped sessions ${filename}:`, error);
+          continue;
+        }
+      }
 
       const { summaries, metrics } = groupCapturesIntoSessions(
         rawCaptures,

@@ -22,7 +22,7 @@ import fs from "node:fs";
 import { stat, readdir, readFile, writeFile, rename, unlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { EncryptionAtRestConfig } from "@contextio/core";
-import { encrypt } from "@contextio/logger";
+import { encrypt, decrypt } from "@contextio/logger";
 
 
 
@@ -36,6 +36,68 @@ export const REDACTION_META_DEBOUNCE_MS = 2_000;
 export const REDACTION_META_JITTER_MS = 500;
 /** Maximum time a .tmp file may exist before it is considered stale (ms). */
 export const REDACTION_META_TMP_MAX_AGE_MS = 30_000;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempt to decrypt capture data if it's encrypted.
+ * Returns the decrypted data if successful, or the original data if not encrypted.
+ * Returns null if decryption fails (wrong key, corrupt data, etc.).
+ */
+async function maybeDecryptCapture(
+  rawBytes: string,
+  encryption?: EncryptionAtRestConfig,
+): Promise<unknown> {
+  if (!encryption) {
+    // No encryption config, assume plaintext
+    try {
+      return JSON.parse(rawBytes);
+    } catch {
+      return null;
+    }
+  }
+
+  // Resolve key material the same way the logger plugin does
+  let keyMaterial: string | undefined;
+  switch (encryption.keyProvider) {
+    case "static":
+      keyMaterial = encryption.staticKey;
+      break;
+    case "env":
+    default:
+      keyMaterial = process.env[encryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
+      break;
+    case "kms":
+      throw new Error("[redaction-meta-watcher] KMS key provider not yet implemented");
+  }
+  if (!keyMaterial) {
+    // No key material available, can't decrypt
+    return null;
+  }
+
+  try {
+    // Parse the raw bytes first to check if it's an encrypted envelope
+    const parsed = JSON.parse(rawBytes);
+    const isEncrypted =
+      typeof parsed.ciphertext === "string" &&
+      typeof parsed.salt === "string" &&
+      typeof parsed.iv === "string";
+
+    if (!isEncrypted) {
+      // Not encrypted, return as-is
+      return parsed;
+    }
+
+    // Decrypt the encrypted payload
+    const decrypted = await decrypt(rawBytes, keyMaterial);
+    return JSON.parse(decrypted);
+  } catch {
+    // Decryption failed (wrong key, corrupt data, etc.)
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -247,6 +309,7 @@ function computeCaptureRedactionCounts(rawData: unknown): {
 
   const strings: string[] = [];
   collectStrings(capture?.requestBody ?? null, strings);
+  collectStrings(capture?.responseBody ?? null, strings);
   const byRule: Record<string, number> = {};
   let total = 0;
   for (const text of strings) {
@@ -435,10 +498,9 @@ async function mergeExistingMetadata(
       if (fileStats.size > MAX_FILE_SIZE) return;
 
       const rawBytes = await readFile(path, "utf8");
-      let rawData: unknown;
-      try {
-        rawData = JSON.parse(rawBytes);
-      } catch {
+      let rawData: unknown = await maybeDecryptCapture(rawBytes, opts.encryption);
+      if (!rawData) {
+        // Could not decrypt or parse, skip
         return;
       }
 
@@ -480,11 +542,9 @@ async function mergeExistingMetadata(
     await processCaptureFile(filename);
   };
 
-  const startWatcher = (): void => {
+const startWatcher = (): void => {
     if (stopped) return;
-
-    // Best-effort cleanup of stale tmp files on startup / reconnect.
-    void flushStaleTmp();
+    console.log("[redaction-meta-watcher] Starting watcher on:", dir);
 
     watcher = fs.watch(dir, { persistent: false }, (eventType, filename) => {
       if (eventType === "rename" || eventType === "change") {
