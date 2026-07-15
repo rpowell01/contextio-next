@@ -113,8 +113,36 @@ COPY --from=build /app/packages/web/public/default-policy.json /app/default-poli
 RUN echo 'import { createLoggerPlugin } from "@contextio/logger";' > /app/logger-plugin.js && \
     echo 'const captureDir = process.env.LOGGER_CAPTURE_DIR || "/app/captures";' >> /app/logger-plugin.js && \
     echo 'const maxSessions = process.env.LOGGER_MAX_SESSIONS ? parseInt(process.env.LOGGER_MAX_SESSIONS, 10) : 0;' >> /app/logger-plugin.js && \
+    echo '// Encryption at rest configuration' >> /app/logger-plugin.js && \
+    echo '// Required: CONTEXTIO_LOGGER_ENCRYPTION_ENABLED=true' >> /app/logger-plugin.js && \
+    echo '// Required: CONTEXTIO_LOGGER_ENCRYPTION_KEY=<actual_key_value>' >> /app/logger-plugin.js && \
+    echo '// Optional overrides (have defaults in proxy config):' >> /app/logger-plugin.js && \
+    echo '//   CONTEXTIO_LOGGER_ENCRYPTION_KEY_PROVIDER (default: "env")' >> /app/logger-plugin.js && \
+    echo '//   CONTEXTIO_LOGGER_ENCRYPTION_KEY_LENGTH (default: 32)' >> /app/logger-plugin.js && \
+    echo '//   CONTEXTIO_LOGGER_ENCRYPTION_STATIC_KEY (only if keyProvider="static")' >> /app/logger-plugin.js && \
+    echo 'const encryptionEnabled = process.env.CONTEXTIO_LOGGER_ENCRYPTION_ENABLED === "true";' >> /app/logger-plugin.js && \
+    echo 'const keyProvider = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY_PROVIDER || "env";' >> /app/logger-plugin.js && \
+    echo 'const staticKey = process.env.CONTEXTIO_LOGGER_ENCRYPTION_STATIC_KEY;' >> /app/logger-plugin.js && \
+    echo 'const keyEnvVar = "CONTEXTIO_LOGGER_ENCRYPTION_KEY";' >> /app/logger-plugin.js && \
+    echo 'const keyLength = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY_LENGTH ? parseInt(process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY_LENGTH, 10) : 32;' >> /app/logger-plugin.js && \
+    echo 'let encryption = undefined;' >> /app/logger-plugin.js && \
+    echo 'if (encryptionEnabled) {' >> /app/logger-plugin.js && \
+    echo '  encryption = { enabled: true, keyProvider, staticKey, keyEnvVar, keyLength };' >> /app/logger-plugin.js && \
+    echo '}' >> /app/logger-plugin.js && \
     echo 'console.log("Logger plugin: captureDir =", captureDir);' >> /app/logger-plugin.js && \
-    echo 'export default () => createLoggerPlugin({ captureDir, maxSessions });' >> /app/logger-plugin.js
+    echo 'console.log("Logger plugin: encryptionEnabled =", encryptionEnabled);' >> /app/logger-plugin.js && \
+    echo 'if (encryptionEnabled) {' >> /app/logger-plugin.js && \
+    echo '  console.log("[startup] Encryption at rest configuration:");' >> /app/logger-plugin.js && \
+    echo '  console.log("  enabled: true");' >> /app/logger-plugin.js && \
+    echo '  console.log("  keyProvider:", keyProvider);' >> /app/logger-plugin.js && \
+    echo '  console.log("  keyEnvVar:", keyEnvVar);' >> /app/logger-plugin.js && \
+    echo '  console.log("  keyLength:", keyLength, "bytes");' >> /app/logger-plugin.js && \
+    echo '  console.log("  staticKey provided:", !!staticKey);' >> /app/logger-plugin.js && \
+    echo '  const keyValue = process.env[keyEnvVar];' >> /app/logger-plugin.js && \
+    echo '  console.log(`  ${keyEnvVar} environment variable:`, keyValue ? "SET" : "NOT SET");' >> /app/logger-plugin.js && \
+    echo '  if (keyValue) console.log(`  ${keyEnvVar} length:`, keyValue.length, "chars");' >> /app/logger-plugin.js && \
+    echo '}' >> /app/logger-plugin.js && \
+    echo 'export default () => createLoggerPlugin({ captureDir, maxSessions, encryption });' >> /app/logger-plugin.js
 
 RUN echo 'import { createRedactPlugin } from "@contextio/redact";' > /app/redact-plugin.js && \
     echo 'const preset = process.env.REDACT_PRESET || "pii";' >> /app/redact-plugin.js && \
