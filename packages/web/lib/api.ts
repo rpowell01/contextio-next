@@ -35,7 +35,7 @@ function getProxyAdminBaseUrl(): string {
   }
   return PROXY_ADMIN_URL;
 }
-const DEFAULT_TIMEOUT = 30000; // 30 seconds
+const DEFAULT_TIMEOUT = 300000; // 5 minutes
 
 interface RetryConfig {
   maxRetries: number;
