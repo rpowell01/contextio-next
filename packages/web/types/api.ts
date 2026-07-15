@@ -461,6 +461,13 @@ export type MetricsData = {
   totalInputTokens?: number;
   /** Total output tokens across all responses */
   totalOutputTokens?: number;
+  /** Pagination information */
+  pagination?: {
+    page: number;
+    pageSize: number;
+    totalPages: number;
+    totalItems: number;
+  };
 };
 
 /**

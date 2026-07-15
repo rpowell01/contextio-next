@@ -11,13 +11,19 @@ export default function SessionsPage() {
   const [summaries, setSummaries] = useState<SessionSummary[]>([]);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [page, setPage] = useState<number>(1);
+  const [pageSize] = useState<number>(20);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalItems, setTotalItems] = useState<number>(0);
 
   useEffect(() => {
     async function fetchSessions() {
       try {
         setSessionsLoading(true);
-        const data = await apiClient.getGroupedSessions();
+        const data = await apiClient.getGroupedSessions(page, pageSize);
         setSummaries(data.summaries);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotalItems(data.pagination?.totalItems || 0);
         setSessionsError(null);
       } catch (e) {
         setSessionsError(e instanceof Error ? e.message : "Unknown error");
@@ -26,7 +32,7 @@ export default function SessionsPage() {
       }
     }
     fetchSessions();
-  }, []);
+  }, [page, pageSize]);
 
   return (
     <MainLayout>
@@ -63,34 +69,63 @@ export default function SessionsPage() {
               <p className="text-sm text-muted-foreground">Start the proxy and make some API requests to see sessions here.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {summaries.map((session) => (
-                <Link
-                  key={session.sessionId}
-                  href={`/sessions/${session.sessionId}`}
-                  className="flex items-center justify-between rounded-lg border p-4 hover:bg-accent transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="rounded-full bg-primary/10 p-3">
-                      <svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h5.5a2 2 0 002-2V9a2 2 0 00-2-2z" />
-                      </svg>
+            <>
+              <div className="space-y-4">
+                {summaries.map((session) => (
+                  <Link
+                    key={session.sessionId}
+                    href={`/sessions/${session.sessionId}`}
+                    className="flex items-center justify-between rounded-lg border p-4 hover:bg-accent transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="rounded-full bg-primary/10 p-3">
+                        <svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h5.5a2 2 0 002-2V9a2 2 0 00-2-2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="font-medium">
+                          {session.source} → {session.destination}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {session.captureCount} captures • {formatDateTime(session.firstTimestamp)}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-medium">
-                        {session.source} → {session.destination}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {session.captureCount} captures • {formatDateTime(session.firstTimestamp)}
-                      </div>
+                    <svg className="h-5 w-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                ))}
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="rounded-lg border p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-muted-foreground">
+                      Page {page} of {totalPages} ({totalItems} total sessions)
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page <= 1}
+                        className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        ← Previous
+                      </button>
+                      <button
+                        onClick={() => setPage(p => p + 1)}
+                        disabled={page >= totalPages}
+                        className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next →
+                      </button>
                     </div>
                   </div>
-                  <svg className="h-5 w-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </Link>
-              ))}
-            </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

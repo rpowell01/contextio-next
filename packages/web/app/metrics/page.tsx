@@ -36,6 +36,8 @@ export default function MetricsPage() {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<TimeRange>(TIME_RANGES[2]); // default 24h
   const [maxDataPoints, setMaxDataPoints] = useState<number>(50);
+  const [page, setPage] = useState<number>(1);
+  const [pageSize] = useState<number>(50);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +48,7 @@ export default function MetricsPage() {
 
       try {
         const controller = new AbortController();
-        const data = await apiClient.getMetrics(timeRange.hours, maxDataPoints || undefined, controller.signal);
+        const data = await apiClient.getMetrics(timeRange.hours, maxDataPoints || undefined, page, pageSize, controller.signal);
 
         if (!isValidMetricsData(data)) {
           throw new Error("Invalid metrics data received from API");
@@ -72,7 +74,7 @@ export default function MetricsPage() {
     return () => {
       cancelled = true;
     };
-  }, [timeRange, maxDataPoints]);
+  }, [timeRange, maxDataPoints, page, pageSize]);
 
   return (
     <MainLayout>
@@ -240,8 +242,37 @@ export default function MetricsPage() {
                 </div>
               </div>
             </div>
-          </div>
-        )}
+
+{/* Pagination Controls */}
+            {(metrics.pagination && metrics.pagination.totalPages > 1) && (
+              <div className="rounded-lg border p-4">
+                <h3 className="text-lg font-semibold mb-4">Pagination</h3>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Page {metrics.pagination.page} of {metrics.pagination.totalPages} ({metrics.pagination.totalItems} total items)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page <= 1}
+                      className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      ← Previous
+                    </button>
+                    <button
+                      onClick={() => setPage(p => p + 1)}
+                      disabled={metrics.pagination && page >= metrics.pagination.totalPages}
+                      className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            </div>
+          )}
 
         {/* Provider Usage */}
         <div className="rounded-lg border p-4">
