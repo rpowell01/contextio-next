@@ -8,6 +8,7 @@ export interface Settings {
   captureCleanupEnabled: boolean;
   captureCleanupIntervalHours: number;
   captureCleanupMaxAgeDays: number;
+  theme: "light" | "dark" | "system" | "high-contrast";
 }
 
 export type SettingSource =
@@ -46,6 +47,10 @@ export const SETTING_ENV_MAP: Record<
   captureCleanupMaxAgeDays: {
     envVar: "LOGGER_CAPTURE_MAX_AGE",
     dynamic: false,
+  },
+  theme: {
+    envVar: "CONTEXTIO_THEME",
+    dynamic: true,
   },
 };
 
@@ -132,6 +137,12 @@ export function applyEnvOverrides(settings: Settings): {
         }
         break;
       }
+      case "theme":
+        if (["light", "dark", "system", "high-contrast"].includes(raw)) {
+          override.theme = raw as "light" | "dark" | "system" | "high-contrast";
+          accepted = true;
+        }
+        break;
       default:
         break;
     }
@@ -175,6 +186,7 @@ export const DEFAULT_SETTINGS: Settings = {
   captureCleanupEnabled: false,
   captureCleanupIntervalHours: 24,
   captureCleanupMaxAgeDays: 30,
+  theme: "system",
 };
 
 export function validateSettings(input: unknown): Settings {
@@ -220,7 +232,7 @@ export function validateSettings(input: unknown): Settings {
   return {
     logDir: validateString("logDir", 0),
     maxSessions: validateNumber("maxSessions", 0, 10000),
-    redactPreset: validateEnum("redactPreset", ["secrets", "pii", "strict"]),
+    redactPreset: validateEnum("redactPreset", ["secrets", "pii", "strict"]) as "secrets" | "pii" | "strict",
     redactReversible: validateBoolean("redactReversible"),
     redactPolicyFile: validateString("redactPolicyFile", 0),
     encryptionAtRest: validateBoolean("encryptionAtRest"),
@@ -235,6 +247,7 @@ export function validateSettings(input: unknown): Settings {
       1,
       365,
     ),
+    theme: validateEnum("theme", ["light", "dark", "system", "high-contrast"]) as "light" | "dark" | "system" | "high-contrast",
   };
 }
 
@@ -295,5 +308,10 @@ export function validateSettingsLenient(input: unknown): Settings {
       obj.captureCleanupMaxAgeDays <= 365
         ? obj.captureCleanupMaxAgeDays
         : DEFAULT_SETTINGS.captureCleanupMaxAgeDays,
+    theme:
+      typeof obj.theme === "string" &&
+      ["light", "dark", "system", "high-contrast"].includes(obj.theme)
+        ? (obj.theme as "light" | "dark" | "system" | "high-contrast")
+        : DEFAULT_SETTINGS.theme,
   };
 }

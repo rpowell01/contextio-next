@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ThemeProvider } from "@/components/theme-provider";
 import "../globals.css";
 
 export const metadata: Metadata = {
@@ -12,9 +13,33 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('contextio-theme');
+                  if (theme) {
+                    document.documentElement.setAttribute('data-theme', theme === 'system' 
+                      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                      : theme);
+                  } else {
+                    // No saved preference - use system preference
+                    document.documentElement.setAttribute('data-theme', 
+                      window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                  }
+                } catch (e) {
+                  document.documentElement.setAttribute('data-theme', 'light');
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className={`antialiased`}>
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

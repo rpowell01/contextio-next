@@ -1,8 +1,10 @@
 "use client";
 
 import { MainLayout } from "@/components/main-layout";
+import { ThemeSelector } from "@/components/theme-selector";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTheme } from "@/components/theme-provider";
 
 interface BuildInfo {
   version: string;
@@ -18,6 +20,7 @@ interface RedactionsSummary {
 export default function HomePage() {
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [redactionsSummary, setRedactionsSummary] = useState<RedactionsSummary | null>(null);
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     fetch("/api/version")
@@ -26,30 +29,35 @@ export default function HomePage() {
       .catch(console.error);
   }, []);
 
-useEffect(() => {
-  fetch("/api/redactions?summary=true")
-  .then((res) => res.json())
-  .then((data: { summary: { totalRedactions: number; byType: Record<string, number> } }) => setRedactionsSummary(data.summary))
-  .catch(console.error);
-}, []);
+  useEffect(() => {
+    fetch("/api/redactions?summary=true")
+      .then((res) => res.json())
+      .then((data: { summary: { totalRedactions: number; byType: Record<string, number> } }) =>
+        setRedactionsSummary(data.summary)
+      )
+      .catch(console.error);
+  }, []);
 
   return (
     <MainLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-muted-foreground">
               Monitor and inspect your LLM API traffic through ContextIO-Next proxy.
             </p>
           </div>
-          {buildInfo && (
-            <div className="text-right text-xs text-muted-foreground font-mono">
-              <div>v{buildInfo.version}</div>
-              <div>{buildInfo.gitCommit}</div>
-              <div>{new Date(buildInfo.buildTime).toLocaleString()}</div>
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            {buildInfo && (
+              <div className="text-right text-xs text-muted-foreground font-mono hidden sm:block">
+                <div>v{buildInfo.version}</div>
+                <div>{buildInfo.gitCommit}</div>
+                <div>{new Date(buildInfo.buildTime).toLocaleString()}</div>
+              </div>
+            )}
+            <ThemeSelector value={theme} onChange={setTheme} />
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
