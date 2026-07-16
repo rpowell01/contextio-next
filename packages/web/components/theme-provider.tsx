@@ -1,32 +1,41 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from "react";
+import { apiClient } from "@/lib/api";
+import type { Settings } from "@/lib/settings";
 
 type Theme = "light" | "dark" | "system" | "high-contrast";
 
 interface ThemeContextType {
   theme: Theme;
-  setTheme: (theme: Theme) => void;
-  setThemeWithoutPersist: (theme: Theme) => void;
+  setTheme: (theme: Theme) => Promise<void>;
   resolvedTheme: "light" | "dark" | "high-contrast";
   mounted: boolean;
+  isOverridden: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+interface ThemeProviderProps {
+  children: ReactNode;
+  // Optional: server-resolved theme (from SSR) to prevent flash
+  initialTheme?: Theme;
+}
+
 export function ThemeProvider({
   children,
   initialTheme = "system",
-}: {
-  children: ReactNode;
-  initialTheme?: Theme;
-}) {
-  const [theme, setTheme] = useState<Theme>(initialTheme);
+}: ThemeProviderProps) {
+  const [theme, setThemeState] = useState<Theme>(initialTheme);
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark" | "high-contrast">("light");
   const [mounted, setMounted] = useState(false);
+  const [isOverridden, setIsOverridden] = useState(false);
+  const settingsRef = useRef<Settings | null>(null);
+  const isLoadingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   // Resolve theme based on system preference
-  const resolveTheme = (t: Theme): "light" | "dark" | "high-contrast" => {
+  const resolveTheme = useCallback((t: Theme): "light" | "dark" | "high-contrast" => {
     if (t === "system") {
       if (typeof window !== "undefined" && window.matchMedia) {
         return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -37,65 +46,100 @@ export function ThemeProvider({
       return "high-contrast";
     }
     return t;
-  };
+  }, []);
 
   // Apply theme to document
-  const applyTheme = (t: Theme) => {
+  const applyTheme = useCallback((t: Theme) => {
     const resolved = resolveTheme(t);
     setResolvedTheme(resolved);
     if (typeof document !== "undefined") {
       document.documentElement.setAttribute("data-theme", resolved);
     }
-  };
+  }, [resolveTheme]);
 
-  // Initialize theme from localStorage or use default
+  // Initialize theme from settings API
   useEffect(() => {
-    setMounted(true);
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("contextio-theme") as Theme | null;
-      if (saved) {
-        setTheme(saved);
-        applyTheme(saved);
-      } else {
-        applyTheme(initialTheme);
+    mountedRef.current = true;
+
+    async function loadTheme() {
+      if (isLoadingRef.current) return;
+      isLoadingRef.current = true;
+
+      try {
+        const response = await apiClient.getSettings();
+        if (!mountedRef.current) return;
+        if (response.settings) {
+          const settings = response.settings as Settings;
+          const metadata = response.metadata as Record<keyof Settings, { source: string; dynamic: boolean }> | undefined;
+
+          settingsRef.current = settings;
+          setThemeState(settings.theme);
+          applyTheme(settings.theme);
+
+          // Check if theme is overridden by environment variable
+          const themeMeta = metadata?.theme;
+          setIsOverridden(themeMeta?.source === "environment-variable");
+        }
+      } catch (error) {
+        console.error("Failed to load theme from settings:", error);
+        // Fallback to system theme
+        if (mountedRef.current) {
+          applyTheme("system");
+        }
+      } finally {
+        if (mountedRef.current) {
+          setMounted(true);
+        }
+        isLoadingRef.current = false;
       }
     }
-  }, [initialTheme]);
+
+    loadTheme();
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [applyTheme]);
 
   // Listen for system theme changes
   useEffect(() => {
-    if (!mounted) return;
-    
+    if (!mounted || theme !== "system") return;
+
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = () => {
-      if (theme === "system") {
-        applyTheme("system");
-      }
+      applyTheme("system");
     };
-    
+
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [theme, mounted]);
+  }, [theme, mounted, applyTheme]);
 
-  // Apply theme to document when it changes (but don't persist to localStorage here)
+  // Apply theme to document when it changes
   useEffect(() => {
     if (!mounted) return;
     applyTheme(theme);
-  }, [theme, mounted]);
+  }, [theme, mounted, applyTheme]);
 
-  const handleSetTheme = (newTheme: Theme) => {
-    setTheme(newTheme);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("contextio-theme", newTheme);
+  const handleSetTheme = async (newTheme: Theme) => {
+    setThemeState(newTheme);
+    applyTheme(newTheme);
+
+    try {
+      // Fetch fresh settings to avoid race conditions with concurrent edits
+      const response = await apiClient.getSettings();
+      const currentSettings = response.settings as Settings;
+      const merged = { ...currentSettings, theme: newTheme };
+
+      await apiClient.saveSettings(merged);
+      // Update cache
+      settingsRef.current = merged;
+    } catch (error) {
+      console.error("Failed to save theme to settings:", error);
     }
   };
 
-  const handleSetThemeWithoutPersist = (newTheme: Theme) => {
-    setTheme(newTheme);
-  };
-
   return (
-    <ThemeContext.Provider value={{ theme, setTheme: handleSetTheme, setThemeWithoutPersist: handleSetThemeWithoutPersist, resolvedTheme, mounted }}>
+    <ThemeContext.Provider value={{ theme, setTheme: handleSetTheme, resolvedTheme, mounted, isOverridden }}>
       {children}
     </ThemeContext.Provider>
   );

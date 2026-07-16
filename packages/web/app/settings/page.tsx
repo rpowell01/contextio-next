@@ -31,7 +31,7 @@ import { Loader2, Trash2 } from "lucide-react";
 // or accidental invocation.
 
 // "Bottom Line" descriptions shown beneath each setting.
-const SETTING_DESCRIPTIONS: Record<keyof Settings, string> = {
+const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
   logDir:
     "Where captured API traffic files are written. Changing this only takes effect after the proxy is restarted.",
   maxSessions:
@@ -50,8 +50,6 @@ const SETTING_DESCRIPTIONS: Record<keyof Settings, string> = {
     "How often the cleanup job runs. Changing this only takes effect after the proxy is restarted.",
   captureCleanupMaxAgeDays:
     "Capture files older than this are deleted. Changing this only takes effect after the proxy is restarted.",
-  theme:
-    "Select the color theme for the web UI. System follows your OS preference. Changes apply immediately.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
@@ -100,7 +98,7 @@ function SettingHelp({
 }
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>({
+  const [settings, setSettings] = useState<Omit<Settings, "theme">>({
     logDir: "./captures",
     maxSessions: 0,
     redactPreset: "pii",
@@ -110,7 +108,6 @@ export default function SettingsPage() {
     captureCleanupEnabled: false,
     captureCleanupIntervalHours: 24,
     captureCleanupMaxAgeDays: 30,
-    theme: "system",
   });
   const [metadata, setMetadata] = useState<Record<
     keyof Settings,
@@ -127,21 +124,16 @@ export default function SettingsPage() {
   const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
-  const { theme, setTheme, setThemeWithoutPersist, mounted } = useTheme();
-
-  // Sync theme from settings when loaded, but don't override user's localStorage choice
-  useEffect(() => {
-    if (mounted && settings.theme !== theme && !localStorage.getItem("contextio-theme")) {
-      setThemeWithoutPersist(settings.theme);
-    }
-  }, [settings.theme, theme, setThemeWithoutPersist, mounted]);
+  const { theme, setTheme, isOverridden: themeIsOverridden } = useTheme();
 
   useEffect(() => {
     async function loadSettings() {
       try {
         const data = await apiClient.getSettings();
         if (data.settings) {
-          setSettings(data.settings);
+          // Omit theme from local settings state since it's managed by ThemeProvider
+          const { theme: _theme, ...restSettings } = data.settings as Settings;
+          setSettings(restSettings);
         }
         if (data.metadata) {
           setMetadata(data.metadata as Record<keyof Settings, SettingMeta>);
@@ -163,46 +155,55 @@ export default function SettingsPage() {
     };
   }, []);
 
-useEffect(() => {
- if (loading) return;
- const policyPath = (settings.redactPolicyFile ?? "").trim();
- if (!policyPath) {
-   setPolicyFileContents(null);
-   setPolicyFileLoadError(null);
-   return;
- }
- setPolicyFileLoadError(null);
- const controller = new AbortController();
- let cancelled = false;
- (async () => {
-   try {
-     const response = await fetch("/api/policy", {
-       signal: controller.signal,
-     });
-     if (!response.ok) {
-       const errorBody = (await response.json().catch(() => ({}))) as { error?: string };
-       throw new Error(errorBody.error ?? `Request failed with status ${response.status}`);
-     }
-     const payload = await response.json();
-     if (!cancelled) setPolicyFileContents(JSON.stringify(payload, null, 2));
-     if (!cancelled) setEditedPolicyContent(JSON.stringify(payload, null, 2));
-   } catch (error) {
-     if (!cancelled) {
-       setPolicyFileLoadError(error instanceof Error ? error.message : "Unable to load policy file");
-       setPolicyFileContents(null);
-     }
-   }
- })();
- return () => {
-   cancelled = true;
-   controller.abort();
- };
-}, [loading, settings.redactPolicyFile]);
+  useEffect(() => {
+    if (loading) return;
+    const policyPath = (settings.redactPolicyFile ?? "").trim();
+    if (!policyPath) {
+      setPolicyFileContents(null);
+      setPolicyFileLoadError(null);
+      return;
+    }
+    setPolicyFileLoadError(null);
+    const controller = new AbortController();
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/policy", {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const errorBody = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(errorBody.error ?? `Request failed with status ${response.status}`);
+        }
+        const payload = await response.json();
+        if (!cancelled) setPolicyFileContents(JSON.stringify(payload, null, 2));
+        if (!cancelled) setEditedPolicyContent(JSON.stringify(payload, null, 2));
+      } catch (error) {
+        if (!cancelled) {
+          setPolicyFileLoadError(error instanceof Error ? error.message : "Unable to load policy file");
+          setPolicyFileContents(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [loading, settings.redactPolicyFile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const result = await apiClient.saveSettings(settings);
+      // Fetch fresh settings to avoid overwriting concurrent changes
+      const response = await apiClient.getSettings();
+      const currentSettings = response.settings as Settings;
+      // Merge with local changes (theme from ThemeProvider, other settings from local state)
+      const mergedSettings: Settings = {
+        ...currentSettings,
+        ...settings,
+        theme,
+      };
+      const result = await apiClient.saveSettings(mergedSettings);
       if (result.success) {
         setCleanupMessage({
           type: "success",
@@ -234,21 +235,18 @@ useEffect(() => {
     return metadata?.[key];
   };
 
-  const isOverridden = (key: keyof Settings): boolean => {
+  const isSettingOverridden = (key: keyof Settings): boolean => {
     return metadata?.[key]?.source === "environment-variable";
   };
 
-  const updateSetting = (
-    key: keyof Settings,
-    value: Settings[keyof Settings],
+  const updateSetting = <K extends keyof Omit<Settings, "theme">>(
+    key: K,
+    value: Settings[K],
   ) => {
-    if (isOverridden(key)) {
+    if (isSettingOverridden(key)) {
       return;
     }
     setSettings((prev) => ({ ...prev, [key]: value }));
-    if (key === "theme" && mounted) {
-      setTheme(value as "light" | "dark" | "system" | "high-contrast");
-    }
   };
 
   const handleCleanupAll = async () => {
@@ -276,6 +274,10 @@ useEffect(() => {
   };
 
   const renderSetting = (key: keyof Settings) => {
+    // Theme is handled by ThemeProvider, not local state
+    if (key === "theme") {
+      return renderThemeSetting();
+    }
     switch (key) {
       case "logDir":
         return (
@@ -288,9 +290,9 @@ useEffect(() => {
               value={settings.logDir}
               onChange={(e) => updateSetting("logDir", e.target.value)}
               placeholder="./captures"
-              disabled={isOverridden("logDir")}
+              disabled={isSettingOverridden("logDir")}
               className={
-                isOverridden("logDir") ? "bg-muted cursor-not-allowed" : ""
+                isSettingOverridden("logDir") ? "bg-muted cursor-not-allowed" : ""
               }
             />
             <SettingHelp
@@ -316,9 +318,9 @@ useEffect(() => {
                 updateSetting("maxSessions", parseInt(e.target.value) || 0)
               }
               min="0"
-              disabled={isOverridden("maxSessions")}
+              disabled={isSettingOverridden("maxSessions")}
               className={
-                isOverridden("maxSessions") ? "bg-muted cursor-not-allowed" : ""
+                isSettingOverridden("maxSessions") ? "bg-muted cursor-not-allowed" : ""
               }
             />
             <SettingHelp
@@ -327,9 +329,9 @@ useEffect(() => {
             />
           </div>
         );
-case "redactPreset": {
-        const presetDisabled = isOverridden("redactPreset") || Boolean(settings.redactPolicyFile?.trim());
-        const presetOverrideReason = isOverridden("redactPreset")
+      case "redactPreset": {
+        const presetDisabled = isSettingOverridden("redactPreset") || Boolean(settings.redactPolicyFile?.trim());
+        const presetOverrideReason = isSettingOverridden("redactPreset")
           ? "Set by environment variable"
           : settings.redactPolicyFile?.trim()
             ? "Overridden by custom policy file"
@@ -369,7 +371,7 @@ case "redactPreset": {
           </div>
         );
       }
-case "redactPolicyFile":
+      case "redactPolicyFile":
         return (
           <div>
             <Label htmlFor="redactPolicyFile" className="block text-sm font-medium mb-2">
@@ -380,9 +382,9 @@ case "redactPolicyFile":
               value={settings.redactPolicyFile}
               onChange={(e) => updateSetting("redactPolicyFile", e.target.value)}
               placeholder="/path/to/policy.yaml"
-              disabled={isOverridden("redactPolicyFile")}
+              disabled={isSettingOverridden("redactPolicyFile")}
               className={
-                isOverridden("redactPolicyFile")
+                isSettingOverridden("redactPolicyFile")
                   ? "bg-muted cursor-not-allowed"
                   : ""
               }
@@ -416,11 +418,11 @@ case "redactPolicyFile":
                   </div>
                 ) : (
                   <>
-        <textarea
-          value={editedPolicyContent}
-          onChange={(e) => setEditedPolicyContent(e.target.value)}
-          className="font-mono text-xs min-h-[600px] min-w-[600px] p-2 border rounded"
-        />
+                    <textarea
+                      value={editedPolicyContent}
+                      onChange={(e) => setEditedPolicyContent(e.target.value)}
+                      className="font-mono text-xs min-h-[600px] min-w-[600px] p-2 border rounded"
+                    />
                     {editedPolicyContent && editedPolicyContent !== policyFileContents && (
                       <Button
                         type="button"
@@ -466,29 +468,29 @@ case "redactPolicyFile":
             )}
           </div>
         );
-case "redactReversible":
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="checkbox"
-        id="redactReversible"
-        checked={settings.redactReversible}
-        onChange={(e) =>
-          updateSetting("redactReversible", e.target.checked)
-        }
-        className="w-4 h-4"
-        disabled={isOverridden("redactReversible")}
-      />
-      <Label htmlFor="redactReversible" className="text-sm">
-        Reversible redaction (restore originals in responses)
-      </Label>
-      <SettingHelp
-        meta={getMeta("redactReversible")}
-        description={SETTING_DESCRIPTIONS.redactReversible}
-      />
-    </div>
-  );
-case "encryptionAtRest":
+      case "redactReversible":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="redactReversible"
+              checked={settings.redactReversible}
+              onChange={(e) =>
+                updateSetting("redactReversible", e.target.checked)
+              }
+              className="w-4 h-4"
+              disabled={isSettingOverridden("redactReversible")}
+            />
+            <Label htmlFor="redactReversible" className="text-sm">
+              Reversible redaction (restore originals in responses)
+            </Label>
+            <SettingHelp
+              meta={getMeta("redactReversible")}
+              description={SETTING_DESCRIPTIONS.redactReversible}
+            />
+          </div>
+        );
+      case "encryptionAtRest":
         return (
           <div className="flex items-center gap-2">
             <input
@@ -499,7 +501,7 @@ case "encryptionAtRest":
                 updateSetting("encryptionAtRest", e.target.checked)
               }
               className="w-4 h-4"
-              disabled={isOverridden("encryptionAtRest")}
+              disabled={isSettingOverridden("encryptionAtRest")}
             />
             <Label htmlFor="encryptionAtRest" className="text-sm">
               Enable encryption at rest for capture files
@@ -532,7 +534,7 @@ case "encryptionAtRest":
                 onChange={(e) =>
                   updateSetting("captureCleanupEnabled", e.target.checked)
                 }
-                disabled={isOverridden("captureCleanupEnabled")}
+                disabled={isSettingOverridden("captureCleanupEnabled")}
                 className="h-4 w-4 rounded border-gray-300"
               />
               <Label htmlFor="captureCleanupEnabled" className="text-sm font-medium">
@@ -563,9 +565,9 @@ case "encryptionAtRest":
               min="1"
               max="168"
               placeholder="24"
-              disabled={isOverridden("captureCleanupIntervalHours")}
+              disabled={isSettingOverridden("captureCleanupIntervalHours")}
               className={
-                isOverridden("captureCleanupIntervalHours")
+                isSettingOverridden("captureCleanupIntervalHours")
                   ? "bg-muted cursor-not-allowed"
                   : ""
               }
@@ -598,9 +600,9 @@ case "encryptionAtRest":
               min="1"
               max="365"
               placeholder="30"
-              disabled={isOverridden("captureCleanupMaxAgeDays")}
+              disabled={isSettingOverridden("captureCleanupMaxAgeDays")}
               className={
-                isOverridden("captureCleanupMaxAgeDays")
+                isSettingOverridden("captureCleanupMaxAgeDays")
                   ? "bg-muted cursor-not-allowed"
                   : ""
               }
@@ -611,47 +613,45 @@ case "encryptionAtRest":
             />
           </div>
         );
-      case "theme": {
-        const themeDisabled = isOverridden("theme");
-        return (
-          <div>
-            <Label htmlFor="theme" className="block text-sm font-medium mb-2">
-              Theme
-              {themeDisabled && (
-                <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-normal">
-                  (Set by environment variable)
-                </span>
-              )}
-            </Label>
-            <select
-              id="theme"
-              value={settings.theme}
-              onChange={(e) =>
-                updateSetting(
-                  "theme",
-                  e.target.value as "light" | "dark" | "system" | "high-contrast"
-                )
-              }
-              disabled={themeDisabled}
-              className={`w-full rounded-md px-3 py-2 text-sm border ${
-                themeDisabled ? "bg-muted cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-primary"
-              }`}
-            >
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-              <option value="system">System (follows OS preference)</option>
-              <option value="high-contrast">High Contrast</option>
-            </select>
-            <SettingHelp
-              meta={getMeta("theme")}
-              description={SETTING_DESCRIPTIONS.theme}
-            />
-          </div>
-        );
-      }
       default:
         return null;
     }
+  };
+
+  const renderThemeSetting = () => {
+    const themeDisabled = themeIsOverridden;
+    return (
+      <div>
+        <Label htmlFor="theme" className="block text-sm font-medium mb-2">
+          Theme
+          {themeIsOverridden && (
+            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-normal">
+              (Set by environment variable)
+            </span>
+          )}
+        </Label>
+        <select
+          id="theme"
+          value={theme}
+          onChange={(e) =>
+            setTheme(e.target.value as "light" | "dark" | "system" | "high-contrast")
+          }
+          disabled={themeDisabled}
+          className={`w-full rounded-md px-3 py-2 text-sm border ${
+            themeDisabled ? "bg-muted cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-primary"
+          }`}
+        >
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="system">System (follows OS preference)</option>
+          <option value="high-contrast">High Contrast</option>
+        </select>
+        <SettingHelp
+          meta={getMeta("theme")}
+          description="Select the color theme for the web UI. System follows your OS preference. Changes apply immediately."
+        />
+      </div>
+    );
   };
 
   if (loading) {
@@ -694,9 +694,9 @@ case "encryptionAtRest":
           </div>
         )}
 
-<form onSubmit={handleSubmit} className="space-y-6">
-  <div className="rounded-lg border p-6">
-   <h3 className="font-semibold mb-4">Logging</h3>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="rounded-lg border p-6">
+            <h3 className="font-semibold mb-4">Logging</h3>
             <div className="space-y-4">
               {renderSetting("logDir")}
               {renderSetting("maxSessions")}

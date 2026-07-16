@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/components/theme-provider";
 
 interface ThemeSelectorProps {
   className?: string;
@@ -18,17 +19,21 @@ const THEME_OPTIONS = [
 
 export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(
+    THEME_OPTIONS.findIndex((t) => t.value === value)
+  );
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const selectedIndexRef = useRef(THEME_OPTIONS.findIndex((t) => t.value === value));
+  const { isOverridden } = useTheme();
 
-  // Check if theme is overridden by environment variable
-  const isEnvOverridden = typeof window !== "undefined" && !!localStorage.getItem("contextio-theme-env-override");
-  
-  // Update selected index when value changes
+  // Update selected index when value changes (for checkmark), but don't move focus while open
   useEffect(() => {
     selectedIndexRef.current = THEME_OPTIONS.findIndex((t) => t.value === value);
-  }, [value]);
+    if (!isOpen) {
+      setFocusedIndex(selectedIndexRef.current);
+    }
+  }, [value, isOpen]);
 
   // Handle keyboard navigation
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement | HTMLUListElement>) => {
@@ -39,15 +44,15 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
     }
 
     if (isOpen) {
-      let newIndex = selectedIndexRef.current;
+      let newIndex = focusedIndex;
       switch (event.key) {
         case "ArrowDown":
           event.preventDefault();
-          newIndex = (selectedIndexRef.current + 1) % THEME_OPTIONS.length;
+          newIndex = (focusedIndex + 1) % THEME_OPTIONS.length;
           break;
         case "ArrowUp":
           event.preventDefault();
-          newIndex = (selectedIndexRef.current - 1 + THEME_OPTIONS.length) % THEME_OPTIONS.length;
+          newIndex = (focusedIndex - 1 + THEME_OPTIONS.length) % THEME_OPTIONS.length;
           break;
         case "Home":
           event.preventDefault();
@@ -60,7 +65,7 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
         case "Enter":
         case " ":
           event.preventDefault();
-          handleSelect(THEME_OPTIONS[selectedIndexRef.current].value);
+          handleSelect(THEME_OPTIONS[focusedIndex].value);
           break;
         case "Escape":
           event.preventDefault();
@@ -71,31 +76,36 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
           setIsOpen(false);
           break;
       }
-      
-      // Update selected index and focus the new option
-      if (newIndex !== selectedIndexRef.current) {
-        selectedIndexRef.current = newIndex;
-        if (listRef.current) {
-          const option = listRef.current.querySelector(`[data-index="${newIndex}"]`) as HTMLElement;
-          option?.focus();
-        }
+
+      // Update focused index and focus the new option
+      if (newIndex !== focusedIndex) {
+        setFocusedIndex(newIndex);
+        // Focus after state update
+        setTimeout(() => {
+          (listRef.current?.querySelector(`[data-index="${newIndex}"]`) as HTMLElement | null)?.focus();
+        }, 0);
       }
     }
   };
 
-  // Focus the selected option when open
+  // Focus the focused option when open
   useEffect(() => {
     if (isOpen && listRef.current) {
-      const option = listRef.current.querySelector(`[data-index="${selectedIndexRef.current}"]`) as HTMLElement;
+      const option = listRef.current.querySelector(`[data-index="${focusedIndex}"]`) as HTMLElement | null;
       option?.focus();
     }
-  }, [isOpen]);
+  }, [isOpen, focusedIndex]);
 
   // Close on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isOpen && buttonRef.current && !buttonRef.current.contains(event.target as Node) &&
-          listRef.current && !listRef.current.contains(event.target as Node)) {
+      if (
+        isOpen &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as Node) &&
+        listRef.current &&
+        !listRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
@@ -118,12 +128,12 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleKeyDown}
-        disabled={isEnvOverridden}
+        disabled={isOverridden}
         className={cn(
           "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
           "bg-background border border-border hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring",
           "min-w-[140px] justify-between",
-          isEnvOverridden && "opacity-50 cursor-not-allowed"
+          isOverridden && "opacity-50 cursor-not-allowed"
         )}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -144,53 +154,55 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
         </svg>
       </button>
 
-{isOpen && (
-          <>
-            <ul
-              ref={listRef}
-              className="absolute z-50 mt-1 min-w-[140px] rounded-md border border-border bg-popover p-1 shadow-lg"
-              role="listbox"
-              aria-label="Theme options"
-              onKeyDown={handleKeyDown}
-            >
-              {THEME_OPTIONS.map((theme, index) => (
-                <li key={theme.value}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={theme.value === value}
-                    tabIndex={-1}
-                    data-index={index}
-                    onClick={() => handleSelect(theme.value)}
-                    disabled={isEnvOverridden}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded px-3 py-2 text-sm font-medium transition-colors",
-                      theme.value === value
-                        ? "bg-accent text-accent-foreground"
-                        : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                      isEnvOverridden && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    <span aria-hidden="true">{theme.icon}</span>
-                    <span>{theme.label}</span>
-                    {theme.value === value && (
-                      <svg
-                        className="ml-auto h-4 w-4 text-primary"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+      {isOpen && (
+        <>
+          <ul
+            ref={listRef}
+            className="absolute z-50 mt-1 min-w-[140px] rounded-md border border-border bg-popover p-1 shadow-lg"
+            role="listbox"
+            aria-label="Theme options"
+            onKeyDown={handleKeyDown}
+            aria-activedescendant={isOpen ? `theme-option-${focusedIndex}` : undefined}
+          >
+            {THEME_OPTIONS.map((theme, index) => (
+              <li key={theme.value}>
+                <button
+                  type="button"
+                  role="option"
+                  id={`theme-option-${index}`}
+                  aria-selected={index === focusedIndex}
+                  tabIndex={-1}
+                  data-index={index}
+                  onClick={() => handleSelect(theme.value)}
+                  disabled={isOverridden}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded px-3 py-2 text-sm font-medium transition-colors",
+                    index === focusedIndex
+                      ? "bg-accent text-accent-foreground"
+                      : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                    isOverridden && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <span aria-hidden="true">{theme.icon}</span>
+                  <span>{theme.label}</span>
+                  {theme.value === value && (
+                    <svg
+                      className="ml-auto h-4 w-4 text-primary"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
