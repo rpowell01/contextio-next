@@ -310,6 +310,30 @@ export function computeCaptureRedactionCounts(
 }
 
 /**
+ * Extract redaction matches from a capture without computing full counts.
+ * Returns simplified matches with ruleId, original value, placeholder, and path.
+ * Used for the redactions detail API to get individual match data on-demand.
+ */
+export function extractRedactionMatches(rawData: Record<string, unknown>): Array<{
+  ruleId: string;
+  original: string;
+  placeholder: string;
+  path: string;
+}> {
+  const requestBody = rawData.requestBody;
+  const responseBody = rawData.responseBody;
+
+  // Use the existing countRedactionsInResponse which handles both request and response
+  const reqCounts = countRedactionsInResponse(undefined, requestBody, false);
+  const resCounts = countRedactionsInResponse(responseBody as string | undefined, undefined, true);
+
+  return [
+    ...reqCounts.matches.map(m => ({ ruleId: m.ruleId, original: m.original, placeholder: m.placeholder, path: m.path })),
+    ...resCounts.matches.map(m => ({ ruleId: m.ruleId, original: m.original, placeholder: m.placeholder, path: m.path })),
+  ];
+}
+
+/**
  * Count redactions in both the request and response bodies.
  */
 export function countRedactionsInResponse(

@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import { join } from "path";
 import type { SessionDetail, SessionMetrics, CaptureMetrics } from "@/types/api";
-import { listCaptureFiles, getCaptureDir, MAX_FILE_SIZE, computeContextValues, computeTokenUsage } from "@/lib/sessions/utils";
+import { listCaptureFiles, getCaptureDir, MAX_FILE_SIZE, computeContextValues, computeTokenUsage, readCaptureFile } from "@/lib/sessions/utils";
 import {
   computeCaptureRedactionCounts,
   countRedactionsInResponse,
@@ -218,8 +218,8 @@ export async function GET(
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
 
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const data = await readCaptureFile(filepath);
+        if (!data) continue;
 
         // Check if this file belongs to the requested session
         if (

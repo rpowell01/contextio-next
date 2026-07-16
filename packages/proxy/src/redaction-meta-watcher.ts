@@ -21,6 +21,8 @@
 import fs from "node:fs";
 import { stat, readdir, readFile, writeFile, rename, unlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { EncryptionAtRestConfig } from "@contextio/core";
+import { encrypt, decrypt } from "@contextio/logger";
 
 
 
@@ -36,6 +38,68 @@ export const REDACTION_META_JITTER_MS = 500;
 export const REDACTION_META_TMP_MAX_AGE_MS = 30_000;
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempt to decrypt capture data if it's encrypted.
+ * Returns the decrypted data if successful, or the original data if not encrypted.
+ * Returns null if decryption fails (wrong key, corrupt data, etc.).
+ */
+async function maybeDecryptCapture(
+  rawBytes: string,
+  encryption?: EncryptionAtRestConfig,
+): Promise<unknown> {
+  if (!encryption) {
+    // No encryption config, assume plaintext
+    try {
+      return JSON.parse(rawBytes);
+    } catch {
+      return null;
+    }
+  }
+
+  // Resolve key material the same way the logger plugin does
+  let keyMaterial: string | undefined;
+  switch (encryption.keyProvider) {
+    case "static":
+      keyMaterial = encryption.staticKey;
+      break;
+    case "env":
+    default:
+      keyMaterial = process.env[encryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
+      break;
+    case "kms":
+      throw new Error("[redaction-meta-watcher] KMS key provider not yet implemented");
+  }
+  if (!keyMaterial) {
+    // No key material available, can't decrypt
+    return null;
+  }
+
+  try {
+    // Parse the raw bytes first to check if it's an encrypted envelope
+    const parsed = JSON.parse(rawBytes);
+    const isEncrypted =
+      typeof parsed.ciphertext === "string" &&
+      typeof parsed.salt === "string" &&
+      typeof parsed.iv === "string";
+
+    if (!isEncrypted) {
+      // Not encrypted, return as-is
+      return parsed;
+    }
+
+    // Decrypt the encrypted payload
+    const decrypted = await decrypt(rawBytes, keyMaterial);
+    return JSON.parse(decrypted);
+  } catch {
+    // Decryption failed (wrong key, corrupt data, etc.)
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -49,6 +113,12 @@ export interface RedactionMetaWatcherOptions {
    * disk so that the web UI can discover them without a live callback.
    */
   onMetadataReady?: (metadata: CaptureRedactionMetadata) => void;
+  /**
+   * Optional encryption configuration for encrypting metadata files.
+   * When provided, metadata files will be encrypted with AES-256-GCM
+   * using the same key derivation as capture files.
+   */
+  encryption?: EncryptionAtRestConfig;
 }
 
 export interface CaptureRedactionMetadata {
@@ -56,13 +126,14 @@ export interface CaptureRedactionMetadata {
   totalRedactions: number;
   byRule: Record<string, number>;
   generatedAt: string;
+  source?: string;
   provider?: string;
   targetUrl?: string;
-  schemaVersion?: string;
   sessionId?: string;
   timestamp?: string;
   checksum?: string;
-  matches?: Array<{ rule: string; original: string; path: string }>;
+  schemaVersion?: string;
+  matches?: Array<{ rule: string; path: string }>;
 }
 
 export interface RedactionMetaWatcher {
@@ -95,14 +166,39 @@ function metaFilenameFor(captureFilename: string): string {
 async function atomicWriteMetadata(
   targetPath: string,
   metadata: CaptureRedactionMetadata,
+  encryption?: EncryptionAtRestConfig,
 ): Promise<void> {
   const tmpPath = `${targetPath}.tmp-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}`;
 
+  let content: string;
+  if (encryption) {
+    // Resolve key material the same way the logger plugin does
+    let keyMaterial: string | undefined;
+    switch (encryption.keyProvider) {
+      case "static":
+        keyMaterial = encryption.staticKey;
+        break;
+      case "env":
+      default:
+        keyMaterial = process.env[encryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
+        break;
+      case "kms":
+        throw new Error("[redaction-meta-watcher] KMS key provider not yet implemented");
+    }
+    if (!keyMaterial) {
+      throw new Error("[redaction-meta-watcher] Encryption enabled but no key material resolved");
+    }
+    const encrypted = await encrypt(JSON.stringify(metadata), keyMaterial);
+    content = JSON.stringify(encrypted);
+  } else {
+    content = JSON.stringify(metadata, null, 2);
+  }
+
   await writeFile(
     tmpPath,
-    JSON.stringify(metadata, null, 2),
+    content,
     "utf8",
   );
 
@@ -180,6 +276,56 @@ interface RawRedactionStats {
 }
 
 /**
+ * Extract individual redaction matches with original and placeholder values.
+ * This is used to populate the meta file with detailed match information
+ * for the redactions detail API.
+ */
+function extractRedactionMatches(rawData: unknown): Array<{ rule: string; original: string; placeholder: string; path: string }> {
+  const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
+  const matches: Array<{ rule: string; original: string; placeholder: string; path: string }> = [];
+
+  // Helper to extract matches from a string value
+  function extractFromString(text: string, path: string): void {
+    PLACEHOLDER_REGEX.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
+      const rule = (m[1] ?? "unknown").toLowerCase();
+      const placeholder = m[0];
+      matches.push({ rule, original: text, placeholder, path });
+    }
+    SSN_REGEX.lastIndex = 0;
+    while ((m = SSN_REGEX.exec(text)) !== null) {
+      matches.push({ rule: "ssn", original: text, placeholder: m[0], path });
+    }
+  }
+
+  // Collect all string values and their paths
+  function collectStringsWithPath(value: unknown, path: string): void {
+    if (typeof value === "string") {
+      extractFromString(value, path);
+    } else if (Array.isArray(value)) {
+      value.forEach((item, index) => collectStringsWithPath(item, `${path}[${index}]`));
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+        collectStringsWithPath(val, `${path}.${key}`);
+      }
+    }
+  }
+
+  // Extract from request body and response body
+  if (rawCapture?.requestBody) {
+    collectStringsWithPath(rawCapture.requestBody, "requestBody");
+  }
+  if (rawCapture?.responseBody && typeof rawCapture.responseBody === "string") {
+    extractFromString(rawCapture.responseBody, "responseBody");
+  } else if (rawCapture?.responseBody) {
+    collectStringsWithPath(rawCapture.responseBody, "responseBody");
+  }
+
+  return matches;
+}
+
+/**
  * Derive redaction counts for a capture.
  *
  * Prefers the persisted redactionStats field when present (matching the web
@@ -190,8 +336,8 @@ function computeCaptureRedactionCounts(rawData: unknown): {
   totalRedactions: number;
   byRule: Record<string, number>;
 } {
-  const capture = (rawData ?? null) as Record<string, unknown> | null;
-  const stats = capture?.redactionStats as RawRedactionStats | undefined;
+  const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
+  const stats = rawCapture?.redactionStats as RawRedactionStats | undefined;
   if (stats && typeof stats.byRule === "object" && stats.byRule !== null) {
     const statsObj = stats as Record<string, unknown>;
     const total =
@@ -213,7 +359,8 @@ function computeCaptureRedactionCounts(rawData: unknown): {
   }
 
   const strings: string[] = [];
-  collectStrings(capture?.requestBody ?? null, strings);
+  collectStrings(rawCapture?.requestBody ?? null, strings);
+  collectStrings(rawCapture?.responseBody ?? null, strings);
   const byRule: Record<string, number> = {};
   let total = 0;
   for (const text of strings) {
@@ -235,12 +382,19 @@ function computeCaptureRedactionCounts(rawData: unknown): {
 
 function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedactionMetadata | null {
   try {
-    const result = computeCaptureRedactionCounts(rawData);
+    const counts = computeCaptureRedactionCounts(rawData);
+    const matches = extractRedactionMatches(rawData);
+    const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
     return {
       captureId,
-      totalRedactions: result.totalRedactions,
-      byRule: result.byRule,
+      totalRedactions: counts.totalRedactions,
+      byRule: counts.byRule,
       generatedAt: new Date().toISOString(),
+      matches: matches.map(m => ({ rule: m.rule, path: m.path })),
+      source: (rawCapture?.source as string) ?? undefined,
+      provider: (rawCapture?.provider as string) ?? "unknown",
+      targetUrl: (rawCapture?.targetUrl as string) ?? "",
+      sessionId: (rawCapture?.sessionId as string) ?? undefined,
     };
   } catch (err) {
     console.error(
@@ -338,7 +492,7 @@ async function mergeExistingMetadata(
         state.metadata,
       );
 
-      await atomicWriteMetadata(metaPath, metadata);
+      await atomicWriteMetadata(metaPath, metadata, opts.encryption);
       if (opts.onMetadataReady) {
         opts.onMetadataReady(metadata);
       }
@@ -402,10 +556,9 @@ async function mergeExistingMetadata(
       if (fileStats.size > MAX_FILE_SIZE) return;
 
       const rawBytes = await readFile(path, "utf8");
-      let rawData: unknown;
-      try {
-        rawData = JSON.parse(rawBytes);
-      } catch {
+      let rawData: unknown = await maybeDecryptCapture(rawBytes, opts.encryption);
+      if (!rawData) {
+        // Could not decrypt or parse, skip
         return;
       }
 
@@ -447,11 +600,9 @@ async function mergeExistingMetadata(
     await processCaptureFile(filename);
   };
 
-  const startWatcher = (): void => {
+const startWatcher = (): void => {
     if (stopped) return;
-
-    // Best-effort cleanup of stale tmp files on startup / reconnect.
-    void flushStaleTmp();
+    console.log("[redaction-meta-watcher] Starting watcher on:", dir);
 
     watcher = fs.watch(dir, { persistent: false }, (eventType, filename) => {
       if (eventType === "rename" || eventType === "change") {

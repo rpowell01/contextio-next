@@ -74,11 +74,39 @@ async function loadPluginsFromEnv(): Promise<ProxyPlugin[]> {
 
 /** Build logger plugin from encryption config, or return null if disabled. */
 function buildLoggerPlugin(encryption: EncryptionAtRestConfig): ProxyPlugin | null {
-	if (!encryption.enabled) {
+	// Log encryption at rest configuration status at container startup
+	const encryptionEnabled = encryption.enabled;
+	const keyProvider = encryption.keyProvider;
+	const keyEnvVar = encryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY";
+	const keyLength = encryption.keyLength;
+	const hasStaticKey = !!encryption.staticKey;
+	const envKeyValue = process.env[keyEnvVar];
+	const hasEnvKey = !!envKeyValue;
+
+console.log("[startup] Encryption at rest configuration:");
+	console.log(`  enabled: ${encryptionEnabled}`);
+	console.log(`  keyProvider: ${keyProvider}`);
+	console.log(`  keyEnvVar: ${keyEnvVar}`);
+	console.log(`  keyLength: ${keyLength} bytes`);
+	console.log(`  staticKey provided: ${hasStaticKey}`);
+	console.log(`  ${keyEnvVar} environment variable: ${hasEnvKey ? "SET" : "NOT SET"}`);
+
+	if (!encryptionEnabled) {
+		console.log("[startup] Encryption at rest is DISABLED");
 		return null;
 	}
+
+	// Check if key material is available
+	const keyAvailable = hasStaticKey || hasEnvKey;
+	if (!keyAvailable) {
+		console.error(
+			`[startup] Encryption at rest is ENABLED but NO KEY MATERIAL is available! ` +
+			`Set ${keyEnvVar} environment variable or provide staticKey.`
+		);
+	}
+
 	try {
-		return createLoggerPlugin({
+		const plugin = createLoggerPlugin({
 			encryption: {
 				enabled: encryption.enabled,
 				keyProvider: encryption.keyProvider,
@@ -87,6 +115,8 @@ function buildLoggerPlugin(encryption: EncryptionAtRestConfig): ProxyPlugin | nu
 				keyLength: encryption.keyLength,
 			},
 		});
+		console.log("[startup] Encryption at rest is ENABLED and logger plugin initialized");
+		return plugin;
 	} catch (err: unknown) {
 		console.error(
 			`Initializing logger plugin failed:`,

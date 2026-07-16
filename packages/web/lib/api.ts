@@ -35,7 +35,7 @@ function getProxyAdminBaseUrl(): string {
   }
   return PROXY_ADMIN_URL;
 }
-const DEFAULT_TIMEOUT = 30000; // 30 seconds
+const DEFAULT_TIMEOUT = 300000; // 5 minutes
 
 interface RetryConfig {
   maxRetries: number;
@@ -229,19 +229,33 @@ class APIClient {
     throw lastError || new Error("Request failed");
   }
 
-  async getSessions(): Promise<Session[]> {
-    return this.request("/api/sessions");
+  async getSessions(page?: number, pageSize?: number): Promise<{ sessions: Session[]; pagination?: { page: number; pageSize: number; totalPages: number; totalItems: number } }> {
+    const params = new URLSearchParams();
+    if (page !== undefined && page > 0) params.set("page", String(page));
+    if (pageSize !== undefined && pageSize > 0) params.set("pageSize", String(pageSize));
+    const query = params.toString();
+    return this.request(`/api/sessions${query ? `?${query}` : ""}`);
   }
 
-  async getGroupedSessions(): Promise<{
+  async getGroupedSessions(page?: number, pageSize?: number): Promise<{
     sessions: Session[];
     summaries: SessionSummary[];
     metrics: Record<string, SessionMetrics>;
+    pagination?: {
+      page: number;
+      pageSize: number;
+      totalPages: number;
+      totalItems: number;
+    };
   }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes for grouped sessions
     try {
-      return await this.request("/api/sessions?groupBySourceDest=true", { signal: controller.signal });
+      const params = new URLSearchParams();
+      params.set("groupBySourceDest", "true");
+      if (page !== undefined && page > 0) params.set("page", String(page));
+      if (pageSize !== undefined && pageSize > 0) params.set("pageSize", String(pageSize));
+      return await this.request(`/api/sessions?${params.toString()}`, { signal: controller.signal });
     } finally {
       clearTimeout(timeoutId);
     }
@@ -465,11 +479,17 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     return data.logs;
   }
 
-  async getMetrics(hours: number = 24, maxPoints?: number, signal?: AbortSignal): Promise<MetricsData> {
+  async getMetrics(hours: number = 24, maxPoints?: number, page?: number, pageSize?: number, signal?: AbortSignal): Promise<MetricsData> {
     const params = new URLSearchParams();
     params.set("hours", String(hours));
     if (maxPoints !== undefined && maxPoints > 0) {
       params.set("maxPoints", String(maxPoints));
+    }
+    if (page !== undefined && page > 0) {
+      params.set("page", String(page));
+    }
+    if (pageSize !== undefined && pageSize > 0) {
+      params.set("pageSize", String(pageSize));
     }
     return this.request(`/api/metrics?${params.toString()}`, { signal });
   }

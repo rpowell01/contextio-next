@@ -1,15 +1,13 @@
-import fs from "fs/promises";
 import { join } from "path";
 
 import {
   getCaptureDir,
-  listCaptureFiles,
+  listRedactionMetaFiles,
   MAX_FILE_SIZE,
+  readCaptureFile,
+  readRedactionMetaFile,
+  extractRedactionMatches,
 } from "@/lib/sessions/utils";
-import {
-  computeCaptureRedactionCounts,
-  getCaptureRedactionStats,
-} from "@/lib/sessions/redaction-utils";
 
 interface RedactionDetailRow {
   redactionType: string;
@@ -72,12 +70,6 @@ interface SortParams {
 
 // Use a stricter type for filters: only valid column keys with string values
 type FilterParams = Partial<Record<ValidColumnKey, string>>;
-
-function extractSessionFromFilename(filename: string): string | null {
-  const match = filename.match(/^([a-f0-9-]+)-\d+\.json$/i);
-  if (match) return match[1];
-  return null;
-}
 
 function applyFilters(rows: MinimalRedactionRow[], filters: FilterParams): MinimalRedactionRow[] {
   if (!filters || Object.keys(filters).length === 0) return rows;
@@ -164,7 +156,6 @@ export async function GET(request: Request): Promise<Response> {
     for (const [key, value] of url.searchParams.entries()) {
       if (key.startsWith("filter_")) {
         const filterKey = key.replace("filter_", "");
-        // Only accept valid column keys for filtering
         if (isValidColumnKey(filterKey)) {
           filters[filterKey] = value;
         }
@@ -179,66 +170,60 @@ export async function GET(request: Request): Promise<Response> {
       sort = { key: sortKey, direction: sortDir };
     }
 
-    const files = await listCaptureFiles();
-
-    // Collect ALL redaction matches across all files (not paginated yet)
+    // Use pre-aggregated redaction meta files for fast listing
+    const metaFiles = await listRedactionMetaFiles();
+    
+    // Collect ALL redaction matches across all meta files (not paginated yet)
     // This is necessary for correct filtering/sorting across the entire dataset
     const allDetailRows: MinimalRedactionRow[] = [];
 
-    for (const filename of files) {
+    for (const metaFilename of metaFiles) {
       try {
-        const filepath = join(getCaptureDir(), filename);
-        const stats = await fs.stat(filepath);
-        if (stats.size > MAX_FILE_SIZE) continue;
+        const metaPath = join(getCaptureDir(), metaFilename);
+        const meta = await readRedactionMetaFile(metaPath);
+        if (!meta) continue;
 
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        // Extract capture ID from meta filename
+        const captureId = metaFilename.replace(/\.redact-meta\.json$/, "");
 
-        const sessionId =
-          (data.sessionId as string | null) ??
-          extractSessionFromFilename(filename);
-        const source = (data.source as string | null) ?? null;
-        const provider = (data.provider as string) ?? "unknown";
-        const targetUrl = (data.targetUrl as string) ?? "";
-        const captureId = filename;
+        // Use meta file fields directly - no need to read capture file for metadata
+        const source = (meta.source as string | null) ?? null;
+        const provider = (meta.provider as string) ?? "unknown";
+        const sessionId = (meta.sessionId as string | null) ?? null;
 
-        const cached = getCaptureRedactionStats(data);
-
-        let originalBody: unknown | undefined;
-        try {
-          if (
-            typeof data.originalRequestBody === "object" &&
-            data.originalRequestBody !== null &&
-            JSON.stringify(data.originalRequestBody).length <= MAX_FILE_SIZE
-          ) {
-            originalBody = data.originalRequestBody;
-          }
-        } catch {
-          // JSON.stringify threw (likely RangeError), skip original body
+        // For the full list we need individual match rows.
+        // We'll load the capture file to extract matches (on-demand, but for all files during init).
+        // This is heavier but only done once per request.
+        const capturePath = join(getCaptureDir(), captureId);
+        const captureData = await readCaptureFile(capturePath);
+        
+        let matches: Array<{ ruleId: string; original: string; placeholder: string }> = [];
+        if (captureData) {
+          const extracted = extractRedactionMatches(captureData);
+          matches = extracted.map(m => ({
+            ruleId: m.rule,
+            original: m.original,
+            placeholder: m.placeholder
+          }));
         }
+        
+        if (matches.length === 0) continue;
 
-        const redaction = computeCaptureRedactionCounts(
-          data,
-          false,
-          cached ?? undefined,
-          originalBody,
-        );
-
-        for (const match of redaction.matches) {
+        for (const match of matches) {
           allDetailRows.push({
             redactionType: match.ruleId,
             requestSource: source,
             requestProvider: provider,
-            requestTarget: targetUrl,
+            requestTarget: (meta.targetUrl as string) ?? "",
             sessionId,
             captureId,
             preRedactionValue: match.original,
             postRedactionValue: match.placeholder,
-            timestamp: stats.mtime.toISOString(),
+            timestamp: (typeof meta.generatedAt === "string" ? meta.generatedAt : "") ?? new Date().toISOString(),
           });
         }
       } catch (error) {
-        console.error(`Error processing capture ${filename}:`, error);
+        console.error(`Error processing redaction meta ${metaFilename}:`, error);
         continue;
       }
     }
@@ -258,21 +243,14 @@ export async function GET(request: Request): Promise<Response> {
     const pageRows = sortedRows.slice(start, end);
 
     // Fetch bodies only for page rows (memory optimization)
-    // Build a Map of captureId -> { originalRequestBody, requestBody } for needed captures
     const neededCaptureIds = new Set(pageRows.map(r => r.captureId));
     const captureBodies = new Map<string, { originalRequestBody: unknown; requestBody: unknown }>();
 
-    for (const filename of files) {
-      const captureId = filename;
-      if (!neededCaptureIds.has(captureId)) continue;
-
+    for (const captureId of neededCaptureIds) {
       try {
-        const filepath = join(getCaptureDir(), filename);
-        const stats = await fs.stat(filepath);
-        if (stats.size > MAX_FILE_SIZE) continue;
-
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const capturePath = join(getCaptureDir(), captureId);
+        const data = await readCaptureFile(capturePath);
+        if (!data) continue;
 
         captureBodies.set(captureId, {
           originalRequestBody: data.originalRequestBody,

@@ -2,6 +2,8 @@ import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
 import { homedir } from "os";
 
 import type { Session, Capture } from "@/types/api";
+// Import decryptCapture for reading encrypted capture files
+import { decryptCapture } from "@contextio/logger";
 
 // Re-export Session and Capture types for convenience
 export type { Session, Capture } from "@/types/api";
@@ -452,4 +454,102 @@ export async function getSessionMetadata(
     timestamp: validatedTimestamp ?? new Date().toISOString(),
     timings,
   };
+}
+
+/**
+ * Read and decrypt a capture file.
+ * Handles both encrypted and plaintext capture files transparently.
+ * 
+ * @param filepath - Path to the capture file
+ * @param keyMaterial - Optional encryption key material. If not provided, attempts to read from CONTEXTIO_LOGGER_ENCRYPTION_KEY env var.
+ * @returns Parsed capture data, or null if file cannot be read/decrypted
+ */
+export async function readCaptureFile(
+  filepath: string,
+  keyMaterial?: string
+): Promise<Record<string, unknown> | null> {
+  const resolvedKey = keyMaterial ?? process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
+  try {
+    const capture = await decryptCapture(filepath, resolvedKey || null);
+    return capture as Record<string, unknown> | null;
+  } catch (error) {
+    console.error(`Error reading capture file ${filepath}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Extract redaction matches from capture data.
+ * Returns array of matches with rule, original value, placeholder, and path.
+ */
+export function extractRedactionMatches(
+  capture: Record<string, unknown>
+): Array<{ rule: string; original: string; placeholder: string; path: string }> {
+  const matches: Array<{ rule: string; original: string; placeholder: string; path: string }> = [];
+
+  // Helper to extract matches from a string value
+  function extractFromString(text: string, path: string): void {
+    const PLACEHOLDER_REGEX = /\[([A-Z][A-Z0-9_]*)_REDACTED\]/g;
+    const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/g;
+    
+    PLACEHOLDER_REGEX.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
+      const rule = (m[1] ?? "unknown").toLowerCase();
+      const placeholder = m[0];
+      matches.push({ rule, original: text, placeholder, path });
+    }
+    SSN_REGEX.lastIndex = 0;
+    while ((m = SSN_REGEX.exec(text)) !== null) {
+      matches.push({ rule: "ssn", original: text, placeholder: m[0], path });
+    }
+  }
+
+  // Recursively collect all string values with their paths
+  function collectStringsWithPath(value: unknown, path: string): void {
+    if (typeof value === "string") {
+      extractFromString(value, path);
+    } else if (Array.isArray(value)) {
+      value.forEach((item, index) => collectStringsWithPath(item, `${path}[${index}]`));
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+        collectStringsWithPath(val, `${path}.${key}`);
+      }
+    }
+  }
+
+  // Extract from request body and response body
+  const captureData = capture as Record<string, unknown>;
+  if (captureData?.requestBody) {
+    collectStringsWithPath(captureData.requestBody, "requestBody");
+  }
+  if (captureData?.responseBody && typeof captureData.responseBody === "string") {
+    extractFromString(captureData.responseBody, "responseBody");
+  } else if (captureData?.responseBody) {
+    collectStringsWithPath(captureData.responseBody, "responseBody");
+  }
+
+  return matches;
+}
+
+/**
+ * Read and decrypt a redaction metadata file (.redact-meta.json).
+ * Handles both encrypted and plaintext meta files transparently.
+ * 
+ * @param filepath - Path to the .redact-meta.json file
+ * @param keyMaterial - Optional encryption key material. If not provided, attempts to read from CONTEXTIO_LOGGER_ENCRYPTION_KEY env var.
+ * @returns Parsed metadata, or null if file cannot be read/decrypted
+ */
+export async function readRedactionMetaFile(
+  filepath: string,
+  keyMaterial?: string
+): Promise<Record<string, unknown> | null> {
+  const resolvedKey = keyMaterial ?? process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
+  try {
+    const capture = await decryptCapture(filepath, resolvedKey || null);
+    return capture as Record<string, unknown> | null;
+  } catch (error) {
+    console.error(`Error reading redaction meta file ${filepath}:`, error);
+    return null;
+  }
 }

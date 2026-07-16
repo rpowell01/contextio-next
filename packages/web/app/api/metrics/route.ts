@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import { join } from "path";
 
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
-import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles } from "@/lib/sessions/utils";
+import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, readCaptureFile } from "@/lib/sessions/utils";
 import { countRedactionsInResponse, getCaptureRedactionStats } from "@/lib/sessions/redaction-utils";
 import { computeTokenUsage } from "@/lib/sessions/utils";
 
@@ -160,6 +160,10 @@ export async function GET(request: Request): Promise<Response> {
       Number.isFinite(maxPointsValue) && maxPointsValue > 0
         ? Math.trunc(maxPointsValue)
         : undefined;
+    const pageValue = Number(url.searchParams.get("page"));
+    const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
+    const pageSizeValue = Number(url.searchParams.get("pageSize"));
+    const pageSize = Number.isFinite(pageSizeValue) && pageSizeValue > 0 ? pageSizeValue : 50;
     const now = new Date();
     const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
 
@@ -170,7 +174,7 @@ export async function GET(request: Request): Promise<Response> {
       redaction: RedactionMetric | null;
     }> = [];
 
-    for (const filename of files) {
+for (const filename of files) {
       try {
         const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
@@ -179,8 +183,8 @@ export async function GET(request: Request): Promise<Response> {
           continue;
         }
 
-        const raw = await fs.readFile(filepath, "utf8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+        const data = await readCaptureFile(filepath);
+        if (!data) continue;
         const parsed = parseCapture(data);
 
         // Filter by timestamp on the server side
@@ -203,13 +207,30 @@ export async function GET(request: Request): Promise<Response> {
     // Sort traffic by timestamp to ensure chronological order
     metrics.traffic.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     const totalTrafficPoints = metrics.traffic.length;
+    const totalPages = Math.ceil(totalTrafficPoints / pageSize);
 
-    // Server-side downsampling using shared function
-    if (maxPoints && metrics.traffic.length > maxPoints) {
+    // Apply pagination
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedTraffic = metrics.traffic.slice(startIndex, endIndex);
+
+    // Server-side downsampling using shared function (only if maxPoints is specified and no pagination)
+    if (maxPoints && !url.searchParams.has("page")) {
       metrics.traffic = downsampleTraffic(metrics.traffic, maxPoints);
+    } else {
+      metrics.traffic = paginatedTraffic;
     }
 
-    const response = Response.json(metrics);
+    const response = Response.json({
+      ...metrics,
+      traffic: metrics.traffic,
+      pagination: {
+        page,
+        pageSize,
+        totalPages,
+        totalItems: totalTrafficPoints,
+      },
+    });
     if (maxPoints) {
       response.headers.set(
         "X-Data-Points-Total",
