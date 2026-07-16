@@ -200,7 +200,7 @@ export async function GET(request: Request): Promise<Response> {
             redactionType: match.rule,
             requestSource: source,
             requestProvider: provider,
-            requestTarget: targetUrl,
+            requestTarget: (meta.targetUrl as string) ?? "",
             sessionId,
             captureId,
             preRedactionValue: match.original,

@@ -129,11 +129,11 @@ export interface CaptureRedactionMetadata {
   source?: string;
   provider?: string;
   targetUrl?: string;
-  schemaVersion?: string;
   sessionId?: string;
   timestamp?: string;
   checksum?: string;
-  matches?: Array<{ rule: string; original: string; placeholder: string; path: string }>;
+  schemaVersion?: string;
+  matches?: Array<{ rule: string; path: string }>;
 }
 
 export interface RedactionMetaWatcher {
@@ -390,11 +390,11 @@ function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedacti
       totalRedactions: counts.totalRedactions,
       byRule: counts.byRule,
       generatedAt: new Date().toISOString(),
-      matches,
-      source: (rawCapture?.source as string | null) ?? undefined,
+      matches: matches.map(m => ({ rule: m.rule, path: m.path })),
+      source: (rawCapture?.source as string) ?? undefined,
       provider: (rawCapture?.provider as string) ?? "unknown",
       targetUrl: (rawCapture?.targetUrl as string) ?? "",
-      sessionId: (rawCapture?.sessionId as string | null) ?? undefined,
+      sessionId: (rawCapture?.sessionId as string) ?? undefined,
     };
   } catch (err) {
     console.error(
