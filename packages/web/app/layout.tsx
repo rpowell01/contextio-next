@@ -13,14 +13,17 @@ const themeInitScript = `(function() {
   try {
     var stored = localStorage.getItem('contextio-theme');
     var theme = stored;
-    
+
     // Resolve 'system' stored value to OS preference or use it for first-time visitors
     if (theme === 'system' || !theme) {
       var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       theme = prefersDark ? 'dark' : 'light';
     }
-    
-    document.documentElement.setAttribute('data-theme', theme);
+
+    // Only set data-theme if we have a valid theme value (not null/undefined)
+    if (theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
   } catch (e) {
     document.documentElement.setAttribute('data-theme', 'light');
   }
