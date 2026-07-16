@@ -2,12 +2,100 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS Custom Properties for Theming - RGB channels for opacity support */
+:root {
+  /* Light theme (default) */
+  --color-bg: 255 255 255;
+  --color-bg-secondary: 248 250 252;
+  --color-bg-tertiary: 241 245 249;
+  --color-text: 15 23 42;
+  --color-text-secondary: 71 85 105;
+  --color-text-muted: 148 163 184;
+  --color-border: 226 232 240;
+  --color-border-hover: 203 213 225;
+  --color-primary: 79 70 229;
+  --color-primary-foreground: 255 255 255;
+  --color-secondary: 241 245 249;
+  --color-secondary-foreground: 15 23 42;
+  --color-accent: 241 245 249;
+  --color-accent-foreground: 15 23 42;
+  --color-destructive: 239 68 68;
+  --color-destructive-foreground: 255 255 255;
+  --color-ring: 79 70 229;
+  --color-card: 255 255 255;
+  --color-card-foreground: 15 23 42;
+  --color-popover: 255 255 255;
+  --color-popover-foreground: 15 23 42;
+  --color-muted: 241 245 249;
+  --color-muted-foreground: 100 116 139;
+  --color-input: 226 232 240;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  --color-bg: 15 23 42;
+  --color-bg-secondary: 30 41 59;
+  --color-bg-tertiary: 51 65 85;
+  --color-text: 248 250 252;
+  --color-text-secondary: 203 213 225;
+  --color-text-muted: 100 116 139;
+  --color-border: 51 65 85;
+  --color-border-hover: 71 85 105;
+  --color-primary: 129 140 248;
+  --color-primary-foreground: 15 23 42;
+  --color-secondary: 30 41 59;
+  --color-secondary-foreground: 248 250 252;
+  --color-accent: 30 41 59;
+  --color-accent-foreground: 248 250 252;
+  --color-destructive: 248 113 113;
+  --color-destructive-foreground: 15 23 42;
+  --color-ring: 129 140 248;
+  --color-card: 30 41 59;
+  --color-card-foreground: 248 250 252;
+  --color-popover: 30 41 59;
+  --color-popover-foreground: 248 250 252;
+  --color-muted: 30 41 59;
+  --color-muted-foreground: 148 163 184;
+  --color-input: 51 65 85;
+}
+
+/* High contrast theme */
+[data-theme="high-contrast"] {
+  --color-bg: 0 0 0;
+  --color-bg-secondary: 26 26 26;
+  --color-bg-tertiary: 51 51 51;
+  --color-text: 255 255 255;
+  --color-text-secondary: 204 204 204;
+  --color-text-muted: 136 136 136;
+  --color-border: 255 255 255;
+  --color-border-hover: 204 204 204;
+  --color-primary: 255 255 0;
+  --color-primary-foreground: 0 0 0;
+  --color-secondary: 51 51 51;
+  --color-secondary-foreground: 255 255 255;
+  --color-accent: 51 51 51;
+  --color-accent-foreground: 255 255 255;
+  --color-destructive: 255 0 0;
+  --color-destructive-foreground: 255 255 255;
+  --color-ring: 255 255 0;
+  --color-card: 26 26 26;
+  --color-card-foreground: 255 255 255;
+  --color-popover: 26 26 26;
+  --color-popover-foreground: 255 255 255;
+  --color-muted: 51 51 51;
+  --color-muted-foreground: 170 170 170;
+  --color-input: 51 51 51;
+}
+
 /* Base styles */
 html,
 body {
   padding: 0;
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  background-color: rgb(var(--color-bg));
+  color: rgb(var(--color-text));
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Constrain images and pre content to prevent huge display */
@@ -18,6 +106,10 @@ img {
 pre {
   max-width: 100%;
   overflow-x: auto;
+  background-color: rgb(var(--color-bg-tertiary));
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 0.5rem;
+  padding: 1rem;
 }
 
 /* Focus styles */
@@ -25,7 +117,7 @@ a:focus,
 button:focus {
   outline: 2px solid transparent;
   outline-offset: 2px;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 0 3px rgb(var(--color-ring));
 }
 
 /* Custom scrollbar */
@@ -35,15 +127,34 @@ button:focus {
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgb(var(--color-bg-secondary));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
+  background: rgb(var(--color-border));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: rgb(var(--color-border-hover));
+}
+
+/* Selection styles */
+::selection {
+  background-color: rgb(var(--color-primary));
+  color: rgb(var(--color-primary-foreground));
+}
+
+/* Apply theme immediately to prevent flash */
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+html[data-theme="high-contrast"] {
+  color-scheme: dark;
 }
 

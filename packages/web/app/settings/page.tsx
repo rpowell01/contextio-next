@@ -4,6 +4,7 @@ import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 import { useState, useEffect, useRef } from "react";
+import { useTheme } from "@/components/theme-provider";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Settings, string> = {
     "How often the cleanup job runs. Changing this only takes effect after the proxy is restarted.",
   captureCleanupMaxAgeDays:
     "Capture files older than this are deleted. Changing this only takes effect after the proxy is restarted.",
+  theme:
+    "Select the color theme for the web UI. System follows your OS preference. Changes apply immediately.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
@@ -107,6 +110,7 @@ export default function SettingsPage() {
     captureCleanupEnabled: false,
     captureCleanupIntervalHours: 24,
     captureCleanupMaxAgeDays: 30,
+    theme: "system",
   });
   const [metadata, setMetadata] = useState<Record<
     keyof Settings,
@@ -123,6 +127,14 @@ export default function SettingsPage() {
   const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const { theme, setTheme, setThemeWithoutPersist, mounted } = useTheme();
+
+  // Sync theme from settings when loaded, but don't override user's localStorage choice
+  useEffect(() => {
+    if (mounted && settings.theme !== theme && !localStorage.getItem("contextio-theme")) {
+      setThemeWithoutPersist(settings.theme);
+    }
+  }, [settings.theme, theme, setThemeWithoutPersist, mounted]);
 
   useEffect(() => {
     async function loadSettings() {
@@ -234,6 +246,9 @@ useEffect(() => {
       return;
     }
     setSettings((prev) => ({ ...prev, [key]: value }));
+    if (key === "theme" && mounted) {
+      setTheme(value as "light" | "dark" | "system" | "high-contrast");
+    }
   };
 
   const handleCleanupAll = async () => {
@@ -596,6 +611,44 @@ case "encryptionAtRest":
             />
           </div>
         );
+      case "theme": {
+        const themeDisabled = isOverridden("theme");
+        return (
+          <div>
+            <Label htmlFor="theme" className="block text-sm font-medium mb-2">
+              Theme
+              {themeDisabled && (
+                <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-normal">
+                  (Set by environment variable)
+                </span>
+              )}
+            </Label>
+            <select
+              id="theme"
+              value={settings.theme}
+              onChange={(e) =>
+                updateSetting(
+                  "theme",
+                  e.target.value as "light" | "dark" | "system" | "high-contrast"
+                )
+              }
+              disabled={themeDisabled}
+              className={`w-full rounded-md px-3 py-2 text-sm border ${
+                themeDisabled ? "bg-muted cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-primary"
+              }`}
+            >
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="system">System (follows OS preference)</option>
+              <option value="high-contrast">High Contrast</option>
+            </select>
+            <SettingHelp
+              meta={getMeta("theme")}
+              description={SETTING_DESCRIPTIONS.theme}
+            />
+          </div>
+        );
+      }
       default:
         return null;
     }
@@ -714,6 +767,10 @@ case "encryptionAtRest":
           <div className="rounded-lg border p-6">
             <h3 className="font-semibold mb-4">Security</h3>
             <div className="space-y-4">{renderSetting("encryptionAtRest")}</div>
+          </div>
+          <div className="rounded-lg border p-6">
+            <h3 className="font-semibold mb-4">Appearance</h3>
+            <div className="space-y-4">{renderSetting("theme")}</div>
           </div>
 
           <Button type="submit" className="w-full md:w-auto" disabled={loading}>

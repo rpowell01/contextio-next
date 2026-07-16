@@ -6,7 +6,10 @@ import {
   MAX_FILE_SIZE,
   readCaptureFile,
   readRedactionMetaFile,
+<<<<<<< HEAD
   extractRedactionMatches,
+=======
+>>>>>>> origin/main
 } from "@/lib/sessions/utils";
 
 interface RedactionDetailRow {
@@ -186,7 +189,7 @@ export async function GET(request: Request): Promise<Response> {
         // Extract capture ID from meta filename
         const captureId = metaFilename.replace(/\.redact-meta\.json$/, "");
 
-        // Use meta file fields directly - no need to read capture file for metadata
+// Use meta file fields directly - no need to read capture file for metadata
         const source = (meta.source as string | null) ?? null;
         const provider = (meta.provider as string) ?? "unknown";
         const sessionId = (meta.sessionId as string | null) ?? null;
@@ -211,7 +214,7 @@ export async function GET(request: Request): Promise<Response> {
 
         for (const match of matches) {
           allDetailRows.push({
-            redactionType: match.ruleId,
+            redactionType: match.rule,
             requestSource: source,
             requestProvider: provider,
             requestTarget: (meta.targetUrl as string) ?? "",
