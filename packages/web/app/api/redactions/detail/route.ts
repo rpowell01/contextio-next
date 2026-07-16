@@ -176,6 +176,9 @@ export async function GET(request: Request): Promise<Response> {
     // Collect ALL redaction matches across all meta files (not paginated yet)
     // This is necessary for correct filtering/sorting across the entire dataset
     const allDetailRows: MinimalRedactionRow[] = [];
+    
+    // Map to cache parsed capture data by captureId, avoiding redundant disk reads
+    const captureDataMap = new Map<string, { originalRequestBody: unknown; requestBody: unknown }>();
 
     for (const metaFilename of metaFiles) {
       try {
@@ -186,7 +189,7 @@ export async function GET(request: Request): Promise<Response> {
         // Extract capture ID from meta filename
         const captureId = metaFilename.replace(/\.redact-meta\.json$/, "");
 
-// Use meta file fields directly - no need to read capture file for metadata
+        // Use meta file fields directly - no need to read capture file for metadata
         const source = (meta.source as string | null) ?? null;
         const provider = (meta.provider as string) ?? "unknown";
         const sessionId = (meta.sessionId as string | null) ?? null;
@@ -196,6 +199,14 @@ export async function GET(request: Request): Promise<Response> {
         // This is heavier but only done once per request.
         const capturePath = join(getCaptureDir(), captureId);
         const captureData = await readCaptureFile(capturePath);
+        
+        // Cache parsed capture data for later use in body-fetch step
+        if (captureData) {
+          captureDataMap.set(captureId, {
+            originalRequestBody: captureData.originalRequestBody,
+            requestBody: captureData.requestBody,
+          });
+        }
         
         let matches: Array<{ ruleId: string; original: string; placeholder: string }> = [];
         if (captureData) {
@@ -210,19 +221,19 @@ export async function GET(request: Request): Promise<Response> {
         if (matches.length === 0) continue;
 
         for (const match of matches) {
-// Store only minimal indexed fields needed for filtering/sorting (all scalars)
-  // No body references are retained in this in-memory array
-  allDetailRows.push({
-    redactionType: match.ruleId,
-    requestSource: source,
-    requestProvider: provider,
-    requestTarget: (meta.targetUrl as string) ?? "",
-    sessionId,
-    captureId,
-    preRedactionValue: match.original,
-    postRedactionValue: match.placeholder,
-    timestamp: (typeof meta.generatedAt === "string" ? meta.generatedAt : "") ?? new Date().toISOString(),
-  });
+          // Store only minimal indexed fields needed for filtering/sorting (all scalars)
+          // No body references are retained in this in-memory array
+          allDetailRows.push({
+            redactionType: match.ruleId,
+            requestSource: source,
+            requestProvider: provider,
+            requestTarget: (meta.targetUrl as string) ?? "",
+            sessionId,
+            captureId,
+            preRedactionValue: match.original,
+            postRedactionValue: match.placeholder,
+            timestamp: (typeof meta.generatedAt === "string" ? meta.generatedAt : "") ?? new Date().toISOString(),
+          });
         }
       } catch (error) {
         console.error(`Error processing redaction meta ${metaFilename}:`, error);
@@ -245,21 +256,14 @@ export async function GET(request: Request): Promise<Response> {
     const pageRows = sortedRows.slice(start, end);
 
     // Fetch bodies only for page rows (memory optimization)
+    // Use cached captureDataMap instead of re-reading files from disk
     const neededCaptureIds = new Set(pageRows.map(r => r.captureId));
     const captureBodies = new Map<string, { originalRequestBody: unknown; requestBody: unknown }>();
 
     for (const captureId of neededCaptureIds) {
-      try {
-        const capturePath = join(getCaptureDir(), captureId);
-        const data = await readCaptureFile(capturePath);
-        if (!data) continue;
-
-        captureBodies.set(captureId, {
-          originalRequestBody: data.originalRequestBody,
-          requestBody: data.requestBody,
-        });
-      } catch (error) {
-        console.error(`Error fetching body for capture ${captureId}:`, error);
+      const bodies = captureDataMap.get(captureId);
+      if (bodies) {
+        captureBodies.set(captureId, bodies);
       }
     }
 

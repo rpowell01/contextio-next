@@ -72,12 +72,13 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
           break;
       }
       
-      // Update selected index and focus the new option
-      if (newIndex !== selectedIndexRef.current) {
-        selectedIndexRef.current = newIndex;
-        if (listRef.current) {
-          const option = listRef.current.querySelector(`[data-index="${newIndex}"]`) as HTMLElement;
-          option?.focus();
+// Update selected index and focus the new option
+        if (newIndex !== selectedIndexRef.current) {
+          selectedIndexRef.current = newIndex;
+          if (listRef.current) {
+            const option = listRef.current.querySelector(`[data-index="${newIndex}"]`) as HTMLElement;
+            option?.focus();
+          }
         }
       }
     }
@@ -144,53 +145,53 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
         </svg>
       </button>
 
-      {isOpen && (
-        <>
-          <ul
-            ref={listRef}
-            className="absolute z-50 mt-1 min-w-[140px] rounded-md border border-border bg-popover p-1 shadow-lg"
-            role="listbox"
-            aria-label="Theme options"
-            onKeyDown={handleKeyDown}
-          >
-            {THEME_OPTIONS.map((theme, index) => (
-              <li key={theme.value}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={theme.value === value}
-                  tabIndex={-1}
-                  data-index={index}
-                  onClick={() => handleSelect(theme.value)}
-                  disabled={isEnvOverridden}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded px-3 py-2 text-sm font-medium transition-colors",
-                    theme.value === value
-                      ? "bg-accent text-accent-foreground"
-                      : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                    isEnvOverridden && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  <span aria-hidden="true">{theme.icon}</span>
-                  <span>{theme.label}</span>
-                  {theme.value === value && (
-                    <svg
-                      className="ml-auto h-4 w-4 text-primary"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+{isOpen && (
+          <>
+            <ul
+              ref={listRef}
+              className="absolute z-50 mt-1 min-w-[140px] rounded-md border border-border bg-popover p-1 shadow-lg"
+              role="listbox"
+              aria-label="Theme options"
+              onKeyDown={handleKeyDown}
+            >
+              {THEME_OPTIONS.map((theme, index) => (
+                <li key={theme.value}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={theme.value === value}
+                    tabIndex={-1}
+                    data-index={index}
+                    onClick={() => handleSelect(theme.value)}
+                    disabled={isEnvOverridden}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded px-3 py-2 text-sm font-medium transition-colors",
+                      theme.value === value
+                        ? "bg-accent text-accent-foreground"
+                        : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                      isEnvOverridden && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <span aria-hidden="true">{theme.icon}</span>
+                    <span>{theme.label}</span>
+                    {theme.value === value && (
+                      <svg
+                        className="ml-auto h-4 w-4 text-primary"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
     </div>
   );
 }
