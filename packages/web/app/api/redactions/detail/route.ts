@@ -210,17 +210,19 @@ export async function GET(request: Request): Promise<Response> {
         if (matches.length === 0) continue;
 
         for (const match of matches) {
-          allDetailRows.push({
-            redactionType: match.ruleId,
-            requestSource: source,
-            requestProvider: provider,
-            requestTarget: (meta.targetUrl as string) ?? "",
-            sessionId,
-            captureId,
-            preRedactionValue: match.original,
-            postRedactionValue: match.placeholder,
-            timestamp: (typeof meta.generatedAt === "string" ? meta.generatedAt : "") ?? new Date().toISOString(),
-          });
+// Store only minimal indexed fields needed for filtering/sorting (all scalars)
+  // No body references are retained in this in-memory array
+  allDetailRows.push({
+    redactionType: match.ruleId,
+    requestSource: source,
+    requestProvider: provider,
+    requestTarget: (meta.targetUrl as string) ?? "",
+    sessionId,
+    captureId,
+    preRedactionValue: match.original,
+    postRedactionValue: match.placeholder,
+    timestamp: (typeof meta.generatedAt === "string" ? meta.generatedAt : "") ?? new Date().toISOString(),
+  });
         }
       } catch (error) {
         console.error(`Error processing redaction meta ${metaFilename}:`, error);

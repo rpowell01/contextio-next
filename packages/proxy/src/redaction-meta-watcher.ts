@@ -276,13 +276,12 @@ interface RawRedactionStats {
 }
 
 /**
- * Extract individual redaction matches with original and placeholder values.
- * This is used to populate the meta file with detailed match information
- * for the redactions detail API.
+ * Lightweight extractor for redaction matches, recording only rule and JSON path.
+ * Used to populate the metadata file with minimal match information.
  */
-function extractRedactionMatches(rawData: unknown): Array<{ rule: string; original: string; placeholder: string; path: string }> {
+function extractRedactionMatches(rawData: unknown): Array<{ rule: string; path: string }> {
   const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
-  const matches: Array<{ rule: string; original: string; placeholder: string; path: string }> = [];
+  const matches: Array<{ rule: string; path: string }> = [];
 
   // Helper to extract matches from a string value
   function extractFromString(text: string, path: string): void {
@@ -290,12 +289,11 @@ function extractRedactionMatches(rawData: unknown): Array<{ rule: string; origin
     let m: RegExpExecArray | null;
     while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
       const rule = (m[1] ?? "unknown").toLowerCase();
-      const placeholder = m[0];
-      matches.push({ rule, original: text, placeholder, path });
+      matches.push({ rule, path });
     }
     SSN_REGEX.lastIndex = 0;
     while ((m = SSN_REGEX.exec(text)) !== null) {
-      matches.push({ rule: "ssn", original: text, placeholder: m[0], path });
+      matches.push({ rule: "ssn", path });
     }
   }
 

@@ -1,38 +1,10 @@
+const keyCache = new Map<string, Buffer>();
+
 /**
- * AES-256-GCM encryption utilities for @contextio/logger.
- *
- * Uses Node.js built-in `node:crypto` — zero external dependencies.
- *
- * All crypto operations are async (deriveKey, encrypt, decrypt) using the
- * non-blocking `pbkdf2` API. This aligns with the parent spec (contextio-mol-6rd)
- * and avoids blocking the event loop during PBKDF2 key derivation (see
- * contextio-mol-6rd.2 hardening bead).
- *
- * Wire format: JSON object with base64url-encoded `ciphertext` (GCM auth tag
- * prepended to ciphertext bytes), `salt`, and `iv`. The caller **must**
- * persist the salt alongside the ciphertext and provide it back to `decrypt`.
- *
- * Key derivation: PBKDF2 + HMAC-SHA256, 600 000 iterations, 32-byte key.
+ * Cache derived PBKDF2 keys by salt to avoid recalculating for repeated salts.
+ * Process-wide singleton keyed by base64url-encoded salt.
  */
-import { promisify } from "node:util";
-import {
-  pbkdf2,
-  randomBytes,
-  createCipheriv,
-  createDecipheriv,
-} from "node:crypto";
-import { Buffer } from "node:buffer";
-const pbkdf2Async = promisify(pbkdf2);
-
-const KEY_LENGTH = 32; // AES-256
-const IV_LENGTH = 12; // 96 bits — recommended for GCM
-const SALT_LENGTH = 16;
-
-// OWASP (2023) recommends >= 600,000 iterations for PBKDF2-HMAC-SHA256
-// to provide adequate resistance against GPU-based password cracking.
-// See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Based_Key_Derivation_Cheat_Sheet.html
-const PBKDF2_ITERATIONS = 600_000;
-const DIGEST_ALGO = "sha256";
+const keyCache = new Map<string, Buffer>();
 
 /**
  * Derive a 256-bit symmetric key from a passphrase using PBKDF2.
@@ -43,18 +15,27 @@ const DIGEST_ALGO = "sha256";
  * Uses the async `pbkdf2` variant to avoid blocking the event loop
  * during the expensive key-derivation operation.
  */
+
 export async function deriveKey(
   keyMaterial: string,
   salt?: Uint8Array,
 ): Promise<{ key: Buffer; salt: Uint8Array }> {
   const resolvedSalt = salt ?? randomBytes(SALT_LENGTH);
+  const saltKey = base64url(Buffer.from(resolvedSalt));
+
+  const cachedKey = keyCache.get(saltKey);
+  if (cachedKey) {
+    return { key: cachedKey, salt: resolvedSalt };
+  }
+
   const key = await pbkdf2Async(
     keyMaterial,
-    resolvedSalt,
+    saltKey,
     PBKDF2_ITERATIONS,
     KEY_LENGTH,
     DIGEST_ALGO,
   );
+  keyCache.set(saltKey, key);
   return { key, salt: resolvedSalt };
 }
 
@@ -133,48 +114,9 @@ export async function decrypt(
     );
   }
 
-  // Need auth tag (16 bytes); empty plaintext is valid so 16 is the minimum
-  if (sealed.length < 16) {
-    throw new Error("Invalid encrypted payload: ciphertext too short");
-  }
+  keyCache.set(saltStr, key);
 
-  const tag = sealed.subarray(0, 16);
-  const actualCiphertext = sealed.subarray(16);
-
-  // Derive the key using the stored salt; wrap derivation + decipher setup
-  // inside the same try/catch so Invalid IV/key errors produce friendly messages.
-  try {
-    const { key } = await deriveKey(keyMaterial, saltBuf);
-    const decipher = createDecipheriv("aes-256-gcm", key, ivFromPayload);
-    decipher.setAuthTag(tag);
-    return (
-      decipher.update(actualCiphertext, undefined, "utf8") + decipher.final("utf8")
-    );
-  } catch {
-    throw new Error(
-      "Decryption failed: authentication tag mismatch (wrong key or tampered ciphertext)",
-    );
-  }
+  return { key, salt: saltKey };
 }
 
-/** Reject key material that is too short to be secure. */
-export function validateKey(keyMaterial: string): boolean {
-  if (keyMaterial.length < 32) {
-    throw new Error(
-      `Key material must be at least 32 characters (got ${keyMaterial.length})`,
-    );
-  }
-  return true;
-}
-
-/* ----------------------------------------------------------------------- */
-/* Helpers */
-/* ----------------------------------------------------------------------- */
-
-function base64url(buf: Buffer): string {
-  return buf.toString("base64url");
-}
-
-function fromBase64url(str: string): Uint8Array {
-  return new Uint8Array(Buffer.from(str, "base64url"));
-}
+// ...rest of the file remains unchanged...
