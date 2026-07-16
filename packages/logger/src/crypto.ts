@@ -9,10 +9,12 @@
  * contextio-mol-6rd.2 hardening bead).
  *
  * Wire format: JSON object with base64url-encoded `ciphertext` (GCM auth tag
- * prepended to ciphertext bytes), `salt`, and `iv`. The caller **must**
- * persist the salt alongside the ciphertext and provide it back to `decrypt`.
+ * prepended to ciphertext bytes), `salt`, `iv`, and optional `iterations`.
+ * The caller **must** persist the salt alongside the ciphertext and provide it
+ * back to `decrypt`.
  *
- * Key derivation: PBKDF2 + HMAC-SHA256, 600 000 iterations, 32-byte key.
+ * Key derivation: PBKDF2 + HMAC-SHA256, 100 000 iterations for runtime
+ * encryption/decryption, 600 000 iterations available for hardened key generation.
  */
 import { promisify } from "node:util";
 import {
@@ -28,15 +30,11 @@ const KEY_LENGTH = 32; // AES-256
 const IV_LENGTH = 12; // 96 bits — recommended for GCM
 const SALT_LENGTH = 16;
 
-// OWASP (2023) recommends >= 600,000 iterations for PBKDF2-HMAC-SHA256
-// to provide adequate resistance against GPU-based password cracking.
-// See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Based_Key_Derivation_Cheat_Sheet.html
-const PBKDF2_ITERATIONS = 600_000;
 const DIGEST_ALGO = "sha256";
 
 /**
  * Cache derived PBKDF2 keys by salt to avoid recalculating for repeated salts.
- * Process-wide singleton keyed by base64url-encoded salt.
+ * Process-wide singleton keyed by base64url-encoded salt + iterations + keyMaterial.
  */
 const keyCache = new Map<string, Buffer>();
 
@@ -48,15 +46,21 @@ const keyCache = new Map<string, Buffer>();
  *
  * Uses the async `pbkdf2` variant to avoid blocking the event loop
  * during the expensive key-derivation operation.
+ *
+ * @param iterations - PBKDF2 iteration count (default: 100,000 for runtime).
+ *                     Pass 600,000 for hardened key generation.
  */
 export async function deriveKey(
   keyMaterial: string,
   salt?: Uint8Array,
+  iterations: number = 100000,
 ): Promise<{ key: Buffer; salt: Uint8Array }> {
   const resolvedSalt = salt ?? randomBytes(SALT_LENGTH);
   const saltKey = base64url(Buffer.from(resolvedSalt));
+  // Cache key includes delimiter to prevent collisions between different keyMaterial/iterations/salt combinations
+  const cacheKey = `${keyMaterial}|${iterations}|${saltKey}`;
 
-  const cachedKey = keyCache.get(saltKey);
+  const cachedKey = keyCache.get(cacheKey);
   if (cachedKey) {
     return { key: cachedKey, salt: resolvedSalt };
   }
@@ -64,11 +68,11 @@ export async function deriveKey(
   const key = await pbkdf2Async(
     keyMaterial,
     resolvedSalt,
-    PBKDF2_ITERATIONS,
+    iterations,
     KEY_LENGTH,
     DIGEST_ALGO,
   );
-  keyCache.set(saltKey, key);
+  keyCache.set(cacheKey, key);
   return { key, salt: resolvedSalt };
 }
 
@@ -82,10 +86,12 @@ export async function deriveKey(
 export async function encrypt(
   plaintext: string,
   keyMaterial: string,
-): Promise<{ ciphertext: string; salt: string; iv: string }> {
+  iterations?: number,
+): Promise<{ ciphertext: string; salt: string; iv: string; iterations: number }> {
   validateKey(keyMaterial);
 
-  const { key, salt } = await deriveKey(keyMaterial);
+  const actualIterations = iterations ?? 100000;
+  const { key, salt } = await deriveKey(keyMaterial, undefined, actualIterations);
   const iv = randomBytes(IV_LENGTH);
 
   const cipher = createCipheriv("aes-256-gcm", key, iv);
@@ -99,37 +105,46 @@ export async function encrypt(
     ciphertext: base64url(sealed),
     salt: base64url(Buffer.from(salt)),
     iv: base64url(Buffer.from(iv)),
+    iterations: actualIterations,
   };
 }
 
 /**
  * Decrypt a payload produced by `encrypt`.
  *
- * Parses the JSON, re-derives the key using the stored salt, verifies the
- * authentication tag, and returns the plaintext.
+ * Parses the JSON, re-derives the key using the stored salt and iteration count,
+ * verifies the authentication tag, and returns the plaintext.
  * Throws on auth failure or tampering.
+ *
+ * @param keyIterations - Override the iteration count stored in the payload.
+ *                        Useful for testing or if payload lacks iteration info.
  */
 export async function decrypt(
   encryptedJson: string,
   keyMaterial: string,
+  keyIterations?: number,
 ): Promise<string> {
   validateKey(keyMaterial);
 
-  let payload: { ciphertext: string; salt: string; iv: string };
+  let payload: { ciphertext: string; salt: string; iv: string; iterations?: number };
   try {
     payload = JSON.parse(encryptedJson) as {
       ciphertext: string;
       salt: string;
       iv: string;
+      iterations?: number;
     };
   } catch {
     throw new Error("Invalid encrypted payload: expected JSON");
   }
 
-  const { ciphertext, salt, iv } = payload;
+  const { ciphertext, salt, iv, iterations } = payload;
   if (!ciphertext || !salt || !iv) {
     throw new Error("Invalid encrypted payload: missing required fields");
   }
+
+  // Use explicit keyIterations if provided, otherwise fall back to payload iterations or default 100k
+  const actualIterations = keyIterations ?? iterations ?? 100000;
 
   const sealed = fromBase64url(ciphertext);
   const saltBuf = fromBase64url(salt);
@@ -155,10 +170,10 @@ export async function decrypt(
   const tag = sealed.subarray(0, 16);
   const actualCiphertext = sealed.subarray(16);
 
-  // Derive the key using the stored salt; wrap derivation + decipher setup
-  // inside the same try/catch so Invalid IV/key errors produce friendly messages.
+  // Derive the key using the stored salt and iteration count
+  // Cache key includes iteration count to prevent key collisions
   try {
-    const { key } = await deriveKey(keyMaterial, saltBuf);
+    const { key } = await deriveKey(keyMaterial, saltBuf, actualIterations);
     const decipher = createDecipheriv("aes-256-gcm", key, ivFromPayload);
     decipher.setAuthTag(tag);
     return (
