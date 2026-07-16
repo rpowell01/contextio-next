@@ -211,7 +211,7 @@ export async function GET(request: Request): Promise<Response> {
 
         for (const match of matches) {
           allDetailRows.push({
-            redactionType: match.rule,
+            redactionType: match.ruleId,
             requestSource: source,
             requestProvider: provider,
             requestTarget: (meta.targetUrl as string) ?? "",
