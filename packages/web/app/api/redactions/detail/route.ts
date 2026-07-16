@@ -23,6 +23,14 @@ interface RedactionDetailRow {
   timestamp: string;
 }
 
+interface PaginatedDetailResponse {
+  details: RedactionDetailRow[];
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totalCount: number;
+}
+
 // Minimal row for initial collection (without heavy stringified bodies)
 interface MinimalRedactionRow {
   redactionType: string;
