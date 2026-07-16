@@ -72,13 +72,12 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
           break;
       }
       
-// Update selected index and focus the new option
-        if (newIndex !== selectedIndexRef.current) {
-          selectedIndexRef.current = newIndex;
-          if (listRef.current) {
-            const option = listRef.current.querySelector(`[data-index="${newIndex}"]`) as HTMLElement;
-            option?.focus();
-          }
+      // Update selected index and focus the new option
+      if (newIndex !== selectedIndexRef.current) {
+        selectedIndexRef.current = newIndex;
+        if (listRef.current) {
+          const option = listRef.current.querySelector(`[data-index="${newIndex}"]`) as HTMLElement;
+          option?.focus();
         }
       }
     }
