@@ -121,6 +121,13 @@ export interface RedactionMetaWatcherOptions {
   encryption?: EncryptionAtRestConfig;
 }
 
+export interface RedactionMatch {
+  rule: string;
+  original: string;
+  placeholder: string;
+  path: string;
+}
+
 export interface CaptureRedactionMetadata {
   captureId: string;
   totalRedactions: number;
@@ -133,7 +140,7 @@ export interface CaptureRedactionMetadata {
   timestamp?: string;
   checksum?: string;
   schemaVersion?: string;
-  matches?: Array<{ rule: string; path: string }>;
+  matches?: Array<RedactionMatch>;
 }
 
 export interface RedactionMetaWatcher {
@@ -279,9 +286,9 @@ interface RawRedactionStats {
  * Lightweight extractor for redaction matches, recording only rule and JSON path.
  * Used to populate the metadata file with minimal match information.
  */
-function extractRedactionMatches(rawData: unknown): Array<{ rule: string; path: string }> {
+function extractRedactionMatches(rawData: unknown): Array<RedactionMatch> {
   const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
-  const matches: Array<{ rule: string; path: string }> = [];
+  const matches: Array<RedactionMatch> = [];
 
   // Helper to extract matches from a string value
   function extractFromString(text: string, path: string): void {
@@ -289,11 +296,21 @@ function extractRedactionMatches(rawData: unknown): Array<{ rule: string; path: 
     let m: RegExpExecArray | null;
     while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
       const rule = (m[1] ?? "unknown").toLowerCase();
-      matches.push({ rule, path });
+      matches.push({
+        rule,
+        original: text,
+        placeholder: m[0],
+        path,
+      });
     }
     SSN_REGEX.lastIndex = 0;
     while ((m = SSN_REGEX.exec(text)) !== null) {
-      matches.push({ rule: "ssn", path });
+      matches.push({
+        rule: "ssn",
+        original: text,
+        placeholder: m[0],
+        path,
+      });
     }
   }
 
@@ -314,7 +331,7 @@ function extractRedactionMatches(rawData: unknown): Array<{ rule: string; path: 
   if (rawCapture?.requestBody) {
     collectStringsWithPath(rawCapture.requestBody, "requestBody");
   }
-  if (rawCapture?.responseBody && typeof rawCapture.responseBody === "string") {
+  if (typeof rawCapture?.responseBody === "string") {
     extractFromString(rawCapture.responseBody, "responseBody");
   } else if (rawCapture?.responseBody) {
     collectStringsWithPath(rawCapture.responseBody, "responseBody");
@@ -388,7 +405,12 @@ function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedacti
       totalRedactions: counts.totalRedactions,
       byRule: counts.byRule,
       generatedAt: new Date().toISOString(),
-      matches: matches.map(m => ({ rule: m.rule, path: m.path })),
+      matches: matches.map(m => ({
+        rule: m.rule,
+        original: m.original,
+        placeholder: m.placeholder,
+        path: m.path,
+      })),
       source: (rawCapture?.source as string) ?? undefined,
       provider: (rawCapture?.provider as string) ?? "unknown",
       targetUrl: (rawCapture?.targetUrl as string) ?? "",

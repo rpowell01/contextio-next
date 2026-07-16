@@ -222,7 +222,7 @@ export default function RedactionsPage() {
           params.set("sortKey", sortConfig.key);
           params.set("sortDir", sortConfig.direction);
         }
-        const res = await fetch(`/api/redactions/detail?${params.toString()}`);
+        const res = await fetch(`/api/redactions?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch details");
         const data = await res.json();
         if (!cancelled) {
