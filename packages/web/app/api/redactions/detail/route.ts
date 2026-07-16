@@ -36,15 +36,7 @@ interface MinimalRedactionRow {
   timestamp: string;
 }
 
-interface PaginatedDetailResponse {
-  details: RedactionDetailRow[];
-  page: number;
-  pageSize: number;
-  totalPages: number;
-  totalCount: number;
-}
-
-// Valid column keys for filtering/sorting (must match RedactionDetailRow / MinimalRedactionRow)
+// Derive VALID_COLUMN_KEYS from RedactionDetailRow to ensure consistency
 const VALID_COLUMN_KEYS = [
   "redactionType",
   "requestSource",
@@ -52,9 +44,9 @@ const VALID_COLUMN_KEYS = [
   "requestTarget",
   "sessionId",
   "captureId",
-  "timestamp",
   "preRedactionValue",
   "postRedactionValue",
+  "timestamp",
 ] as const;
 
 type ValidColumnKey = typeof VALID_COLUMN_KEYS[number];

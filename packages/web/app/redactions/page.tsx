@@ -229,6 +229,8 @@ export default function RedactionsPage() {
           _setDetails(data.details);
           setTotalPages(data.totalPages);
           setTotalCount(data.totalCount);
+          // Sync client page to server-clamped page to avoid desync when dataset shrinks
+          if (data.page && data.page !== page) setPage(data.page);
         }
       } catch (err) {
         if (!cancelled) {
