@@ -6,10 +6,7 @@ import {
   MAX_FILE_SIZE,
   readCaptureFile,
   readRedactionMetaFile,
-<<<<<<< HEAD
   extractRedactionMatches,
-=======
->>>>>>> origin/main
 } from "@/lib/sessions/utils";
 
 interface RedactionDetailRow {
