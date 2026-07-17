@@ -115,6 +115,11 @@ async function getRedactionDetailsFromMeta(
       // Create one detail row per match (using matches array if available in meta)
       const matches = (meta.matches as Array<{ ruleId: string; original: string; placeholder: string; path: string }> | undefined) ?? [];
       
+      console.log('[RedactionAPI] Processing meta:', filename, 'matches.length:', matches.length, 'byRule keys:', meta.byRule ? Object.keys(meta.byRule) : 'none');
+      if (matches.length > 0) {
+        console.log('[RedactionAPI] First match:', JSON.stringify(matches[0]));
+      }
+      
       if (matches.length > 0) {
         for (const match of matches) {
           allRows.push({
