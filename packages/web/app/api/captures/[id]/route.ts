@@ -8,7 +8,9 @@ import {
   metaFilenameFor,
   isValidFilename,
   getSessionMetadata,
+  readCaptureFile,
 } from "@/lib/sessions/utils";
+import { withRequestCache } from "@/lib/request-cache";
 import {
   computeCaptureRedactionCounts,
   getCaptureRedactionStats,
@@ -19,9 +21,7 @@ import {
 import type { RedactionDetails } from "@/types/api";
 import { consumeToken } from "@/lib/csrf";
 
-async function readRedactionMetaSidecar(
-  captureFilepath: string,
-): Promise<{
+async function readRedactionMetaSidecar(captureFilepath: string): Promise<{
   captureId: string;
   totalRedactions: number;
   byRule: Record<string, number>;
@@ -69,102 +69,112 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
+  return withRequestCache(async () => {
+    const { id } = await params;
 
-  try {
-    if (!isValidFilename(id)) {
-      return Response.json({ error: "Invalid capture id" }, { status: 400 });
-    }
+    try {
+      if (!isValidFilename(id)) {
+        return Response.json({ error: "Invalid capture id" }, { status: 400 });
+      }
 
-    const filepath = join(getCaptureDir(), id);
-    const stats = await fs.stat(filepath).catch(() => null);
-    if (!stats) {
-      return Response.json({ error: "Capture not found" }, { status: 404 });
-    }
+      const filepath = join(getCaptureDir(), id);
+      const stats = await fs.stat(filepath).catch(() => null);
+      if (!stats) {
+        return Response.json({ error: "Capture not found" }, { status: 404 });
+      }
 
-    if (stats.size > MAX_FILE_SIZE) {
-      return Response.json({ error: "Capture file too large" }, { status: 413 });
-    }
+      if (stats.size > MAX_FILE_SIZE) {
+        return Response.json(
+          { error: "Capture file too large" },
+          { status: 413 },
+        );
+      }
 
-    const raw = await fs.readFile(filepath, "utf8");
-    const data = JSON.parse(raw) as Record<string, unknown>;
-    const capture = extractCaptureMetadata(id, data);
-    const sessionMeta = await getSessionMetadata(id, data);
-    const sidecar = await readRedactionMetaSidecar(filepath);
-    const persistedStatsFromCapture = getCaptureRedactionStats(data) ?? null;
+      const data = await readCaptureFile(filepath);
+      if (!data) {
+        return Response.json(
+          { error: "Capture not found or could not be decrypted" },
+          { status: 404 },
+        );
+      }
+      const capture = extractCaptureMetadata(id, data);
+      const sessionMeta = await getSessionMetadata(id, data);
+      const sidecar = await readRedactionMetaSidecar(filepath);
+      const persistedStatsFromCapture = getCaptureRedactionStats(data) ?? null;
 
-    // "computed" is used for the redactions list (with matches).
-    const computed = computeCaptureRedactionCounts(
-      data,
-      false,
-      persistedStatsFromCapture ?? undefined,
-      data.originalRequestBody,
-    );
-
-    // "redactionMeta" is what gets persisted as the sidecar.
-    let redactionMeta: {
-      captureId: string;
-      totalRedactions: number;
-      byRule: Record<string, number>;
-      generatedAt?: string;
-    };
-
-    if (sidecar) {
-      // Sidecar wins: preserves provider/targetUrl/timestamp/checksum/matches.
-      redactionMeta = {
-        captureId: sidecar.captureId,
-        totalRedactions: sidecar.totalRedactions,
-        byRule: sidecar.byRule,
-        generatedAt: undefined,
-      };
-    } else {
-      // Fallback: derive from persisted stats in the capture file.
-      redactionMeta = buildRedactionMeta(
-        id.replace(/\.json$/, ""),
-        persistedStatsFromCapture,
-        computed,
+      // "computed" is used for the redactions list (with matches).
+      const computed = computeCaptureRedactionCounts(
+        data,
         false,
+        persistedStatsFromCapture ?? undefined,
+        data.originalRequestBody,
       );
+
+      // "redactionMeta" is what gets persisted as the sidecar.
+      let redactionMeta: {
+        captureId: string;
+        totalRedactions: number;
+        byRule: Record<string, number>;
+        generatedAt?: string;
+      };
+
+      if (sidecar) {
+        // Sidecar wins: preserves provider/targetUrl/timestamp/checksum/matches.
+        redactionMeta = {
+          captureId: sidecar.captureId,
+          totalRedactions: sidecar.totalRedactions,
+          byRule: sidecar.byRule,
+          generatedAt: undefined,
+        };
+      } else {
+        // Fallback: derive from persisted stats in the capture file.
+        redactionMeta = buildRedactionMeta(
+          id.replace(/\.json$/, ""),
+          persistedStatsFromCapture,
+          computed,
+          false,
+        );
+      }
+
+      // Surface request/response bodies from session metadata (the richer write).
+      const requestBody = sessionMeta.requestBody ?? data.requestBody;
+      const responseBody = sessionMeta.responseBody ?? data.responseBody;
+
+      // Redaction summary for the list/detail consumers.
+      const redactionStats = getCaptureRedactionStats(data) ?? undefined;
+      const redaction = computeCaptureRedactionCounts(
+        data,
+        true,
+        redactionStats,
+        data.originalRequestBody,
+      );
+      const redactionDetails: RedactionDetails = {
+        totalRedactions: redaction.totalRedactions,
+        byRule: redaction.byRule,
+        matches: redaction.matches.map((m) => ({
+          ruleId: m.ruleId,
+          original: m.original,
+          placeholder: m.placeholder,
+          path: m.path,
+        })),
+      };
+
+      return Response.json({
+        ...capture,
+        requestBody,
+        responseBody,
+        totalRedactions: redactionDetails.totalRedactions,
+        byRule: redactionDetails.byRule,
+        matches: redactionDetails.matches,
+        redactionMeta,
+        redaction: redactionDetails,
+        redactions: redactionDetails,
+      });
+    } catch (error) {
+      console.error("Error in capture detail API:", error);
+      return Response.json({ error: "Internal server error" }, { status: 500 });
     }
-
-    // Surface request/response bodies from session metadata (the richer write).
-    const requestBody = sessionMeta.requestBody ?? data.requestBody;
-    const responseBody = sessionMeta.responseBody ?? data.responseBody;
-
-    // Redaction summary for the list/detail consumers.
-    const redactionStats = getCaptureRedactionStats(data) ?? undefined;
-    const redaction = computeCaptureRedactionCounts(
-      data,
-      true,
-      redactionStats,
-      data.originalRequestBody,
-    );
-    const redactionDetails: RedactionDetails = {
-      totalRedactions: redaction.totalRedactions,
-      byRule: redaction.byRule,
-      matches: redaction.matches.map((m) => ({
-        ruleId: m.ruleId,
-        original: m.original,
-        placeholder: m.placeholder,
-        path: m.path,
-      })),
-    };
-
-return Response.json({
-  ...capture,
-  requestBody,
-  responseBody,
-  totalRedactions: redactionDetails.totalRedactions,
-  byRule: redactionDetails.byRule,
-  matches: redactionDetails.matches,
-  redactionMeta,
-  redaction: redactionDetails,
-  redactions: redactionDetails,
-});
-  } catch (error) {
-    console.error("Error in capture detail API:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
-  }
+  });
 }
 
 export async function PUT(
@@ -180,7 +190,10 @@ export async function PUT(
 
     const csrfToken = _request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
-      return Response.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+      return Response.json(
+        { error: "Invalid or missing CSRF token" },
+        { status: 400 },
+      );
     }
 
     const filepath = join(getCaptureDir(), id);
@@ -279,16 +292,14 @@ export async function POST(
     // ------------------------------------------------------------------
     if (action === "redact") {
       const rules = body.rules ?? [];
-      const originalReq =
-        rawData.originalRequestBody ?? rawData.requestBody;
-      const originalRes =
-        rawData.originalResponseBody ?? rawData.responseBody;
+      const originalReq = rawData.originalRequestBody ?? rawData.requestBody;
+      const originalRes = rawData.originalResponseBody ?? rawData.responseBody;
 
-  const redacted = applyRedaction(
-    originalReq,
-    originalRes as string | null,
-    rules,
-  );
+      const redacted = applyRedaction(
+        originalReq,
+        originalRes as string | null,
+        rules,
+      );
 
       const redactionDetails: RedactionDetails = {
         totalRedactions: redacted.matches.length,
@@ -321,10 +332,7 @@ export async function POST(
         },
       };
 
-      await fs.writeFile(
-        filepath,
-        JSON.stringify(updatedData, null, 2),
-      );
+      await fs.writeFile(filepath, JSON.stringify(updatedData, null, 2));
 
       const capture = extractCaptureMetadata(id, updatedData);
       return Response.json({
