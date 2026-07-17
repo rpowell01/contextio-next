@@ -3,57 +3,119 @@
 
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X } from "lucide-react";
 
 /**
- * Simple dialog component with scrollbars and close button.
- * Renders full text with a specific needle highlighted (all occurrences).
+ * Simple line-based diff algorithm.
+ * Returns array of { type: 'equal' | 'delete' | 'insert', value: string, lineNumber?: number }
  */
-function ContentDialog({
+function computeDiff(oldText: string, newText: string) {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  const result: Array<{ type: 'equal' | 'delete' | 'insert'; value: string; oldLineNum?: number; newLineNum?: number }> = [];
+
+  // Simple longest common subsequence for lines
+  const dp: number[][] = Array(oldLines.length + 1).fill(null).map(() => Array(newLines.length + 1).fill(0));
+  
+  for (let i = oldLines.length - 1; i >= 0; i--) {
+    for (let j = newLines.length - 1; j >= 0; j--) {
+      if (oldLines[i] === newLines[j]) {
+        dp[i][j] = dp[i + 1][j + 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+  }
+
+  let i = 0, j = 0;
+  let oldLineNum = 1, newLineNum = 1;
+  
+  while (i < oldLines.length || j < newLines.length) {
+    if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
+      result.push({ type: 'equal', value: oldLines[i], oldLineNum, newLineNum });
+      i++; j++; oldLineNum++; newLineNum++;
+    } else if (j < newLines.length && (i >= oldLines.length || dp[i][j + 1] >= dp[i + 1][j])) {
+      result.push({ type: 'insert', value: newLines[j], newLineNum });
+      j++; newLineNum++;
+    } else if (i < oldLines.length) {
+      result.push({ type: 'delete', value: oldLines[i], oldLineNum });
+      i++; oldLineNum++;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * DiffDialog component with two-pane layout showing pre-redaction (left) and post-redaction (right).
+ */
+function DiffDialog({
   isOpen,
   onClose,
   title,
-  fullText,
-  needle,
-  isPreRedaction = false,
+  preContent,
+  postContent,
+  captureId,
+  redactionType,
+  provider,
+  targetUrl,
+  timestamp,
 }: {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  fullText: string;
-  needle: string;
-  isPreRedaction?: boolean;
+  preContent: string;
+  postContent: string;
+  captureId: string;
+  redactionType: string;
+  provider: string;
+  targetUrl: string;
+  timestamp: string;
 }) {
   if (!isOpen) return null;
 
-  // Highlight all occurrences of needle in fullText
-  const highlightParts = () => {
-    if (!needle) return <code className="font-mono text-xs">{fullText}</code>;
-    const parts = fullText.split(needle);
-    if (parts.length === 1) return <code className="font-mono text-xs">{fullText}</code>;
+  const diff = useMemo(() => computeDiff(preContent, postContent), [preContent, postContent]);
+
+  const renderLine = (item: typeof diff[0], side: 'left' | 'right') => {
+    const isLeft = side === 'left';
+    const showLine = isLeft ? (item.type !== 'insert') : (item.type !== 'delete');
+    
+    if (!showLine) {
+      return <div style={{ height: '1.25rem' }} />;
+    }
+    
+    const lineNum = isLeft ? item.oldLineNum : item.newLineNum;
+    const lineClass = `font-mono text-xs whitespace-pre-wrap ${
+      item.type === 'delete' ? 'bg-red-100 dark:bg-red-900/30 line-through' :
+      item.type === 'insert' ? 'bg-green-100 dark:bg-green-900/30' :
+      'bg-transparent'
+    }`;
+    
     return (
-      <code className="font-mono text-xs">
-        {parts.map((part, i) => (
-          <>
-            {part}
-            {i < parts.length - 1 && (
-              <mark className={`px-1 rounded font-medium ${isPreRedaction ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
-                {needle}
-              </mark>
-            )}
-          </>
-        ))}
-      </code>
+      <div className={lineClass} style={{ padding: '2px 8px', borderRadius: '4px', minHeight: '1.25rem' }}>
+        <span className="text-muted-foreground mr-2 select-none" style={{ width: '3rem', display: 'inline-block', textAlign: 'right' }}>
+          {lineNum ?? ''}
+        </span>
+        {item.value || ' '}
+      </div>
     );
   };
 
-  if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col">
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold">{title}</h3>
+          <div>
+            <h3 className="text-lg font-semibold">{title}</h3>
+            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-1">
+              <span>Type: <span className="font-mono capitalize">{redactionType.replace(/_/g, ' ')}</span></span>
+              <span>Capture: <span className="font-mono">{captureId}</span></span>
+              {provider && <span>Provider: <span className="font-mono">{provider}</span></span>}
+              {targetUrl && <span>Target: <span className="font-mono truncate max-w-[200px]">{targetUrl}</span></span>}
+              {timestamp && <span>Time: <span className="font-mono">{new Date(timestamp).toLocaleString()}</span></span>}
+            </div>
+          </div>
           <button
             onClick={onClose}
             className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -62,8 +124,30 @@ function ContentDialog({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="p-4 overflow-auto max-h-[70vh] font-mono text-xs whitespace-pre-wrap">
-          {highlightParts()}
+        <div className="flex flex-col md:flex-row overflow-hidden max-h-[75vh]">
+          {/* Left pane - Pre-redaction (Original) */}
+          <div className="flex-1 min-w-0 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+            <div className="p-2 bg-red-50 dark:bg-red-900/20 border-b border-gray-200 dark:border-gray-700">
+              <h4 className="text-xs font-semibold text-red-700 dark:text-red-300">Pre-Redaction (Original)</h4>
+            </div>
+            <div className="flex-1 overflow-auto p-4 font-mono text-xs">
+              {diff.map((chunk, idx) => (
+                <div key={idx}>{renderLine(chunk, 'left')}</div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Right pane - Post-redaction (Redacted) */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="p-2 bg-green-50 dark:bg-green-900/20 border-b border-gray-200 dark:border-gray-700">
+              <h4 className="text-xs font-semibold text-green-700 dark:text-green-300">Post-Redaction (Redacted)</h4>
+            </div>
+            <div className="flex-1 overflow-auto p-4 font-mono text-xs">
+              {diff.map((chunk, idx) => (
+                <div key={idx}>{renderLine(chunk, 'right')}</div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -144,12 +228,16 @@ export default function RedactionsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [preDialogOpen, setPreDialogOpen] = useState(false);
-  const [preDialogContent, setPreDialogContent] = useState("");
-  const [preNeedle, setPreNeedle] = useState("");
-  const [postDialogOpen, setPostDialogOpen] = useState(false);
-  const [postDialogContent, setPostDialogContent] = useState("");
-  const [postNeedle, setPostNeedle] = useState("");
+  const [diffDialogOpen, setDiffDialogOpen] = useState(false);
+  const [diffDialogData, setDiffDialogData] = useState<{
+    preContent: string;
+    postContent: string;
+    captureId: string;
+    redactionType: string;
+    provider: string;
+    targetUrl: string;
+    timestamp: string;
+  } | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
   // Debounced filters for API calls - prevents firing on every keystroke
@@ -469,9 +557,16 @@ return (
                           <span
                             className="text-primary underline cursor-pointer hover:text-primary/80"
                             onClick={() => {
-                              setPreDialogContent(row.fullOriginal || row.preRedactionValue);
-                              setPreNeedle(row.preRedactionValue);
-                              setPreDialogOpen(true);
+                              setDiffDialogData({
+                                preContent: row.fullOriginal || row.preRedactionValue,
+                                postContent: row.fullRedacted || row.postRedactionValue,
+                                captureId: row.captureId,
+                                redactionType: row.redactionType,
+                                provider: row.requestProvider,
+                                targetUrl: row.requestTarget,
+                                timestamp: row.timestamp,
+                              });
+                              setDiffDialogOpen(true);
                             }}
                           >
                             <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
@@ -481,9 +576,16 @@ return (
                           <span
                             className="text-primary underline cursor-pointer hover:text-primary/80"
                             onClick={() => {
-                              setPostDialogContent(row.fullRedacted || row.postRedactionValue);
-                              setPostNeedle(row.postRedactionValue);
-                              setPostDialogOpen(true);
+                              setDiffDialogData({
+                                preContent: row.fullOriginal || row.preRedactionValue,
+                                postContent: row.fullRedacted || row.postRedactionValue,
+                                captureId: row.captureId,
+                                redactionType: row.redactionType,
+                                provider: row.requestProvider,
+                                targetUrl: row.requestTarget,
+                                timestamp: row.timestamp,
+                              });
+                              setDiffDialogOpen(true);
                             }}
                           >
                             <RedactionHighlight value={row.postRedactionValue} />
@@ -532,28 +634,21 @@ return (
             )}
           </div>
         </div>
-      </MainLayout>
+</MainLayout>
 
-      {/* Pre-Redaction Dialog */}
-      <ContentDialog
-        isOpen={preDialogOpen}
-        onClose={() => setPreDialogOpen(false)}
-        title="Pre-Redaction (Original)"
-        fullText={preDialogContent}
-        needle={preNeedle}
-        isPreRedaction={true}
-      />
-
-      {/* Post-Redaction Dialog */}
-      <ContentDialog
-        isOpen={postDialogOpen}
-        onClose={() => setPostDialogOpen(false)}
-        title="Post-Redaction (Redacted)"
-        fullText={postDialogContent}
-        needle={postNeedle}
-        isPreRedaction={false}
+      {/* Diff Dialog - Two-pane view showing pre/post redaction side by side */}
+      <DiffDialog
+        isOpen={diffDialogOpen}
+        onClose={() => setDiffDialogOpen(false)}
+        preContent={diffDialogData?.preContent || ""}
+        postContent={diffDialogData?.postContent || ""}
+        title="Redaction Diff"
+        captureId={diffDialogData?.captureId || ""}
+        redactionType={diffDialogData?.redactionType || ""}
+        provider={diffDialogData?.provider || ""}
+        targetUrl={diffDialogData?.targetUrl || ""}
+        timestamp={diffDialogData?.timestamp || ""}
       />
     </>
   );
-                
 }
