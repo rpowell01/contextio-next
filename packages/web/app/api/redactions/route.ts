@@ -113,7 +113,7 @@ async function getRedactionDetailsFromMeta(
       }
 
       // Create one detail row per match (using matches array if available in meta)
-      const matches = (meta.matches as Array<{ ruleId: string; original: string; placeholder: string; path: string }> | undefined) ?? [];
+      const matches = (meta.matches as Array<{ rule: string; original: string; placeholder: string; path: string }> | undefined) ?? [];
       
       console.log('[RedactionAPI] Processing meta:', filename, 'matches.length:', matches.length, 'byRule keys:', meta.byRule ? Object.keys(meta.byRule) : 'none');
       if (matches.length > 0) {
@@ -123,7 +123,7 @@ async function getRedactionDetailsFromMeta(
       if (matches.length > 0) {
         for (const match of matches) {
           allRows.push({
-            redactionType: match.ruleId,
+            redactionType: match.rule,
             requestSource: source,
             requestProvider: provider,
             requestTarget: targetUrl,
