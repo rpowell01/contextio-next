@@ -165,6 +165,8 @@ export async function GET(
         ...capture,
         requestBody,
         responseBody,
+        originalRequestBody: data.originalRequestBody,
+        originalResponseBody: data.originalResponseBody,
         totalRedactions: redactionDetails.totalRedactions,
         byRule: redactionDetails.byRule,
         matches: redactionDetails.matches,

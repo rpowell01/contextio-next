@@ -178,6 +178,7 @@ interface RedactionDetailRow {
   captureId: string;
   preRedactionValue: string;
   postRedactionValue: string;
+  path: string;
   fullOriginal?: string;
   fullRedacted?: string;
   timestamp: string;
@@ -269,19 +270,57 @@ export default function RedactionsPage() {
 
   const lastFocusedTrigger = useRef<HTMLElement | null>(null);
 
-const handleOpenDiff = useCallback((e: React.MouseEvent, row: RedactionDetailRow) => {
-  lastFocusedTrigger.current = e.currentTarget as HTMLElement;
-  setDiffDialogData({
-    preContent: row.fullOriginal || row.preRedactionValue,
-    postContent: row.fullRedacted || row.postRedactionValue,
-    captureId: row.captureId,
-    redactionType: row.redactionType,
-    provider: row.requestProvider,
-    targetUrl: row.requestTarget,
-    timestamp: row.timestamp,
-  });
-  setDiffDialogOpen(true);
-}, []);
+const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionDetailRow) => {
+    lastFocusedTrigger.current = e.currentTarget as HTMLElement;
+    
+    // Fetch full capture data to get complete original vs redacted content
+    let preContent = row.fullOriginal || row.preRedactionValue;
+    let postContent = row.fullRedacted || row.postRedactionValue;
+    
+    try {
+      const res = await fetch(`/api/captures/${row.captureId}`);
+      if (res.ok) {
+        const capture = await res.json();
+        // The capture contains both redacted (requestBody/responseBody) and original (originalRequestBody/originalResponseBody)
+        // Use path to determine which body this redaction applies to:
+        // - "requestBody.*" = request body redaction
+        // - "responseBody.*" = response body redaction
+        const isRequestRedaction = row.path.startsWith('requestBody');
+        
+        if (isRequestRedaction && capture.originalRequestBody && capture.requestBody) {
+          // Request body redaction
+          preContent = typeof capture.originalRequestBody === 'string' 
+            ? capture.originalRequestBody 
+            : JSON.stringify(capture.originalRequestBody, null, 2);
+          postContent = typeof capture.requestBody === 'string' 
+            ? capture.requestBody 
+            : JSON.stringify(capture.requestBody, null, 2);
+        } else if (capture.originalResponseBody && capture.responseBody) {
+          // Response body redaction
+          preContent = typeof capture.originalResponseBody === 'string' 
+            ? capture.originalResponseBody 
+            : JSON.stringify(capture.originalResponseBody, null, 2);
+          postContent = typeof capture.responseBody === 'string' 
+            ? capture.responseBody 
+            : JSON.stringify(capture.responseBody, null, 2);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch full capture for diff:', err);
+      // Fall back to substring values
+    }
+    
+    setDiffDialogData({
+      preContent,
+      postContent,
+      captureId: row.captureId,
+      redactionType: row.redactionType,
+      provider: row.requestProvider,
+      targetUrl: row.requestTarget,
+      timestamp: row.timestamp,
+    });
+    setDiffDialogOpen(true);
+  }, []);
 
 const handleCloseDiff = useCallback(() => {
   if (lastFocusedTrigger.current) {

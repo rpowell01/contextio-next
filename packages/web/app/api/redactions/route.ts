@@ -22,6 +22,7 @@ interface RedactionDetailRow {
   captureId: string;
   preRedactionValue: string;
   postRedactionValue: string;
+  path: string;
   timestamp: string;
 }
 
@@ -125,6 +126,7 @@ async function getRedactionDetailsFromMeta(
             captureId,
             preRedactionValue: match.original,
             postRedactionValue: match.placeholder,
+            path: match.path,
             timestamp,
           });
         }
