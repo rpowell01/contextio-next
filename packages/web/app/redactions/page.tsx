@@ -246,7 +246,14 @@ function RedactionHighlight({
         <span key={i}>
           {part}
           {i < matches.length && (
-            <mark className="bg-red-100 text-red-800 px-1 rounded font-bold">
+            <mark style={{ 
+              backgroundColor: '#fef2f2', 
+              color: '#991b1b', 
+              fontWeight: '700', 
+              padding: '2px 6px', 
+              borderRadius: '4px',
+              fontFamily: 'inherit'
+            }}>
               {matches[i]}
             </mark>
           )}
