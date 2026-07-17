@@ -404,6 +404,21 @@ const handleCloseDiff = useCallback(() => {
     return () => clearTimeout(timer);
   }, [filters, selectedRedactionType]);
 
+  // Also update debouncedFilters immediately for redactionType filter (click-based, no debounce needed)
+  useEffect(() => {
+    if (selectedRedactionType !== undefined) {
+      setDebouncedFilters(prev => {
+        const next = { ...prev };
+        if (selectedRedactionType) {
+          next.redactionType = selectedRedactionType;
+        } else {
+          delete next.redactionType;
+        }
+        return next;
+      });
+    }
+  }, [selectedRedactionType]);
+
   // Fetch summary data
   useEffect(() => {
     let cancelled = false;
