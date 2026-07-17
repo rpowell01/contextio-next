@@ -582,10 +582,12 @@ const handleCloseDiff = useCallback(() => {
     setPage(1); // Reset to first page when sort changes
   };
 
-  // Convert preset rule name to ruleId format (hyphens -> underscores)
-  // e.g., "api-key-prefixed" -> "api_key"
+  // Convert preset rule name to ruleId format
+  // Rule names from presets use hyphens (e.g., "api-key-prefixed")
+  // The redaction engine stores rule.name directly as ruleId
+  // So we use the name as-is, no conversion needed
   const presetNameToRuleId = (presetName: string): string => {
-    return presetName.replace(/-/g, '_');
+    return presetName;
   };
 
   const handleFilterChange = (key: string, value: string) => {
