@@ -246,7 +246,7 @@ function RedactionHighlight({
         <span key={i}>
           {part}
           {i < matches.length && (
-            <mark className="bg-red-100 text-red-800 px-1 rounded font-medium">
+            <mark className="bg-red-100 text-red-800 px-1 rounded font-bold">
               {matches[i]}
             </mark>
           )}
@@ -280,13 +280,12 @@ export default function RedactionsPage() {
   // Debounced filters for API calls - prevents firing on every keystroke
   const [debouncedFilters, setDebouncedFilters] = useState<Record<string, string>>({});
   const [columnOrder, setColumnOrder] = useState<string[]>([
-    'redactionType',
+    'timestamp',
     'requestSource',
     'requestProvider',
     'requestTarget',
     'sessionId',
     'captureId',
-    'timestamp',
   ]);
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
@@ -589,62 +588,59 @@ const handleCloseDiff = useCallback(() => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    {columnOrder.map((key, idx) => {
-                      const labelMap: Record<string, string> = {
-                        redactionType: 'Redaction Type',
-                        requestSource: 'Source',
-                        requestProvider: 'Provider',
-                        requestTarget: 'Target',
-                        sessionId: 'Session ID',
-                        captureId: 'Capture ID',
-                        timestamp: 'Date/Time',
-                      };
-                      const isLast = idx === columnOrder.length - 1;
-                      return (
-                        <th
-                          key={key}
-                          className="text-left py-3 px-4 cursor-pointer hover:bg-muted relative"
-                          onClick={() => handleSort(key)}
-                          draggable
-                          onDragStart={() => handleDragStart(key)}
-                          onDragOver={handleDragOver}
-                          onDrop={() => handleDrop(key)}
-                          onDragEnd={handleDragEnd}
-                          style={{ width: columnWidths[key] ? `${columnWidths[key]}px` : undefined }}
-                        >
-                          {labelMap[key]}
-                          {sortConfig?.key === key && (
-                            <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
-                          )}
-                          {!isLast && (
-                            <div
-                              className="resize-handle absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary"
-                              onMouseDown={(e) => handleResizeStart(key, e)}
-                            />
-                          )}
-                        </th>
-                      );
-                    })}
-                    <th className="text-left py-3 px-4">Pre-Redaction</th>
-                    <th className="text-left py-3 px-4">Post-Redaction</th>
-                  </tr>
+{columnOrder.map((key, idx) => {
+                       const labelMap: Record<string, string> = {
+                         requestSource: 'Source',
+                         requestProvider: 'Provider',
+                         requestTarget: 'Target',
+                         sessionId: 'Session ID',
+                         captureId: 'Capture ID',
+                         timestamp: 'Date/Time',
+                       };
+                       const isLast = idx === columnOrder.length - 1;
+                       return (
+                         <th
+                           key={key}
+                           className="text-left py-3 px-4 cursor-pointer hover:bg-muted relative"
+                           onClick={() => handleSort(key)}
+                           draggable
+                           onDragStart={() => handleDragStart(key)}
+                           onDragOver={handleDragOver}
+                           onDrop={() => handleDrop(key)}
+                           onDragEnd={handleDragEnd}
+                           style={{ width: columnWidths[key] ? `${columnWidths[key]}px` : undefined }}
+                         >
+                           {labelMap[key]}
+                           {sortConfig?.key === key && (
+                             <span className="ml-1">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                           )}
+                           {!isLast && (
+                             <div
+                               className="resize-handle absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary"
+                               onMouseDown={(e) => handleResizeStart(key, e)}
+                             />
+                           )}
+                         </th>
+                       );
+                     })}
+                     <th className="text-left py-3 px-4">Redaction Diff</th>
+                   </tr>
                   <tr className="border-b bg-muted/50">
-                    {columnOrder.map((key) => (
-                      <th key={key} className="py-1 px-4">
-                        <input
-                          type="text"
-                          placeholder="Filter…"
-                          className="w-full text-xs rounded border px-2 py-1"
-                          value={filters[key] || ''}
-                          onChange={e => handleFilterChange(key, e.target.value)}
-                        />
-                      </th>
-                    ))}
-                    <th className="py-1 px-4"></th>
-                    <th className="py-1 px-4"></th>
-                  </tr>
+{columnOrder.map((key) => (
+                       <th key={key} className="py-1 px-4">
+                         <input
+                           type="text"
+                           placeholder="Filter…"
+                           className="w-full text-xs rounded border px-2 py-1"
+                           value={filters[key] || ''}
+                           onChange={e => handleFilterChange(key, e.target.value)}
+                         />
+                       </th>
+                     ))}
+                     <th className="py-1 px-4"></th>
+                   </tr>
                 </thead>
-                <tbody>
+<tbody>
                   {details.map((row, index) => {
                     const rowKey = `${row.captureId}-${index}`;
                     return (
@@ -653,27 +649,19 @@ const handleCloseDiff = useCallback(() => {
                           <td key={key}>{renderCell(key, row)}</td>
                         ))}
                         <td className="py-3 px-4 max-w-xs truncate">
-          <span
-            className="text-primary underline cursor-pointer hover:text-primary/80"
-            onClick={(e) => handleOpenDiff(e, row)}
-          >
-            <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
-          </span>
-                        </td>
-                        <td className="py-3 px-4 max-w-xs truncate">
-          <span
-            className="text-primary underline cursor-pointer hover:text-primary/80"
-            onClick={(e) => handleOpenDiff(e, row)}
-          >
-            <RedactionHighlight value={row.postRedactionValue} />
-          </span>
+              <span
+                className="text-primary underline cursor-pointer hover:text-primary/80"
+                onClick={(e) => handleOpenDiff(e, row)}
+              >
+                <RedactionHighlight value={row.postRedactionValue} />
+              </span>
                         </td>
                       </tr>
                     );
                   })}
                   {(!details || details.length === 0) && (
                     <tr>
-                      <td colSpan={columnOrder.length + 2} className="py-12 text-center text-muted-foreground">
+                      <td colSpan={columnOrder.length + 1} className="py-12 text-center text-muted-foreground">
                         No redaction details found
                       </td>
                     </tr>
