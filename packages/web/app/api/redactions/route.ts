@@ -243,11 +243,6 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-  } catch (error) {
-    console.error("Error in redactions API:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
 
 export async function POST(request: Request) {
   try {
