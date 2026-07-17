@@ -5,6 +5,7 @@ import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from 
 import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, readCaptureFile } from "@/lib/sessions/utils";
 import { countRedactionsInResponse, getCaptureRedactionStats } from "@/lib/sessions/redaction-utils";
 import { computeTokenUsage } from "@/lib/sessions/utils";
+import { withRequestCache } from "@/lib/request-cache";
 
 /**
  * Parse a single capture file and extract metrics.
@@ -91,20 +92,20 @@ function aggregateMetrics(
       totalResponseBytes += capture.traffic.responseBytes;
     }
 
-  if (capture.providerUsage) {
-    const existing = providerMap.get(capture.providerUsage.provider);
-    if (existing) {
-      existing.requestCount += capture.providerUsage.requestCount;
-      existing.totalInputTokens += capture.providerUsage.totalInputTokens;
-      existing.totalOutputTokens += capture.providerUsage.totalOutputTokens;
-    } else {
-      providerMap.set(capture.providerUsage.provider, {
-        ...capture.providerUsage,
-      });
+    if (capture.providerUsage) {
+      const existing = providerMap.get(capture.providerUsage.provider);
+      if (existing) {
+        existing.requestCount += capture.providerUsage.requestCount;
+        existing.totalInputTokens += capture.providerUsage.totalInputTokens;
+        existing.totalOutputTokens += capture.providerUsage.totalOutputTokens;
+      } else {
+        providerMap.set(capture.providerUsage.provider, {
+          ...capture.providerUsage,
+        });
+      }
+      totalInputTokens += capture.providerUsage.totalInputTokens;
+      totalOutputTokens += capture.providerUsage.totalOutputTokens;
     }
-    totalInputTokens += capture.providerUsage.totalInputTokens;
-    totalOutputTokens += capture.providerUsage.totalOutputTokens;
-  }
 
     if (capture.redaction) {
       redactions.push(capture.redaction);
@@ -124,9 +125,11 @@ function aggregateMetrics(
   };
 }
 
-/** Shared peak-sampling strategy: group adjacent points and take the max in each group.
+/**
+ * Shared peak-sampling strategy: group adjacent points and take the max in each group.
  * Mirrors the client-side `downsampleData` in `traffic-chart.tsx` so server and
- * client produce identical chart representations for the same data. */
+ * client produce identical chart representations for the same data.
+ */
 function downsampleTraffic(
   data: TrafficMetric[],
   maxPoints: number,
@@ -148,7 +151,7 @@ function downsampleTraffic(
 }
 
 export async function GET(request: Request): Promise<Response> {
-  try {
+  return withRequestCache(async () => {
     const url = new URL(request.url);
 
     // Parse query params
@@ -163,7 +166,10 @@ export async function GET(request: Request): Promise<Response> {
     const pageValue = Number(url.searchParams.get("page"));
     const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
     const pageSizeValue = Number(url.searchParams.get("pageSize"));
-    const pageSize = Number.isFinite(pageSizeValue) && pageSizeValue > 0 ? pageSizeValue : 50;
+    const pageSize =
+      Number.isFinite(pageSizeValue) && pageSizeValue > 0
+        ? pageSizeValue
+        : 50;
     const now = new Date();
     const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
 
@@ -174,7 +180,7 @@ export async function GET(request: Request): Promise<Response> {
       redaction: RedactionMetric | null;
     }> = [];
 
-for (const filename of files) {
+    for (const filename of files) {
       try {
         const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
@@ -205,7 +211,9 @@ for (const filename of files) {
     const metrics = aggregateMetrics(captures);
 
     // Sort traffic by timestamp to ensure chronological order
-    metrics.traffic.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    metrics.traffic.sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
     const totalTrafficPoints = metrics.traffic.length;
     const totalPages = Math.ceil(totalTrafficPoints / pageSize);
 
@@ -238,8 +246,5 @@ for (const filename of files) {
       );
     }
     return response;
-  } catch (error) {
-    console.error("Error in metrics API:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
-  }
+  });
 }

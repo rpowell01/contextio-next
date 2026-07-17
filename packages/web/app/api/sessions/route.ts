@@ -15,6 +15,7 @@ import {
   aggregateRedactionMetaBySession,
   readCaptureFile,
 } from "@/lib/sessions/utils";
+import { withRequestCache } from "@/lib/request-cache";
 import {
   countRedactionsInResponse,
   getCaptureRedactionStats,
@@ -35,7 +36,10 @@ interface RawCaptureData extends Record<string, unknown> {
   responseBody?: string;
   responseStatus?: number;
   responseIsStreaming?: boolean;
-  redactionStats?: { totalRedactions: number; byRule: Record<string, number> };
+  redactionStats?: {
+    totalRedactions: number;
+    byRule: Record<string, number>;
+  };
 }
 
 /**
@@ -103,7 +107,10 @@ function groupCapturesIntoSessions(
     // Use pre-aggregated redaction metadata if available
     let totalRedactions = 0;
     const byRule: Record<string, number> = {};
-    if (redactionMetaBySession && redactionMetaBySession.has(sessionId)) {
+    if (
+      redactionMetaBySession &&
+      redactionMetaBySession.has(sessionId)
+    ) {
       const meta = redactionMetaBySession.get(sessionId)!;
       totalRedactions = meta.totalRedactions;
       Object.assign(byRule, meta.byRule);
@@ -115,9 +122,15 @@ function groupCapturesIntoSessions(
         );
         const redactionCounts: CaptureRedactionStats =
           cachedStats ??
-          countRedactionsInResponse(c.responseBody, c.requestBody, false);
+          countRedactionsInResponse(
+            c.responseBody,
+            c.requestBody,
+            false,
+          );
         totalRedactions += redactionCounts.totalRedactions;
-        for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
+        for (const [rule, count] of Object.entries(
+          redactionCounts.byRule,
+        )) {
           byRule[rule] = (byRule[rule] || 0) + count;
         }
       }
@@ -167,7 +180,9 @@ function groupCapturesIntoSessions(
       totalInputTokens: totalInputTokens || undefined,
       totalOutputTokens: totalOutputTokens || undefined,
       tokensPerSecond:
-        tokensPerSecond > 0 ? Number(tokensPerSecond.toFixed(2)) : 0,
+        tokensPerSecond > 0
+          ? Number(tokensPerSecond.toFixed(2))
+          : 0,
       redactionStats: {
         totalRedactions,
         byRule,
@@ -178,141 +193,154 @@ function groupCapturesIntoSessions(
   return { summaries, metrics };
 }
 
-export async function GET(request: Request) {
-  try {
-    const url = new URL(request.url);
-    const groupBySourceDest =
-      url.searchParams.get("groupBySourceDest") === "true";
-    const pageValue = Number(url.searchParams.get("page"));
-    const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
-    const pageSizeValue = Number(url.searchParams.get("pageSize"));
-    const pageSize = Number.isFinite(pageSizeValue) && pageSizeValue > 0 ? pageSizeValue : 20;
-    const pathParts = url.pathname.split("/").filter(Boolean);
+async function handleGet(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const groupBySourceDest =
+    url.searchParams.get("groupBySourceDest") === "true";
+  const pageValue = Number(url.searchParams.get("page"));
+  const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
+  const pageSizeValue = Number(url.searchParams.get("pageSize"));
+  const pageSize =
+    Number.isFinite(pageSizeValue) && pageSizeValue > 0
+      ? pageSizeValue
+      : 20;
+  const pathParts = url.pathname.split("/").filter(Boolean);
 
-    // Check if we're requesting a specific session by ID
-    if (
-      pathParts.length >= 2 &&
-      pathParts[0] === "api" &&
-      pathParts[1] === "sessions" &&
-      pathParts[2]
-    ) {
-      // ... existing session detail code unchanged ...
-    }
+  // Check if we're requesting a specific session by ID
+  if (
+    pathParts.length >= 2 &&
+    pathParts[0] === "api" &&
+    pathParts[1] === "sessions" &&
+    pathParts[2]
+  ) {
+    // ... existing session detail code unchanged ...
+  }
 
-    const files = await listCaptureFiles();
-    const sessions: Session[] = [];
+  const files = await listCaptureFiles();
+  const sessions: Session[] = [];
 
   for (const filename of files) {
-  try {
-  const filepath = join(getCaptureDir(), filename);
+    try {
+      const filepath = join(getCaptureDir(), filename);
+      const stats = await fs.stat(filepath);
+      if (stats.size > MAX_FILE_SIZE) continue;
+      const data = await readCaptureFile(filepath);
+      if (!data) continue;
+      const session = await getSessionMetadata(filename, data);
+      sessions.push(session);
+    } catch (error) {
+      console.error(
+        `Error processing session capture ${filename}:`,
+        error,
+      );
+      continue;
+    }
+  }
+
+  // Sort by timestamp descending (newest first)
+  sessions.sort(
+    (a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+
+  // Strip heavy body fields from list responses to avoid RangeError in JSON.stringify
+  const listSessions = sessions.map(
+    ({ requestBody: _rb, responseBody: _rsp, ...rest }) => rest,
+  );
+
+  // Apply pagination for non-grouped list
+  if (!groupBySourceDest) {
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedSessions = listSessions.slice(startIndex, endIndex);
+    const totalPages = Math.ceil(listSessions.length / pageSize);
+    return Response.json({
+      sessions: paginatedSessions,
+      pagination: {
+        page,
+        pageSize,
+        totalPages,
+        totalItems: listSessions.length,
+      },
+    });
+  }
+
+  // Return grouped summaries if requested
+  if (groupBySourceDest) {
+    // Load pre-aggregated redaction metadata from .redact-meta.json files
+    const redactionMetaBySession = await aggregateRedactionMetaBySession();
+
+    // Read raw capture data for accurate byte counts
+    const files = await listCaptureFiles();
+    const rawCaptures: RawCaptureData[] = [];
+
+    for (const filename of files) {
+      try {
+        const filepath = join(getCaptureDir(), filename);
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) continue;
-
         const data = await readCaptureFile(filepath);
         if (!data) continue;
-        const session = await getSessionMetadata(filename, data);
-        sessions.push(session);
+
+        rawCaptures.push({
+          sessionId: data.sessionId as string | null,
+          source: data.source as string | null,
+          provider: data.provider as string,
+          targetUrl: data.targetUrl as string,
+          requestBytes: (data.requestBytes as number) || 0,
+          responseBytes: (data.responseBytes as number) || 0,
+          timings: (data.timings as { total_ms: number }) || {
+            total_ms: 0,
+          },
+          timestamp: data.timestamp as string,
+          requestBody: undefined,
+          responseBody: undefined,
+        });
       } catch (error) {
-        console.error(`Error processing session capture ${filename}:`, error);
+        console.error(
+          `Error reading capture for grouped sessions ${filename}:`,
+          error,
+        );
         continue;
       }
     }
 
-    // Sort by timestamp descending (newest first)
-    sessions.sort(
+    const { summaries, metrics } = groupCapturesIntoSessions(
+      rawCaptures,
+      redactionMetaBySession,
+    );
+    summaries.sort(
       (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+        new Date(b.lastTimestamp).getTime() -
+        new Date(a.lastTimestamp).getTime(),
     );
 
-    // Strip heavy body fields from list responses to avoid RangeError in JSON.stringify
-    const listSessions = sessions.map(
-      ({ requestBody: _rb, responseBody: _rsp, ...rest }) => rest,
-    );
-    
-    // Apply pagination for non-grouped list
-    if (!groupBySourceDest) {
-      const startIndex = (page - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedSessions = listSessions.slice(startIndex, endIndex);
-      const totalPages = Math.ceil(listSessions.length / pageSize);
-      return Response.json({
-        sessions: paginatedSessions,
-        pagination: {
-          page,
-          pageSize,
-          totalPages,
-          totalItems: listSessions.length,
-        },
-      });
-    }
-    
-    // Return grouped summaries if requested
-    if (groupBySourceDest) {
-      // Load pre-aggregated redaction metadata from .redact-meta.json files
-      const redactionMetaBySession = await aggregateRedactionMetaBySession();
+    // Apply pagination to summaries
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedSummaries = summaries.slice(startIndex, endIndex);
+    const totalPages = Math.ceil(summaries.length / pageSize);
 
-      // Read raw capture data for accurate byte counts
-      const files = await listCaptureFiles();
-      const rawCaptures: RawCaptureData[] = [];
-      
-      for (const filename of files) {
-        try {
-          const filepath = join(getCaptureDir(), filename);
-          const stats = await fs.stat(filepath);
-          if (stats.size > MAX_FILE_SIZE) continue;
+    return Response.json({
+      sessions: [],
+      summaries: paginatedSummaries,
+      metrics,
+      pagination: {
+        page,
+        pageSize,
+        totalPages,
+        totalItems: summaries.length,
+      },
+    });
+  }
 
-          const data = await readCaptureFile(filepath);
-          if (!data) continue;
+  // For non-grouped list without pagination params, return all
+  return Response.json(listSessions);
+}
 
-          rawCaptures.push({
-            sessionId: data.sessionId as string | null,
-            source: data.source as string | null,
-            provider: data.provider as string,
-            targetUrl: data.targetUrl as string,
-            requestBytes: (data.requestBytes as number) || 0,
-            responseBytes: (data.responseBytes as number) || 0,
-            timings: (data.timings as { total_ms: number }) || { total_ms: 0 },
-            timestamp: data.timestamp as string,
-            requestBody: undefined,
-            responseBody: undefined,
-          });
-        } catch (error) {
-          console.error(`Error reading capture for grouped sessions ${filename}:`, error);
-          continue;
-        }
-      }
-
-      const { summaries, metrics } = groupCapturesIntoSessions(
-        rawCaptures,
-        redactionMetaBySession,
-      );
-      summaries.sort(
-        (a, b) =>
-          new Date(b.lastTimestamp).getTime() -
-          new Date(a.lastTimestamp).getTime(),
-      );
-      
-      // Apply pagination to summaries
-      const startIndex = (page - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedSummaries = summaries.slice(startIndex, endIndex);
-      const totalPages = Math.ceil(summaries.length / pageSize);
-      
-      return Response.json({ 
-        sessions: [], 
-        summaries: paginatedSummaries, 
-        metrics,
-        pagination: {
-          page,
-          pageSize,
-          totalPages,
-          totalItems: summaries.length,
-        },
-      });
-    }
-
-    // For non-grouped list without pagination params, return all
-    return Response.json(listSessions);
+export async function GET(request: Request) {
+  try {
+    return await withRequestCache(() => handleGet(request));
   } catch (error) {
     console.error("Error in sessions API:", error);
     return Response.json({ error: "Internal server error" }, { status: 500 });

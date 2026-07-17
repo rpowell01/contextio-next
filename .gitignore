@@ -21,3 +21,5 @@ __pycache__/
 
 # Temporary export files
 issue-export*.jsonl
+
+scripts/test-fixture/capture.bin

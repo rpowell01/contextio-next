@@ -1,7 +1,7 @@
 import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
 import { homedir } from "os";
-
 import type { Session, Capture } from "@/types/api";
+import { requestCacheStore } from "@/lib/request-cache";
 // Import decryptCapture for reading encrypted capture files
 import { decryptCapture } from "@contextio/logger";
 
@@ -458,20 +458,42 @@ export async function getSessionMetadata(
 
 /**
  * Read and decrypt a capture file.
- * Handles both encrypted and plaintext capture files transparently.
- * 
+ * Dedupes within a single request via the ALS-backed capture cache.
+ * Concurrent requests see isolated caches — no cross-request exposure.
+ *
  * @param filepath - Path to the capture file
  * @param keyMaterial - Optional encryption key material. If not provided, attempts to read from CONTEXTIO_LOGGER_ENCRYPTION_KEY env var.
  * @returns Parsed capture data, or null if file cannot be read/decrypted
+ * @throws If called outside a `withRequestCache()` boundary (cached access requires isolated per-request state).
  */
 export async function readCaptureFile(
   filepath: string,
-  keyMaterial?: string
+  keyMaterial?: string,
 ): Promise<Record<string, unknown> | null> {
-  const resolvedKey = keyMaterial ?? process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
+  const resolvedKey =
+    keyMaterial ?? process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
+  const cacheKey = `${filepath}@${resolvedKey}`;
+
+  const store = requestCacheStore.getStore();
+  if (!store) {
+    throw new Error(
+      "readCaptureFile() called outside of request context — " +
+        "wrap the caller in `withRequestCache(() => ...)` " +
+        "(see `@/lib/request-cache`).",
+    );
+  }
+  const current = store.captureCache;
+  if (current.has(cacheKey)) {
+    return current.get(cacheKey) as Record<string, unknown>;
+  }
+
   try {
     const capture = await decryptCapture(filepath, resolvedKey || null);
-    return capture as Record<string, unknown> | null;
+    const result = capture as Record<string, unknown> | null;
+    if (result) {
+      current.set(cacheKey, result);
+    }
+    return result;
   } catch (error) {
     console.error(`Error reading capture file ${filepath}:`, error);
     return null;
