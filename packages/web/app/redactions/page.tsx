@@ -248,7 +248,7 @@ function RedactionHighlight({
   value,
   isPreRedaction = false,
 }: {
-  value: string;
+  value: string | undefined | null;
   isPreRedaction?: boolean;
 }) {
   // The placeholder format: [RULE_REDACTED] where RULE is uppercase with underscores
@@ -257,12 +257,13 @@ function RedactionHighlight({
   if (isPreRedaction) {
     // For pre-redaction, the value IS the original string that was replaced.
     // Display it plainly (the dialog already isolates this substring).
-    return <code className="font-mono text-xs">{value}</code>;
+    return <code className="font-mono text-xs">{value || ""}</code>;
   }
 
   // For post-redaction, highlight the redaction placeholders
-  const parts = value.split(redactionPattern);
-  const matches = value.match(redactionPattern);
+  const safeValue = String(value || "");
+  const parts = safeValue.split(redactionPattern);
+  const matches = safeValue.match(redactionPattern);
 
   if (!matches || matches.length === 0) {
     return <code className="font-mono text-xs">{value}</code>;
