@@ -283,3 +283,86 @@ export function computeDiffStats(chunks: DiffChunk[]): DiffStats {
     totalChunks: chunks.length,
   };
 }
+
+/**
+ * Filter diff to show only changes with surrounding context lines.
+ * This collapses long runs of equal lines, keeping only `contextLines` 
+ * around each change.
+ */
+export interface FilteredDiffResult {
+  chunks: DiffChunk[];
+  hasHiddenLines: boolean;
+  hiddenRanges: Array<{ start: number; end: number; count: number }>;
+}
+
+export function filterDiffWithContext(
+  chunks: DiffChunk[],
+  contextLines = 3
+): FilteredDiffResult {
+  if (chunks.length === 0) {
+    return { chunks: [], hasHiddenLines: false, hiddenRanges: [] };
+  }
+
+  // Find indices of all non-equal chunks
+  const changeIndices: number[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    if (chunks[i].type !== "equal") {
+      changeIndices.push(i);
+    }
+  }
+
+  // If no changes, return first few lines as context
+  if (changeIndices.length === 0) {
+    const showCount = Math.min(contextLines * 2, chunks.length);
+    return {
+      chunks: chunks.slice(0, showCount),
+      hasHiddenLines: chunks.length > showCount,
+      hiddenRanges: chunks.length > showCount ? [{ start: showCount, end: chunks.length - 1, count: chunks.length - showCount }] : [],
+    };
+  }
+
+  // Build a set of indices to keep (changes + context around them)
+  const keepIndices = new Set<number>();
+  for (const changeIdx of changeIndices) {
+    const start = Math.max(0, changeIdx - contextLines);
+    const end = Math.min(chunks.length - 1, changeIdx + contextLines);
+    for (let i = start; i <= end; i++) {
+      keepIndices.add(i);
+    }
+  }
+
+  // Build filtered chunks, inserting hidden range markers
+  const filteredChunks: DiffChunk[] = [];
+  const hiddenRanges: Array<{ start: number; end: number; count: number }> = [];
+  let hiddenStart = -1;
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (keepIndices.has(i)) {
+      if (hiddenStart !== -1) {
+        hiddenRanges.push({
+          start: hiddenStart,
+          end: i - 1,
+          count: i - hiddenStart,
+        });
+        hiddenStart = -1;
+      }
+      filteredChunks.push(chunks[i]);
+    } else if (hiddenStart === -1) {
+      hiddenStart = i;
+    }
+  }
+
+  if (hiddenStart !== -1) {
+    hiddenRanges.push({
+      start: hiddenStart,
+      end: chunks.length - 1,
+      count: chunks.length - hiddenStart,
+    });
+  }
+
+  return {
+    chunks: filteredChunks,
+    hasHiddenLines: hiddenRanges.length > 0,
+    hiddenRanges,
+  };
+}

@@ -13,7 +13,7 @@ import {
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
-import { computeDiff, type DiffChunk } from "@/lib/diff";
+import { computeDiff, type DiffChunk, filterDiffWithContext } from "@/lib/diff";
 
 /**
  * DiffDialog component with two-pane layout showing pre-redaction (left) and post-redaction (right).
@@ -42,7 +42,13 @@ function DiffDialog({
   targetUrl: string;
   timestamp: string;
 }) {
-  const diff = useMemo(() => computeDiff(preContent, postContent), [preContent, postContent]);
+  const fullDiff = useMemo(() => computeDiff(preContent, postContent), [preContent, postContent]);
+  
+  // Filter diff to show only changes with context
+  const { chunks: diff, hasHiddenLines, hiddenRanges } = useMemo(
+    () => filterDiffWithContext(fullDiff, 3),
+    [fullDiff]
+  );
 
   // Synchronized scrolling state
   const leftPaneRef = useRef<HTMLDivElement>(null);
@@ -92,7 +98,7 @@ function DiffDialog({
   return (
    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className="max-w-6xl max-h-[85vh] mx-4"
+        className="max-w-6xl max-h-[85vh] mx-4 flex flex-col"
         aria-labelledby="diff-dialog-title"
         aria-describedby="diff-dialog-description"
       >
@@ -103,7 +109,7 @@ function DiffDialog({
           Side-by-side diff showing pre-redaction and post-redaction content
         </DialogDescription>
 
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <div>
             <h3 className="text-lg font-semibold">{title}</h3>
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-1">
@@ -130,6 +136,11 @@ function DiffDialog({
               )}
             </div>
           </div>
+          {hasHiddenLines && (
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+              Showing changes with context ({diff.length} lines of {fullDiff.length})
+            </span>
+          )}
           <DialogClose
             className="p-1 rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             aria-label="Close diff dialog"
@@ -137,15 +148,15 @@ function DiffDialog({
             <X className="h-5 w-5" />
           </DialogClose>
         </div>
-        <div className="flex flex-col md:flex-row overflow-hidden max-h-[75vh]">
+        <div className="flex flex-col md:flex-row overflow-hidden flex-1 min-h-0">
           {/* Left pane - Pre-redaction (Original) */}
-          <div className="flex-1 min-w-0 border-r border-border flex flex-col">
-    <div className="p-2 bg-muted/50 border-b border-border">
+          <div className="flex-1 min-w-0 border-r border-border flex flex-col min-h-0">
+    <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
       <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
     </div>
             <div 
               ref={leftPaneRef}
-              className="flex-1 overflow-auto p-4"
+              className="flex-1 overflow-auto p-4 min-h-0"
               onScroll={(e) => handleScroll(e, 'left')}
             >
                 <div className="font-mono text-xs">
@@ -157,13 +168,13 @@ function DiffDialog({
           </div>
 
           {/* Right pane - Post-redaction (Redacted) */}
-          <div className="flex-1 min-w-0 flex flex-col">
-    <div className="p-2 bg-muted/50 border-b border-border">
+          <div className="flex-1 min-w-0 flex flex-col min-h-0">
+    <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
       <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
     </div>
             <div 
               ref={rightPaneRef}
-              className="flex-1 overflow-auto p-4"
+              className="flex-1 overflow-auto p-4 min-h-0"
               onScroll={(e) => handleScroll(e, 'right')}
             >
                 <div className="font-mono text-xs">
