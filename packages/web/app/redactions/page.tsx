@@ -582,17 +582,24 @@ const handleCloseDiff = useCallback(() => {
     setPage(1); // Reset to first page when sort changes
   };
 
+  // Convert preset rule name to ruleId format (hyphens -> underscores)
+  // e.g., "api-key-prefixed" -> "api_key"
+  const presetNameToRuleId = (presetName: string): string => {
+    return presetName.replace(/-/g, '_');
+  };
+
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
     setPage(1); // Reset to first page when filter changes
   };
 
   const handleRedactionTypeClick = (type: string) => {
-    console.log('[RedactionFilter] Clicked type:', type, 'current:', selectedRedactionType);
-    if (selectedRedactionType === type) {
+    const ruleId = presetNameToRuleId(type);
+    console.log('[RedactionFilter] Clicked type:', type, '-> ruleId:', ruleId, 'current:', selectedRedactionType);
+    if (selectedRedactionType === ruleId) {
       setSelectedRedactionType(null);
     } else {
-      setSelectedRedactionType(type);
+      setSelectedRedactionType(ruleId);
     }
     setPage(1); // Reset to first page when filter changes
   };
@@ -634,7 +641,7 @@ const handleCloseDiff = useCallback(() => {
               <h2 className="text-xl font-semibold">Breakdown by Redaction Type</h2>
               {selectedRedactionType && (
                 <button
-                  onClick={() => handleRedactionTypeClick(selectedRedactionType)}
+                  onClick={() => handleRedactionTypeClick(presetNameToRuleId(selectedRedactionType))}
                   className="text-xs text-primary hover:underline"
                 >
                   Clear filter
@@ -647,7 +654,7 @@ const handleCloseDiff = useCallback(() => {
                   key={type}
                   onClick={() => handleRedactionTypeClick(type)}
                   className={`rounded-lg border p-3 transition-colors text-left ${
-                    selectedRedactionType === type
+                    selectedRedactionType === presetNameToRuleId(type)
                       ? 'bg-primary/10 border-primary'
                       : 'hover:bg-accent'
                   }`}
