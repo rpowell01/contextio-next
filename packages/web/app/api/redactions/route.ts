@@ -90,7 +90,7 @@ async function getRedactionDetailsFromMeta(
       const meta = await readRedactionMetaFile(filepath);
       if (!meta) continue;
 
-      const captureId = filename.replace(/\.redact-meta\.json$/, "");
+      const captureId = filename.replace(/\.redact-meta\.json$/, "") + ".json";
       const sessionId = (meta.sessionId as string | null) ?? null;
       const source = (meta.source as string | null) ?? null;
       const provider = (meta.provider as string) ?? "unknown";
