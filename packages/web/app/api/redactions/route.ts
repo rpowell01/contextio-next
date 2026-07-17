@@ -113,26 +113,45 @@ async function getRedactionDetailsFromMeta(
       }
 
       // Create one detail row per match (using matches array if available in meta)
-      const matches = (meta.matches as Array<{ rule: string; original: string; placeholder: string; path: string }> | undefined) ?? [];
+      const matches = (meta.matches as Array<{ ruleId: string; preValue: string; postValue: string; path: string }> | undefined) ?? [];
       
       if (matches.length > 0) {
         for (const match of matches) {
           allRows.push({
-            redactionType: match.rule,
+            redactionType: match.ruleId,
             requestSource: source,
             requestProvider: provider,
             requestTarget: targetUrl,
             sessionId,
             captureId,
-            preRedactionValue: match.original,
-            postRedactionValue: match.placeholder,
+            preRedactionValue: match.preValue,
+            postRedactionValue: match.postValue,
             path: match.path,
             timestamp,
           });
         }
+      } else if (meta.byRule && typeof meta.byRule === "object") {
+        // Fallback: expand byRule into individual rows when matches array is not available
+        // This handles older captures that don't have the matches array
+        for (const [rule, count] of Object.entries(meta.byRule)) {
+          if (typeof count === "number" && count > 0) {
+            // Create one row per redaction of this type (using count to show total)
+            allRows.push({
+              redactionType: rule,
+              requestSource: source,
+              requestProvider: provider,
+              requestTarget: targetUrl,
+              sessionId,
+              captureId,
+              preRedactionValue: `(total: ${count})`,
+              postRedactionValue: `(total: ${count})`,
+              path: "summary",
+              timestamp,
+            });
+          }
+        }
       } else {
-        // If no individual matches in meta, create a summary row
-        // This indicates the meta file has counts but not individual matches
+        // If no matches and no byRule, create a summary row
         allRows.push({
           redactionType: "summary",
           requestSource: source,
