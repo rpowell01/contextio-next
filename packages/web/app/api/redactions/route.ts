@@ -113,7 +113,7 @@ async function getRedactionDetailsFromMeta(
       }
 
       // Create one detail row per match (using matches array if available in meta)
-      const matches = (meta.matches as Array<{ ruleId: string; preValue: string; postValue: string; path: string }> | undefined) ?? [];
+      const matches = (meta.matches as Array<{ ruleId: string; original: string; placeholder: string; path: string }> | undefined) ?? [];
       
       if (matches.length > 0) {
         for (const match of matches) {
@@ -124,8 +124,8 @@ async function getRedactionDetailsFromMeta(
             requestTarget: targetUrl,
             sessionId,
             captureId,
-            preRedactionValue: match.preValue,
-            postRedactionValue: match.postValue,
+            preRedactionValue: match.original,
+            postRedactionValue: match.placeholder,
             path: match.path,
             timestamp,
           });
