@@ -231,6 +231,13 @@ export async function GET(request: Request): Promise<Response> {
     console.log('[RedactionAPI] Parsed filters:', filters);
     
     const result = await getRedactionDetailsFromMeta(page, pageSize, filters, sortKey, sortDir);
+    console.log('[RedactionAPI] Result: totalCount=', result.totalCount, 'details.length=', result.details.length);
+    if (result.details.length > 0) {
+      console.log('[RedactionAPI] First detail redactionType:', result.details[0].redactionType);
+      // Log unique redactionTypes in result
+      const types = [...new Set(result.details.map(d => d.redactionType))];
+      console.log('[RedactionAPI] Unique redactionTypes in result:', types);
+    }
     return Response.json(result);
   } catch (error) {
     console.error("Error in redactions API:", error);
