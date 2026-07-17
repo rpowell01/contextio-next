@@ -86,8 +86,8 @@ function DiffDialog({
     }`;
 
     // For right pane (post-redaction), highlight redaction placeholders
-    const renderValue = (value: string, isRight: boolean) => {
-      if (!isRight) return value;
+    const renderValue = (value: string | undefined, isRight: boolean) => {
+      if (!isRight || !value) return value || "";
       
       const redactionPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
       const parts = value.split(redactionPattern);
