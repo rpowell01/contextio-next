@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
 import { X } from "lucide-react";
-import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
 import {
   Dialog,
   DialogContent,
@@ -45,11 +44,27 @@ function DiffDialog({
 }) {
   const diff = useMemo(() => computeDiff(preContent, postContent), [preContent, postContent]);
 
-  // Detect if content looks like JSON for syntax highlighting
-  const isJsonContent = useMemo(() => {
-    const trimmed = (preContent || postContent || "").trim();
-    return trimmed.startsWith("{") || trimmed.startsWith("[");
-  }, [preContent, postContent]);
+  // Synchronized scrolling state
+  const leftPaneRef = useRef<HTMLDivElement>(null);
+  const rightPaneRef = useRef<HTMLDivElement>(null);
+  const isScrollingRef = useRef(false);
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>, source: 'left' | 'right') => {
+    if (isScrollingRef.current) return;
+    isScrollingRef.current = true;
+    
+    const sourcePane = e.currentTarget;
+    const targetPane = source === 'left' ? rightPaneRef.current : leftPaneRef.current;
+    
+    if (targetPane) {
+      targetPane.scrollTop = sourcePane.scrollTop;
+      targetPane.scrollLeft = sourcePane.scrollLeft;
+    }
+    
+    requestAnimationFrame(() => {
+      isScrollingRef.current = false;
+    });
+  }, []);
 
   const renderLine = (item: DiffChunk, side: "left" | "right") => {
     const isLeft = side === "left";
@@ -128,16 +143,16 @@ function DiffDialog({
     <div className="p-2 bg-muted/50 border-b border-border">
       <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
     </div>
-            <div className="flex-1 overflow-auto p-4">
-              {isJsonContent ? (
-                <SyntaxHighlighter code={preContent} lang="json" />
-              ) : (
+            <div 
+              ref={leftPaneRef}
+              className="flex-1 overflow-auto p-4"
+              onScroll={(e) => handleScroll(e, 'left')}
+            >
                 <div className="font-mono text-xs">
                   {diff.map((chunk, idx) => (
                     <div key={idx}>{renderLine(chunk, "left")}</div>
                   ))}
                 </div>
-              )}
             </div>
           </div>
 
@@ -146,16 +161,16 @@ function DiffDialog({
     <div className="p-2 bg-muted/50 border-b border-border">
       <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
     </div>
-            <div className="flex-1 overflow-auto p-4">
-              {isJsonContent ? (
-                <SyntaxHighlighter code={postContent} lang="json" />
-              ) : (
+            <div 
+              ref={rightPaneRef}
+              className="flex-1 overflow-auto p-4"
+              onScroll={(e) => handleScroll(e, 'right')}
+            >
                 <div className="font-mono text-xs">
                   {diff.map((chunk, idx) => (
                     <div key={idx}>{renderLine(chunk, "right")}</div>
                   ))}
                 </div>
-              )}
             </div>
           </div>
         </div>
