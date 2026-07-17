@@ -691,23 +691,9 @@ const handleCloseDiff = useCallback(() => {
                          </th>
                        );
                      })}
-                     <th className="text-left py-3 px-4">Redaction Diff</th>
-                   </tr>
-                  <tr className="border-b bg-muted/50">
-{columnOrder.map((key) => (
-                       <th key={key} className="py-1 px-4">
-                         <input
-                           type="text"
-                           placeholder="Filter…"
-                           className="w-full text-xs rounded border px-2 py-1"
-                           value={filters[key] || ''}
-                           onChange={e => handleFilterChange(key, e.target.value)}
-                         />
-                       </th>
-                     ))}
-                     <th className="py-1 px-4"></th>
-                   </tr>
-                </thead>
+<th className="text-left py-3 px-4">Redaction Diff</th>
+                    </tr>
+                 </thead>
 <tbody>
                   {details.map((row, index) => {
                     const rowKey = `${row.captureId}-${index}`;
