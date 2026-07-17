@@ -231,14 +231,18 @@ export async function GET(request: Request): Promise<Response> {
     console.log('[RedactionAPI] Parsed filters:', filters);
     
     const result = await getRedactionDetailsFromMeta(page, pageSize, filters, sortKey, sortDir);
-    console.log('[RedactionAPI] Result: totalCount=', result.totalCount, 'details.length=', result.details.length);
-    if (result.details.length > 0) {
-      console.log('[RedactionAPI] First detail redactionType:', result.details[0].redactionType);
-      // Log unique redactionTypes in result
-      const types = [...new Set(result.details.map(d => d.redactionType))];
-      console.log('[RedactionAPI] Unique redactionTypes in result:', types);
-    }
+    
+    // Log unique redactionTypes in the result for debugging
+    const uniqueTypes = [...new Set(result.details.map(d => d.redactionType))];
+    console.log('[RedactionAPI] Unique redactionTypes in result:', uniqueTypes);
+    console.log('[RedactionAPI] Total details:', result.details.length, 'totalCount:', result.totalCount);
+    
     return Response.json(result);
+  } catch (error) {
+    console.error("Error in redactions API:", error);
+    return Response.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
   } catch (error) {
     console.error("Error in redactions API:", error);
     return Response.json({ error: "Internal server error" }, { status: 500 });
