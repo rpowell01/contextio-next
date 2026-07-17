@@ -266,6 +266,28 @@ async function reapStaleTmpFiles(dir: string): Promise<void> {
 const PLACEHOLDER_REGEX = /\[([A-Z][A-Z0-9_]*)_REDACTED\]/g;
 const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/g;
 
+/**
+ * Validate that the matches array in a meta file has the expected format.
+ * Expected format: { rule: string, original: string, placeholder: string, path: string }
+ * Returns true if valid, false if invalid or missing.
+ */
+function isValidMatchesFormat(matches: unknown): boolean {
+  if (!Array.isArray(matches)) return false;
+  for (const match of matches) {
+    if (
+      typeof match !== "object" ||
+      match === null ||
+      typeof (match as Record<string, unknown>).rule !== "string" ||
+      typeof (match as Record<string, unknown>).original !== "string" ||
+      typeof (match as Record<string, unknown>).placeholder !== "string" ||
+      typeof (match as Record<string, unknown>).path !== "string"
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Recursively collect every string leaf value from an arbitrary value. */
 function collectStrings(value: unknown, out: string[]): void {
   if (typeof value === "string") {
@@ -462,7 +484,7 @@ async function mergeExistingMetadata(
 
     const enriched: CaptureRedactionMetadata = { ...computed };
 
-    if (!enriched.matches && Array.isArray(existing.matches) && existing.matches.length > 0) {
+    if (!enriched.matches && Array.isArray(existing.matches) && existing.matches.length > 0 && isValidMatchesFormat(existing.matches)) {
       enriched.matches = existing.matches;
     }
 
@@ -597,7 +619,23 @@ async function mergeExistingMetadata(
           metaStats.mtimeMs >= fileStats.mtimeMs - 1_000 &&
           metaStats.size > 0
         ) {
-          return;
+          // Additionally, verify the matches format is correct.
+          // If the meta file was written by the redact plugin (different format),
+          // we need to re-process.
+          try {
+            const metaContent = await readFile(metaPath, "utf8");
+            const existingMeta = JSON.parse(metaContent) as Record<string, unknown>;
+            const matches = existingMeta.matches;
+            if (matches !== undefined && !isValidMatchesFormat(matches)) {
+              console.log(
+                `[redaction-meta-watcher] Meta file has invalid matches format, re-processing: ${captureFilename}`,
+              );
+            } else {
+              return; // Skip re-processing
+            }
+          } catch {
+            // If we can't read/parse the meta file, proceed to re-process
+          }
         }
       } catch {
         // metadata file does not yet exist; continue to write it.
