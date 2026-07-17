@@ -3,51 +3,17 @@
 
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X } from "lucide-react";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
-
-/**
- * Simple line-based diff algorithm.
- * Returns array of { type: 'equal' | 'delete' | 'insert', value: string, lineNumber?: number }
- */
-function computeDiff(oldText: string, newText: string) {
-  const oldLines = oldText.split('\n');
-  const newLines = newText.split('\n');
-  const result: Array<{ type: 'equal' | 'delete' | 'insert'; value: string; oldLineNum?: number; newLineNum?: number }> = [];
-
-  // Simple longest common subsequence for lines
-  const dp: number[][] = Array(oldLines.length + 1).fill(null).map(() => Array(newLines.length + 1).fill(0));
-  
-  for (let i = oldLines.length - 1; i >= 0; i--) {
-    for (let j = newLines.length - 1; j >= 0; j--) {
-      if (oldLines[i] === newLines[j]) {
-        dp[i][j] = dp[i + 1][j + 1] + 1;
-      } else {
-        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
-      }
-    }
-  }
-
-  let i = 0, j = 0;
-  let oldLineNum = 1, newLineNum = 1;
-  
-  while (i < oldLines.length || j < newLines.length) {
-    if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
-      result.push({ type: 'equal', value: oldLines[i], oldLineNum, newLineNum });
-      i++; j++; oldLineNum++; newLineNum++;
-    } else if (j < newLines.length && (i >= oldLines.length || dp[i][j + 1] >= dp[i + 1][j])) {
-      result.push({ type: 'insert', value: newLines[j], newLineNum });
-      j++; newLineNum++;
-    } else if (i < oldLines.length) {
-      result.push({ type: 'delete', value: oldLines[i], oldLineNum });
-      i++; oldLineNum++;
-    }
-  }
-
-  return result;
-}
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { computeDiff, type DiffChunk } from "@/lib/diff";
 
 /**
  * DiffDialog component with two-pane layout showing pre-redaction (left) and post-redaction (right).
@@ -76,10 +42,6 @@ function DiffDialog({
   targetUrl: string;
   timestamp: string;
 }) {
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-
   const diff = useMemo(() => computeDiff(preContent, postContent), [preContent, postContent]);
 
   // Detect if content looks like JSON for syntax highlighting
@@ -88,9 +50,9 @@ function DiffDialog({
     return trimmed.startsWith("{") || trimmed.startsWith("[");
   }, [preContent, postContent]);
 
-  const renderLine = (item: typeof diff[0], side: "left" | "right") => {
+  const renderLine = (item: DiffChunk, side: "left" | "right") => {
     const isLeft = side === "left";
-    const showLine = isLeft ? item.type !== "insert" : item.type !== "delete";
+    const showLine = isLeft ? (item.type !== "insert") : (item.type !== "delete");
 
     if (!showLine) {
       return <div style={{ height: "1.25rem" }} />;
@@ -98,9 +60,7 @@ function DiffDialog({
 
     const lineNum = isLeft ? item.oldLineNum : item.newLineNum;
     const lineClass = `font-mono text-xs whitespace-pre-wrap ${
-      item.type === "delete" ? "bg-red-100 dark:bg-red-900/30 line-through" :
-      item.type === "insert" ? "bg-green-100 dark:bg-green-900/30" :
-      "bg-transparent"
+      item.type === "delete" ? "bg-red-100 line-through" : item.type === "insert" ? "bg-green-100" : "bg-transparent"
     }`;
 
     return (
@@ -113,111 +73,95 @@ function DiffDialog({
     );
   };
 
-  const handleOpenChange = useCallback((open: boolean) => {
-    if (!open) {
-      onClose();
-      // Restore focus to trigger element
-      previouslyFocusedRef.current?.focus();
-      previouslyFocusedRef.current = null;
-    }
-  }, [onClose]);
-
-  const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
-    if (event.key === "Escape") {
-      onClose();
-    }
-  }, [onClose]);
-
-  // Store reference to the element that triggered the dialog
-  useEffect(() => {
-    if (isOpen) {
-      previouslyFocusedRef.current = document.activeElement as HTMLElement;
-      // Focus the dialog content after render
-      setTimeout(() => contentRef.current?.focus(), 0);
-    }
-  }, [isOpen]);
-
   if (!isOpen) return null;
 
   return (
-    <DialogPrimitive.Root open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <DialogPrimitive.Content
-          ref={contentRef}
-          className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-6xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-white dark:bg-gray-900 p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg max-h-[85vh] mx-4"
-          onKeyDown={handleKeyDown}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="diff-dialog-title"
-          aria-describedby="diff-dialog-description"
-          tabIndex={-1}
-        >
-          <DialogPrimitive.Title id="diff-dialog-title" className="text-lg font-semibold sr-only">
-            {title}
-          </DialogPrimitive.Title>
-          <DialogPrimitive.Description id="diff-dialog-description" className="sr-only">
-            Side-by-side diff showing pre-redaction and post-redaction content
-          </DialogPrimitive.Description>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent
+        className="max-w-6xl max-h-[85vh] mx-4"
+        aria-labelledby="diff-dialog-title"
+        aria-describedby="diff-dialog-description"
+      >
+        <DialogTitle id="diff-dialog-title" className="sr-only">
+          {title}
+        </DialogTitle>
+        <DialogDescription id="diff-dialog-description" className="sr-only">
+          Side-by-side diff showing pre-redaction and post-redaction content
+        </DialogDescription>
 
-          <div className="flex items-center justify-between p-4 border-b">
-            <div>
-              <h3 className="text-lg font-semibold" id="diff-dialog-title-visible">{title}</h3>
-              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-1">
-                <span>Type: <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span></span>
-                <span>Capture: <span className="font-mono">{captureId}</span></span>
-                {provider && <span>Provider: <span className="font-mono">{provider}</span></span>}
-                {targetUrl && <span>Target: <span className="font-mono truncate max-w-[200px]">{targetUrl}</span></span>}
-                {timestamp && <span>Time: <span className="font-mono">{new Date(timestamp).toLocaleString()}</span></span>}
-              </div>
-            </div>
-            <DialogPrimitive.Close
-              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900"
-              aria-label="Close diff dialog"
-            >
-              <X className="h-5 w-5" />
-            </DialogPrimitive.Close>
-          </div>
-          <div className="flex flex-col md:flex-row overflow-hidden max-h-[75vh]">
-            {/* Left pane - Pre-redaction (Original) */}
-            <div className="flex-1 min-w-0 border-r border-gray-200 dark:border-gray-700 flex flex-col">
-              <div className="p-2 bg-red-50 dark:bg-red-900/20 border-b border-gray-200 dark:border-gray-700">
-                <h4 className="text-xs font-semibold text-red-700 dark:text-red-300">Pre-Redaction (Original)</h4>
-              </div>
-              <div className="flex-1 overflow-auto p-4">
-                {isJsonContent ? (
-                  <SyntaxHighlighter code={preContent} lang="json" />
-                ) : (
-                  <div className="font-mono text-xs">
-                    {diff.map((chunk, idx) => (
-                      <div key={idx}>{renderLine(chunk, "left")}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right pane - Post-redaction (Redacted) */}
-            <div className="flex-1 min-w-0 flex flex-col">
-              <div className="p-2 bg-green-50 dark:bg-green-900/20 border-b border-gray-200 dark:border-gray-700">
-                <h4 className="text-xs font-semibold text-green-700 dark:text-green-300">Post-Redaction (Redacted)</h4>
-              </div>
-              <div className="flex-1 overflow-auto p-4">
-                {isJsonContent ? (
-                  <SyntaxHighlighter code={postContent} lang="json" />
-                ) : (
-                  <div className="font-mono text-xs">
-                    {diff.map((chunk, idx) => (
-                      <div key={idx}>{renderLine(chunk, "right")}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div>
+            <h3 className="text-lg font-semibold">{title}</h3>
+            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-1">
+              <span>
+                Type: <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span>
+              </span>
+              <span>
+                Capture: <span className="font-mono">{captureId}</span>
+              </span>
+              {provider && (
+                <span>
+                  Provider: <span className="font-mono">{provider}</span>
+                </span>
+              )}
+              {targetUrl && (
+                <span>
+                  Target: <span className="font-mono truncate max-w-[200px]">{targetUrl}</span>
+                </span>
+              )}
+              {timestamp && (
+                <span>
+                  Time: <span className="font-mono">{new Date(timestamp).toLocaleString()}</span>
+                </span>
+              )}
             </div>
           </div>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+          <DialogClose
+            className="p-1 rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+            aria-label="Close diff dialog"
+          >
+            <X className="h-5 w-5" />
+          </DialogClose>
+        </div>
+        <div className="flex flex-col md:flex-row overflow-hidden max-h-[75vh]">
+          {/* Left pane - Pre-redaction (Original) */}
+          <div className="flex-1 min-w-0 border-r border-border flex flex-col">
+            <div className="p-2 bg-red-50 border-b border-border">
+              <h4 className="text-xs font-semibold text-red-700">Pre-Redaction (Original)</h4>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {isJsonContent ? (
+                <SyntaxHighlighter code={preContent} lang="json" />
+              ) : (
+                <div className="font-mono text-xs">
+                  {diff.map((chunk, idx) => (
+                    <div key={idx}>{renderLine(chunk, "left")}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right pane - Post-redaction (Redacted) */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="p-2 bg-green-50 border-b border-border">
+              <h4 className="text-xs font-semibold text-green-700">Post-Redaction (Redacted)</h4>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {isJsonContent ? (
+                <SyntaxHighlighter code={postContent} lang="json" />
+              ) : (
+                <div className="font-mono text-xs">
+                  {diff.map((chunk, idx) => (
+                    <div key={idx}>{renderLine(chunk, "right")}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -239,7 +183,7 @@ interface RedactionDetailRow {
   fullRedacted?: string;
   timestamp: string;
 }
- 
+
 const PAGE_SIZE = 50;
 
 /**
@@ -447,7 +391,7 @@ export default function RedactionsPage() {
     });
     setDraggedKey(null);
   };
-const handleDragEnd = () => setDraggedKey(null);
+  const handleDragEnd = () => setDraggedKey(null);
 
   const renderCell = (key: string, row: RedactionDetailRow) => {
     switch (key) {
@@ -496,7 +440,7 @@ const handleDragEnd = () => setDraggedKey(null);
     setPage(1); // Reset to first page when filter changes
   };
 
-return (
+  return (
     <>
       <MainLayout>
         <div className="space-y-6">
@@ -612,7 +556,7 @@ return (
                     <th className="py-1 px-4"></th>
                   </tr>
                 </thead>
-<tbody>
+                <tbody>
                   {details.map((row, index) => {
                     const rowKey = `${row.captureId}-${index}`;
                     return (
@@ -701,7 +645,7 @@ return (
             )}
           </div>
         </div>
-</MainLayout>
+      </MainLayout>
 
       {/* Diff Dialog - Two-pane view showing pre/post redaction side by side */}
       <DiffDialog

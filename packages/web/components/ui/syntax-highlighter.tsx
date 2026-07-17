@@ -1,33 +1,44 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSingletonHighlighter, codeToHtml } from "shiki";
+import { createHighlighter } from "shiki";
+import { useTheme } from "@/components/theme-provider";
 
 interface SyntaxHighlighterProps {
   code: string;
   lang?: string;
-  theme?: "github-light" | "github-dark";
 }
 
 export function SyntaxHighlighter({
   code,
   lang = "json",
-  theme = "github-light",
 }: SyntaxHighlighterProps) {
-  const [highlighter, setHighlighter] = useState<Awaited<ReturnType<typeof getSingletonHighlighter>> | null>(null);
+  const [highlighter, setHighlighter] = useState<Awaited<ReturnType<typeof createHighlighter>> | null>(null);
+  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
-    getSingletonHighlighter().then(setHighlighter);
+    createHighlighter({
+      themes: ["github-light", "github-dark"],
+      langs: ["json"],
+    }).then(setHighlighter);
   }, []);
 
-  const darkTheme = typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const effectiveTheme = darkTheme ? "github-dark" : theme;
+  // Map app theme to Shiki theme
+  const shikiTheme = resolvedTheme === "dark" || resolvedTheme === "high-contrast" ? "github-dark" : "github-light";
 
-  if (!highlighter) {
+  useEffect(() => {
+    if (highlighter && code) {
+      const html = highlighter.codeToHtml(code, { lang, theme: shikiTheme });
+      setHighlightedHtml(html);
+    } else if (!highlighter) {
+      setHighlightedHtml(null);
+    }
+  }, [highlighter, code, lang, shikiTheme]);
+
+  if (!highlighter || highlightedHtml === null) {
     return <pre className="font-mono text-xs overflow-auto"><code>{code}</code></pre>;
   }
 
-  const html = codeToHtml(code, { lang, theme: effectiveTheme });
-
-  return <pre className="font-mono text-xs overflow-auto" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <pre className="font-mono text-xs overflow-auto" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />;
 }

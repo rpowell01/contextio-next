@@ -2,8 +2,8 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist-test",
-    "rootDir": "test",
+    "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["test"]
+  "include": ["test", "packages/web/lib/diff.ts", "packages/web/lib/diff.test.ts"]
 }
