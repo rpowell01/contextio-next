@@ -314,6 +314,8 @@ export default function RedactionsPage() {
   const [filters, setFilters] = useState<Record<string, string>>({});
   // Debounced filters for API calls - prevents firing on every keystroke
   const [debouncedFilters, setDebouncedFilters] = useState<Record<string, string>>({});
+  // Selected redaction type filter from breakdown widgets
+  const [selectedRedactionType, setSelectedRedactionType] = useState<string | null>(null);
   const [columnOrder, setColumnOrder] = useState<string[]>([
     'timestamp',
     'requestSource',
@@ -393,10 +395,14 @@ const handleCloseDiff = useCallback(() => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedFilters(filters);
+      const newFilters = { ...filters };
+      if (selectedRedactionType) {
+        newFilters.redactionType = selectedRedactionType;
+      }
+      setDebouncedFilters(newFilters);
     }, 300);
     return () => clearTimeout(timer);
-  }, [filters]);
+  }, [filters, selectedRedactionType]);
 
   // Fetch summary data
   useEffect(() => {
@@ -562,6 +568,15 @@ const handleCloseDiff = useCallback(() => {
     setPage(1); // Reset to first page when filter changes
   };
 
+  const handleRedactionTypeClick = (type: string) => {
+    if (selectedRedactionType === type) {
+      setSelectedRedactionType(null);
+    } else {
+      setSelectedRedactionType(type);
+    }
+    setPage(1); // Reset to first page when filter changes
+  };
+
   return (
     <>
       <MainLayout>
@@ -595,13 +610,31 @@ const handleCloseDiff = useCallback(() => {
 
           {/* Breakdown by Type */}
           <div className="rounded-lg border p-4">
-            <h2 className="text-xl font-semibold mb-4">Breakdown by Redaction Type</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Breakdown by Redaction Type</h2>
+              {selectedRedactionType && (
+                <button
+                  onClick={() => handleRedactionTypeClick(selectedRedactionType)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
             <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-5">
               {Object.entries(summary?.byType ?? {}).map(([type, count]) => (
-                <div key={type} className="rounded-lg border p-3 hover:bg-accent transition-colors">
+                <button
+                  key={type}
+                  onClick={() => handleRedactionTypeClick(type)}
+                  className={`rounded-lg border p-3 transition-colors text-left ${
+                    selectedRedactionType === type
+                      ? 'bg-primary/10 border-primary'
+                      : 'hover:bg-accent'
+                  }`}
+                >
                   <div className="text-sm text-muted-foreground capitalize">{type.replace(/_/g, " ")}</div>
                   <div className="text-2xl font-bold">{count}</div>
-                </div>
+                </button>
               ))}
               {Object.keys(summary?.byType ?? {}).length === 0 && (
                 <div className="col-span-full text-center text-muted-foreground py-8">
