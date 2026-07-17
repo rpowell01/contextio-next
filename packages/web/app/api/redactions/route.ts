@@ -120,6 +120,7 @@ async function getRedactionDetailsFromMeta(
         console.log('[RedactionAPI] First match:', JSON.stringify(matches[0]));
       }
       
+      // Add rows for each individual match
       if (matches.length > 0) {
         for (const match of matches) {
           allRows.push({
@@ -135,12 +136,13 @@ async function getRedactionDetailsFromMeta(
             timestamp,
           });
         }
-      } else if (meta.byRule && typeof meta.byRule === "object") {
-        // Fallback: expand byRule into individual rows when matches array is not available
-        // This handles older captures that don't have the matches array
+      }
+      
+      // Always add a summary row for each rule present in byRule so that
+      // every redaction type appears in the table and can be filtered.
+      if (meta.byRule && typeof meta.byRule === 'object') {
         for (const [rule, count] of Object.entries(meta.byRule)) {
-          if (typeof count === "number" && count > 0) {
-            // Create one row per redaction of this type (using count to show total)
+          if (typeof count === 'number' && count > 0) {
             allRows.push({
               redactionType: rule,
               requestSource: source,
@@ -155,8 +157,8 @@ async function getRedactionDetailsFromMeta(
             });
           }
         }
-      } else {
-        // If no matches and no byRule, create a summary row
+      } else if (matches.length === 0) {
+        // If no matches and no byRule, create a generic summary row
         allRows.push({
           redactionType: "summary",
           requestSource: source,
