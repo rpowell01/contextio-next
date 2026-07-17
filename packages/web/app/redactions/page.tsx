@@ -85,12 +85,40 @@ function DiffDialog({
       item.type === "delete" ? "bg-red-100 line-through" : item.type === "insert" ? "bg-green-100" : "bg-transparent"
     }`;
 
+    // For right pane (post-redaction), highlight redaction placeholders
+    const renderValue = (value: string, isRight: boolean) => {
+      if (!isRight) return value;
+      
+      const redactionPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
+      const parts = value.split(redactionPattern);
+      const matches = value.match(redactionPattern);
+      
+      if (!matches || matches.length === 0) return value;
+      
+      return parts.map((part, i) => (
+        <span key={i}>
+          {part}
+          {i < matches.length && (
+            <mark style={{ 
+              backgroundColor: '#fef2f2', 
+              color: '#991b1b', 
+              fontWeight: '700', 
+              padding: '2px 6px', 
+              borderRadius: '4px',
+            }}>
+              {matches[i]}
+            </mark>
+          )}
+        </span>
+      ));
+    };
+
     return (
       <div className={lineClass} style={{ padding: "2px 8px", borderRadius: "4px", minHeight: "1.25rem" }}>
         <span className="text-muted-foreground mr-2 select-none" style={{ width: "3rem", display: "inline-block", textAlign: "right" }}>
           {lineNum ?? ""}
         </span>
-        {item.value || " "}
+        {renderValue(item.value, !isLeft)}
       </div>
     );
   };
