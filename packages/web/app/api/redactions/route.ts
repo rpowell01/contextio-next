@@ -199,6 +199,7 @@ async function getRedactionDetailsFromMeta(
 export async function GET(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);
+    console.log('[RedactionAPI] Request URL:', url.toString());
     
     // Check for summary=true query parameter for fast aggregated counts
     const summaryOnly = url.searchParams.get("summary") === "true";
@@ -227,6 +228,7 @@ export async function GET(request: Request): Promise<Response> {
         if (value) filters[filterKey] = value;
       }
     }
+    console.log('[RedactionAPI] Parsed filters:', filters);
     
     const result = await getRedactionDetailsFromMeta(page, pageSize, filters, sortKey, sortDir);
     return Response.json(result);
