@@ -399,6 +399,7 @@ const handleCloseDiff = useCallback(() => {
       if (selectedRedactionType) {
         newFilters.redactionType = selectedRedactionType;
       }
+      console.log('[RedactionFilter] Setting debouncedFilters:', newFilters);
       setDebouncedFilters(newFilters);
     }, 300);
     return () => clearTimeout(timer);
@@ -464,7 +465,9 @@ const handleCloseDiff = useCallback(() => {
           params.set("sortKey", sortConfig.key);
           params.set("sortDir", sortConfig.direction);
         }
-        const res = await fetch(`/api/redactions?${params.toString()}`);
+        const url = `/api/redactions?${params.toString()}`;
+        console.log('[RedactionFilter] Fetching:', url);
+        const res = await fetch(url);
         if (!res.ok) throw new Error("Failed to fetch details");
         const data = await res.json();
         if (!cancelled) {
@@ -584,6 +587,7 @@ const handleCloseDiff = useCallback(() => {
   };
 
   const handleRedactionTypeClick = (type: string) => {
+    console.log('[RedactionFilter] Clicked type:', type, 'current:', selectedRedactionType);
     if (selectedRedactionType === type) {
       setSelectedRedactionType(null);
     } else {
