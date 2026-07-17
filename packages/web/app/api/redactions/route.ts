@@ -142,6 +142,7 @@ async function getRedactionDetailsFromMeta(
           captureId,
           preRedactionValue: `(total: ${meta.totalRedactions ?? 0})`,
           postRedactionValue: `(total: ${meta.totalRedactions ?? 0})`,
+          path: "summary",
           timestamp,
         });
       }
