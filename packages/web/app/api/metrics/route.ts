@@ -182,7 +182,8 @@ export async function GET(request: Request): Promise<Response> {
 
     for (const filename of files) {
       try {
-        const filepath = join(getCaptureDir(), filename);
+        const captureDir = await getCaptureDir();
+        const filepath = join(captureDir, filename);
         const stats = await fs.stat(filepath);
         if (stats.size > MAX_FILE_SIZE) {
           console.warn(`Capture file too large, skipping: ${filename}`);

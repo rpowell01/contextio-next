@@ -12,6 +12,9 @@ function validateCsrfSecret(): void {
   }
 }
 
+// Use Node.js runtime for instrumentation to support Node.js built-ins (crypto, fs, etc.)
+export const runtime = "nodejs";
+
 export async function register(): Promise<void> {
   // Validate CSRF secret in ALL runtimes (including Edge) before middleware runs
   validateCsrfSecret();
@@ -27,4 +30,4 @@ export async function register(): Promise<void> {
   await startCleanupScheduler();
 }
 
-import { applyLogDir } from "@/lib/sessions/utils";
+import { applyLogDir } from "@/lib/capture-dir";

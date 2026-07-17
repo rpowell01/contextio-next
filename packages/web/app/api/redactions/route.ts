@@ -43,7 +43,8 @@ const getRedactionsSummary = unstable_cache(
 
     for (const filename of metaFiles) {
       try {
-        const filepath = join(getCaptureDir(), filename);
+        const captureDir = await getCaptureDir();
+        const filepath = join(captureDir, filename);
         const meta = await readRedactionMetaFile(filepath);
         if (!meta) continue;
 
@@ -86,7 +87,8 @@ async function getRedactionDetailsFromMeta(
 
   for (const filename of metaFiles) {
     try {
-      const filepath = join(getCaptureDir(), filename);
+      const captureDir = await getCaptureDir();
+      const filepath = join(captureDir, filename);
       const meta = await readRedactionMetaFile(filepath);
       if (!meta) continue;
 

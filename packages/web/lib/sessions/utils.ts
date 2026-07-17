@@ -1,51 +1,31 @@
 import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
-import { homedir } from "os";
 import type { Session, Capture } from "@/types/api";
 import { requestCacheStore } from "@/lib/request-cache";
 // Import decryptCapture for reading encrypted capture files
 import { decryptCapture } from "@contextio/logger";
+// Re-export capture directory utilities
+import {
+  getCaptureDir,
+  setCaptureDir,
+  CAPTURE_DIR,
+  resolveLogDir,
+  applyLogDir,
+  getNodeUtils,
+  getHomedir,
+} from "../capture-dir";
+
+export {
+  getCaptureDir,
+  setCaptureDir,
+  CAPTURE_DIR,
+  resolveLogDir,
+  applyLogDir,
+  getNodeUtils,
+  getHomedir,
+};
 
 // Re-export Session and Capture types for convenience
 export type { Session, Capture } from "@/types/api";
-
-// Allow override via environment variable (used in Docker environments)
-// Falls back to default ~/.contextio/captures for local development
-let _captureDir: string | undefined;
-
-// Import Node.js built-ins dynamically inside functions to avoid bundling issues
-function getNodeUtils(): Promise<{
-  fs: typeof import("fs/promises");
-  path: { join: typeof import("path").join; resolve: typeof import("path").resolve };
-}> {
-  return Promise.all([
-    import("fs/promises"),
-    import("path"),
-  ]).then(([fs, path]) => ({
-    fs,
-    path: { join: path.join, resolve: path.resolve },
-  }));
-}
-
-/** Read the capture directory currently in effect. */
-export function getCaptureDir(): string {
-  if (!_captureDir) {
-    _captureDir = process.env.LOGGER_CAPTURE_DIR || `${homedir()}/.contextio/captures`;
-    CAPTURE_DIR = _captureDir;
-  }
-  return _captureDir;
-}
-
-/** Update the capture directory seen by all server-side helpers. */
-export function setCaptureDir(dir: string): void {
-  _captureDir = dir;
-  // Keep the deprecated re-export in sync for external callers
-  CAPTURE_DIR = dir;
-}
-
-/** @deprecated Use `getCaptureDir()` — live ESM binding kept for external
- *  callers that haven't migrated. Internal code should call `getCaptureDir()`
- *  directly to avoid relying on live-binding propagation quirks. */
-export let CAPTURE_DIR: string;
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const MAX_FILENAME_LENGTH = 255;
@@ -86,7 +66,8 @@ export function metaFilenameFor(captureFilename: string): string {
 export async function listCaptureFiles(): Promise<string[]> {
   const { fs } = await getNodeUtils();
   try {
-    const files = await fs.readdir(getCaptureDir());
+    const captureDir = await getCaptureDir();
+    const files = await fs.readdir(captureDir);
     return files
       .filter((f) => isValidFilename(f) && !f.endsWith(".tmp") && !f.includes("redact-meta"))
       .sort();
@@ -101,7 +82,8 @@ export async function listCaptureFiles(): Promise<string[]> {
 export async function listRedactionMetaFiles(): Promise<string[]> {
   const { fs } = await getNodeUtils();
   try {
-    const files = await fs.readdir(getCaptureDir());
+    const captureDir = await getCaptureDir();
+    const files = await fs.readdir(captureDir);
     return files
       .filter((f) => f.endsWith(".redact-meta.json"))
       .sort();
@@ -125,7 +107,8 @@ export async function loadRedactionMeta(
 } | null> {
   const { fs, path } = await getNodeUtils();
   try {
-    const filepath = path.join(getCaptureDir(), filename);
+    const captureDir = await getCaptureDir();
+    const filepath = path.join(captureDir, filename);
     const raw = await fs.readFile(filepath, "utf8");
     const meta = JSON.parse(raw) as {
       totalRedactions?: number;
@@ -222,25 +205,6 @@ export function extractCaptureMetadata(
       total_ms: getNumber(rawTimings, "total_ms"),
     },
   };
-}
-
-/** Canonical `logDir` → absolute capture-directory resolver. */
-export async function resolveLogDir(logDir: string): Promise<string> {
-  const { path } = await getNodeUtils();
-  const trimmed = logDir.trim();
-  if (!trimmed) {
-    return process.env.LOGGER_CAPTURE_DIR || `${homedir()}/.contextio/captures`;
-  }
-  if (trimmed === "~") return homedir();
-  if (trimmed.startsWith("~/")) return path.join(homedir(), trimmed.slice(2));
-  if (trimmed.startsWith("/")) return trimmed;
-  return path.resolve(process.cwd(), trimmed);
-}
-
-/** Resolve and apply a Settings `logDir` value as the active capture directory. */
-export async function applyLogDir(logDir: string): Promise<void> {
-  const resolved = await resolveLogDir(logDir);
-  setCaptureDir(resolved);
 }
 
 /**

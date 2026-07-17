@@ -27,7 +27,8 @@ async function readRedactionMetaSidecar(captureFilepath: string): Promise<{
   byRule: Record<string, number>;
 } | null> {
   const metaFilename = metaFilenameFor(basename(captureFilepath));
-  const metaPath = join(getCaptureDir(), metaFilename);
+  const captureDir = await getCaptureDir();
+  const metaPath = join(captureDir, metaFilename);
   try {
     const raw = await fs.readFile(metaPath, "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -77,7 +78,8 @@ export async function GET(
         return Response.json({ error: "Invalid capture id" }, { status: 400 });
       }
 
-      const filepath = join(getCaptureDir(), id);
+      const captureDir = await getCaptureDir();
+      const filepath = join(captureDir, id);
       const stats = await fs.stat(filepath).catch(() => null);
       if (!stats) {
         return Response.json({ error: "Capture not found" }, { status: 404 });
@@ -196,7 +198,7 @@ export async function PUT(
       );
     }
 
-    const filepath = join(getCaptureDir(), id);
+    const filepath = join(await getCaptureDir(), id);
     const stats = await fs.stat(filepath).catch(() => null);
     if (!stats) {
       return Response.json({ error: "Capture not found" }, { status: 404 });
@@ -223,7 +225,7 @@ export async function PUT(
       generatedAt: new Date().toISOString(),
     };
 
-    const metaPath = join(getCaptureDir(), metaFilenameFor(id));
+    const metaPath = join(await getCaptureDir(), metaFilenameFor(id));
     const tmpMetaPath = `${metaPath}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await fs.writeFile(tmpMetaPath, JSON.stringify(meta, null, 2), "utf8");
     await fs.rename(tmpMetaPath, metaPath);
@@ -262,7 +264,7 @@ export async function POST(
       );
     }
 
-    const filepath = join(getCaptureDir(), id);
+    const filepath = join(await getCaptureDir(), id);
     const stats = await fs.stat(filepath).catch(() => null);
     if (!stats) {
       return Response.json({ error: "Capture not found" }, { status: 404 });
@@ -380,7 +382,7 @@ export async function POST(
       generatedAt: new Date().toISOString(),
     };
 
-    const metaPath = join(getCaptureDir(), metaFilenameFor(id));
+    const metaPath = join(await getCaptureDir(), metaFilenameFor(id));
     const tmpMetaPath = `${metaPath}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await fs.writeFile(tmpMetaPath, JSON.stringify(meta, null, 2), "utf8");
     await fs.rename(tmpMetaPath, metaPath);

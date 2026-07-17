@@ -3,7 +3,8 @@
 
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+
 import { X } from "lucide-react";
 import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
 import {
@@ -73,10 +74,8 @@ function DiffDialog({
     );
   };
 
-  if (!isOpen) return null;
-
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+   <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
         className="max-w-6xl max-h-[85vh] mx-4"
         aria-labelledby="diff-dialog-title"
@@ -126,9 +125,9 @@ function DiffDialog({
         <div className="flex flex-col md:flex-row overflow-hidden max-h-[75vh]">
           {/* Left pane - Pre-redaction (Original) */}
           <div className="flex-1 min-w-0 border-r border-border flex flex-col">
-            <div className="p-2 bg-red-50 border-b border-border">
-              <h4 className="text-xs font-semibold text-red-700">Pre-Redaction (Original)</h4>
-            </div>
+    <div className="p-2 bg-muted/50 border-b border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
+    </div>
             <div className="flex-1 overflow-auto p-4">
               {isJsonContent ? (
                 <SyntaxHighlighter code={preContent} lang="json" />
@@ -144,9 +143,9 @@ function DiffDialog({
 
           {/* Right pane - Post-redaction (Redacted) */}
           <div className="flex-1 min-w-0 flex flex-col">
-            <div className="p-2 bg-green-50 border-b border-border">
-              <h4 className="text-xs font-semibold text-green-700">Post-Redaction (Redacted)</h4>
-            </div>
+    <div className="p-2 bg-muted/50 border-b border-border">
+      <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
+    </div>
             <div className="flex-1 overflow-auto p-4">
               {isJsonContent ? (
                 <SyntaxHighlighter code={postContent} lang="json" />
@@ -268,7 +267,31 @@ export default function RedactionsPage() {
   const [resizeStartX, setResizeStartX] = useState<number>(0);
   const [resizeStartWidth, setResizeStartWidth] = useState<number>(0);
 
-  // Debounce filter changes to avoid firing API request on every keystroke
+  const lastFocusedTrigger = useRef<HTMLElement | null>(null);
+
+const handleOpenDiff = useCallback((e: React.MouseEvent, row: RedactionDetailRow) => {
+  lastFocusedTrigger.current = e.currentTarget as HTMLElement;
+  setDiffDialogData({
+    preContent: row.fullOriginal || row.preRedactionValue,
+    postContent: row.fullRedacted || row.postRedactionValue,
+    captureId: row.captureId,
+    redactionType: row.redactionType,
+    provider: row.requestProvider,
+    targetUrl: row.requestTarget,
+    timestamp: row.timestamp,
+  });
+  setDiffDialogOpen(true);
+}, []);
+
+const handleCloseDiff = useCallback(() => {
+  if (lastFocusedTrigger.current) {
+    lastFocusedTrigger.current.focus();
+  }
+  setDiffDialogOpen(false);
+}, []);
+
+// Debounce filter changes to avoid firing API request on every keystroke
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedFilters(filters);
@@ -565,42 +588,20 @@ export default function RedactionsPage() {
                           <td key={key}>{renderCell(key, row)}</td>
                         ))}
                         <td className="py-3 px-4 max-w-xs truncate">
-                          <span
-                            className="text-primary underline cursor-pointer hover:text-primary/80"
-                            onClick={() => {
-                              setDiffDialogData({
-                                preContent: row.fullOriginal || row.preRedactionValue,
-                                postContent: row.fullRedacted || row.postRedactionValue,
-                                captureId: row.captureId,
-                                redactionType: row.redactionType,
-                                provider: row.requestProvider,
-                                targetUrl: row.requestTarget,
-                                timestamp: row.timestamp,
-                              });
-                              setDiffDialogOpen(true);
-                            }}
-                          >
-                            <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
-                          </span>
+          <span
+            className="text-primary underline cursor-pointer hover:text-primary/80"
+            onClick={(e) => handleOpenDiff(e, row)}
+          >
+            <RedactionHighlight value={row.preRedactionValue} isPreRedaction />
+          </span>
                         </td>
                         <td className="py-3 px-4 max-w-xs truncate">
-                          <span
-                            className="text-primary underline cursor-pointer hover:text-primary/80"
-                            onClick={() => {
-                              setDiffDialogData({
-                                preContent: row.fullOriginal || row.preRedactionValue,
-                                postContent: row.fullRedacted || row.postRedactionValue,
-                                captureId: row.captureId,
-                                redactionType: row.redactionType,
-                                provider: row.requestProvider,
-                                targetUrl: row.requestTarget,
-                                timestamp: row.timestamp,
-                              });
-                              setDiffDialogOpen(true);
-                            }}
-                          >
-                            <RedactionHighlight value={row.postRedactionValue} />
-                          </span>
+          <span
+            className="text-primary underline cursor-pointer hover:text-primary/80"
+            onClick={(e) => handleOpenDiff(e, row)}
+          >
+            <RedactionHighlight value={row.postRedactionValue} />
+          </span>
                         </td>
                       </tr>
                     );
@@ -650,7 +651,7 @@ export default function RedactionsPage() {
       {/* Diff Dialog - Two-pane view showing pre/post redaction side by side */}
       <DiffDialog
         isOpen={diffDialogOpen}
-        onClose={() => setDiffDialogOpen(false)}
+        onClose={handleCloseDiff}
         preContent={diffDialogData?.preContent || ""}
         postContent={diffDialogData?.postContent || ""}
         title="Redaction Diff"

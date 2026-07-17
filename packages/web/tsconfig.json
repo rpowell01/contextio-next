@@ -42,10 +42,10 @@
     "lib/**/*",
     "config/**/*",
     "types/**/*",
-    "scripts/**/*",
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "scripts/**/*"
   ]
 }

@@ -55,22 +55,25 @@ async function loadSettings(): Promise<{
   return cleanupSettings ?? defaultSettings();
 }
 
+// Use dynamic require for Node.js modules to avoid bundling in client
 async function runCleanup(): Promise<void> {
   const settings = await loadSettings();
   if (!settings.enabled || settings.maxAgeDays <= 0) return;
   const cutoff = Date.now() - settings.maxAgeDays * 24 * 60 * 60 * 1000;
   const files = await listCaptureFiles();
-  const captureDir = getCaptureDir();
-  const [fsModule, pathModule] = await Promise.all([import("fs/promises"), import("path")]);
-  const fs = fsModule.default;
-  const path = pathModule.join;
+  const captureDir = await getCaptureDir();
+  
+  // Dynamic require for Node.js built-ins - only runs on server
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  
   for (const file of files) {
-    const filepath = path(captureDir, file);
+    const filepath = path.join(captureDir, file);
     try {
       const stats = await fs.stat(filepath);
       if (stats.mtimeMs >= cutoff) continue;
       await fs.unlink(filepath);
-      await fs.unlink(path(captureDir, metaFilenameFor(file))).catch(() => {});
+      await fs.unlink(path.join(captureDir, metaFilenameFor(file))).catch(() => {});
     } catch {
       // ignore individual file errors (e.g., already deleted, permissions)
     }

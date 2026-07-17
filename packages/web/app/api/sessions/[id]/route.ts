@@ -228,7 +228,8 @@ export async function GET(
 
       for (const filename of files) {
         try {
-          const filepath = join(getCaptureDir(), filename);
+          const captureDir = await getCaptureDir();
+          const filepath = join(captureDir, filename);
           const stats = await fs.stat(filepath);
           if (stats.size > MAX_FILE_SIZE) continue;
 

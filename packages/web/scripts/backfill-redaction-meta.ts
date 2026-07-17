@@ -85,13 +85,13 @@ function usage(): void {
   console.error(`Usage: backfill-redaction-meta [CAPTURE_DIR]`);
   console.error(` CAPTURE_DIR Override capture directory.`);
   console.error(
-    ` Defaults to ${getCaptureDir()} (or LOGGER_CAPTURE_DIR)`,
+    ` Defaults to ~/.contextio/captures (or LOGGER_CAPTURE_DIR)`,
   );
   process.exit(1);
 }
 
-function runBackfill(): void {
-  const resolvedCaptureDir = process.argv[2] ?? getCaptureDir();
+async function runBackfill(): Promise<void> {
+  const resolvedCaptureDir = process.argv[2] ?? await getCaptureDir();
 
   if (process.argv[2] === "--help" || process.argv[2] === "-h") {
     usage();
@@ -137,4 +137,4 @@ function runBackfill(): void {
   }
 }
 
-runBackfill();
+await runBackfill();

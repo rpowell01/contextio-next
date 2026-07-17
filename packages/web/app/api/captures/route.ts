@@ -37,11 +37,12 @@ export async function POST(request: Request) {
       let errors = 0;
 
       for (const filename of files) {
-        const filepath = join(getCaptureDir(), filename);
+        const captureDir = await getCaptureDir();
+        const filepath = join(captureDir, filename);
         try {
           await fs.unlink(filepath);
           // Also delete the associated redaction metadata file
-          const metaPath = join(getCaptureDir(), metaFilenameFor(filename));
+          const metaPath = join(captureDir, metaFilenameFor(filename));
           await fs.unlink(metaPath).catch(() => {}); // Ignore if doesn't exist
           deleted++;
         } catch (error) {
@@ -170,7 +171,8 @@ export async function GET(request: Request) {
       const id = url.pathname.split("/").pop();
 
       if (id && id !== "captures") {
-        const filepath = join(getCaptureDir(), id);
+        const captureDir = await getCaptureDir();
+        const filepath = join(captureDir, id);
         const stats = await fs.stat(filepath).catch(() => null);
         if (!stats) {
           return Response.json({ error: "Capture not found" }, { status: 404 });
@@ -218,7 +220,8 @@ export async function GET(request: Request) {
       const captures: (Capture | CaptureWithRedaction)[] = [];
 
       for (const filename of files) {
-        const filepath = join(getCaptureDir(), filename);
+        const captureDir = await getCaptureDir();
+        const filepath = join(captureDir, filename);
         let capture: Capture | null = null;
         let redaction: RedactionDetails | null = null;
 

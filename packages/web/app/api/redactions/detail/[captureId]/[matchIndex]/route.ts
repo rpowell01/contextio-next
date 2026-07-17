@@ -30,7 +30,8 @@ export async function GET(
       const { captureId, matchIndex } = await params;
 
       // Load the capture file to extract individual matches
-      const capturePath = join(getCaptureDir(), captureId);
+      const captureDir = await getCaptureDir();
+      const capturePath = join(captureDir, captureId);
       const captureData = await readCaptureFile(capturePath);
 
       if (!captureData) {

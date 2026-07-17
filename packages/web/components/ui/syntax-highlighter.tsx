@@ -17,12 +17,19 @@ export function SyntaxHighlighter({
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
   const { resolvedTheme } = useTheme();
 
-  useEffect(() => {
-    createHighlighter({
-      themes: ["github-light", "github-dark"],
-      langs: ["json"],
-    }).then(setHighlighter);
-  }, []);
+useEffect(() => {
+  let highlighterInstance: Awaited<ReturnType<typeof createHighlighter>> | null = null;
+  createHighlighter({
+    themes: ["github-light", "github-dark"],
+    langs: ["json"],
+  }).then((h) => {
+    highlighterInstance = h;
+    setHighlighter(h);
+  });
+  return () => {
+    highlighterInstance?.dispose();
+  };
+}, []);
 
   // Map app theme to Shiki theme
   const shikiTheme = resolvedTheme === "dark" || resolvedTheme === "high-contrast" ? "github-dark" : "github-light";

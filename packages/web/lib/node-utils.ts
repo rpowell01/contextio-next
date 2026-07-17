@@ -2,14 +2,14 @@
 // Next.js will not bundle this for edge runtime due to Node.js built-ins
 
 async function getNodeModules(): Promise<{
-  fs: typeof import("fs/promises");
-  path: { join: typeof import("path").join };
-  os: { homedir: typeof import("os").homedir };
+  fs: typeof import("node:fs/promises");
+  path: { join: typeof import("node:path").join };
+  os: { homedir: typeof import("node:os").homedir };
 }> {
   const [fs, path, os] = await Promise.all([
-    import("fs/promises"),
-    import("path"),
-    import("os"),
+    import("node:fs/promises"),
+    import("node:path"),
+    import("node:os"),
   ]);
   return {
     fs,
