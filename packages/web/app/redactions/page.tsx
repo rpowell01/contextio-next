@@ -3,8 +3,10 @@
 
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { X } from "lucide-react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
 
 /**
  * Simple line-based diff algorithm.
@@ -49,6 +51,7 @@ function computeDiff(oldText: string, newText: string) {
 
 /**
  * DiffDialog component with two-pane layout showing pre-redaction (left) and post-redaction (right).
+ * Features: focus trap, ARIA roles, keyboard navigation, responsive design, dark mode, syntax highlighting.
  */
 function DiffDialog({
   isOpen,
@@ -73,84 +76,148 @@ function DiffDialog({
   targetUrl: string;
   timestamp: string;
 }) {
-  if (!isOpen) return null;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   const diff = useMemo(() => computeDiff(preContent, postContent), [preContent, postContent]);
 
-  const renderLine = (item: typeof diff[0], side: 'left' | 'right') => {
-    const isLeft = side === 'left';
-    const showLine = isLeft ? (item.type !== 'insert') : (item.type !== 'delete');
-    
+  // Detect if content looks like JSON for syntax highlighting
+  const isJsonContent = useMemo(() => {
+    const trimmed = (preContent || postContent || "").trim();
+    return trimmed.startsWith("{") || trimmed.startsWith("[");
+  }, [preContent, postContent]);
+
+  const renderLine = (item: typeof diff[0], side: "left" | "right") => {
+    const isLeft = side === "left";
+    const showLine = isLeft ? item.type !== "insert" : item.type !== "delete";
+
     if (!showLine) {
-      return <div style={{ height: '1.25rem' }} />;
+      return <div style={{ height: "1.25rem" }} />;
     }
-    
+
     const lineNum = isLeft ? item.oldLineNum : item.newLineNum;
     const lineClass = `font-mono text-xs whitespace-pre-wrap ${
-      item.type === 'delete' ? 'bg-red-100 dark:bg-red-900/30 line-through' :
-      item.type === 'insert' ? 'bg-green-100 dark:bg-green-900/30' :
-      'bg-transparent'
+      item.type === "delete" ? "bg-red-100 dark:bg-red-900/30 line-through" :
+      item.type === "insert" ? "bg-green-100 dark:bg-green-900/30" :
+      "bg-transparent"
     }`;
-    
+
     return (
-      <div className={lineClass} style={{ padding: '2px 8px', borderRadius: '4px', minHeight: '1.25rem' }}>
-        <span className="text-muted-foreground mr-2 select-none" style={{ width: '3rem', display: 'inline-block', textAlign: 'right' }}>
-          {lineNum ?? ''}
+      <div className={lineClass} style={{ padding: "2px 8px", borderRadius: "4px", minHeight: "1.25rem" }}>
+        <span className="text-muted-foreground mr-2 select-none" style={{ width: "3rem", display: "inline-block", textAlign: "right" }}>
+          {lineNum ?? ""}
         </span>
-        {item.value || ' '}
+        {item.value || " "}
       </div>
     );
   };
 
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      onClose();
+      // Restore focus to trigger element
+      previouslyFocusedRef.current?.focus();
+      previouslyFocusedRef.current = null;
+    }
+  }, [onClose]);
+
+  const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
+    if (event.key === "Escape") {
+      onClose();
+    }
+  }, [onClose]);
+
+  // Store reference to the element that triggered the dialog
+  useEffect(() => {
+    if (isOpen) {
+      previouslyFocusedRef.current = document.activeElement as HTMLElement;
+      // Focus the dialog content after render
+      setTimeout(() => contentRef.current?.focus(), 0);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b">
-          <div>
-            <h3 className="text-lg font-semibold">{title}</h3>
-            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-1">
-              <span>Type: <span className="font-mono capitalize">{redactionType.replace(/_/g, ' ')}</span></span>
-              <span>Capture: <span className="font-mono">{captureId}</span></span>
-              {provider && <span>Provider: <span className="font-mono">{provider}</span></span>}
-              {targetUrl && <span>Target: <span className="font-mono truncate max-w-[200px]">{targetUrl}</span></span>}
-              {timestamp && <span>Time: <span className="font-mono">{new Date(timestamp).toLocaleString()}</span></span>}
+    <DialogPrimitive.Root open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Content
+          ref={contentRef}
+          className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-6xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-white dark:bg-gray-900 p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg max-h-[85vh] mx-4"
+          onKeyDown={handleKeyDown}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="diff-dialog-title"
+          aria-describedby="diff-dialog-description"
+          tabIndex={-1}
+        >
+          <DialogPrimitive.Title id="diff-dialog-title" className="text-lg font-semibold sr-only">
+            {title}
+          </DialogPrimitive.Title>
+          <DialogPrimitive.Description id="diff-dialog-description" className="sr-only">
+            Side-by-side diff showing pre-redaction and post-redaction content
+          </DialogPrimitive.Description>
+
+          <div className="flex items-center justify-between p-4 border-b">
+            <div>
+              <h3 className="text-lg font-semibold" id="diff-dialog-title-visible">{title}</h3>
+              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-1">
+                <span>Type: <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span></span>
+                <span>Capture: <span className="font-mono">{captureId}</span></span>
+                {provider && <span>Provider: <span className="font-mono">{provider}</span></span>}
+                {targetUrl && <span>Target: <span className="font-mono truncate max-w-[200px]">{targetUrl}</span></span>}
+                {timestamp && <span>Time: <span className="font-mono">{new Date(timestamp).toLocaleString()}</span></span>}
+              </div>
+            </div>
+            <DialogPrimitive.Close
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900"
+              aria-label="Close diff dialog"
+            >
+              <X className="h-5 w-5" />
+            </DialogPrimitive.Close>
+          </div>
+          <div className="flex flex-col md:flex-row overflow-hidden max-h-[75vh]">
+            {/* Left pane - Pre-redaction (Original) */}
+            <div className="flex-1 min-w-0 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+              <div className="p-2 bg-red-50 dark:bg-red-900/20 border-b border-gray-200 dark:border-gray-700">
+                <h4 className="text-xs font-semibold text-red-700 dark:text-red-300">Pre-Redaction (Original)</h4>
+              </div>
+              <div className="flex-1 overflow-auto p-4">
+                {isJsonContent ? (
+                  <SyntaxHighlighter code={preContent} lang="json" />
+                ) : (
+                  <div className="font-mono text-xs">
+                    {diff.map((chunk, idx) => (
+                      <div key={idx}>{renderLine(chunk, "left")}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right pane - Post-redaction (Redacted) */}
+            <div className="flex-1 min-w-0 flex flex-col">
+              <div className="p-2 bg-green-50 dark:bg-green-900/20 border-b border-gray-200 dark:border-gray-700">
+                <h4 className="text-xs font-semibold text-green-700 dark:text-green-300">Post-Redaction (Redacted)</h4>
+              </div>
+              <div className="flex-1 overflow-auto p-4">
+                {isJsonContent ? (
+                  <SyntaxHighlighter code={postContent} lang="json" />
+                ) : (
+                  <div className="font-mono text-xs">
+                    {diff.map((chunk, idx) => (
+                      <div key={idx}>{renderLine(chunk, "right")}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="flex flex-col md:flex-row overflow-hidden max-h-[75vh]">
-          {/* Left pane - Pre-redaction (Original) */}
-          <div className="flex-1 min-w-0 border-r border-gray-200 dark:border-gray-700 flex flex-col">
-            <div className="p-2 bg-red-50 dark:bg-red-900/20 border-b border-gray-200 dark:border-gray-700">
-              <h4 className="text-xs font-semibold text-red-700 dark:text-red-300">Pre-Redaction (Original)</h4>
-            </div>
-            <div className="flex-1 overflow-auto p-4 font-mono text-xs">
-              {diff.map((chunk, idx) => (
-                <div key={idx}>{renderLine(chunk, 'left')}</div>
-              ))}
-            </div>
-          </div>
-          
-          {/* Right pane - Post-redaction (Redacted) */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            <div className="p-2 bg-green-50 dark:bg-green-900/20 border-b border-gray-200 dark:border-gray-700">
-              <h4 className="text-xs font-semibold text-green-700 dark:text-green-300">Post-Redaction (Redacted)</h4>
-            </div>
-            <div className="flex-1 overflow-auto p-4 font-mono text-xs">
-              {diff.map((chunk, idx) => (
-                <div key={idx}>{renderLine(chunk, 'right')}</div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 
