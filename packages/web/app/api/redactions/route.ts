@@ -113,65 +113,26 @@ async function getRedactionDetailsFromMeta(
       }
 
       // Create one detail row per match (using matches array if available in meta)
-      const matches = (meta.matches as Array<{ rule: string; original: string; placeholder: string; path: string }> | undefined) ?? [];
+      const matches = (meta.matches as Array<{ ruleId: string; original: string; placeholder: string; path: string }> | undefined) ?? [];
       
       console.log('[RedactionAPI] Processing meta:', filename, 'matches.length:', matches.length, 'byRule keys:', meta.byRule ? Object.keys(meta.byRule) : 'none');
-      if (matches.length > 0) {
-        console.log('[RedactionAPI] First match:', JSON.stringify(matches[0]));
-      }
-      
-      // Add rows for each individual match
-      if (matches.length > 0) {
-        for (const match of matches) {
-          allRows.push({
-            redactionType: match.rule,
-            requestSource: source,
-            requestProvider: provider,
-            requestTarget: targetUrl,
-            sessionId,
-            captureId,
-            preRedactionValue: match.original,
-            postRedactionValue: match.placeholder,
-            path: match.path,
-            timestamp,
-          });
-        }
-      }
-      
-      // Always add a summary row for each rule present in byRule so that
-      // every redaction type appears in the table and can be filtered.
-      if (meta.byRule && typeof meta.byRule === 'object') {
-        for (const [rule, count] of Object.entries(meta.byRule)) {
-          if (typeof count === 'number' && count > 0) {
-            allRows.push({
-              redactionType: rule,
-              requestSource: source,
-              requestProvider: provider,
-              requestTarget: targetUrl,
-              sessionId,
-              captureId,
-              preRedactionValue: `(total: ${count})`,
-              postRedactionValue: `(total: ${count})`,
-              path: "summary",
-              timestamp,
-            });
-          }
-        }
-      } else if (matches.length === 0) {
-        // If no matches and no byRule, create a generic summary row
-        allRows.push({
-          redactionType: "summary",
-          requestSource: source,
-          requestProvider: provider,
-          requestTarget: targetUrl,
-          sessionId,
-          captureId,
-          preRedactionValue: `(total: ${meta.totalRedactions ?? 0})`,
-          postRedactionValue: `(total: ${meta.totalRedactions ?? 0})`,
-          path: "summary",
-          timestamp,
-        });
-      }
+  // Add rows for each individual match (individual match entries)
+  if (matches.length > 0) {
+    for (const match of matches) {
+      allRows.push({
+        redactionType: match.ruleId,
+        requestSource: source,
+        requestProvider: provider,
+        requestTarget: targetUrl,
+        sessionId,
+        captureId,
+        preRedactionValue: match.original,
+        postRedactionValue: match.placeholder,
+        path: match.path,
+        timestamp,
+      });
+    }
+  }
     } catch (error) {
       console.error(`Error processing redaction meta ${filename}:`, error);
       continue;
