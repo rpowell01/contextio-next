@@ -3,7 +3,7 @@
 import { MainLayout } from "@/components/main-layout";
 import { ThemeSelector } from "@/components/theme-selector";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useTheme } from "@/components/theme-provider";
 
 interface BuildInfo {
@@ -17,10 +17,49 @@ interface RedactionsSummary {
   byType: Record<string, number>;
 }
 
+const Spinner = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    className={`animate-spin ${className}`}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <circle
+      className="opacity-25"
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="currentColor"
+      strokeWidth="4"
+    />
+    <path
+      className="opacity-75"
+      fill="currentColor"
+      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    />
+  </svg>
+);
+
 export default function HomePage() {
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [redactionsSummary, setRedactionsSummary] = useState<RedactionsSummary | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { theme, setTheme } = useTheme();
+
+  const fetchSummary = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/redactions?summary=true");
+      const data = await res.json();
+      setRedactionsSummary(data.summary);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/version")
@@ -30,13 +69,8 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/redactions?summary=true")
-      .then((res) => res.json())
-      .then((data: { summary: { totalRedactions: number; byType: Record<string, number> } }) =>
-        setRedactionsSummary(data.summary)
-      )
-      .catch(console.error);
-  }, []);
+    fetchSummary();
+  }, [fetchSummary]);
 
   return (
     <MainLayout>
@@ -72,7 +106,18 @@ export default function HomePage() {
                 </svg>
               </div>
               <div>
-                <h3 className="font-semibold text-red-700">Total Redactions</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-red-700">Total Redactions</h3>
+                  <button
+                    onClick={fetchSummary}
+                    disabled={refreshing}
+                    className="p-1 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Refresh redaction counts"
+                    title="Refresh counts"
+                  >
+                    <Spinner size={14} className={refreshing ? "text-red-600" : "text-muted-foreground"} />
+                  </button>
+                </div>
                 <p className="text-sm text-muted-foreground">
                   {redactionsSummary?.totalRedactions ?? 0} redactions found
                 </p>

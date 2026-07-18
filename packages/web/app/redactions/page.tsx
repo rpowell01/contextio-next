@@ -297,6 +297,7 @@ export default function RedactionsPage() {
   const [details, _setDetails] = useState<RedactionDetailRow[]>([]);
   const [_loadingSummary, _setLoadingSummary] = useState(true);
   const [_loadingDetails, _setLoadingDetails] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [_error, _setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -325,13 +326,56 @@ export default function RedactionsPage() {
     'sessionId',
     'captureId',
   ]);
-  const [draggedKey, setDraggedKey] = useState<string | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [draggedKey, setDraggedKey] = useState<string | null>(null);
   const [resizingKey, setResizingKey] = useState<string | null>(null);
   const [resizeStartX, setResizeStartX] = useState<number>(0);
   const [resizeStartWidth, setResizeStartWidth] = useState<number>(0);
 
   const lastFocusedTrigger = useRef<HTMLElement | null>(null);
+
+  const Spinner = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
+    <svg
+      className={`animate-spin ${className}`}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
+  );
+
+  const fetchSummary = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/redactions?summary=true");
+      if (!res.ok) throw new Error("Failed to fetch summary");
+      const data = await res.json();
+      _setSummary(data.summary);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
 const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionDetailRow) => {
     lastFocusedTrigger.current = e.currentTarget as HTMLElement;
@@ -615,19 +659,41 @@ const handleCloseDiff = useCallback(() => {
               <h1 className="text-3xl font-bold tracking-tight">Redactions</h1>
               <p className="text-muted-foreground">View all redacted data across captures</p>
             </div>
-            <Link
-              href="/"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              ← Back to Dashboard
-            </Link>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={fetchSummary}
+                disabled={refreshing}
+                className="p-1.5 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Refresh redaction counts"
+                title="Refresh counts"
+              >
+                <Spinner size={16} className={refreshing ? "text-primary" : "text-muted-foreground"} />
+              </button>
+              <Link
+                href="/"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                ← Back to Dashboard
+              </Link>
+            </div>
           </div>
 
           {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border p-4 bg-red-50 border-red-200">
-              <div className="text-sm text-muted-foreground">Total Redactions</div>
-              <div className="text-3xl font-bold text-red-600">{summary?.totalRedactions ?? 0}</div>
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">Total Redactions</div>
+                <button
+                  onClick={fetchSummary}
+                  disabled={refreshing}
+                  className="p-1 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Refresh redaction count"
+                  title="Refresh count"
+                >
+                  <Spinner size={14} className={refreshing ? "text-red-600" : "text-muted-foreground"} />
+                </button>
+              </div>
+              <div className="text-3xl font-bold text-red-600 mt-1">{summary?.totalRedactions ?? 0}</div>
             </div>
             {Object.entries(summary?.byType ?? {}).slice(0, 3).map(([type, count]) => (
               <div key={type} className="rounded-lg border p-4 bg-muted/50">
@@ -680,13 +746,29 @@ const handleCloseDiff = useCallback(() => {
 
           {/* Details Table with Pagination */}
           <div className="rounded-lg border">
-            <div className="border-b p-4">
-              <h2 className="text-xl font-semibold">Redaction Details</h2>
-              <p className="text-sm text-muted-foreground">
-                {totalCount} total redaction entries • Page {page} of {totalPages || 1}
-              </p>
+            <div className="border-b p-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">Redaction Details</h2>
+                <p className="text-sm text-muted-foreground">
+                  {totalCount} total redaction entries • Page {page} of {totalPages || 1}
+                </p>
+              </div>
+              {_loadingDetails && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Spinner size={14} />
+                  <span>Loading details...</span>
+                </div>
+              )}
             </div>
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
+              {_loadingDetails && (
+                <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10">
+                  <div className="flex flex-col items-center gap-3">
+                    <Spinner size={32} className="text-primary" />
+                    <span className="text-muted-foreground">Loading redaction details...</span>
+                  </div>
+                </div>
+              )}
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
