@@ -706,7 +706,7 @@ export function createProxyHandler(
                   };
 
 // Skip capture for title-generation requests (internal UI feature)
-  if (urlSource === "title") {
+  if (sessionId?.startsWith("title-")) {
     if (opts.logTraffic) {
       console.log("[DEBUG] Skipping capture for title-generation request");
     }
