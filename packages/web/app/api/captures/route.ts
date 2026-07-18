@@ -4,7 +4,7 @@ import { join } from "path";
 import type { Capture, CaptureWithRedaction, RedactionDetails, PaginationMeta } from "@/types/api";
 
 import { getCaptureRedactionStats, computeCaptureRedactionCounts } from "@/lib/sessions/redaction-utils";
-import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, metaFilenameFor, readCaptureFile } from "@/lib/sessions/utils";
+import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, readCaptureFile } from "@/lib/sessions/utils";
 import { consumeToken } from "@/lib/csrf";
 import { withRequestCache } from "@/lib/request-cache";
 
