@@ -119,16 +119,17 @@ async function getRedactionDetailsFromMeta(
   // Add rows for each individual match (individual match entries)
   if (matches.length > 0) {
     for (const match of matches) {
+      const matchRec = match as Record<string, unknown>;
       allRows.push({
-        redactionType: match.ruleId,
+        redactionType: (matchRec.ruleId ?? matchRec.rule ?? "") as string,
         requestSource: source,
         requestProvider: provider,
         requestTarget: targetUrl,
         sessionId,
         captureId,
-        preRedactionValue: match.original,
-        postRedactionValue: match.placeholder,
-        path: match.path,
+        preRedactionValue: (matchRec.original ?? matchRec.preValue ?? matchRec.pre ?? "") as string,
+        postRedactionValue: (matchRec.placeholder ?? matchRec.postValue ?? matchRec.post ?? "") as string,
+        path: (matchRec.path ?? "") as string,
         timestamp,
       });
     }

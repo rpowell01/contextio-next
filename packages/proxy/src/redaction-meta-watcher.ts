@@ -122,7 +122,7 @@ export interface RedactionMetaWatcherOptions {
 }
 
 export interface RedactionMatch {
-  rule: string;
+  ruleId: string;
   original: string;
   placeholder: string;
   path: string;
@@ -268,20 +268,22 @@ const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/g;
 
 /**
  * Validate that the matches array in a meta file has the expected format.
- * Expected format: { rule: string, original: string, placeholder: string, path: string }
+ * Accepts two legacy/concurrent shapes:
+ *  - Watcher/backfill: { ruleId, original, placeholder, path }
+ *  - Redact plugin:  { ruleId, preValue, postValue, path }
  * Returns true if valid, false if invalid or missing.
  */
 function isValidMatchesFormat(matches: unknown): boolean {
   if (!Array.isArray(matches)) return false;
   for (const match of matches) {
-    if (
-      typeof match !== "object" ||
-      match === null ||
-      typeof (match as Record<string, unknown>).rule !== "string" ||
-      typeof (match as Record<string, unknown>).original !== "string" ||
-      typeof (match as Record<string, unknown>).placeholder !== "string" ||
-      typeof (match as Record<string, unknown>).path !== "string"
-    ) {
+    const rec = match as Record<string, unknown>;
+    const hasRuleId = typeof rec.ruleId === "string";
+    const hasOriginalPlaceholder =
+      typeof rec.original === "string" && typeof rec.placeholder === "string";
+    const hasPrePost =
+      typeof rec.preValue === "string" && typeof rec.postValue === "string";
+    const hasPath = typeof rec.path === "string";
+    if (!hasRuleId || !hasPath || (!hasOriginalPlaceholder && !hasPrePost)) {
       return false;
     }
   }
@@ -316,24 +318,24 @@ function extractRedactionMatches(rawData: unknown): Array<RedactionMatch> {
   function extractFromString(text: string, path: string): void {
     PLACEHOLDER_REGEX.lastIndex = 0;
     let m: RegExpExecArray | null;
-    while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
-      const rule = (m[1] ?? "unknown").toLowerCase();
-      matches.push({
-        rule,
-        original: text,
-        placeholder: m[0],
-        path,
-      });
-    }
-    SSN_REGEX.lastIndex = 0;
-    while ((m = SSN_REGEX.exec(text)) !== null) {
-      matches.push({
-        rule: "ssn",
-        original: text,
-        placeholder: m[0],
-        path,
-      });
-    }
+  while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
+    const ruleId = (m[1] ?? "unknown").toLowerCase();
+    matches.push({
+      ruleId,
+      original: text,
+      placeholder: m[0],
+      path,
+    });
+  }
+  SSN_REGEX.lastIndex = 0;
+  while ((m = SSN_REGEX.exec(text)) !== null) {
+    matches.push({
+      ruleId: "ssn",
+      original: text,
+      placeholder: m[0],
+      path,
+    });
+  }
   }
 
   // Collect all string values and their paths
@@ -422,22 +424,25 @@ function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedacti
     const counts = computeCaptureRedactionCounts(rawData);
     const matches = extractRedactionMatches(rawData);
     const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
-    return {
-      captureId,
-      totalRedactions: counts.totalRedactions,
-      byRule: counts.byRule,
-      generatedAt: new Date().toISOString(),
-      matches: matches.map(m => ({
-        rule: m.rule,
-        original: m.original,
-        placeholder: m.placeholder,
-        path: m.path,
-      })),
-      source: (rawCapture?.source as string) ?? undefined,
-      provider: (rawCapture?.provider as string) ?? "unknown",
-      targetUrl: (rawCapture?.targetUrl as string) ?? "",
-      sessionId: (rawCapture?.sessionId as string) ?? undefined,
-    };
+  return {
+    captureId,
+    totalRedactions: counts.totalRedactions,
+    byRule: counts.byRule,
+    generatedAt: new Date().toISOString(),
+    matches: matches.map((m) => ({
+      ruleId: m.ruleId,
+      original: m.original,
+      placeholder: m.placeholder,
+      path: m.path,
+    })),
+    source: (rawCapture?.source as string) ?? undefined,
+    provider: (rawCapture?.provider as string) ?? "unknown",
+    targetUrl: (rawCapture?.targetUrl as string) ?? "",
+    sessionId: (rawCapture?.sessionId as string) ?? undefined,
+    timestamp: (rawCapture?.timestamp as string) ?? undefined,
+    checksum: (rawCapture?.checksum as string) ?? undefined,
+    schemaVersion: (rawCapture?.schemaVersion as string) ?? undefined,
+  };
   } catch (err) {
     console.error(
       `[redaction-meta-watcher] Failed to compute metadata for ${captureId}:`,
