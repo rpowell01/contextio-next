@@ -651,23 +651,28 @@ const handleCloseDiff = useCallback(() => {
               )}
             </div>
             <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-5">
-              {Object.entries(summary?.byType ?? {}).map(([type, count]) => (
-                <button
-                  key={type}
-                  onClick={() => handleRedactionTypeClick(type)}
-                  className={`rounded-lg border p-3 transition-colors text-left ${
-                    selectedRedactionType === presetNameToRuleId(type)
-                      ? 'bg-primary/10 border-primary'
-                      : 'hover:bg-accent'
-                  }`}
-                >
-                  <div className="text-sm text-muted-foreground capitalize">{type.replace(/_/g, " ")}</div>
-                  <div className="text-2xl font-bold">{count}</div>
-                </button>
-              ))}
-              {Object.keys(summary?.byType ?? {}).length === 0 && (
+              {summary && Object.keys(summary.byType ?? {}).length > 0 ? (
+                Object.entries(summary.byType ?? {}).map(([type, count]) => (
+                  <button
+                    key={type}
+                    onClick={() => handleRedactionTypeClick(type)}
+                    className={`rounded-lg border p-3 transition-colors text-left ${
+                      selectedRedactionType === presetNameToRuleId(type)
+                        ? 'bg-primary/10 border-primary'
+                        : 'hover:bg-accent'
+                    }`}
+                  >
+                    <div className="text-sm text-muted-foreground capitalize">{type.replace(/_/g, " ")}</div>
+                    <div className="text-2xl font-bold">{count}</div>
+                  </button>
+                ))
+              ) : (
                 <div className="col-span-full text-center text-muted-foreground py-8">
-                  No redactions found
+                  {_loadingSummary ? (
+                    <>Loading breakdown...</>
+                  ) : (
+                    <>No redactions found</>
+                  )}
                 </div>
               )}
             </div>
