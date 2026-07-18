@@ -32,24 +32,25 @@ export async function POST(request: Request) {
         return Response.json({ error: "Confirmation required" }, { status: 400 });
       }
 
-      const files = await listCaptureFiles();
-      let deleted = 0;
-      let errors = 0;
+  const captureDir = await getCaptureDir();
+  let deleted = 0;
+  let errors = 0;
 
-      for (const filename of files) {
-        const captureDir = await getCaptureDir();
-        const filepath = join(captureDir, filename);
-        try {
-          await fs.unlink(filepath);
-          // Also delete the associated redaction metadata file
-          const metaPath = join(captureDir, metaFilenameFor(filename));
-          await fs.unlink(metaPath).catch(() => {}); // Ignore if doesn't exist
-          deleted++;
-        } catch (error) {
-          errors++;
-          console.error(`Error deleting capture ${filename}:`, error);
-        }
-      }
+  // List all entries in the capture directory and remove them.
+  // This is more reliable than iterating over `listCaptureFiles()` because it
+  // also catches `.tmp` files left behind by an interrupted write or files
+  // renamed in after the initial listing.
+  const entries = await fs.readdir(captureDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const filepath = join(captureDir, entry.name);
+    try {
+      await fs.rm(filepath, { force: true, recursive: entry.isDirectory() });
+      deleted++;
+    } catch (error) {
+      errors++;
+      console.error(`Error deleting ${filepath}:`, error);
+    }
+  }
 
       return Response.json({
         success: true,
