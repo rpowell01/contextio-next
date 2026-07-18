@@ -705,25 +705,32 @@ export function createProxyHandler(
                     total_ms: Math.round(endTime - startTime),
                   };
 
-  const capture = buildCaptureData({
-    sessionId,
-    req,
-    cleanPath,
-    source,
-    provider,
-    apiFormat,
-    targetUrl,
-    ctx,
-    originalBody: bodyJson,
-    reqBytes,
-    proxyRes,
-    finalBody,
-    isStreaming: !!isStreaming,
-    respBytes,
-    timings,
-  });
+// Skip capture for title-generation requests (internal UI feature)
+  if (urlSource === "title") {
+    if (opts.logTraffic) {
+      console.log("[DEBUG] Skipping capture for title-generation request");
+    }
+  } else {
+    const capture = buildCaptureData({
+      sessionId,
+      req,
+      cleanPath,
+      source,
+      provider,
+      apiFormat,
+      targetUrl,
+      ctx,
+      originalBody: bodyJson,
+      reqBytes,
+      proxyRes,
+      finalBody,
+      isStreaming: !!isStreaming,
+      respBytes,
+      timings,
+    });
 
-                  runCapturePlugins(plugins, capture);
+    runCapturePlugins(plugins, capture);
+  }
                 }
               };
 
