@@ -69,7 +69,7 @@ const getRedactionsSummary = unstable_cache(
     return { totalRedactions, byType };
   },
   ["redactions-summary"],
-  { revalidate: 30, tags: ["redactions-summary"] }
+  { revalidate: 30, tags: ["redactions-summary"] },
 );
 
 // Get paginated detail rows from meta files only
@@ -99,7 +99,8 @@ async function getRedactionDetailsFromMeta(
       const source = (meta.source as string | null) ?? null;
       const provider = (meta.provider as string) ?? "unknown";
       const targetUrl = (meta.targetUrl as string) ?? "";
-      const timestamp = (meta.generatedAt as string) ?? new Date().toISOString();
+      const timestamp =
+        (meta.generatedAt as string) ?? new Date().toISOString();
 
       // Add counts to summary
       if (typeof meta.totalRedactions === "number") {
@@ -113,30 +114,42 @@ async function getRedactionDetailsFromMeta(
         }
       }
 
-// Create one detail row per match (using matches array if available in meta)
-      const matches = (meta.matches as Array<{ ruleId: string; original: string; placeholder: string; path: string }> | undefined) ?? [];
-      
-      console.log('[RedactionAPI] Processing meta:', filename, 'matches.length:', matches.length, 'byRule keys:', meta.byRule ? Object.keys(meta.byRule) : 'none');
-  // Add rows for each individual match (individual match entries)
-  if (matches.length > 0) {
-    for (let i = 0; i < matches.length; i++) {
-      const match = matches[i];
-      const matchRec = match as Record<string, unknown>;
-      allRows.push({
-        redactionType: (matchRec.ruleId ?? matchRec.rule ?? "") as string,
-        requestSource: source,
-        requestProvider: provider,
-        requestTarget: targetUrl,
-        sessionId,
-        captureId,
-        preRedactionValue: (matchRec.original ?? matchRec.preValue ?? matchRec.pre ?? "") as string,
-        postRedactionValue: (matchRec.placeholder ?? matchRec.postValue ?? matchRec.post ?? "") as string,
-        path: (matchRec.path ?? "") as string,
-        matchIndex: i,
-        timestamp,
-      });
-    }
-  }
+      // Create one detail row per match (using matches array if available in meta)
+      const matches =
+        (meta.matches as
+          | Array<{
+              ruleId: string;
+              original: string;
+              placeholder: string;
+              path: string;
+            }>
+          | undefined) ?? [];
+      // Add rows for each individual match (individual match entries)
+      if (matches.length > 0) {
+        for (let i = 0; i < matches.length; i++) {
+          const match = matches[i];
+          const matchRec = match as Record<string, unknown>;
+          allRows.push({
+            redactionType: (matchRec.ruleId ?? matchRec.rule ?? "") as string,
+            requestSource: source,
+            requestProvider: provider,
+            requestTarget: targetUrl,
+            sessionId,
+            captureId,
+            preRedactionValue: (matchRec.original ??
+              matchRec.preValue ??
+              matchRec.pre ??
+              "") as string,
+            postRedactionValue: (matchRec.placeholder ??
+              matchRec.postValue ??
+              matchRec.post ??
+              "") as string,
+            path: (matchRec.path ?? "") as string,
+            matchIndex: i,
+            timestamp,
+          });
+        }
+      }
     } catch (error) {
       console.error(`Error processing redaction meta ${filename}:`, error);
       continue;
@@ -146,23 +159,34 @@ async function getRedactionDetailsFromMeta(
   // Apply filters
   let filteredRows = allRows;
   if (Object.keys(filters).length > 0) {
-    filteredRows = allRows.filter(row => {
+    filteredRows = allRows.filter((row) => {
       return Object.entries(filters).every(([key, val]) => {
         if (!val) return true;
         const cell = row[key as keyof RedactionDetailRow];
-        return String(cell ?? "").toLowerCase().includes(val.toLowerCase());
+        return String(cell ?? "")
+          .toLowerCase()
+          .includes(val.toLowerCase());
       });
     });
   }
 
   // Apply sorting
-  const sortableKeys = ["redactionType", "requestSource", "requestProvider", "requestTarget", "sessionId", "captureId"];
+  const sortableKeys = [
+    "redactionType",
+    "requestSource",
+    "requestProvider",
+    "requestTarget",
+    "sessionId",
+    "captureId",
+  ];
   if (sortKey && sortDir && sortableKeys.includes(sortKey)) {
     filteredRows = [...filteredRows].sort((a, b) => {
       const aVal = a[sortKey as keyof RedactionDetailRow];
       const bVal = b[sortKey as keyof RedactionDetailRow];
-      if (aVal === null || aVal === undefined) return sortDir === "asc" ? 1 : -1;
-      if (bVal === null || bVal === undefined) return sortDir === "asc" ? -1 : 1;
+      if (aVal === null || aVal === undefined)
+        return sortDir === "asc" ? 1 : -1;
+      if (bVal === null || bVal === undefined)
+        return sortDir === "asc" ? -1 : 1;
       if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
       if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
       return 0;
@@ -190,8 +214,7 @@ async function getRedactionDetailsFromMeta(
 export async function GET(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);
-    console.log('[RedactionAPI] Request URL:', url.toString());
-    
+
     // Check for summary=true query parameter for fast aggregated counts
     const summaryOnly = url.searchParams.get("summary") === "true";
 
@@ -200,34 +223,51 @@ export async function GET(request: Request): Promise<Response> {
       const summary = await getRedactionsSummary();
       return Response.json({ summary });
     }
-    
+
     // Parse pagination params
     const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
-    const pageSize = Math.min(200, Math.max(1, parseInt(url.searchParams.get("pageSize") ?? "50", 10)));
-    
+    const pageSize = Math.min(
+      200,
+      Math.max(1, parseInt(url.searchParams.get("pageSize") ?? "50", 10)),
+    );
+
     // Parse sort params
     const sortKey = url.searchParams.get("sortKey");
-    const sortDir = url.searchParams.get("sortDir") === "asc" ? "asc" : 
-                    url.searchParams.get("sortDir") === "desc" ? "desc" : null;
-    
+    const sortDir =
+      url.searchParams.get("sortDir") === "asc"
+        ? "asc"
+        : url.searchParams.get("sortDir") === "desc"
+          ? "desc"
+          : null;
+
     // Parse filters (only valid keys)
-    const validFilterKeys = ["redactionType", "requestSource", "requestProvider", "requestTarget", "sessionId", "captureId"];
+    const validFilterKeys = [
+      "redactionType",
+      "requestSource",
+      "requestProvider",
+      "requestTarget",
+      "sessionId",
+      "captureId",
+    ];
     const filters: Record<string, string> = {};
     for (const [key, value] of url.searchParams.entries()) {
-      if (key.startsWith("filter_") && validFilterKeys.includes(key.replace("filter_", ""))) {
+      if (
+        key.startsWith("filter_") &&
+        validFilterKeys.includes(key.replace("filter_", ""))
+      ) {
         const filterKey = key.replace("filter_", "");
         if (value) filters[filterKey] = value;
       }
     }
-    console.log('[RedactionAPI] Parsed filters:', filters);
-    
-    const result = await getRedactionDetailsFromMeta(page, pageSize, filters, sortKey, sortDir);
-    
-    // Log unique redactionTypes in the result for debugging
-    const uniqueTypes = [...new Set(result.details.map(d => d.redactionType))];
-    console.log('[RedactionAPI] Unique redactionTypes in result:', uniqueTypes);
-    console.log('[RedactionAPI] Total details:', result.details.length, 'totalCount:', result.totalCount);
-    
+
+    const result = await getRedactionDetailsFromMeta(
+      page,
+      pageSize,
+      filters,
+      sortKey,
+      sortDir,
+    );
+
     return Response.json(result);
   } catch (error) {
     console.error("Error in redactions API:", error);
@@ -239,13 +279,18 @@ export async function POST(request: Request) {
   try {
     const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
-      return Response.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+      return Response.json(
+        { error: "Invalid or missing CSRF token" },
+        { status: 400 },
+      );
     }
-    const body = (await request.json().catch(() => ({}))) as { action?: string };
+    const body = (await request.json().catch(() => ({}))) as {
+      action?: string;
+    };
     if (body.action !== "clear") {
       return Response.json({ error: "Invalid action" }, { status: 400 });
     }
-    
+
     // Clear all redactions by returning empty summary
     const result: PaginatedRedactionResponse = {
       summary: { totalRedactions: 0, byType: {} },
