@@ -682,7 +682,13 @@ const handleCloseDiff = useCallback(() => {
                 aria-label="Refresh redaction counts"
                 title="Refresh counts"
               >
-                {refreshing && <Spinner size={16} className="text-primary" />}
+                {refreshing ? (
+                  <Spinner size={16} className="text-primary" />
+                ) : (
+                  <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
               </button>
               <Link
                 href="/"
@@ -705,7 +711,13 @@ const handleCloseDiff = useCallback(() => {
                   aria-label="Refresh redaction count"
                   title="Refresh count"
                 >
-                  {refreshing && <Spinner size={14} className="text-red-600" />}
+                  {refreshing ? (
+                    <Spinner size={14} className="text-red-600" />
+                  ) : (
+                    <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  )}
                 </button>
               </div>
               <div className="text-3xl font-bold text-red-600 mt-1">{summary?.totalRedactions ?? 0}</div>
