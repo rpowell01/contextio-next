@@ -126,6 +126,7 @@ export default function HomePage() {
                   <h3 className="font-semibold text-red-700">Total Redactions</h3>
                   <button
                     onClick={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       fetchSummary();
                     }}
