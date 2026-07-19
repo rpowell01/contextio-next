@@ -24,6 +24,7 @@ interface RedactionDetailRow {
   preRedactionValue: string;
   postRedactionValue: string;
   path: string;
+  matchIndex: number;
   fullOriginal?: string;
   fullRedacted?: string;
   timestamp: string;
@@ -46,6 +47,8 @@ export default function RedactionsPage() {
   const [diffDialogData, setDiffDialogData] = useState<{
     preContent: string;
     postContent: string;
+    fullOriginal?: string;
+    fullRedacted?: string;
     captureId: string;
     redactionType: string;
     provider: string;
@@ -134,26 +137,33 @@ const fetchSummary = useCallback(async () => {
 
 const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionDetailRow) => {
     lastFocusedTrigger.current = e.currentTarget as HTMLElement;
-
-    // Use the detail endpoint which returns fullOriginal/fullRedacted for the specific match
-    let preContent = row.fullOriginal || row.preRedactionValue;
-    let postContent = row.fullRedacted || row.postRedactionValue;
-
+    
+    // Fetch specific match data from detail endpoint using matchIndex
+    let preContent = row.preRedactionValue;
+    let postContent = row.postRedactionValue;
+    let fullOriginal: string | undefined;
+    let fullRedacted: string | undefined;
+    
     try {
       const res = await fetch(`/api/redactions/detail/${row.captureId}/${row.matchIndex}`);
       if (res.ok) {
         const detail = await res.json();
-        if (detail.fullOriginal) preContent = detail.fullOriginal;
-        if (detail.fullRedacted) postContent = detail.fullRedacted;
+        preContent = detail.preRedactionValue || row.preRedactionValue;
+        postContent = detail.postRedactionValue || row.postRedactionValue;
+        fullOriginal = detail.fullOriginal;
+        fullRedacted = detail.fullRedacted;
+      } else {
+        console.warn('Failed to fetch redaction detail:', res.status);
       }
     } catch (err) {
-      console.warn('Failed to fetch redaction detail for diff:', err);
-      // Fall back to substring values
+      console.warn('Failed to fetch redaction detail:', err);
     }
 
     setDiffDialogData({
       preContent,
       postContent,
+      fullOriginal,
+      fullRedacted,
       captureId: row.captureId,
       redactionType: row.redactionType,
       provider: row.requestProvider,
@@ -623,6 +633,8 @@ const handleCloseDiff = useCallback(() => {
         onClose={handleCloseDiff}
         preContent={diffDialogData?.preContent || ""}
         postContent={diffDialogData?.postContent || ""}
+        fullOriginal={diffDialogData?.fullOriginal}
+        fullRedacted={diffDialogData?.fullRedacted}
         title="Redaction Diff"
         captureId={diffDialogData?.captureId || ""}
         redactionType={diffDialogData?.redactionType || ""}

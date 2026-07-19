@@ -18,6 +18,8 @@ interface DiffDialogProps {
   title: string;
   preContent: string;
   postContent: string;
+  fullOriginal?: string;
+  fullRedacted?: string;
   captureId: string;
   redactionType: string;
   provider: string;
@@ -64,13 +66,18 @@ export function DiffDialog({
   title,
   preContent,
   postContent,
+  fullOriginal,
+  fullRedacted,
   captureId,
   redactionType,
   provider,
   targetUrl,
   timestamp,
 }: DiffDialogProps) {
-  const fullDiff = useMemo(() => computeDiff(preContent, postContent), [preContent, postContent]);
+  // Use full body content for diff if available, otherwise use match snippets
+  const diffPreContent = fullOriginal ?? preContent;
+  const diffPostContent = fullRedacted ?? postContent;
+  const fullDiff = useMemo(() => computeDiff(diffPreContent, diffPostContent), [diffPreContent, diffPostContent]);
 
   // Filter diff to show only changes with context
   const { chunks: diff, hasHiddenLines } = useMemo(

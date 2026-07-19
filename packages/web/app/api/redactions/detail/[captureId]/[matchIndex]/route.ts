@@ -4,6 +4,7 @@ import {
   getCaptureDir,
   readRedactionMetaFile,
   readCaptureFile,
+  readRedactionMetaFile,
   metaFilenameFor,
 } from "@/lib/sessions/utils";
 
@@ -43,6 +44,7 @@ export async function GET(
     try {
       const { captureId, matchIndex } = await params;
 
+      // Load the capture file for metadata and body content
       const captureDir = await getCaptureDir();
 
       // Load the capture file (metadata + body content)
@@ -54,7 +56,7 @@ export async function GET(
         return Response.json({ error: "Capture file not found" }, { status: 404 });
       }
 
-      // Load redaction metadata for match ordering
+      // Load the redaction meta file to get matches (authoritative source)
       const metaFilename = metaFilenameFor(captureId);
       const metaPath = join(captureDir, metaFilename);
       const meta = await readRedactionMetaFile(metaPath);
@@ -63,6 +65,7 @@ export async function GET(
         return Response.json({ error: "Redaction metadata not found" }, { status: 404 });
       }
 
+      // Get matches from meta file (authoritative source for match ordering)
       const matches = (meta.matches as MetaMatch[] | undefined) ?? [];
 
       if (matches.length === 0) {
@@ -82,12 +85,14 @@ export async function GET(
 
       const match = matches[index];
 
+      // Use same field fallback logic as list API (route.ts:130-131)
       const preRedactionValue =
         (match.original ?? match.preValue ?? match.pre ?? "") as string;
       const postRedactionValue =
         (match.placeholder ?? match.postValue ?? match.post ?? "") as string;
       const redactionType = (match.ruleId ?? match.rule ?? "") as string;
 
+      // Build the response
       const response: RedactionDetailResponse = {
         redactionType,
         requestSource: (captureData.source as string | null) ?? null,
@@ -97,7 +102,8 @@ export async function GET(
         captureId,
         preRedactionValue,
         postRedactionValue,
-        timestamp: (captureData.timestamp as string) ?? new Date().toISOString(),
+        // Use meta.generatedAt with fallback to capture timestamp (consistent with list API)
+        timestamp: (meta.generatedAt as string) ?? (captureData.timestamp as string) ?? new Date().toISOString(),
       };
 
       // Include full original/redacted values where available
