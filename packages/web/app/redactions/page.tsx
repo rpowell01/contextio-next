@@ -361,18 +361,28 @@ export default function RedactionsPage() {
 
   const fetchSummary = useCallback(async () => {
     setRefreshing(true);
+    console.log("[Redactions] Starting summary fetch");
+    // Safety timeout: force refreshing to false after 10 seconds no matter what
+    const safetyTimeout = setTimeout(() => {
+      console.warn("[Redactions] Safety timeout triggered, forcing refreshing to false");
+      setRefreshing(false);
+    }, 10000);
     try {
       const fetchPromise = fetch("/api/redactions?summary=true");
       const timeoutPromise = new Promise<Response>((_, reject) =>
         setTimeout(() => reject(new Error("Fetch timeout")), 5000)
       );
       const res = await Promise.race([fetchPromise, timeoutPromise]);
+      console.log("[Redactions] Fetch completed, status:", res.status);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      console.log("[Redactions] Data received:", data);
       _setSummary(data.summary);
     } catch (err) {
       console.error("Summary fetch failed:", err);
     } finally {
+      console.log("[Redactions] Setting refreshing to false");
+      clearTimeout(safetyTimeout);
       setRefreshing(false);
     }
   }, []);
