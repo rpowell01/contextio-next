@@ -27,6 +27,7 @@ interface RedactionDetailRow {
   fullOriginal?: string;
   fullRedacted?: string;
   timestamp: string;
+  matchIndex: number;
 }
 
 const PAGE_SIZE = 50;
@@ -133,44 +134,23 @@ const fetchSummary = useCallback(async () => {
 
 const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionDetailRow) => {
     lastFocusedTrigger.current = e.currentTarget as HTMLElement;
-    
-    // Fetch full capture data to get complete original vs redacted content
+
+    // Use the detail endpoint which returns fullOriginal/fullRedacted for the specific match
     let preContent = row.fullOriginal || row.preRedactionValue;
     let postContent = row.fullRedacted || row.postRedactionValue;
-    
-    try {
-      const res = await fetch(`/api/captures/${row.captureId}`);
-      if (res.ok) {
-        const capture = await res.json();
-        // The capture contains both redacted (requestBody/responseBody) and original (originalRequestBody/originalResponseBody)
-      // Use path to determine which body this redaction applies to:
-      // - "responseBody" = response body redaction
-      // - anything else = request body redaction
-      const isResponseRedaction = row.path === 'responseBody';
 
-      if (isResponseRedaction && capture.originalResponseBody && capture.responseBody) {
-        // Response body redaction
-        preContent = typeof capture.originalResponseBody === 'string'
-        ? capture.originalResponseBody
-        : JSON.stringify(capture.originalResponseBody, null, 2);
-        postContent = typeof capture.responseBody === 'string'
-        ? capture.responseBody
-        : JSON.stringify(capture.responseBody, null, 2);
-  } else if (capture.originalRequestBody && capture.requestBody) {
-    // Request body redaction
-    preContent = typeof capture.originalRequestBody === 'string'
-    ? capture.originalRequestBody
-    : JSON.stringify(capture.originalRequestBody, null, 2);
-    postContent = typeof capture.requestBody === 'string'
-    ? capture.requestBody
-    : JSON.stringify(capture.requestBody, null, 2);
-  }
+    try {
+      const res = await fetch(`/api/redactions/detail/${row.captureId}/${row.matchIndex}`);
+      if (res.ok) {
+        const detail = await res.json();
+        if (detail.fullOriginal) preContent = detail.fullOriginal;
+        if (detail.fullRedacted) postContent = detail.fullRedacted;
       }
     } catch (err) {
-      console.warn('Failed to fetch full capture for diff:', err);
+      console.warn('Failed to fetch redaction detail for diff:', err);
       // Fall back to substring values
     }
-    
+
     setDiffDialogData({
       preContent,
       postContent,

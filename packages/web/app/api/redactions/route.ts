@@ -23,6 +23,7 @@ interface RedactionDetailRow {
   preRedactionValue: string;
   postRedactionValue: string;
   path: string;
+  matchIndex: number;
   timestamp: string;
 }
 
@@ -112,28 +113,29 @@ async function getRedactionDetailsFromMeta(
         }
       }
 
-      // Create one detail row per match (using matches array if available in meta)
+// Create one detail row per match (using matches array if available in meta)
       const matches = (meta.matches as Array<{ ruleId: string; original: string; placeholder: string; path: string }> | undefined) ?? [];
-      
-      console.log('[RedactionAPI] Processing meta:', filename, 'matches.length:', matches.length, 'byRule keys:', meta.byRule ? Object.keys(meta.byRule) : 'none');
-  // Add rows for each individual match (individual match entries)
-  if (matches.length > 0) {
-    for (const match of matches) {
-      const matchRec = match as Record<string, unknown>;
-      allRows.push({
-        redactionType: (matchRec.ruleId ?? matchRec.rule ?? "") as string,
-        requestSource: source,
-        requestProvider: provider,
-        requestTarget: targetUrl,
-        sessionId,
-        captureId,
-        preRedactionValue: (matchRec.original ?? matchRec.preValue ?? matchRec.pre ?? "") as string,
-        postRedactionValue: (matchRec.placeholder ?? matchRec.postValue ?? matchRec.post ?? "") as string,
-        path: (matchRec.path ?? "") as string,
-        timestamp,
-      });
-    }
-  }
+
+      // Add rows for each individual match (individual match entries)
+      if (matches.length > 0) {
+        for (let i = 0; i < matches.length; i++) {
+          const match = matches[i];
+          const matchRec = match as Record<string, unknown>;
+          allRows.push({
+            redactionType: (matchRec.ruleId ?? matchRec.rule ?? "") as string,
+            requestSource: source,
+            requestProvider: provider,
+            requestTarget: targetUrl,
+            sessionId,
+            captureId,
+            preRedactionValue: (matchRec.original ?? matchRec.preValue ?? matchRec.pre ?? "") as string,
+            postRedactionValue: (matchRec.placeholder ?? matchRec.postValue ?? matchRec.post ?? "") as string,
+            path: (matchRec.path ?? "") as string,
+            timestamp,
+            matchIndex: i,
+          });
+        }
+      }
     } catch (error) {
       console.error(`Error processing redaction meta ${filename}:`, error);
       continue;

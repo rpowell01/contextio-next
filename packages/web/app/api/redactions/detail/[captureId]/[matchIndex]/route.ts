@@ -2,9 +2,11 @@ import { join } from "path";
 
 import {
   getCaptureDir,
+  readRedactionMetaFile,
   readCaptureFile,
-  extractRedactionMatches,
+  metaFilenameFor,
 } from "@/lib/sessions/utils";
+
 import { withRequestCache } from "@/lib/request-cache";
 
 interface RedactionDetailResponse {
@@ -21,6 +23,18 @@ interface RedactionDetailResponse {
   fullRedacted?: string;
 }
 
+interface MetaMatch {
+  ruleId?: string;
+  rule?: string;
+  original?: string;
+  placeholder?: string;
+  preValue?: string;
+  postValue?: string;
+  pre?: string;
+  post?: string;
+  path?: string;
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ captureId: string; matchIndex: string }> }
@@ -29,63 +43,94 @@ export async function GET(
     try {
       const { captureId, matchIndex } = await params;
 
-      // Load the capture file to extract individual matches
       const captureDir = await getCaptureDir();
-      const capturePath = join(captureDir, captureId);
+
+      // Load the capture file (metadata + body content)
+      const captureFileName = captureId.replace(/\.json$/, "") + ".json";
+      const capturePath = join(captureDir, captureFileName);
       const captureData = await readCaptureFile(capturePath);
 
       if (!captureData) {
         return Response.json({ error: "Capture file not found" }, { status: 404 });
       }
 
-      // Extract all matches from the capture
-      const matches = extractRedactionMatches(captureData);
+      // Load redaction metadata for match ordering
+      const metaFilename = metaFilenameFor(captureId);
+      const metaPath = join(captureDir, metaFilename);
+      const meta = await readRedactionMetaFile(metaPath);
+
+      if (!meta) {
+        return Response.json({ error: "Redaction metadata not found" }, { status: 404 });
+      }
+
+      const matches = (meta.matches as MetaMatch[] | undefined) ?? [];
 
       if (matches.length === 0) {
         return Response.json({ error: "No redactions found in this capture" }, { status: 404 });
       }
 
-      // Parse match index
       const index = parseInt(matchIndex, 10);
       if (isNaN(index) || index < 0 || index >= matches.length) {
-        return Response.json({
-          error: "Match index out of range",
-          totalMatches: matches.length
-        }, { status: 400 });
+        return Response.json(
+          {
+            error: "Match index out of range",
+            totalMatches: matches.length,
+          },
+          { status: 400 }
+        );
       }
 
       const match = matches[index];
 
-      // Build the response
+      const preRedactionValue =
+        (match.original ?? match.preValue ?? match.pre ?? "") as string;
+      const postRedactionValue =
+        (match.placeholder ?? match.postValue ?? match.post ?? "") as string;
+      const redactionType = (match.ruleId ?? match.rule ?? "") as string;
+
       const response: RedactionDetailResponse = {
-        redactionType: match.rule,
+        redactionType,
         requestSource: (captureData.source as string | null) ?? null,
         requestProvider: (captureData.provider as string) ?? "unknown",
         requestTarget: (captureData.targetUrl as string) ?? "",
         sessionId: (captureData.sessionId as string | null) ?? null,
         captureId,
-        preRedactionValue: match.original || "",
-        postRedactionValue: match.placeholder || "",
+        preRedactionValue,
+        postRedactionValue,
         timestamp: (captureData.timestamp as string) ?? new Date().toISOString(),
       };
 
-      // Include full original/redacted values if available
+      // Include full original/redacted values where available
       const requestBody = captureData.requestBody;
       const originalRequestBody = captureData.originalRequestBody;
+      const responseBody = captureData.responseBody;
+      const originalResponseBody = captureData.originalResponseBody;
 
-      if (originalRequestBody) {
+      const isResponseRedaction = match.path === "responseBody";
+
+      if (isResponseRedaction && originalResponseBody) {
         try {
-          const str = JSON.stringify(originalRequestBody, null, 2);
-          response.fullOriginal = str;
+          response.fullOriginal = JSON.stringify(originalResponseBody, null, 2);
+        } catch {
+          response.fullOriginal = "(unable to serialize original body)";
+        }
+      } else if (originalRequestBody) {
+        try {
+          response.fullOriginal = JSON.stringify(originalRequestBody, null, 2);
         } catch {
           response.fullOriginal = "(unable to serialize original body)";
         }
       }
 
-      if (requestBody) {
+      if (isResponseRedaction && responseBody) {
         try {
-          const str = JSON.stringify(requestBody, null, 2);
-          response.fullRedacted = str;
+          response.fullRedacted = JSON.stringify(responseBody, null, 2);
+        } catch {
+          response.fullRedacted = "(unable to serialize redacted body)";
+        }
+      } else if (requestBody) {
+        try {
+          response.fullRedacted = JSON.stringify(requestBody, null, 2);
         } catch {
           response.fullRedacted = "(unable to serialize redacted body)";
         }
