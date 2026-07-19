@@ -125,7 +125,10 @@ export default function HomePage() {
 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-red-700">Total Redactions</h3>
                   <button
-                    onClick={fetchSummary}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fetchSummary();
+                    }}
                     disabled={refreshing}
                     className="p-1.5 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Refresh redaction counts"
