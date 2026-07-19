@@ -143,28 +143,28 @@ const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionDet
       if (res.ok) {
         const capture = await res.json();
         // The capture contains both redacted (requestBody/responseBody) and original (originalRequestBody/originalResponseBody)
-        // Use path to determine which body this redaction applies to:
-        // - "requestBody.*" = request body redaction
-        // - "responseBody.*" = response body redaction
-        const isRequestRedaction = row.path.startsWith('requestBody');
-        
-        if (isRequestRedaction && capture.originalRequestBody && capture.requestBody) {
-          // Request body redaction
-          preContent = typeof capture.originalRequestBody === 'string' 
-            ? capture.originalRequestBody 
-            : JSON.stringify(capture.originalRequestBody, null, 2);
-          postContent = typeof capture.requestBody === 'string' 
-            ? capture.requestBody 
-            : JSON.stringify(capture.requestBody, null, 2);
-        } else if (capture.originalResponseBody && capture.responseBody) {
-          // Response body redaction
-          preContent = typeof capture.originalResponseBody === 'string' 
-            ? capture.originalResponseBody 
-            : JSON.stringify(capture.originalResponseBody, null, 2);
-          postContent = typeof capture.responseBody === 'string' 
-            ? capture.responseBody 
-            : JSON.stringify(capture.responseBody, null, 2);
-        }
+      // Use path to determine which body this redaction applies to:
+      // - "responseBody" = response body redaction
+      // - anything else = request body redaction
+      const isResponseRedaction = row.path === 'responseBody';
+
+      if (isResponseRedaction && capture.originalResponseBody && capture.responseBody) {
+        // Response body redaction
+        preContent = typeof capture.originalResponseBody === 'string'
+        ? capture.originalResponseBody
+        : JSON.stringify(capture.originalResponseBody, null, 2);
+        postContent = typeof capture.responseBody === 'string'
+        ? capture.responseBody
+        : JSON.stringify(capture.responseBody, null, 2);
+  } else if (capture.originalRequestBody && capture.requestBody) {
+    // Request body redaction
+    preContent = typeof capture.originalRequestBody === 'string'
+    ? capture.originalRequestBody
+    : JSON.stringify(capture.originalRequestBody, null, 2);
+    postContent = typeof capture.requestBody === 'string'
+    ? capture.requestBody
+    : JSON.stringify(capture.requestBody, null, 2);
+  }
       }
     } catch (err) {
       console.warn('Failed to fetch full capture for diff:', err);
