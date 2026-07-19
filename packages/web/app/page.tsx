@@ -49,8 +49,9 @@ export default function HomePage() {
   const { theme, setTheme } = useTheme();
 
   const fetchSummary = useCallback(async () => {
+    console.log("[Dashboard] fetchSummary called, current refreshing:", refreshing);
     setRefreshing(true);
-    console.log("[Dashboard] Starting summary fetch");
+    console.log("[Dashboard] setRefreshing(true) called");
     // Safety timeout: force refreshing to false after 10 seconds no matter what
     const safetyTimeout = setTimeout(() => {
       console.warn("[Dashboard] Safety timeout triggered, forcing refreshing to false");
@@ -70,7 +71,7 @@ export default function HomePage() {
     } catch (e) {
       console.error("Summary fetch failed:", e);
     } finally {
-      console.log("[Dashboard] Setting refreshing to false");
+      console.log("[Dashboard] Finally block - clearing timeout and setting refreshing false");
       clearTimeout(safetyTimeout);
       setRefreshing(false);
     }
@@ -122,16 +123,18 @@ export default function HomePage() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-red-700">Total Redactions</h3>
-                  <button
-                    onClick={fetchSummary}
-                    disabled={refreshing}
-                    className="p-1 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label="Refresh redaction counts"
-                    title="Refresh counts"
-                  >
-                    <Spinner size={14} className={refreshing ? "text-red-600" : "text-muted-foreground"} />
-                  </button>
+<h3 className="font-semibold text-red-700">Total Redactions</h3>
+                    {refreshing && (
+                      <button
+                        onClick={fetchSummary}
+                        disabled={refreshing}
+                        className="p-1 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Refresh redaction counts"
+                        title="Refresh counts"
+                      >
+                        <Spinner size={14} className="text-red-600" />
+                      </button>
+                    )}
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {redactionsSummary?.totalRedactions ?? 0} redactions found
