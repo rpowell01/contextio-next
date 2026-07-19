@@ -362,11 +362,12 @@ export default function RedactionsPage() {
   const fetchSummary = useCallback(async () => {
     setRefreshing(true);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch("/api/redactions?summary=true", { signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (!res.ok) throw new Error("Failed to fetch summary");
+      const fetchPromise = fetch("/api/redactions?summary=true");
+      const timeoutPromise = new Promise<Response>((_, reject) =>
+        setTimeout(() => reject(new Error("Fetch timeout")), 5000)
+      );
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       _setSummary(data.summary);
     } catch (err) {
