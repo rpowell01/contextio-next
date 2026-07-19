@@ -675,17 +675,15 @@ const handleCloseDiff = useCallback(() => {
               <p className="text-muted-foreground">View all redacted data across captures</p>
             </div>
             <div className="flex items-center gap-4">
-              {refreshing && (
-                <button
-                  onClick={fetchSummary}
-                  disabled={refreshing}
-                  className="p-1.5 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Refresh redaction counts"
-                  title="Refresh counts"
-                >
-                  <Spinner size={16} className="text-primary" />
-                </button>
-              )}
+              <button
+                onClick={fetchSummary}
+                disabled={refreshing}
+                className="p-1.5 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Refresh redaction counts"
+                title="Refresh counts"
+              >
+                {refreshing && <Spinner size={16} className="text-primary" />}
+              </button>
               <Link
                 href="/"
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
@@ -700,17 +698,15 @@ const handleCloseDiff = useCallback(() => {
             <div className="rounded-lg border p-4 bg-red-50 border-red-200">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">Total Redactions</div>
-                {refreshing && (
-                  <button
-                    onClick={fetchSummary}
-                    disabled={refreshing}
-                    className="p-1 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label="Refresh redaction count"
-                    title="Refresh count"
-                  >
-                    <Spinner size={14} className="text-red-600" />
-                  </button>
-                )}
+                <button
+                  onClick={fetchSummary}
+                  disabled={refreshing}
+                  className="p-1 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Refresh redaction count"
+                  title="Refresh count"
+                >
+                  {refreshing && <Spinner size={14} className="text-red-600" />}
+                </button>
               </div>
               <div className="text-3xl font-bold text-red-600 mt-1">{summary?.totalRedactions ?? 0}</div>
             </div>

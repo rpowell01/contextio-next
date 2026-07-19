@@ -124,17 +124,15 @@ export default function HomePage() {
               <div>
                 <div className="flex items-center gap-2">
 <h3 className="font-semibold text-red-700">Total Redactions</h3>
-                    {refreshing && (
-                      <button
-                        onClick={fetchSummary}
-                        disabled={refreshing}
-                        className="p-1 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        aria-label="Refresh redaction counts"
-                        title="Refresh counts"
-                      >
-                        <Spinner size={14} className="text-red-600" />
-                      </button>
-                    )}
+                    <button
+                      onClick={fetchSummary}
+                      disabled={refreshing}
+                      className="p-1 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="Refresh redaction counts"
+                      title="Refresh counts"
+                    >
+                      {refreshing && <Spinner size={14} className="text-red-600" />}
+                    </button>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {redactionsSummary?.totalRedactions ?? 0} redactions found
