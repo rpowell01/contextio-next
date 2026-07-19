@@ -9,6 +9,7 @@ import {
   isValidFilename,
   getSessionMetadata,
   readCaptureFile,
+  CaptureReadError,
 } from "@/lib/sessions/utils";
 import { withRequestCache } from "@/lib/request-cache";
 import {
@@ -92,14 +93,8 @@ export async function GET(
         );
       }
 
-      const data = await readCaptureFile(filepath);
-      if (!data) {
-        return Response.json(
-          { error: "Capture not found or could not be decrypted" },
-          { status: 404 },
-        );
-      }
-      const capture = extractCaptureMetadata(id, data);
+  const data = await readCaptureFile(filepath);
+  const capture = extractCaptureMetadata(id, data);
       const sessionMeta = await getSessionMetadata(id, data);
       const sidecar = await readRedactionMetaSidecar(filepath);
       const persistedStatsFromCapture = getCaptureRedactionStats(data) ?? null;
@@ -174,10 +169,19 @@ export async function GET(
         redaction: redactionDetails,
         redactions: redactionDetails,
       });
-    } catch (error) {
-      console.error("Error in capture detail API:", error);
-      return Response.json({ error: "Internal server error" }, { status: 500 });
+  } catch (error) {
+    if (error instanceof CaptureReadError) {
+      const status =
+        error.kind === "notFound"
+          ? 404
+          : error.kind === "corrupt"
+            ? 422
+            : 500;
+      return Response.json({ error: error.message, kind: error.kind }, { status });
     }
+    console.error("Error in capture detail API:", error);
+    return Response.json({ error: "Internal server error" }, { status: 500 });
+  }
   });
 }
 

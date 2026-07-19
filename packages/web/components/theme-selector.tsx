@@ -24,10 +24,17 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
   );
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const typeAheadRef = useRef<string>("");
+  const typeAheadTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const selectedIndexRef = useRef(THEME_OPTIONS.findIndex((t) => t.value === value));
   const { isOverridden } = useTheme();
 
-  // Update selected index when value changes (for checkmark), but don't move focus while open
+// Build stable, unique IDs for each listbox option.
+// aria-activedescendant always points to the currently focused option.
+const optionIds: string[] = THEME_OPTIONS.map((_, i) => `theme-option-${i}`);
+const activeDescendantId = `theme-option-${focusedIndex}`;
+
+// Update selected index when value changes, but don't move focus while open
   useEffect(() => {
     selectedIndexRef.current = THEME_OPTIONS.findIndex((t) => t.value === value);
     if (!isOpen) {
@@ -35,64 +42,14 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
     }
   }, [value, isOpen]);
 
-  // Handle keyboard navigation
-  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement | HTMLUListElement>) => {
-    if (!isOpen && (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter" || event.key === " ")) {
-      event.preventDefault();
-      setIsOpen(true);
-      return;
-    }
-
-    if (isOpen) {
-      let newIndex = focusedIndex;
-      switch (event.key) {
-        case "ArrowDown":
-          event.preventDefault();
-          newIndex = (focusedIndex + 1) % THEME_OPTIONS.length;
-          break;
-        case "ArrowUp":
-          event.preventDefault();
-          newIndex = (focusedIndex - 1 + THEME_OPTIONS.length) % THEME_OPTIONS.length;
-          break;
-        case "Home":
-          event.preventDefault();
-          newIndex = 0;
-          break;
-        case "End":
-          event.preventDefault();
-          newIndex = THEME_OPTIONS.length - 1;
-          break;
-        case "Enter":
-        case " ":
-          event.preventDefault();
-          handleSelect(THEME_OPTIONS[focusedIndex].value);
-          break;
-        case "Escape":
-          event.preventDefault();
-          setIsOpen(false);
-          buttonRef.current?.focus();
-          break;
-        case "Tab":
-          setIsOpen(false);
-          break;
-      }
-
-      // Update focused index and focus the new option
-      if (newIndex !== focusedIndex) {
-        setFocusedIndex(newIndex);
-        // Focus after state update
-        setTimeout(() => {
-          (listRef.current?.querySelector(`[data-index="${newIndex}"]`) as HTMLElement | null)?.focus();
-        }, 0);
-      }
-    }
-  };
-
-  // Focus the focused option when open
+  // Focus the listbox when opened, scroll focused option into view
   useEffect(() => {
     if (isOpen && listRef.current) {
-      const option = listRef.current.querySelector(`[data-index="${focusedIndex}"]`) as HTMLElement | null;
-      option?.focus();
+      listRef.current.focus();
+      const option = listRef.current.querySelector(
+        `[data-index="${focusedIndex}"]`
+      ) as HTMLElement | null;
+      option?.scrollIntoView({ block: "nearest" });
     }
   }, [isOpen, focusedIndex]);
 
@@ -119,6 +76,86 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
     buttonRef.current?.focus();
   };
 
+  // Type-ahead search: match first item starting with typed characters, cycling through matches
+  const handleTypeAhead = (char: string): number => {
+    typeAheadRef.current += char.toLowerCase();
+    clearTimeout(typeAheadTimerRef.current);
+    typeAheadTimerRef.current = setTimeout(() => {
+      typeAheadRef.current = "";
+    }, 500);
+
+    const typed = typeAheadRef.current;
+    const start = focusedIndex + 1;
+    // Search forward from current position, then wrap
+    for (let i = start; i < start + THEME_OPTIONS.length; i++) {
+      const idx = i % THEME_OPTIONS.length;
+      if (THEME_OPTIONS[idx].label.toLowerCase().startsWith(typed)) {
+        return idx;
+      }
+    }
+    return -1;
+  };
+
+  const handleListKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+    if (!isOpen) return;
+
+    let newIndex = focusedIndex;
+
+    switch (event.key) {
+      case "ArrowDown": {
+        event.preventDefault();
+        newIndex = (focusedIndex + 1) % THEME_OPTIONS.length;
+        break;
+      }
+      case "ArrowUp": {
+        event.preventDefault();
+        newIndex =
+          (focusedIndex - 1 + THEME_OPTIONS.length) % THEME_OPTIONS.length;
+        break;
+      }
+      case "Home": {
+        event.preventDefault();
+        newIndex = 0;
+        break;
+      }
+      case "End": {
+        event.preventDefault();
+        newIndex = THEME_OPTIONS.length - 1;
+        break;
+      }
+      case "Enter":
+      case " ": {
+        event.preventDefault();
+        handleSelect(THEME_OPTIONS[focusedIndex].value);
+        return;
+      }
+      case "Escape": {
+        event.preventDefault();
+        setIsOpen(false);
+        buttonRef.current?.focus();
+        return;
+      }
+      case "Tab": {
+        setIsOpen(false);
+        return;
+      }
+      default:
+        // Type-ahead on printable characters
+        if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          const match = handleTypeAhead(event.key);
+          if (match !== -1) {
+            setFocusedIndex(match);
+          }
+        }
+        return;
+    }
+
+    if (newIndex !== focusedIndex) {
+      setFocusedIndex(newIndex);
+    }
+  };
+
   const selectedTheme = THEME_OPTIONS.find((t) => t.value === value) || THEME_OPTIONS[2];
 
   return (
@@ -127,7 +164,25 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
         ref={buttonRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={(e) => {
+          // Open on ArrowDown/ArrowUp/Enter/Space when closed
+          if (
+            !isOpen &&
+            (e.key === "ArrowDown" ||
+              e.key === "ArrowUp" ||
+              e.key === "Enter" ||
+              e.key === " ")
+          ) {
+            e.preventDefault();
+            setIsOpen(true);
+            return;
+          }
+        }}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? "theme-listbox" : undefined}
+        aria-activedescendant={isOpen ? activeDescendantId : undefined}
+        aria-label="Select theme"
         disabled={isOverridden}
         className={cn(
           "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
@@ -135,9 +190,6 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
           "min-w-[140px] justify-between",
           isOverridden && "opacity-50 cursor-not-allowed"
         )}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-label="Select theme"
       >
         <span className="flex items-center gap-2">
           <span aria-hidden="true">{selectedTheme.icon}</span>
@@ -150,58 +202,76 @@ export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps
           viewBox="0 0 24 24"
           aria-hidden="true"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 9l-7 7-7-7"
+          />
         </svg>
       </button>
 
       {isOpen && (
-        <>
-          <ul
-            ref={listRef}
-            className="absolute z-50 mt-1 min-w-[140px] rounded-md border border-border bg-popover p-1 shadow-lg"
-            role="listbox"
-            aria-label="Theme options"
-            onKeyDown={handleKeyDown}
-            aria-activedescendant={isOpen ? `theme-option-${focusedIndex}` : undefined}
-          >
-            {THEME_OPTIONS.map((theme, index) => (
-              <li key={theme.value}>
-                <button
-                  type="button"
-                  role="option"
-                  id={`theme-option-${index}`}
-                  aria-selected={index === focusedIndex}
-                  tabIndex={-1}
-                  data-index={index}
-                  onClick={() => handleSelect(theme.value)}
-                  disabled={isOverridden}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded px-3 py-2 text-sm font-medium transition-colors",
-                    index === focusedIndex
-                      ? "bg-accent text-accent-foreground"
-                      : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                    isOverridden && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  <span aria-hidden="true">{theme.icon}</span>
-                  <span>{theme.label}</span>
-                  {theme.value === value && (
-                    <svg
-                      className="ml-auto h-4 w-4 text-primary"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
+        <ul
+          id="theme-listbox"
+          ref={listRef}
+          tabIndex={0}
+          role="listbox"
+          aria-label="Theme options"
+          onKeyDown={handleListKeyDown}
+          className={cn(
+            "absolute z-50 mt-1 min-w-[140px] rounded-md border border-border bg-popover p-1 shadow-lg",
+            "max-h-60 overflow-y-auto"
+          )}
+        >
+          {THEME_OPTIONS.map((theme, index) => (
+            <li
+              key={theme.value}
+              role="option"
+              id={optionIds[index]}
+              aria-selected={theme.value === value}
+              data-index={index}
+              aria-setsize={THEME_OPTIONS.length}
+              aria-posinset={index + 1}
+            >
+              <button
+                type="button"
+                tabIndex={-1}
+onClick={() => handleSelect(theme.value)}
+              disabled={isOverridden}
+              className={cn(
+                  "flex w-full items-center gap-2 rounded px-3 py-2 text-sm font-medium transition-colors",
+                  index === focusedIndex
+                    ? "bg-accent text-accent-foreground"
+                    : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  isOverridden && "opacity-50 cursor-not-allowed"
+                )}
+                onMouseEnter={() => setFocusedIndex(index)}
+                onFocus={() => setFocusedIndex(index)}
+              >
+                <span aria-hidden="true">{theme.icon}</span>
+                <span>{theme.label}</span>
+                {theme.value === value && (
+                  <svg
+                    className="ml-auto h-4 w-4 text-primary"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

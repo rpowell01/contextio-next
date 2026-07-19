@@ -4,28 +4,42 @@ import { requestCacheStore } from "@/lib/request-cache";
 // Import decryptCapture for reading encrypted capture files
 import { decryptCapture } from "@contextio/logger";
 // Re-export capture directory utilities
-import {
-  getCaptureDir,
-  setCaptureDir,
-  CAPTURE_DIR,
-  resolveLogDir,
-  applyLogDir,
-  getNodeUtils,
-  getHomedir,
+import { 
+getCaptureDir, 
+setCaptureDir, 
+CAPTURE_DIR, 
+resolveLogDir, 
+applyLogDir, 
+getNodeUtils, 
+getHomedir, 
 } from "../capture-dir";
 
 export {
-  getCaptureDir,
-  setCaptureDir,
-  CAPTURE_DIR,
-  resolveLogDir,
-  applyLogDir,
-  getNodeUtils,
-  getHomedir,
+getCaptureDir,
+setCaptureDir,
+CAPTURE_DIR,
+resolveLogDir,
+applyLogDir,
+getNodeUtils,
+getHomedir,
 };
 
 // Re-export Session and Capture types for convenience
 export type { Session, Capture } from "@/types/api";
+
+/** Category of a capture read failure. */
+export type CaptureReadErrorKind = "notFound" | "corrupt" | "unexpected";
+
+/** Structured error thrown by `readCaptureFile` instead of returning `null`. */
+export class CaptureReadError extends Error {
+  readonly kind: CaptureReadErrorKind;
+
+  constructor(kind: CaptureReadErrorKind, message: string, cause?: Error) {
+    super(message, { cause });
+    this.name = "CaptureReadError";
+    this.kind = kind;
+  }
+}
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const MAX_FILENAME_LENGTH = 255;
@@ -427,13 +441,16 @@ export async function getSessionMetadata(
  *
  * @param filepath - Path to the capture file
  * @param keyMaterial - Optional encryption key material. If not provided, attempts to read from CONTEXTIO_LOGGER_ENCRYPTION_KEY env var.
- * @returns Parsed capture data, or null if file cannot be read/decrypted
- * @throws If called outside a `withRequestCache()` boundary (cached access requires isolated per-request state).
+ * @returns Parsed capture data
+ * @throws {Error} If called outside a `withRequestCache()` boundary (cached access requires isolated per-request state).
+ * @throws {CaptureReadError} `kind: "notFound"` when the capture file does not exist or cannot be opened.
+ * @throws {CaptureReadError} `kind: "corrupt"` when the file cannot be decrypted or parsed as valid capture JSON.
+ * @throws {CaptureReadError} `kind: "unexpected"` for filesystem or decryption errors that do not fit the above categories.
  */
 export async function readCaptureFile(
-  filepath: string,
-  keyMaterial?: string,
-): Promise<Record<string, unknown> | null> {
+filepath: string,
+keyMaterial?: string,
+): Promise<Record<string, unknown>> {
   const resolvedKey =
     keyMaterial ?? process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
   const cacheKey = `${filepath}@${resolvedKey}`;
@@ -446,22 +463,34 @@ export async function readCaptureFile(
         "(see `@/lib/request-cache`).",
     );
   }
+
   const current = store.captureCache;
   if (current.has(cacheKey)) {
     return current.get(cacheKey) as Record<string, unknown>;
   }
 
+  let result: Record<string, unknown> | null = null;
   try {
     const capture = await decryptCapture(filepath, resolvedKey || null);
-    const result = capture as Record<string, unknown> | null;
-    if (result) {
-      current.set(cacheKey, result);
-    }
-    return result;
+    result = capture as Record<string, unknown> | null;
   } catch (error) {
     console.error(`Error reading capture file ${filepath}:`, error);
-    return null;
+    throw new CaptureReadError(
+      "unexpected",
+      `Capture file could not be read: ${filepath}`,
+      error instanceof Error ? error : undefined,
+    );
   }
+
+  if (result) {
+    current.set(cacheKey, result);
+    return result;
+  }
+
+  throw new CaptureReadError(
+    "corrupt",
+    `Capture file is empty, unreadable, or could not be decrypted: ${filepath}`,
+  );
 }
 
 /**
