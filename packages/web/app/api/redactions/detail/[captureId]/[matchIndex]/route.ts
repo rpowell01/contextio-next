@@ -111,7 +111,11 @@ export async function GET(
       const responseBody = captureData.responseBody;
       const originalResponseBody = captureData.originalResponseBody;
 
-      const isResponseRedaction = match.path?.startsWith("responseBody");
+      // Determine if this is a response body redaction.
+      // - Watcher writes paths with "requestBody." or "responseBody" prefix
+      // - Redact plugin writes paths without prefix (e.g., "user.email") and only redacts request bodies
+      const path = match.path ?? "";
+      const isResponseRedaction = path.startsWith("responseBody");
 
       if (isResponseRedaction && originalResponseBody) {
         try {

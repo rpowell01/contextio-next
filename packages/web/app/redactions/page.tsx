@@ -1,11 +1,9 @@
-// @ts-nocheck
 "use client";
 
 import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
-import { computeDiff, type DiffChunk, filterDiffWithContext } from "@/lib/diff";
 import { DiffDialog } from "@/components/ui/diff-dialog";
 import { RedactionHighlight } from "@/components/ui/redaction-highlight";
 
@@ -28,7 +26,6 @@ interface RedactionDetailRow {
   fullOriginal?: string;
   fullRedacted?: string;
   timestamp: string;
-  matchIndex: number;
 }
 
 const PAGE_SIZE = 50;
@@ -56,8 +53,7 @@ export default function RedactionsPage() {
     timestamp: string;
   } | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'timestamp', direction: 'desc' });
-  const [filters, setFilters] = useState<Record<string, string>>({});
-  // Debounced filters for API calls - prevents firing on every keystroke
+  // Debounced filters for API calls - only redactionType is used (from breakdown clicks)
   const [debouncedFilters, setDebouncedFilters] = useState<Record<string, string>>({});
   // Selected redaction type filter from breakdown widgets
   const [selectedRedactionType, setSelectedRedactionType] = useState<string | null>(null);
@@ -181,10 +177,10 @@ const handleCloseDiff = useCallback(() => {
 }, []);
 
 // Debounce filter changes to avoid firing API request on every keystroke
-
+  // selectedRedactionType is included in deps so clicks apply immediately (300ms debounce is fine for clicks too)
   useEffect(() => {
     const timer = setTimeout(() => {
-      const newFilters = { ...filters };
+      const newFilters: Record<string, string> = {};
       if (selectedRedactionType) {
         newFilters.redactionType = selectedRedactionType;
       }
@@ -192,21 +188,6 @@ const handleCloseDiff = useCallback(() => {
       setDebouncedFilters(newFilters);
     }, 300);
     return () => clearTimeout(timer);
-  }, [filters, selectedRedactionType]);
-
-  // Also update debouncedFilters immediately for redactionType filter (click-based, no debounce needed)
-  useEffect(() => {
-    if (selectedRedactionType !== undefined) {
-      setDebouncedFilters(prev => {
-        const next = { ...prev };
-        if (selectedRedactionType) {
-          next.redactionType = selectedRedactionType;
-        } else {
-          delete next.redactionType;
-        }
-        return next;
-      });
-    }
   }, [selectedRedactionType]);
 
   // Fetch summary data
@@ -376,11 +357,6 @@ const handleCloseDiff = useCallback(() => {
   // So we use the name as-is, no conversion needed
   const presetNameToRuleId = (presetName: string): string => {
     return presetName;
-  };
-
-  const handleFilterChange = (key: string, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-    setPage(1); // Reset to first page when filter changes
   };
 
   const handleRedactionTypeClick = (type: string) => {

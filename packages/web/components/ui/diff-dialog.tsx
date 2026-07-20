@@ -114,9 +114,11 @@ export function DiffDialog({
   // View mode state - default to diff view, allow switching to syntax highlighted view for JSON
   const [viewMode, setViewMode] = useState<ViewMode>("diff");
 
-  // Synchronized scrolling state
-  const leftPaneRef = useRef<HTMLDivElement>(null);
-  const rightPaneRef = useRef<HTMLDivElement>(null);
+  // Synchronized scrolling state - separate refs for each view mode
+  const leftPaneDiffRef = useRef<HTMLDivElement>(null);
+  const rightPaneDiffRef = useRef<HTMLDivElement>(null);
+  const leftPaneSyntaxRef = useRef<HTMLDivElement>(null);
+  const rightPaneSyntaxRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>, source: "left" | "right") => {
@@ -124,7 +126,13 @@ export function DiffDialog({
     isScrollingRef.current = true;
 
     const sourcePane = e.currentTarget;
-    const targetPane = source === "left" ? rightPaneRef.current : leftPaneRef.current;
+    let targetPane: HTMLDivElement | null = null;
+
+    if (viewMode === "diff") {
+      targetPane = source === "left" ? rightPaneDiffRef.current : leftPaneDiffRef.current;
+    } else {
+      targetPane = source === "left" ? rightPaneSyntaxRef.current : leftPaneSyntaxRef.current;
+    }
 
     if (targetPane) {
       targetPane.scrollTop = sourcePane.scrollTop;
@@ -134,7 +142,7 @@ export function DiffDialog({
     requestAnimationFrame(() => {
       isScrollingRef.current = false;
     });
-  }, []);
+  }, [viewMode]);
 
   const renderDiffPane = (diffChunks: typeof diff, side: "left" | "right") => (
     <div className="font-mono text-xs">
@@ -200,9 +208,15 @@ export function DiffDialog({
               <button
                 role="tab"
                 aria-selected={viewMode === "diff"}
-                aria-controls="left-panel right-panel"
+                aria-controls="left-panel-diff right-panel-diff"
                 id="diff-tab"
                 onClick={() => setViewMode("diff")}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowRight") {
+                    e.preventDefault();
+                    setViewMode("syntax");
+                  }
+                }}
                 className={`px-2 py-1 text-xs rounded transition-colors ${
                   viewMode === "diff"
                     ? "bg-primary text-primary-foreground"
@@ -214,9 +228,15 @@ export function DiffDialog({
               <button
                 role="tab"
                 aria-selected={viewMode === "syntax"}
-                aria-controls="left-panel right-panel"
+                aria-controls="left-panel-syntax right-panel-syntax"
                 id="syntax-tab"
                 onClick={() => setViewMode("syntax")}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    setViewMode("diff");
+                  }
+                }}
                 className={`px-2 py-1 text-xs rounded transition-colors ${
                   viewMode === "syntax"
                     ? "bg-primary text-primary-foreground"
@@ -236,45 +256,67 @@ export function DiffDialog({
           </DialogClose>
         </div>
         <div className="flex flex-col md:flex-row overflow-hidden flex-1 min-h-0">
-          {/* Left pane - Pre-redaction (Original) */}
-          <div className="flex-1 min-w-0 border-r border-border flex flex-col min-h-0">
+          {/* Diff View Panels (shown when viewMode === "diff") */}
+          <div hidden={viewMode !== "diff"} className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
             <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
               <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
             </div>
             <div
-              ref={leftPaneRef}
+              ref={leftPaneDiffRef}
               className="flex-1 overflow-auto p-4 min-h-0"
               onScroll={(e) => handleScroll(e, "left")}
               role="tabpanel"
-              id="left-panel"
-              aria-labelledby={viewMode === "syntax" ? "syntax-tab" : "diff-tab"}
+              id="left-panel-diff"
+              aria-labelledby="diff-tab"
             >
-              {viewMode === "syntax" ? (
-                renderSyntaxPane(diffPreContent)
-              ) : (
-                renderDiffPane(diff, "left")
-              )}
+              {renderDiffPane(diff, "left")}
             </div>
           </div>
-
-          {/* Right pane - Post-redaction (Redacted) */}
-          <div className="flex-1 min-w-0 flex flex-col min-h-0">
+          <div hidden={viewMode !== "diff"} className="w-full md:w-1/2 min-w-0 flex flex-col min-h-0">
             <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
               <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
             </div>
             <div
-              ref={rightPaneRef}
+              ref={rightPaneDiffRef}
               className="flex-1 overflow-auto p-4 min-h-0"
               onScroll={(e) => handleScroll(e, "right")}
               role="tabpanel"
-              id="right-panel"
-              aria-labelledby={viewMode === "syntax" ? "syntax-tab" : "diff-tab"}
+              id="right-panel-diff"
+              aria-labelledby="diff-tab"
             >
-              {viewMode === "syntax" ? (
-                renderSyntaxPane(diffPostContent)
-              ) : (
-                renderDiffPane(diff, "right")
-              )}
+              {renderDiffPane(diff, "right")}
+            </div>
+          </div>
+
+          {/* Syntax Highlighted Panels (shown when viewMode === "syntax") */}
+          <div hidden={viewMode !== "syntax"} className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
+            <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
+              <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
+            </div>
+            <div
+              ref={leftPaneSyntaxRef}
+              className="flex-1 overflow-auto p-4 min-h-0"
+              onScroll={(e) => handleScroll(e, "left")}
+              role="tabpanel"
+              id="left-panel-syntax"
+              aria-labelledby="syntax-tab"
+            >
+              {renderSyntaxPane(diffPreContent)}
+            </div>
+          </div>
+          <div hidden={viewMode !== "syntax"} className="w-full md:w-1/2 min-w-0 flex flex-col min-h-0">
+            <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
+              <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
+            </div>
+            <div
+              ref={rightPaneSyntaxRef}
+              className="flex-1 overflow-auto p-4 min-h-0"
+              onScroll={(e) => handleScroll(e, "right")}
+              role="tabpanel"
+              id="right-panel-syntax"
+              aria-labelledby="syntax-tab"
+            >
+              {renderSyntaxPane(diffPostContent)}
             </div>
           </div>
         </div>
