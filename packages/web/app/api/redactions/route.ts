@@ -40,16 +40,37 @@ interface PaginatedRedactionResponse {
 const getRedactionsSummary = unstable_cache(
   async (): Promise<RedactionSummary> => {
     const metaFiles = await listRedactionMetaFiles();
-    let totalRedactions = 0;
-    const byType: Record<string, number> = {};
-
+    
+    // Group meta files by sessionId to avoid duplicate counts from multiple captures per session
+    const metaBySession = new Map<string, { filename: string; meta: Record<string, unknown> }>();
+    
     for (const filename of metaFiles) {
       try {
         const captureDir = await getCaptureDir();
         const filepath = join(captureDir, filename);
         const meta = await readRedactionMetaFile(filepath);
         if (!meta) continue;
+        
+        const sessionId = (meta.sessionId as string | null) ?? "_no_session";
+        
+        // Skip title generation captures
+        if (sessionId.startsWith("title-")) continue;
+        
+        // Keep first meta file per session
+        if (!metaBySession.has(sessionId)) {
+          metaBySession.set(sessionId, { filename, meta });
+        }
+      } catch (error) {
+        console.error(`Error reading redaction meta ${filename}:`, error);
+        continue;
+      }
+    }
 
+    let totalRedactions = 0;
+    const byType: Record<string, number> = {};
+
+for (const [_sessionId, { filename, meta }] of metaBySession) {
+      try {
         if (typeof meta.totalRedactions === "number") {
           totalRedactions += meta.totalRedactions;
         }
@@ -61,7 +82,7 @@ const getRedactionsSummary = unstable_cache(
           }
         }
       } catch (error) {
-        console.error(`Error reading redaction meta ${filename}:`, error);
+        console.error(`Error processing redaction meta ${filename}:`, error);
         continue;
       }
     }
