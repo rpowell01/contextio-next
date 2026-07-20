@@ -170,7 +170,8 @@ onRequest(ctx: RequestContext): RequestContext {
     writeRedactionMeta(config.captureDir, ctx.captureId, {
       provider: ctx.provider,
       sessionId: ctx.sessionId,
-            targetUrl: ctx.targetUrl,
+      targetUrl: ctx.targetUrl,
+      source: ctx.source,
     }, redactionStats);
   }
 

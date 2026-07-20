@@ -152,7 +152,7 @@ export function buildRedactMetaPayload(
 export function writeRedactionMeta(
   captureDir: string,
   captureId: string | undefined,
-  ctx: { provider?: Provider | string; sessionId?: string | null; targetUrl?: string },
+  ctx: { provider?: Provider | string; sessionId?: string | null; targetUrl?: string; source?: string | null },
   payload: { totalRedactions: number; byRule: Readonly<Record<string, number>>; matches?: MatchEntry[] },
 ): boolean {
   if (!captureId) return false;
@@ -169,6 +169,7 @@ export function writeRedactionMeta(
       timestamp: new Date().toISOString(),
       provider: ctx.provider ?? "unknown",
       targetUrl: ctx.targetUrl ?? "",
+      source: ctx.source ?? null,
       totalRedactions: payload.totalRedactions,
       byRule: payload.byRule,
       ...(payload.matches && payload.matches.length > 0 ? { matches: payload.matches } : {}),
