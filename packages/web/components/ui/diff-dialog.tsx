@@ -44,7 +44,7 @@ function renderLine(item: DiffChunk, side: "left" | "right") {
         ? "bg-green-50"
         : "bg-transparent"
       : item.type === "delete"
-      ? "bg-red-50 line-through"
+      ? "bg-red-50"
       : item.type === "insert"
       ? "bg-green-50"
       : "bg-transparent"
