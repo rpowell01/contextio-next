@@ -1,9 +1,6 @@
-import { join } from "path";
-
 import {
-  getCaptureDir,
   listRedactionMetaFiles,
-  readRedactionMetaFile,
+  loadRedactionMeta,
 } from "@/lib/sessions/utils";
 import { consumeToken } from "@/lib/csrf";
 import { unstable_cache } from "next/cache";
@@ -46,9 +43,7 @@ const getRedactionsSummary = unstable_cache(
     
     for (const filename of metaFiles) {
       try {
-        const captureDir = await getCaptureDir();
-        const filepath = join(captureDir, filename);
-        const meta = await readRedactionMetaFile(filepath);
+        const meta = await loadRedactionMeta(filename);
         if (!meta) continue;
         
         const sessionId = (meta.sessionId as string | null) ?? "_no_session";
@@ -108,9 +103,7 @@ async function getRedactionDetailsFromMeta(
   
   for (const filename of metaFiles) {
     try {
-      const captureDir = await getCaptureDir();
-      const filepath = join(captureDir, filename);
-      const meta = await readRedactionMetaFile(filepath);
+      const meta = await loadRedactionMeta(filename);
       if (!meta) continue;
       
       const sessionId = (meta.sessionId as string | null) ?? "_no_session";
