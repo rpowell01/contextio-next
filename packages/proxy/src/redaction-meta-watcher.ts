@@ -422,19 +422,14 @@ function computeCaptureRedactionCounts(rawData: unknown): {
 function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedactionMetadata | null {
   try {
     const counts = computeCaptureRedactionCounts(rawData);
-    const matches = extractRedactionMatches(rawData);
     const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
   return {
     captureId,
     totalRedactions: counts.totalRedactions,
     byRule: counts.byRule,
     generatedAt: new Date().toISOString(),
-    matches: matches.map((m) => ({
-      ruleId: m.ruleId,
-      original: m.original,
-      placeholder: m.placeholder,
-      path: m.path,
-    })),
+    // Omit matches - they will be preserved from redact plugin's meta file via mergeExistingMetadata
+    // Watcher's extractRedactionMatches uses placeholder extraction which gives wrong ruleIds
     source: (rawCapture?.source as string) ?? undefined,
     provider: (rawCapture?.provider as string) ?? "unknown",
     targetUrl: (rawCapture?.targetUrl as string) ?? "",
