@@ -96,6 +96,10 @@ async function getRedactionDetailsFromMeta(
 
       const captureId = filename.replace(/\.redact-meta\.json$/, "") + ".json";
       const sessionId = (meta.sessionId as string | null) ?? null;
+      
+      // Skip title generation captures to avoid duplicate counts
+      if (sessionId?.startsWith("title-")) continue;
+      
       const source = (meta.source as string | null) ?? null;
       const provider = (meta.provider as string) ?? "unknown";
       const targetUrl = (meta.targetUrl as string) ?? "";
