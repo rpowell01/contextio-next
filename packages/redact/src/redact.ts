@@ -157,7 +157,9 @@ export function writeRedactionMeta(
   payload: { totalRedactions: number; byRule: Readonly<Record<string, number>>; matches?: MatchEntry[] },
 ): boolean {
   if (!captureId) return false;
-  const filePath = join(captureDir, `${captureId}.redact-meta.json`);
+  // captureId from proxy includes ".json" extension; strip it for meta filename
+  const baseId = captureId.endsWith(".json") ? captureId.slice(0, -5) : captureId;
+  const filePath = join(captureDir, `${baseId}.redact-meta.json`);
   const tmpPath = `${filePath}.tmp`;
   try {
     /** Canonical field ordering for stable (therefore comparable) checksums. */
