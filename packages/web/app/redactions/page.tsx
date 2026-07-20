@@ -451,12 +451,6 @@ const handleCloseDiff = useCallback(() => {
               </div>
               <div className="text-3xl font-bold text-red-600 mt-1">{summary?.totalRedactions ?? 0}</div>
             </div>
-            {Object.entries(summary?.byType ?? {}).slice(0, 3).map(([type, count]) => (
-              <div key={type} className="rounded-lg border p-4 bg-muted/50">
-                <div className="text-sm text-muted-foreground capitalize">{type}</div>
-                <div className="text-2xl font-bold">{count}</div>
-              </div>
-            ))}
           </div>
 
           {/* Breakdown by Type */}

@@ -489,7 +489,9 @@ async function mergeExistingMetadata(
 
     const enriched: CaptureRedactionMetadata = { ...computed };
 
-    if (!enriched.matches && Array.isArray(existing.matches) && existing.matches.length > 0 && isValidMatchesFormat(existing.matches)) {
+    // Prefer existing matches from redact plugin (they have correct ruleIds from presets)
+    // over watcher-computed matches (which extract ruleIds from placeholders with different naming)
+    if (Array.isArray(existing.matches) && existing.matches.length > 0 && isValidMatchesFormat(existing.matches)) {
       enriched.matches = existing.matches;
     }
 
