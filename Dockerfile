@@ -148,8 +148,10 @@ RUN echo 'import { createRedactPlugin } from "@contextio/redact";' > /app/redact
     echo 'const preset = process.env.REDACT_PRESET || "pii";' >> /app/redact-plugin.js && \
     echo 'const reversible = process.env.REDACT_REVERSIBLE === "true";' >> /app/redact-plugin.js && \
     echo 'const policyFile = process.env.REDACT_POLICY_FILE || "/app/custom-policy/custom-policy.json";' >> /app/redact-plugin.js && \
+    echo 'const captureDir = process.env.REDACT_CAPTURE_DIR || process.env.LOGGER_CAPTURE_DIR || "/app/captures";' >> /app/redact-plugin.js && \
     echo 'console.log("Redact plugin: policyFile =", policyFile);' >> /app/redact-plugin.js && \
-    echo 'const config = policyFile ? { policyFile, reversible } : { preset, reversible };' >> /app/redact-plugin.js && \
+    echo 'console.log("Redact plugin: captureDir =", captureDir);' >> /app/redact-plugin.js && \
+    echo 'const config = policyFile ? { policyFile, reversible, captureDir } : { preset, reversible, captureDir };' >> /app/redact-plugin.js && \
     echo 'export default () => createRedactPlugin(config);' >> /app/redact-plugin.js
 
 # Create directories at build time with proper permissions

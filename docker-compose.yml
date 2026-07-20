@@ -17,12 +17,13 @@ services:
       # Logging configuration
       LOGGER_CAPTURE_DIR: /app/captures
       LOGGER_MAX_SESSIONS: 0
-      # Redaction configuration (optional - enable with policy file)
-      # REDACT_POLICY_FILE: /app/custom-policy/custom-policy.json
-      # REDACT_REVERSIBLE: "false"
-      # REDACT_PRESET: pii
-      # Plugin configuration (add /app/redact-plugin.js to enable redaction)
-      CONTEXT_PROXY_PLUGINS: /app/logger-plugin.js
+      # Redaction configuration
+      REDACT_POLICY_FILE: /app/custom-policy/custom-policy.json
+      REDACT_REVERSIBLE: "false"
+      REDACT_PRESET: pii
+      REDACT_CAPTURE_DIR: /app/captures
+      # Plugin configuration
+      CONTEXT_PROXY_PLUGINS: /app/redact-plugin.js,/app/logger-plugin.js
       # Web UI configuration
       NEXT_PUBLIC_SITE_URL: http://localhost:4041
       # CSRF protection (set via Coolify environment variables)
