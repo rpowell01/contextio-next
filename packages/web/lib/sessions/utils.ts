@@ -118,6 +118,14 @@ export async function loadRedactionMeta(
   provider?: string;
   targetUrl?: string;
   timestamp?: string;
+  generatedAt?: string;
+  source?: string | null;
+  matches?: Array<{
+    ruleId: string;
+    preValue: string;
+    postValue: string;
+    path: string;
+  }>;
 } | null> {
   const { fs, path } = await getNodeUtils();
   try {
@@ -131,6 +139,14 @@ export async function loadRedactionMeta(
       provider?: string;
       targetUrl?: string;
       timestamp?: string;
+      generatedAt?: string;
+      source?: string | null;
+      matches?: Array<{
+        ruleId: string;
+        preValue: string;
+        postValue: string;
+        path: string;
+      }>;
     };
 
     if (typeof meta.totalRedactions !== "number") return null;
@@ -143,6 +159,9 @@ export async function loadRedactionMeta(
       provider: meta.provider,
       targetUrl: meta.targetUrl,
       timestamp: meta.timestamp,
+      generatedAt: meta.generatedAt,
+      source: meta.source,
+      matches: meta.matches,
     };
   } catch {
     return null;
