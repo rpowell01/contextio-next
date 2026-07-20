@@ -37,10 +37,16 @@ function renderLine(item: DiffChunk, side: "left" | "right") {
 
   const lineNum = isLeft ? item.oldLineNum : item.newLineNum;
   const lineClass = `font-mono text-xs whitespace-pre-wrap ${
-    item.type === "delete"
-      ? "bg-red-100 line-through"
+    isLeft
+      ? item.type === "delete"
+        ? "bg-red-50"
+        : item.type === "insert"
+        ? "bg-green-50"
+        : "bg-transparent"
+      : item.type === "delete"
+      ? "bg-red-50 line-through"
       : item.type === "insert"
-      ? "bg-green-100"
+      ? "bg-green-50"
       : "bg-transparent"
   }`;
 
