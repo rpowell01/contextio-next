@@ -616,25 +616,30 @@ async function mergeExistingMetadata(
 const captureId = captureFilename.replace(/\.json$/, "");
       const metadata = computeCaptureMeta(captureId, rawData);
 
-      // fast-path: if the metadata file already exists and has valid matches
-      // from the redact plugin, skip re-writing entirely. The redact plugin
-      // writes correct preset ruleIds; we only need to compute if meta is
-      // missing or has invalid format.
+      // Wait for redact plugin's meta file to appear (race condition: capture
+      // file event may arrive before meta file is visible). Retry up to 5s.
       const metaPath = join(dir, metaFilenameFor(captureFilename));
-      try {
-        const metaContent = await readFile(metaPath, "utf8");
-        const existingMeta = JSON.parse(metaContent) as Record<string, unknown>;
+      let existingMeta: Record<string, unknown> | null = null;
+      for (let attempt = 0; attempt < 25; attempt++) {
+        try {
+          const metaContent = await readFile(metaPath, "utf8");
+          existingMeta = JSON.parse(metaContent) as Record<string, unknown>;
+          break;
+        } catch {
+          if (attempt === 24) break;
+          await new Promise((r) => setTimeout(r, 200));
+        }
+      }
+
+      if (existingMeta) {
         const matches = existingMeta.matches;
-        if (matches !== undefined && isValidMatchesFormat(matches)) {
-          // Meta has valid redact-plugin matches; skip re-processing
+        if (Array.isArray(matches) && matches.length > 0) {
           console.log(`[redaction-meta-watcher] Fast-path: preserving redact plugin matches for ${captureFilename}`);
           return;
         }
-        // Meta exists but has invalid/empty matches; fall through to re-compute
-        console.log(`[redaction-meta-watcher] Meta exists but invalid matches, re-processing: ${captureFilename}`);
-      } catch {
-        // Meta file does not exist yet; continue to write it.
-        console.log(`[redaction-meta-watcher] No meta file yet, will create: ${captureFilename}`);
+        console.log(`[redaction-meta-watcher] Meta exists but empty/invalid matches, re-processing: ${captureFilename}`);
+      } else {
+        console.log(`[redaction-meta-watcher] No meta file after 5s, will create: ${captureFilename}`);
       }
 
       schedule(captureFilename, metadata);
