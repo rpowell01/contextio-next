@@ -55,7 +55,7 @@ export default function RedactionsPage() {
     targetUrl: string;
     timestamp: string;
   } | null>(null);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'timestamp', direction: 'desc' });
   const [filters, setFilters] = useState<Record<string, string>>({});
   // Debounced filters for API calls - prevents firing on every keystroke
   const [debouncedFilters, setDebouncedFilters] = useState<Record<string, string>>({});
