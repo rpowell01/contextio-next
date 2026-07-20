@@ -489,6 +489,12 @@ async function mergeExistingMetadata(
 
     const enriched: CaptureRedactionMetadata = { ...computed };
 
+    // Prefer existing byRule from redact plugin (correct preset rule names like "credential_generic")
+    // over watcher-computed byRule (extracted from placeholders like "[SECRET_REDACTED]" -> "secret")
+    if (existing.byRule && typeof existing.byRule === "object" && !Array.isArray(existing.byRule)) {
+      enriched.byRule = existing.byRule as Record<string, number>;
+    }
+
     // Prefer existing matches from redact plugin (they have correct ruleIds from presets)
     // over watcher-computed matches (which extract ruleIds from placeholders with different naming)
     if (Array.isArray(existing.matches) && existing.matches.length > 0 && isValidMatchesFormat(existing.matches)) {
