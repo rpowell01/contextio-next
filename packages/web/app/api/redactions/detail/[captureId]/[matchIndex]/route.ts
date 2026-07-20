@@ -111,7 +111,7 @@ export async function GET(
       const responseBody = captureData.responseBody;
       const originalResponseBody = captureData.originalResponseBody;
 
-      const isResponseRedaction = match.path === "responseBody";
+      const isResponseRedaction = match.path?.startsWith("responseBody");
 
       if (isResponseRedaction && originalResponseBody) {
         try {

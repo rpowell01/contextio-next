@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useCallback } from "react";
-import { X } from "lucide-react";
+import { useMemo, useRef, useCallback, useState } from "react";
+import { X, Code } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { computeDiff, type DiffChunk, filterDiffWithContext } from "@/lib/diff";
 import { RedactionHighlight } from "@/components/ui/redaction-highlight";
+import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
 
 interface DiffDialogProps {
   isOpen: boolean;
@@ -26,6 +27,8 @@ interface DiffDialogProps {
   targetUrl: string;
   timestamp: string;
 }
+
+type ViewMode = "diff" | "syntax";
 
 function renderLine(item: DiffChunk, side: "left" | "right") {
   const isLeft = side === "left";
@@ -66,6 +69,18 @@ function renderLine(item: DiffChunk, side: "left" | "right") {
   );
 }
 
+// Validate JSON content properly
+function isValidJson(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function DiffDialog({
   isOpen,
   onClose,
@@ -91,6 +106,14 @@ export function DiffDialog({
     [fullDiff]
   );
 
+  // Detect if content is valid JSON for syntax highlighting
+  const isJsonContent = useMemo(() => {
+    return isValidJson(diffPreContent) || isValidJson(diffPostContent);
+  }, [diffPreContent, diffPostContent]);
+
+  // View mode state - default to diff view, allow switching to syntax highlighted view for JSON
+  const [viewMode, setViewMode] = useState<ViewMode>("diff");
+
   // Synchronized scrolling state
   const leftPaneRef = useRef<HTMLDivElement>(null);
   const rightPaneRef = useRef<HTMLDivElement>(null);
@@ -112,6 +135,18 @@ export function DiffDialog({
       isScrollingRef.current = false;
     });
   }, []);
+
+  const renderDiffPane = (diffChunks: typeof diff, side: "left" | "right") => (
+    <div className="font-mono text-xs">
+      {diffChunks.map((chunk, idx) => (
+        <div key={idx}>{renderLine(chunk, side)}</div>
+      ))}
+    </div>
+  );
+
+  const renderSyntaxPane = (content: string) => (
+    <SyntaxHighlighter code={content} lang="json" />
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -159,6 +194,40 @@ export function DiffDialog({
               Showing changes with context ({diff.length} lines of {fullDiff.length})
             </span>
           )}
+          {/* View mode toggle for JSON content */}
+          {isJsonContent && (
+            <div className="flex items-center gap-2" role="tablist" aria-label="View mode">
+              <button
+                role="tab"
+                aria-selected={viewMode === "diff"}
+                aria-controls="left-panel right-panel"
+                id="diff-tab"
+                onClick={() => setViewMode("diff")}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  viewMode === "diff"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                }`}
+              >
+                Diff View
+              </button>
+              <button
+                role="tab"
+                aria-selected={viewMode === "syntax"}
+                aria-controls="left-panel right-panel"
+                id="syntax-tab"
+                onClick={() => setViewMode("syntax")}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  viewMode === "syntax"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                }`}
+              >
+                <Code className="h-3 w-3 mr-1" />
+                Syntax Highlighted
+              </button>
+            </div>
+          )}
           <DialogClose
             className="p-1 rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             aria-label="Close diff dialog"
@@ -176,12 +245,15 @@ export function DiffDialog({
               ref={leftPaneRef}
               className="flex-1 overflow-auto p-4 min-h-0"
               onScroll={(e) => handleScroll(e, "left")}
+              role="tabpanel"
+              id="left-panel"
+              aria-labelledby={viewMode === "syntax" ? "syntax-tab" : "diff-tab"}
             >
-              <div className="font-mono text-xs">
-                {diff.map((chunk, idx) => (
-                  <div key={idx}>{renderLine(chunk, "left")}</div>
-                ))}
-              </div>
+              {viewMode === "syntax" ? (
+                renderSyntaxPane(diffPreContent)
+              ) : (
+                renderDiffPane(diff, "left")
+              )}
             </div>
           </div>
 
@@ -194,12 +266,15 @@ export function DiffDialog({
               ref={rightPaneRef}
               className="flex-1 overflow-auto p-4 min-h-0"
               onScroll={(e) => handleScroll(e, "right")}
+              role="tabpanel"
+              id="right-panel"
+              aria-labelledby={viewMode === "syntax" ? "syntax-tab" : "diff-tab"}
             >
-              <div className="font-mono text-xs">
-                {diff.map((chunk, idx) => (
-                  <div key={idx}>{renderLine(chunk, "right")}</div>
-                ))}
-              </div>
+              {viewMode === "syntax" ? (
+                renderSyntaxPane(diffPostContent)
+              ) : (
+                renderDiffPane(diff, "right")
+              )}
             </div>
           </div>
         </div>
