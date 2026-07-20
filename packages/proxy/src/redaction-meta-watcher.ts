@@ -492,7 +492,8 @@ async function mergeExistingMetadata(
 
     // Prefer existing matches from redact plugin (they have correct ruleIds from presets)
     // over watcher-computed matches (which extract ruleIds from placeholders with different naming)
-    if (Array.isArray(existing.matches) && existing.matches.length > 0 && isValidMatchesFormat(existing.matches)) {
+    // Always preserve existing matches if they exist - the API handles multiple formats
+    if (Array.isArray(existing.matches) && existing.matches.length > 0) {
       enriched.matches = existing.matches;
     }
 
@@ -615,20 +616,20 @@ async function mergeExistingMetadata(
       const captureId = captureFilename.replace(/\.json$/, "");
       const metadata = computeCaptureMeta(captureId, rawData);
 
-      // fast-path: if the metadata file already exists and has valid matches
+      // fast-path: if the metadata file already exists and has matches
       // from the redact plugin, skip re-writing entirely. The redact plugin
       // writes correct preset ruleIds; we only need to compute if meta is
-      // missing or has invalid format.
+      // missing or has no matches.
       const metaPath = join(dir, metaFilenameFor(captureFilename));
       try {
         const metaContent = await readFile(metaPath, "utf8");
         const existingMeta = JSON.parse(metaContent) as Record<string, unknown>;
         const matches = existingMeta.matches;
-        if (matches !== undefined && isValidMatchesFormat(matches)) {
-          // Meta has valid redact-plugin matches; skip re-processing
+        if (Array.isArray(matches) && matches.length > 0) {
+          // Meta has redact-plugin matches; skip re-processing
           return;
         }
-        // Meta exists but has invalid/empty matches; fall through to re-compute
+        // Meta exists but has no matches; fall through to re-compute
       } catch {
         // Meta file does not exist yet; continue to write it.
       }
