@@ -136,7 +136,6 @@ function recordMatch(
   path: string[],
 ): void {
   if (!stats.matches) stats.matches = [];
-  if (stats.matches.length >= 10) return;
   stats.matches.push({ ruleId: rule.name, preValue, postValue, path: path.join(".") });
 }
 
