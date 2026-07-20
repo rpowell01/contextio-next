@@ -180,7 +180,7 @@ async function atomicWriteMetadata(
     .slice(2, 8)}`;
 
   let content: string;
-  if (encryption) {
+  if (encryption?.enabled) {
     // Resolve key material the same way the logger plugin does
     let keyMaterial: string | undefined;
     switch (encryption.keyProvider) {
