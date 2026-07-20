@@ -81,32 +81,47 @@ async function getRedactionDetailsFromMeta(
   sortDir: "asc" | "desc" | null,
 ): Promise<PaginatedRedactionResponse> {
   const metaFiles = await listRedactionMetaFiles();
-  let totalRedactions = 0;
-  const byType: Record<string, number> = {};
-
-  // First pass: collect all data from meta files
-  const allRows: RedactionDetailRow[] = [];
-
+  
+  // Group meta files by sessionId to avoid duplicate counts from multiple captures per session
+  const metaBySession = new Map<string, { filename: string; meta: Record<string, unknown> }>();
+  
   for (const filename of metaFiles) {
     try {
       const captureDir = await getCaptureDir();
       const filepath = join(captureDir, filename);
       const meta = await readRedactionMetaFile(filepath);
       if (!meta) continue;
+      
+      const sessionId = (meta.sessionId as string | null) ?? "_no_session";
+      
+      // Skip title generation captures
+      if (sessionId.startsWith("title-")) continue;
+      
+      // Keep first meta file per session (they should have identical counts)
+      if (!metaBySession.has(sessionId)) {
+        metaBySession.set(sessionId, { filename, meta });
+      }
+    } catch {
+      continue;
+    }
+  }
 
+  let totalRedactions = 0;
+  const byType: Record<string, number> = {};
+
+  // First pass: collect all data from meta files (deduplicated by sessionId)
+  const allRows: RedactionDetailRow[] = [];
+
+  for (const [sessionId, { filename, meta }] of metaBySession) {
+    try {
       const captureId = filename.replace(/\.redact-meta\.json$/, "") + ".json";
-      const sessionId = (meta.sessionId as string | null) ?? null;
-      
-      // Skip title generation captures to avoid duplicate counts
-      if (sessionId?.startsWith("title-")) continue;
-      
       const source = (meta.source as string | null) ?? null;
       const provider = (meta.provider as string) ?? "unknown";
       const targetUrl = (meta.targetUrl as string) ?? "";
       const timestamp =
         (meta.generatedAt as string) ?? new Date().toISOString();
 
-      // Add counts to summary
+      // Add counts to summary (once per session)
       if (typeof meta.totalRedactions === "number") {
         totalRedactions += meta.totalRedactions;
       }
@@ -138,7 +153,7 @@ async function getRedactionDetailsFromMeta(
             requestSource: source,
             requestProvider: provider,
             requestTarget: targetUrl,
-            sessionId,
+            sessionId: sessionId === "_no_session" ? null : sessionId,
             captureId,
             preRedactionValue: (matchRec.original ??
               matchRec.preValue ??
