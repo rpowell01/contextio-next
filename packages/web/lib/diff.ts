@@ -197,13 +197,22 @@ export function computeDiff(
     if (oldText === "") {
       return [];
     }
-    // Split by newlines and filter trailing empty string to match general path behavior
-    const lines = oldText
-      .split("\n")
-      .filter((t, i, arr) => i < arr.length - 1 || t !== "");
-    return lines.map((line, i) => ({
+
+    // Split based on mode to match general path behavior
+    let tokens: string[];
+    if (mode === "word") {
+      // Word mode: split by word boundaries, preserving whitespace
+      tokens = oldText.split(/(\s+)/).filter(Boolean);
+    } else {
+      // Line mode: split by newlines, filter trailing empty string
+      tokens = oldText
+        .split("\n")
+        .filter((t, i, arr) => i < arr.length - 1 || t !== "");
+    }
+
+    return tokens.map((token, i) => ({
       type: "equal" as const,
-      value: line,
+      value: token,
       oldLineNum: mode === "line" ? i + 1 : undefined,
       newLineNum: mode === "line" ? i + 1 : undefined,
     }));
