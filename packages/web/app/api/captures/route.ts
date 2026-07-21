@@ -3,67 +3,19 @@ import { join } from "path";
 
 import type { Capture, CaptureWithRedaction, RedactionDetails, PaginationMeta } from "@/types/api";
 
-import { getCaptureRedactionStats, computeCaptureRedactionCounts } from "@/lib/sessions/redaction-utils";
-import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, readCaptureFile } from "@/lib/sessions/utils";
+import {
+  getCaptureRedactionStats,
+  computeCaptureRedactionCounts,
+} from "@/lib/sessions/redaction-utils";
+import {
+  getCaptureDir,
+  MAX_FILE_SIZE,
+  listCaptureFiles,
+  readCaptureFile,
+} from "@/lib/sessions/utils";
 import { consumeToken } from "@/lib/csrf";
 import { withRequestCache } from "@/lib/request-cache";
-
-export async function POST(request: Request) {
-  return withRequestCache(async () => {
-    try {
-      const url = new URL(request.url);
-
-      if (url.pathname !== "/api/captures") {
-        return Response.json({ error: "Not found" }, { status: 404 });
-      }
-
-      const action = url.searchParams.get("action");
-      if (action !== "clear") {
-        return Response.json({ error: "Invalid action" }, { status: 400 });
-      }
-
-      const csrfToken = request.headers.get("x-csrf-token");
-      if (!(await consumeToken(csrfToken ?? ""))) {
-        return Response.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
-      }
-
-      const body = (await request.json().catch(() => ({}))) as { action?: string };
-      if (body.action !== "DELETE_ALL_CAPTURES") {
-        return Response.json({ error: "Confirmation required" }, { status: 400 });
-      }
-
-  const captureDir = await getCaptureDir();
-  let deleted = 0;
-  let errors = 0;
-
-  // List all entries in the capture directory and remove them.
-  // This is more reliable than iterating over `listCaptureFiles()` because it
-  // also catches `.tmp` files left behind by an interrupted write or files
-  // renamed in after the initial listing.
-  const entries = await fs.readdir(captureDir, { withFileTypes: true });
-  for (const entry of entries) {
-    const filepath = join(captureDir, entry.name);
-    try {
-      await fs.rm(filepath, { force: true, recursive: entry.isDirectory() });
-      deleted++;
-    } catch (error) {
-      errors++;
-      console.error(`Error deleting ${filepath}:`, error);
-    }
-  }
-
-      return Response.json({
-        success: true,
-        deleted,
-        errors,
-        message: `Deleted ${deleted} capture(s)${errors > 0 ? `, ${errors} error(s)` : ""}`,
-      });
-    } catch (error) {
-      console.error("Error clearing captures:", error);
-      return Response.json({ error: "Internal server error" }, { status: 500 });
-    }
-  });
-}
+import { withAuth } from "@/lib/auth/guards";
 
 function extractCaptureMetadata(
   filename: string,
@@ -165,7 +117,10 @@ function extractSource(filename: string): string | null {
   return null;
 }
 
-export async function GET(request: Request) {
+async function handleGetCaptures(
+  request: Request,
+  _context: { params: Promise<Record<string, string>>; session: import("@/lib/auth/session").AuthSession },
+) {
   return withRequestCache(async () => {
     try {
       const url = new URL(request.url);
@@ -309,3 +264,66 @@ export async function GET(request: Request) {
     }
   });
 }
+
+async function handleClearCaptures(
+  request: Request,
+  _context: { params: Promise<Record<string, string>>; session: import("@/lib/auth/session").AuthSession },
+) {
+  return withRequestCache(async () => {
+    try {
+      const url = new URL(request.url);
+
+      if (url.pathname !== "/api/captures") {
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
+
+      const action = url.searchParams.get("action");
+      if (action !== "clear") {
+        return Response.json({ error: "Invalid action" }, { status: 400 });
+      }
+
+      const csrfToken = request.headers.get("x-csrf-token");
+      if (!(await consumeToken(csrfToken ?? ""))) {
+        return Response.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+      }
+
+      const body = (await request.json().catch(() => ({}))) as { action?: string };
+      if (body.action !== "DELETE_ALL_CAPTURES") {
+        return Response.json({ error: "Confirmation required" }, { status: 400 });
+      }
+
+      const captureDir = await getCaptureDir();
+      let deleted = 0;
+      let errors = 0;
+
+      // List all entries in the capture directory and remove them.
+      // This is more reliable than iterating over `listCaptureFiles()` because it
+      // also catches `.tmp` files left behind by an interrupted write or files
+      // renamed in after the initial listing.
+      const entries = await fs.readdir(captureDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const filepath = join(captureDir, entry.name);
+        try {
+          await fs.rm(filepath, { force: true, recursive: entry.isDirectory() });
+          deleted++;
+        } catch (error) {
+          errors++;
+          console.error(`Error deleting ${filepath}:`, error);
+        }
+      }
+
+      return Response.json({
+        success: true,
+        deleted,
+        errors,
+        message: `Deleted ${deleted} capture(s)${errors > 0 ? `, ${errors} error(s)` : ""}`,
+      });
+    } catch (error) {
+      console.error("Error clearing captures:", error);
+      return Response.json({ error: "Internal server error" }, { status: 500 });
+    }
+  });
+}
+
+export const GET = withAuth(handleGetCaptures);
+export const POST = withAuth(handleClearCaptures);

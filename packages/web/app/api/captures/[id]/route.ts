@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import { join, basename } from "path";
+import { NextRequest, NextResponse } from "next/server";
 
 import {
   getCaptureDir,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/sessions/redaction-utils";
 import type { RedactionDetails } from "@/types/api";
 import { consumeToken } from "@/lib/csrf";
+import { withAuth } from "@/lib/auth/guards";
 
 async function readRedactionMetaSidecar(captureFilepath: string): Promise<{
   captureId: string;
@@ -67,27 +69,27 @@ function buildRedactionMeta(
   };
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
+async function handleGetCapture(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession },
 ) {
   return withRequestCache(async () => {
-    const { id } = await params;
+    const { id } = await context.params;
 
     try {
       if (!isValidFilename(id)) {
-        return Response.json({ error: "Invalid capture id" }, { status: 400 });
+        return NextResponse.json({ error: "Invalid capture id" }, { status: 400 });
       }
 
       const captureDir = await getCaptureDir();
       const filepath = join(captureDir, id);
       const stats = await fs.stat(filepath).catch(() => null);
       if (!stats) {
-        return Response.json({ error: "Capture not found" }, { status: 404 });
+        return NextResponse.json({ error: "Capture not found" }, { status: 404 });
       }
 
       if (stats.size > MAX_FILE_SIZE) {
-        return Response.json(
+        return NextResponse.json(
           { error: "Capture file too large" },
           { status: 413 },
         );
@@ -156,7 +158,7 @@ export async function GET(
         })),
       };
 
-      return Response.json({
+      return NextResponse.json({
         ...capture,
         requestBody,
         responseBody,
@@ -177,31 +179,31 @@ export async function GET(
             : error.kind === "corrupt"
               ? 422
               : 500;
-        return Response.json(
+        return NextResponse.json(
           { error: error.message, kind: error.kind },
           { status },
         );
       }
       console.error("Error in capture detail API:", error);
-      return Response.json({ error: "Internal server error" }, { status: 500 });
+      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
   });
 }
 
-export async function PUT(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
+async function handlePutCapture(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession },
 ) {
-  const { id } = await params;
+  const { id } = await context.params;
 
   try {
     if (!isValidFilename(id)) {
-      return Response.json({ error: "Invalid capture id" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid capture id" }, { status: 400 });
     }
 
-    const csrfToken = _request.headers.get("x-csrf-token");
+    const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
-      return Response.json(
+      return NextResponse.json(
         { error: "Invalid or missing CSRF token" },
         { status: 400 },
       );
@@ -210,10 +212,10 @@ export async function PUT(
     const filepath = join(await getCaptureDir(), id);
     const stats = await fs.stat(filepath).catch(() => null);
     if (!stats) {
-      return Response.json({ error: "Capture not found" }, { status: 404 });
+      return NextResponse.json({ error: "Capture not found" }, { status: 404 });
     }
     if (stats.size > MAX_FILE_SIZE) {
-      return Response.json({ error: "Capture too large" }, { status: 413 });
+      return NextResponse.json({ error: "Capture too large" }, { status: 413 });
     }
 
     const raw = await fs.readFile(filepath, "utf8");
@@ -239,35 +241,35 @@ export async function PUT(
     await fs.writeFile(tmpMetaPath, JSON.stringify(meta, null, 2), "utf8");
     await fs.rename(tmpMetaPath, metaPath);
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       redactionMeta: meta,
       redactions: redaction,
     });
   } catch (error) {
     console.error("Error in capture redact API:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 // POST supports two actions:
-//   • action: "rerunrerun (default) – re-evaluate and rewrite redaction stats/metadata
+//   • action: "rerun" (default) – re-evaluate and rewrite redaction stats/metadata
 //       Accepts optional body overrides for requestBody/responseBody/redactionStats.
-//   • action:redact – apply explicit redaction rules (mirrors original redact POST).
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
+//   • action: "redact" – apply explicit redaction rules (mirrors original redact POST).
+async function handlePostCapture(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession },
 ) {
-  const { id } = await params;
+  const { id } = await context.params;
 
   try {
     if (!isValidFilename(id)) {
-      return Response.json({ error: "Invalid capture id" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid capture id" }, { status: 400 });
     }
 
     const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
-      return Response.json(
+      return NextResponse.json(
         { error: "Invalid or missing CSRF token" },
         { status: 400 },
       );
@@ -276,10 +278,10 @@ export async function POST(
     const filepath = join(await getCaptureDir(), id);
     const stats = await fs.stat(filepath).catch(() => null);
     if (!stats) {
-      return Response.json({ error: "Capture not found" }, { status: 404 });
+      return NextResponse.json({ error: "Capture not found" }, { status: 404 });
     }
     if (stats.size > MAX_FILE_SIZE) {
-      return Response.json(
+      return NextResponse.json(
         { error: "Capture file too large" },
         { status: 413 },
       );
@@ -346,7 +348,7 @@ export async function POST(
       await fs.writeFile(filepath, JSON.stringify(updatedData, null, 2));
 
       const capture = extractCaptureMetadata(id, updatedData);
-      return Response.json({
+      return NextResponse.json({
         ...capture,
         requestBody: redacted.requestBody,
         responseBody: redacted.responseBody,
@@ -396,7 +398,7 @@ export async function POST(
     await fs.writeFile(tmpMetaPath, JSON.stringify(meta, null, 2), "utf8");
     await fs.rename(tmpMetaPath, metaPath);
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       capture: patched,
       redactionMeta: meta,
@@ -404,6 +406,10 @@ export async function POST(
     });
   } catch (error) {
     console.error("Error in capture rerun API:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export const GET = withAuth(handleGetCapture);
+export const PUT = withAuth(handlePutCapture);
+export const POST = withAuth(handlePostCapture);
