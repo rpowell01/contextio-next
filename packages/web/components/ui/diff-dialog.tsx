@@ -30,16 +30,16 @@ interface DiffDialogProps {
 
 type ViewMode = "diff" | "syntax";
 
+// Shared line style for both visible lines and placeholders to keep panes aligned
+const lineStyle = {
+  padding: "2px 8px",
+  borderRadius: "4px",
+  minHeight: "1.25rem",
+} as const;
+
 function renderLine(item: DiffChunk, side: "left" | "right") {
   const isLeft = side === "left";
   const showLine = isLeft ? item.type !== "insert" : item.type !== "delete";
-
-  // Shared line style for both visible lines and placeholders to keep panes aligned
-  const lineStyle = {
-    padding: "2px 8px",
-    borderRadius: "4px",
-    minHeight: "1.25rem",
-  } as const;
 
   if (!showLine) {
     // Placeholder for hidden lines (insert on left, delete on right) - use same
