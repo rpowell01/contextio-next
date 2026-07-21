@@ -21,6 +21,8 @@ export interface OidcProviderMetadata {
   userinfo_endpoint: string;
   /** OIDC Issuer URL. */
   issuer: string;
+  /** Optional: End session endpoint for RP-initiated logout. */
+  end_session_endpoint?: string;
 }
 
 /**
@@ -37,6 +39,14 @@ export interface JwtPayload {
   exp: number;
   /** Issued at time (Unix timestamp). */
   iat: number;
+  /** Optional: User's email address. */
+  email?: string;
+  /** Optional: User's full name. */
+  name?: string;
+  /** Optional: User's picture URL. */
+  picture?: string;
+  /** Optional: Nonce for ID token validation. */
+  nonce?: string;
   /** Additional claims. */
   [key: string]: unknown;
 }

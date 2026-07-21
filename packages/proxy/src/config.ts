@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 
-import type { EncryptionAtRestConfig, ProxyConfig, Upstreams } from "@contextio/core";
+import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams } from "@contextio/core";
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
  * double-prefix API paths. Empty values pass through intact. */
@@ -80,6 +80,7 @@ export interface ResolvedProxyConfig {
 	loggerCaptureCleanupIntervalMs: number;
 	loggerCaptureCleanupEnabled: boolean;
 	loggerEncryption: EncryptionAtRestConfig;
+	oidc: OidcProviderConfig | null;
 }
 
 /**
@@ -98,6 +99,14 @@ export interface ResolvedProxyConfig {
  * false)
  * - `CONTEXTIO_LOGGER_ENCRYPTION_KEY` provides the key material when encryption
  * is enabled without an explicit override.
+ *
+ * OIDC authentication:
+ * - `OIDC_ISSUER` - OIDC issuer URL (e.g., https://accounts.google.com)
+ * - `OIDC_CLIENT_ID` - OAuth2 client ID
+ * - `OIDC_CLIENT_SECRET` - OAuth2 client secret
+ * - `OIDC_CALLBACK_URL` - Redirect URI for OIDC callback
+ * - `OIDC_SCOPE` - Space-separated scopes (default: "openid profile email")
+ * - `OIDC_SESSION_SECRET` - Secret for signing/encrypting session cookies
  */
 export function resolveConfig(
 	overrides?: ProxyConfig,
@@ -166,6 +175,29 @@ export function resolveConfig(
 		keyLength: overrides?.loggerEncryption?.keyLength ?? 32,
 	};
 
+	// Resolve OIDC config from environment
+	const oidc: OidcProviderConfig | null = (() => {
+		const issuer = overrides?.oidc?.issuer || process.env.OIDC_ISSUER;
+		const clientId = overrides?.oidc?.clientId || process.env.OIDC_CLIENT_ID;
+		const clientSecret = overrides?.oidc?.clientSecret || process.env.OIDC_CLIENT_SECRET;
+		const callbackUrl = overrides?.oidc?.callbackUrl || process.env.OIDC_CALLBACK_URL;
+		const scope = overrides?.oidc?.scope || process.env.OIDC_SCOPE?.split(" ") || ["openid", "profile", "email"];
+		const sessionSecret = overrides?.oidc?.sessionSecret || process.env.OIDC_SESSION_SECRET;
+
+		if (!issuer || !clientId || !clientSecret || !callbackUrl || !sessionSecret) {
+			return null;
+		}
+
+		return {
+			issuer,
+			clientId,
+			clientSecret,
+			callbackUrl,
+			scope,
+			sessionSecret,
+		};
+	})();
+
 	const upstreams: Upstreams = {
 		...defaultUpstreams,
 		...overrides?.upstreams,
@@ -194,5 +226,6 @@ export function resolveConfig(
 		loggerCaptureCleanupIntervalMs,
 		loggerCaptureCleanupEnabled,
 		loggerEncryption,
+		oidc,
 	};
 }

@@ -14,6 +14,7 @@ import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
+import { createAuthHandler } from "./auth.js";
 import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
 
 async function cleanupCaptureFiles(config: {
@@ -114,11 +115,17 @@ export function createProxy(
 
   const adminHandler = createAdminHandler({ plugins, logTraffic, startTime });
 
-  // Combined handler that routes /admin/* to admin handler
+  const authHandler = resolved.oidc
+    ? createAuthHandler({ oidc: resolved.oidc, baseUrl: `http://${resolved.bindHost}:${resolved.port}` })
+    : null;
+
+  // Combined handler that routes /admin/* to admin handler, /auth/* to auth handler
   const combinedHandler: http.RequestListener = (req, res) => {
     const url = req.url || "";
     if (url.startsWith("/admin/")) {
       adminHandler(req, res);
+    } else if (url.startsWith("/auth/") && authHandler) {
+      authHandler(req, res);
     } else {
       proxyHandler(req, res);
     }

@@ -10,11 +10,10 @@
 import http from "node:http";
 import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
 import { lookup } from "mime-types";
-
-import { createProxy } from "./proxy.js";
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
+import { createAuthHandler } from "./auth.js";
 import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
 import { join } from "node:path";
 import fs from "node:fs/promises";
@@ -184,30 +183,32 @@ export function createCombinedProxy(
 
   const adminHandler = createAdminHandler({ plugins, logTraffic, startTime });
 
+  const authHandler = resolved.oidc
+    ? createAuthHandler({ oidc: resolved.oidc, baseUrl: `http://${resolved.bindHost}:${resolved.port}` })
+    : null;
+
   // Create Next.js server instance and get its request handler
   let nextHandler: http.RequestListener | null = null;
 
   const initNextJs = async (): Promise<void> => {
     try {
       // Import Next.js dynamically - use root node_modules where next is hoisted
-      const { default: createServer } = await import(
+      const nextModule = await import(
         join(process.cwd(), "node_modules/next/dist/server/next.js")
       );
-      
+
       // Create Next.js server instance using the exported createServer function
-      const nextServer = await import(
-        join(process.cwd(), "node_modules/next/dist/server/next.js")
-      ).then(mod => mod.default({
+      const nextServer = nextModule.default({
         dir: join(process.cwd(), "packages/web"),
         dev: false,
         port: 0,
         hostname: "0.0.0.0",
         customServer: false,
-      }));
-      
+      });
+
       // Prepare the server (loads routes, compiles, etc.)
       await nextServer.prepare();
-      
+
       // Get the request handler
       nextHandler = nextServer.getRequestHandler();
       console.log("Next.js handler loaded successfully");
@@ -222,26 +223,32 @@ export function createCombinedProxy(
 // Combined handler: routes based on path
   const combinedHandler: http.RequestListener = async (req, res) => {
     const url = req.url || "";
-    
+
     // Serve Next.js static assets directly (faster, bypasses Next.js handler)
     if (url.startsWith("/_next/static/")) {
       const served = await serveStaticFile(req, res);
       if (served) return;
       // If not found, fall through to Next.js for 404 handling
     }
-    
+
     // Proxy admin API
     if (url.startsWith("/admin/")) {
       adminHandler(req, res);
       return;
     }
-    
+
+    // Auth endpoints
+    if (url.startsWith("/auth/") && authHandler) {
+      authHandler(req, res);
+      return;
+    }
+
     // Proxy routing paths
     if (url.startsWith("/chat/") || url.startsWith("/v1/")) {
       proxyHandler(req, res);
       return;
     }
-    
+
     // Everything else → Next.js (web UI, /api/*, etc.)
     if (nextHandler) {
       nextHandler(req, res);

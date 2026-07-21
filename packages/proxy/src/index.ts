@@ -32,3 +32,12 @@ export {
   clearLogs,
 } from "./admin.js";
 export type { ProxyStatus, ProxyEnvVar, LogEntry, AdminOptions } from "./admin.js";
+
+// Auth API for OIDC authentication
+export {
+  createAuthHandler,
+  validateSession,
+  requireAuth,
+  getSessionId,
+} from "./auth.js";
+export type { AuthSession, AuthOptions } from "./auth.js";
