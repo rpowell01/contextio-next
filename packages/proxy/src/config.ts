@@ -82,6 +82,7 @@ export interface ResolvedProxyConfig {
 	loggerCaptureCleanupEnabled: boolean;
 	loggerEncryption: EncryptionAtRestConfig;
 	oidc: OidcProviderConfig | null;
+	publicUrl: string | null;
 }
 
 /**
@@ -235,6 +236,11 @@ export function resolveConfig(
 
 	const oidc = resolveOidcConfig(overrides);
 
+	const publicUrl =
+		overrides?.publicUrl ||
+		process.env.CONTEXTIO_PUBLIC_URL ||
+		null;
+
 	const upstreams: Upstreams = {
 		...defaultUpstreams,
 		...overrides?.upstreams,
@@ -264,5 +270,6 @@ export function resolveConfig(
 		loggerCaptureCleanupEnabled,
 		loggerEncryption,
 		oidc,
+		publicUrl,
 	};
 }

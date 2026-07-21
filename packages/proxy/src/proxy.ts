@@ -116,7 +116,10 @@ export function createProxy(
   const adminHandler = createAdminHandler({ plugins, logTraffic, startTime });
 
   const authHandler = resolved.oidc
-    ? createAuthHandler({ oidc: resolved.oidc, baseUrl: `http://${resolved.bindHost}:${resolved.port}` })
+    ? createAuthHandler({
+        oidc: resolved.oidc,
+        baseUrl: resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`,
+      })
     : null;
 
   // Combined handler that routes /admin/* to admin handler, /auth/* to auth handler

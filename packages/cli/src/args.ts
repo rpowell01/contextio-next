@@ -46,6 +46,9 @@ export interface ProxyArgs {
 	oidcClientSecret: string | null;
 	/** OIDC session secret for signing cookies. */
 	oidcSessionSecret: string | null;
+	/** Public-facing URL for the proxy (e.g., https://contextio.example.com).
+   * Used for OIDC callback URLs when behind a reverse proxy. */
+	publicUrl: string | null;
 	/** Command and args after "--" to wrap, or null for standalone proxy. */
 	wrap: string[] | null;
 }
@@ -143,6 +146,10 @@ export function buildProgram(
 		.option("--oidc-client-id <id>", "OIDC client ID")
 		.option("--oidc-client-secret <secret>", "OIDC client secret")
 		.option("--oidc-session-secret <secret>", "OIDC session secret for signing cookies")
+		.option(
+			"--public-url <url>",
+			"public-facing URL for the proxy (e.g., https://contextio.example.com)",
+		)
 		.allowUnknownOption(false)
 		.passThroughOptions()
 		.argument("[command-args...]")
@@ -175,6 +182,7 @@ export function buildProgram(
 				oidcClientId: null,
 				oidcClientSecret: null,
 				oidcSessionSecret: null,
+				publicUrl: null,
 				wrap: null,
 			});
 			return;
@@ -228,6 +236,7 @@ export function buildProgram(
 			oidcClientId: opts.oidcClientId || null,
 			oidcClientSecret: opts.oidcClientSecret || null,
 			oidcSessionSecret: opts.oidcSessionSecret || null,
+			publicUrl: opts.publicUrl || null,
 			wrap,
 		});
 	});

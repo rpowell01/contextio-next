@@ -278,6 +278,10 @@ export interface ProxyConfig {
   loggerEncryption?: EncryptionAtRestConfig;
   /** Optional OpenID Connect authentication configuration. */
   oidc?: OidcProviderConfig;
+  /** Public-facing URL for the proxy (e.g., https://contextio.example.com).
+   * Used for OIDC callback URLs when behind a reverse proxy.
+   * If not set, computed from request headers (X-Forwarded-*, Host). */
+  publicUrl?: string;
 }
 
 // --- Routing helpers (re-exported from routing.ts) ---

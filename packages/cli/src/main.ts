@@ -241,6 +241,7 @@ function buildProxyArgs(args: ProxyArgs, port: number): string[] {
 		// Encryption key is passed via env to child, not argv (security)
 	}
 	if (args.verbose) out.push("--verbose");
+	if (args.publicUrl) out.push("--public-url", args.publicUrl);
 	// OIDC config is passed via env vars to child, not argv (security)
 	return out;
 }
@@ -445,6 +446,10 @@ const proxyArgs = buildProxyArgs(args, proxyPort);
 		if (args.oidcClientSecret) childEnv.CONTEXTIO_OIDC_CLIENT_SECRET = args.oidcClientSecret;
 		if (args.oidcSessionSecret) childEnv.CONTEXTIO_OIDC_SESSION_SECRET = args.oidcSessionSecret;
 	}
+	// Pass public URL via env for callback URL construction behind reverse proxy
+	if (args.publicUrl) {
+		childEnv.CONTEXTIO_PUBLIC_URL = args.publicUrl;
+	}
 	const child = spawn("node", [CLI_ENTRY, ...proxyArgs], {
 		detached: true,
 		stdio: ["ignore", logFd, logFd],
@@ -572,6 +577,7 @@ async function runStandalone(args: ProxyArgs): Promise<void> {
 		bindHost: args.bind || undefined,
 		plugins,
 		logTraffic: args.verbose,
+		publicUrl: args.publicUrl || undefined,
 	};
 
 	if (args.enableOidc) {
