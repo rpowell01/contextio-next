@@ -313,8 +313,8 @@ async function handleGet(request: Request): Promise<Response> {
     );
     summaries.sort(
       (a, b) =>
-        new Date(b.lastTimestamp).getTime() -
-        new Date(a.lastTimestamp).getTime(),
+        new Date(b.firstTimestamp).getTime() -
+        new Date(a.firstTimestamp).getTime(),
     );
 
     // Apply pagination to summaries
