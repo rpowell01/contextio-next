@@ -72,6 +72,14 @@ export {
   type OutputScanResult,
 } from "./output-scanner.js";
 
+// OIDC utilities
+export {
+  fetchProviderMetadata,
+  validateIdToken,
+  type OidcProviderMetadata,
+  type JwtPayload,
+} from "./oidc.js";
+
 // Core types used across all packages
 export type {
   ApiFormat,
