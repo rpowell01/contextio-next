@@ -44,7 +44,7 @@ useEffect(() => {
   }, [highlighter, code, lang, shikiTheme]);
 
   if (!highlighter || highlightedHtml === null) {
-    return <pre className="font-mono text-xs overflow-auto"><code className={`language-${lang}`}>{code}</code></pre>;
+    return <pre className="font-mono text-xs overflow-auto"><code className={`language-${lang}`} lang={lang}>{code}</code></pre>;
   }
 
   return <pre className="font-mono text-xs overflow-auto" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />;

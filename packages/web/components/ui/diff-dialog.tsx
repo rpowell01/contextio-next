@@ -172,7 +172,7 @@ export function DiffDialog({
         aria-labelledby="diff-dialog-title"
         aria-describedby="diff-dialog-description"
       >
-        <DialogTitle id="diff-dialog-title" className="sr-only">
+        <DialogTitle id="diff-dialog-title">
           {title}
         </DialogTitle>
         <DialogDescription id="diff-dialog-description" className="sr-only">
@@ -181,7 +181,6 @@ export function DiffDialog({
 
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <div>
-            <h3 className="text-lg font-semibold">{title}</h3>
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-1">
               <span>
                 Type: <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span>

@@ -305,6 +305,32 @@ describe("computeDiff - word mode", () => {
       assert.equal(chunk.newLineNum, undefined);
     }
   });
+
+  it("performance guard triggers greedy algorithm for large word inputs", () => {
+    // Create input with > 5000 word tokens to trigger greedy fallback
+    // Word mode splits by word boundaries (\s+), so we need many words
+    const words = 6000;
+    const oldText = "word ".repeat(words).trim();
+    const newText = "word ".repeat(words - 1).trim() + " changed";
+    
+    const result = computeDiff(oldText, newText, { 
+      mode: "word",
+      maxTokens: 5000, 
+      autoFallback: true 
+    });
+    
+    // Should complete and produce valid results
+    assert.ok(result.length > 0);
+    // Should have equal, delete, and insert chunks
+    const types = new Set(result.map((c: DiffChunk) => c.type));
+    assert.ok(types.has("equal"));
+    assert.ok(types.has("delete") && types.has("insert"));
+    // Word mode should not have line numbers
+    for (const chunk of result) {
+      assert.equal(chunk.oldLineNum, undefined);
+      assert.equal(chunk.newLineNum, undefined);
+    }
+  });
 });
 
 describe("computeDiff - options", () => {
