@@ -92,27 +92,35 @@ function computeDiffGreedy(
     newTokenIndices.set(token, arr);
   });
 
-  // Track which new tokens have been matched
-  const matchedNew = new Set<number>();
+  // Track the next unmatched candidate index for each token (per-token pointer)
+  // This ensures O(n+m) worst-case time even with many duplicate tokens
+  const nextCandidateIndex = new Map<string, number>();
 
   while (i < normalizedOld.length || j < normalizedNew.length) {
     // Try to find a match for the current old token in newTokens
     if (i < normalizedOld.length) {
       const oldToken = normalizedOld[i];
       const candidates = newTokenIndices.get(oldToken) || [];
-      const nextMatch = candidates.find((idx) => idx >= j && !matchedNew.has(idx));
+      
+      // Get the next candidate index for this token (starts at 0)
+      let candidateIdx = nextCandidateIndex.get(oldToken) ?? 0;
+      
+      // Advance candidateIdx to find the first unmatched candidate >= j
+      while (candidateIdx < candidates.length && candidates[candidateIdx] < j) {
+        candidateIdx++;
+      }
+      
+      const nextMatch = candidateIdx < candidates.length ? candidates[candidateIdx] : undefined;
 
       if (nextMatch !== undefined) {
         // Found a match - output insertions for skipped new tokens
         while (j < nextMatch) {
-          if (!matchedNew.has(j)) {
-            result.push({
-              type: "insert",
-              value: newTokens[j], // Use original value for display
-              newLineNum: trackLineNumbers ? newLineNum : undefined,
-            });
-            if (trackLineNumbers) newLineNum++;
-          }
+          result.push({
+            type: "insert",
+            value: newTokens[j], // Use original value for display
+            newLineNum: trackLineNumbers ? newLineNum : undefined,
+          });
+          if (trackLineNumbers) newLineNum++;
           j++;
         }
         // Output the match
@@ -122,7 +130,8 @@ function computeDiffGreedy(
           oldLineNum: trackLineNumbers ? oldLineNum : undefined,
           newLineNum: trackLineNumbers ? newLineNum : undefined,
         });
-        matchedNew.add(nextMatch);
+        // Update the per-token pointer to skip this matched candidate next time
+        nextCandidateIndex.set(oldToken, candidateIdx + 1);
         i++;
         j = nextMatch + 1;
         if (trackLineNumbers) {
@@ -131,6 +140,9 @@ function computeDiffGreedy(
         }
         continue;
       }
+      
+      // No match found - advance the per-token pointer to avoid re-scanning exhausted candidates
+      nextCandidateIndex.set(oldToken, candidateIdx);
     }
 
     // No match found for old token, or no more old tokens
@@ -145,14 +157,12 @@ function computeDiffGreedy(
       if (trackLineNumbers) oldLineNum++;
     } else if (j < normalizedNew.length) {
       // Insert remaining new tokens
-      if (!matchedNew.has(j)) {
-        result.push({
-          type: "insert",
-          value: newTokens[j], // Use original value for display
-          newLineNum: trackLineNumbers ? newLineNum : undefined,
-        });
-        if (trackLineNumbers) newLineNum++;
-      }
+      result.push({
+        type: "insert",
+        value: newTokens[j], // Use original value for display
+        newLineNum: trackLineNumbers ? newLineNum : undefined,
+      });
+      if (trackLineNumbers) newLineNum++;
       j++;
     }
   }
