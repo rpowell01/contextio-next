@@ -80,6 +80,9 @@ export {
   type JwtPayload,
 } from "./oidc.js";
 
+// Default OIDC scopes
+export { DEFAULT_OIDC_SCOPE } from "./types.js";
+
 // Core types used across all packages
 export type {
   ApiFormat,

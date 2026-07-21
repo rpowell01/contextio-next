@@ -36,6 +36,16 @@ export interface ProxyArgs {
 	verbose: boolean;
 	/** Enable at-rest encryption for captured logs. */
 	enableEncryption: boolean;
+	/** Enable OpenID Connect authentication. */
+	enableOidc: boolean;
+	/** OIDC issuer URL (e.g., https://accounts.google.com). */
+	oidcIssuer: string | null;
+	/** OIDC client ID. */
+	oidcClientId: string | null;
+	/** OIDC client secret. */
+	oidcClientSecret: string | null;
+	/** OIDC session secret for signing cookies. */
+	oidcSessionSecret: string | null;
 	/** Command and args after "--" to wrap, or null for standalone proxy. */
 	wrap: string[] | null;
 }
@@ -128,6 +138,11 @@ export function buildProgram(
 			"enable at-rest encryption for captured logs (key from CONTEXTIO_LOGGER_ENCRYPTION_KEY env var)",
 		)
 		.option("--verbose", "show per-request traffic logs")
+		.option("--enable-oidc", "enable OpenID Connect authentication")
+		.option("--oidc-issuer <url>", "OIDC issuer URL (e.g., https://accounts.google.com)")
+		.option("--oidc-client-id <id>", "OIDC client ID")
+		.option("--oidc-client-secret <secret>", "OIDC client secret")
+		.option("--oidc-session-secret <secret>", "OIDC session secret for signing cookies")
 		.allowUnknownOption(false)
 		.passThroughOptions()
 		.argument("[command-args...]")
@@ -155,9 +170,29 @@ export function buildProgram(
 				logMaxSessions: 0,
 				verbose: false,
 				enableEncryption: opts.enableEncryption || false,
+				enableOidc: false,
+				oidcIssuer: null,
+				oidcClientId: null,
+				oidcClientSecret: null,
+				oidcSessionSecret: null,
 				wrap: null,
 			});
 			return;
+		}
+
+		// Validate required OIDC options when --enable-oidc is set
+		if (opts.enableOidc) {
+			const missing: string[] = [];
+			if (!opts.oidcIssuer) missing.push("--oidc-issuer");
+			if (!opts.oidcClientId) missing.push("--oidc-client-id");
+			if (!opts.oidcClientSecret) missing.push("--oidc-client-secret");
+			if (!opts.oidcSessionSecret) missing.push("--oidc-session-secret");
+			if (missing.length > 0) {
+				onResult({
+					error: `OIDC enabled but missing required options: ${missing.join(", ")}`,
+				});
+				return;
+			}
 		}
 
 		const wrap = commandArgs.length > 0 ? commandArgs : null;
@@ -188,6 +223,11 @@ export function buildProgram(
 			logMaxSessions: opts.logMaxSessions ? parseInt(opts.logMaxSessions, 10) : 0,
 			verbose: opts.verbose || false,
 			enableEncryption: opts.enableEncryption || false,
+			enableOidc: opts.enableOidc || false,
+			oidcIssuer: opts.oidcIssuer || null,
+			oidcClientId: opts.oidcClientId || null,
+			oidcClientSecret: opts.oidcClientSecret || null,
+			oidcSessionSecret: opts.oidcSessionSecret || null,
 			wrap,
 		});
 	});

@@ -233,6 +233,9 @@ export interface EncryptionAtRestConfig {
 }
 // --- OIDC auth config ---
 
+/** Default OIDC scopes requested during authentication. */
+export const DEFAULT_OIDC_SCOPE = ["openid", "profile", "email"] as const;
+
 /**
  * Configuration for a single OpenID Connect identity provider.
  *

@@ -9,6 +9,7 @@
 import fs from "node:fs";
 
 import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams } from "@contextio/core";
+import { DEFAULT_OIDC_SCOPE } from "@contextio/core";
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
  * double-prefix API paths. Empty values pass through intact. */
@@ -84,6 +85,61 @@ export interface ResolvedProxyConfig {
 }
 
 /**
+ * Resolve OIDC configuration from environment variables and overrides.
+ *
+ * Reads CONTEXTIO_OIDC_* environment variables. If OIDC is enabled but
+ * required fields are missing, throws a descriptive error.
+ */
+export function resolveOidcConfig(
+	overrides?: ProxyConfig,
+): OidcProviderConfig | null {
+	const enabled = overrides?.oidc?.issuer
+		|| process.env.CONTEXTIO_OIDC_ENABLED === "true"
+		|| (process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET);
+
+	if (!enabled) {
+		return null;
+	}
+
+	const issuer = overrides?.oidc?.issuer || process.env.CONTEXTIO_OIDC_ISSUER || process.env.OIDC_ISSUER;
+	const clientId = overrides?.oidc?.clientId || process.env.CONTEXTIO_OIDC_CLIENT_ID || process.env.OIDC_CLIENT_ID;
+	const clientSecret = overrides?.oidc?.clientSecret || process.env.CONTEXTIO_OIDC_CLIENT_SECRET || process.env.OIDC_CLIENT_SECRET;
+	const sessionSecret = overrides?.oidc?.sessionSecret || process.env.CONTEXTIO_OIDC_SESSION_SECRET || process.env.OIDC_SESSION_SECRET;
+	const scope = overrides?.oidc?.scope
+		|| process.env.CONTEXTIO_OIDC_SCOPE?.split(/\s+/).filter(Boolean)
+		|| process.env.OIDC_SCOPE?.split(/\s+/).filter(Boolean)
+		|| [...DEFAULT_OIDC_SCOPE];
+
+	if (!issuer) {
+		throw new Error("OIDC enabled but CONTEXTIO_OIDC_ISSUER is not set");
+	}
+	if (!clientId) {
+		throw new Error("OIDC enabled but CONTEXTIO_OIDC_CLIENT_ID is not set");
+	}
+	if (!clientSecret) {
+		throw new Error("OIDC enabled but CONTEXTIO_OIDC_CLIENT_SECRET is not set");
+	}
+	if (!sessionSecret) {
+		throw new Error("OIDC enabled but CONTEXTIO_OIDC_SESSION_SECRET is not set");
+	}
+	if (sessionSecret.length < 32) {
+		throw new Error("OIDC session secret must be at least 32 characters");
+	}
+	if (!issuer.startsWith("https://")) {
+		throw new Error("OIDC issuer must use HTTPS");
+	}
+
+	return {
+		issuer,
+		clientId,
+		clientSecret,
+		callbackUrl: "", // Filled in by auth handler from baseUrl
+		scope,
+		sessionSecret,
+	};
+}
+
+/**
  * Resolve final proxy config from environment variables and overrides.
  *
  * Capture retention:
@@ -101,12 +157,16 @@ export interface ResolvedProxyConfig {
  * is enabled without an explicit override.
  *
  * OIDC authentication:
- * - `OIDC_ISSUER` - OIDC issuer URL (e.g., https://accounts.google.com)
- * - `OIDC_CLIENT_ID` - OAuth2 client ID
- * - `OIDC_CLIENT_SECRET` - OAuth2 client secret
- * - `OIDC_CALLBACK_URL` - Redirect URI for OIDC callback
- * - `OIDC_SCOPE` - Space-separated scopes (default: "openid profile email")
- * - `OIDC_SESSION_SECRET` - Secret for signing/encrypting session cookies
+ * - `CONTEXTIO_OIDC_ENABLED` - explicitly enable OIDC (e.g., "true")
+ * - `CONTEXTIO_OIDC_ISSUER` - OIDC issuer URL (e.g., https://accounts.google.com)
+ * - `CONTEXTIO_OIDC_CLIENT_ID` - OAuth2 client ID
+ * - `CONTEXTIO_OIDC_CLIENT_SECRET` - OAuth2 client secret
+ * - `CONTEXTIO_OIDC_SESSION_SECRET` - Secret for signing/encrypting session cookies
+ * - `CONTEXTIO_OIDC_SCOPE` - Space-separated scopes (default: "openid profile email")
+ *
+ * Legacy (deprecated) env vars:
+ * - `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_SESSION_SECRET`, `OIDC_SCOPE`
+ *   All must be set together to enable OIDC without CONTEXTIO_OIDC_ENABLED.
  */
 export function resolveConfig(
 	overrides?: ProxyConfig,
@@ -125,13 +185,11 @@ export function resolveConfig(
 		vertex:
 			process.env.UPSTREAM_VERTEX_URL ||
 			"https://us-central1-aiplatform.googleapis.com",
-		nvidia:
-			process.env.UPSTREAM_NVIDIA_URL || "https://integrate.api.nvidia.com",
+		nvidia: process.env.UPSTREAM_NVIDIA_URL || "https://integrate.api.nvidia.com",
 		kilo:
 			process.env.UPSTREAM_KILO_URL ||
 			"https://api.kilo.ai/api/gateway",
-		openrouter:
-			process.env.UPSTREAM_OPENROUTER_URL || "https://openrouter.ai/api",
+		openrouter: process.env.UPSTREAM_OPENROUTER_URL || "https://openrouter.ai/api",
 	};
 
 	const bindHost =
@@ -175,28 +233,7 @@ export function resolveConfig(
 		keyLength: overrides?.loggerEncryption?.keyLength ?? 32,
 	};
 
-	// Resolve OIDC config from environment
-	const oidc: OidcProviderConfig | null = (() => {
-		const issuer = overrides?.oidc?.issuer || process.env.OIDC_ISSUER;
-		const clientId = overrides?.oidc?.clientId || process.env.OIDC_CLIENT_ID;
-		const clientSecret = overrides?.oidc?.clientSecret || process.env.OIDC_CLIENT_SECRET;
-		const callbackUrl = overrides?.oidc?.callbackUrl || process.env.OIDC_CALLBACK_URL;
-		const scope = overrides?.oidc?.scope || process.env.OIDC_SCOPE?.split(" ") || ["openid", "profile", "email"];
-		const sessionSecret = overrides?.oidc?.sessionSecret || process.env.OIDC_SESSION_SECRET;
-
-		if (!issuer || !clientId || !clientSecret || !callbackUrl || !sessionSecret) {
-			return null;
-		}
-
-		return {
-			issuer,
-			clientId,
-			clientSecret,
-			callbackUrl,
-			scope,
-			sessionSecret,
-		};
-	})();
+	const oidc = resolveOidcConfig(overrides);
 
 	const upstreams: Upstreams = {
 		...defaultUpstreams,

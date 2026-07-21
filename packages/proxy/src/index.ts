@@ -22,6 +22,7 @@ export type { ForwardOptions } from "./forward.js";
 
 // Config resolution (env vars + overrides)
 export { resolveConfig } from "./config.js";
+export { resolveOidcConfig } from "./config.js";
 export type { ResolvedProxyConfig } from "./config.js";
 
 // Admin API for management UI

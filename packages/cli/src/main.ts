@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import type { ProxyPlugin } from "@contextio/core";
 import { createLoggerPlugin } from "@contextio/logger";
 import type { LoggerPlugin } from "@contextio/logger";
-import { createProxy } from "@contextio/proxy";
+import { createProxy, resolveOidcConfig } from "@contextio/proxy";
 import { createRedactPlugin } from "@contextio/redact";
 import type { PresetName } from "@contextio/redact";
 
@@ -241,6 +241,7 @@ function buildProxyArgs(args: ProxyArgs, port: number): string[] {
 		// Encryption key is passed via env to child, not argv (security)
 	}
 	if (args.verbose) out.push("--verbose");
+	// OIDC config is passed via env vars to child, not argv (security)
 	return out;
 }
 
@@ -436,6 +437,14 @@ const proxyArgs = buildProxyArgs(args, proxyPort);
 	if (args.enableEncryption && process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY) {
 		childEnv.CONTEXTIO_LOGGER_ENCRYPTION_KEY = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY;
 	}
+	// Pass OIDC config via env vars to child (security: avoids argv exposure)
+	if (args.enableOidc) {
+		childEnv.CONTEXTIO_OIDC_ENABLED = "true";
+		if (args.oidcIssuer) childEnv.CONTEXTIO_OIDC_ISSUER = args.oidcIssuer;
+		if (args.oidcClientId) childEnv.CONTEXTIO_OIDC_CLIENT_ID = args.oidcClientId;
+		if (args.oidcClientSecret) childEnv.CONTEXTIO_OIDC_CLIENT_SECRET = args.oidcClientSecret;
+		if (args.oidcSessionSecret) childEnv.CONTEXTIO_OIDC_SESSION_SECRET = args.oidcSessionSecret;
+	}
 	const child = spawn("node", [CLI_ENTRY, ...proxyArgs], {
 		detached: true,
 		stdio: ["ignore", logFd, logFd],
@@ -554,12 +563,35 @@ async function runStandalone(args: ProxyArgs): Promise<void> {
 	const plugins = buildPlugins(args);
 	printStartupInfo(plugins, args);
 
-	const proxy = createProxy({
+	if (args.enableOidc) {
+		console.log("[startup] OIDC authentication enabled");
+	}
+
+	const proxyConfig: Parameters<typeof createProxy>[0] = {
 		port: args.port || undefined,
 		bindHost: args.bind || undefined,
 		plugins,
 		logTraffic: args.verbose,
-	});
+	};
+
+	if (args.enableOidc) {
+		// Build overrides from CLI args for resolveOidcConfig
+		// Note: OIDC values from CLI take precedence over env vars
+		// Use type assertion since we only provide the fields we have, and resolveOidcConfig reads individual fields
+		const oidcConfig = resolveOidcConfig({
+			oidc: {
+				issuer: args.oidcIssuer!,
+				clientId: args.oidcClientId!,
+				clientSecret: args.oidcClientSecret!,
+				sessionSecret: args.oidcSessionSecret!,
+			} as Parameters<typeof resolveOidcConfig>[0] extends { oidc?: infer T } ? T : never,
+		});
+		if (oidcConfig) {
+			proxyConfig.oidc = oidcConfig;
+		}
+	}
+
+	const proxy = createProxy(proxyConfig);
 
 	await proxy.start();
 
@@ -586,6 +618,9 @@ async function runStandalone(args: ProxyArgs): Promise<void> {
 async function runWrap(args: ProxyArgs, wrap: string[]): Promise<void> {
 	const plugins = buildPlugins(args);
 	printStartupInfo(plugins, args, true);
+	if (args.enableOidc) {
+		console.log("[startup] OIDC authentication enabled");
+	}
 	const [command, ...commandArgs] = wrap;
 	const sessionId = randomBytes(4).toString("hex"); // 8 hex chars
 
