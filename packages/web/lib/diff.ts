@@ -101,15 +101,15 @@ function computeDiffGreedy(
     if (i < normalizedOld.length) {
       const oldToken = normalizedOld[i];
       const candidates = newTokenIndices.get(oldToken) || [];
-      
+
       // Get the next candidate index for this token (starts at 0)
       let candidateIdx = nextCandidateIndex.get(oldToken) ?? 0;
-      
+
       // Advance candidateIdx to find the first unmatched candidate >= j
       while (candidateIdx < candidates.length && candidates[candidateIdx] < j) {
         candidateIdx++;
       }
-      
+
       const nextMatch = candidateIdx < candidates.length ? candidates[candidateIdx] : undefined;
 
       if (nextMatch !== undefined) {
@@ -139,10 +139,10 @@ function computeDiffGreedy(
           newLineNum++;
         }
         continue;
+      } else {
+        // No match found - advance the per-token pointer to avoid re-scanning exhausted candidates
+        nextCandidateIndex.set(oldToken, candidateIdx);
       }
-      
-      // No match found - advance the per-token pointer to avoid re-scanning exhausted candidates
-      nextCandidateIndex.set(oldToken, candidateIdx);
     }
 
     // No match found for old token, or no more old tokens
