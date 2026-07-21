@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getNavigationItems, NavigationConfig } from "@/lib/nav-config";
-import { getSession, clearSession } from "@/lib/auth/session";
 
 interface UserInfo {
   sub: string;
@@ -14,7 +13,7 @@ interface UserInfo {
   picture?: string;
 }
 
-interface HeaderProps {
+export interface HeaderProps {
   navigationConfig?: NavigationConfig;
 }
 

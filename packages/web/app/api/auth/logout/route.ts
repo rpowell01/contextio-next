@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
  * Invalidates the session by clearing the session cookie.
  * Also redirects to the OIDC provider's logout endpoint if configured.
  */
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
     // Clear the local session cookie
     const cookieStore = await cookies();
