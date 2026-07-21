@@ -8,7 +8,6 @@ import {
   groupDiffChunks,
   computeDiffStats,
   type DiffChunk,
-  type ComputeDiffOptions,
 } from "./diff.js";
 
 describe("computeDiff - line mode", () => {
@@ -183,6 +182,86 @@ describe("computeDiff - line mode", () => {
     const insertChunk = middle.find((c: DiffChunk) => c.type === "insert");
     assert.equal(deleteChunk?.value, "");
     assert.equal(insertChunk?.value, "c");
+  });
+
+  it("multi-line insertion produces correct chunk sequence", () => {
+    // Multiple lines inserted in the middle
+    const result = computeDiff("line1\nline3", "line1\ninserted1\ninserted2\nline3");
+    assert.equal(result.length, 4);
+    assert.deepEqual(result[0], { type: "equal", value: "line1", oldLineNum: 1, newLineNum: 1 });
+    assert.deepEqual(result[1], { type: "insert", value: "inserted1", newLineNum: 2 });
+    assert.deepEqual(result[2], { type: "insert", value: "inserted2", newLineNum: 3 });
+    assert.deepEqual(result[3], { type: "equal", value: "line3", oldLineNum: 2, newLineNum: 4 });
+  });
+
+  it("multi-line deletion produces correct chunk sequence", () => {
+    // Multiple lines deleted
+    const result = computeDiff("line1\nline2\nline3\nline4", "line1\nline4");
+    assert.equal(result.length, 4);
+    assert.deepEqual(result[0], { type: "equal", value: "line1", oldLineNum: 1, newLineNum: 1 });
+    assert.deepEqual(result[1], { type: "delete", value: "line2", oldLineNum: 2 });
+    assert.deepEqual(result[2], { type: "delete", value: "line3", oldLineNum: 3 });
+    assert.deepEqual(result[3], { type: "equal", value: "line4", oldLineNum: 4, newLineNum: 2 });
+  });
+
+  it("replace with multi-line insertion", () => {
+    // One line replaced with multiple lines
+    const result = computeDiff("a\nb\nc", "a\nx\ny\nc");
+    assert.ok(result.length >= 5);
+    assert.deepEqual(result[0], { type: "equal", value: "a", oldLineNum: 1, newLineNum: 1 });
+    assert.deepEqual(result[result.length - 1], { type: "equal", value: "c", oldLineNum: 3, newLineNum: 4 });
+    // Middle should have one delete and two inserts (order may vary)
+    const middle = result.slice(1, -1);
+    const types = middle.map((c: DiffChunk) => c.type).sort();
+    assert.deepEqual(types, ["delete", "insert", "insert"]);
+  });
+
+  it("trailing newline difference does not produce bogus diff row", () => {
+    // Same content, one with trailing newline, one without
+    const result1 = computeDiff("hello\nworld\n", "hello\nworld");
+    const nonEmpty1 = result1.filter((c: DiffChunk) => c.value !== "");
+    assert.deepEqual(nonEmpty1, [
+      { type: "equal", value: "hello", oldLineNum: 1, newLineNum: 1 },
+      { type: "equal", value: "world", oldLineNum: 2, newLineNum: 2 },
+    ]);
+
+    const result2 = computeDiff("hello\nworld", "hello\nworld\n");
+    const nonEmpty2 = result2.filter((c: DiffChunk) => c.value !== "");
+    assert.deepEqual(nonEmpty2, [
+      { type: "equal", value: "hello", oldLineNum: 1, newLineNum: 1 },
+      { type: "equal", value: "world", oldLineNum: 2, newLineNum: 2 },
+    ]);
+  });
+
+  it("performance guard triggers greedy algorithm for large inputs", () => {
+    // Input exceeding maxTokens (5000 default) should use greedy algorithm
+    const lines = 6000;
+    const oldText = "line\n".repeat(lines).slice(0, -1);
+    const newText = "line\n".repeat(lines - 1).slice(0, -1) + "changed";
+    
+    const result = computeDiff(oldText, newText, { maxTokens: 5000, autoFallback: true });
+    
+    // Should complete and produce valid results
+    assert.ok(result.length > 0);
+    // Should have equal, delete, and insert chunks
+    const types = new Set(result.map((c: DiffChunk) => c.type));
+    assert.ok(types.has("equal"));
+    assert.ok(types.has("delete") || types.has("insert"));
+  });
+
+  it("autoFallback can be disabled", () => {
+    // Use smaller input for LCS path to avoid excessive memory/time
+    const lines = 200;
+    const oldText = "line\n".repeat(lines).slice(0, -1);
+    const newText = "line\n".repeat(lines - 1).slice(0, -1) + "changed";
+    
+    const result = computeDiff(oldText, newText, { maxTokens: 5000, autoFallback: false });
+    
+    // Without fallback, should use LCS
+    // Just verify it produces correct results
+    assert.ok(result.length > 0);
+    const types = new Set(result.map((c: DiffChunk) => c.type));
+    assert.ok(types.has("equal"));
   });
 });
 

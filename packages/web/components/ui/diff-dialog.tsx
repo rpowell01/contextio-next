@@ -34,8 +34,17 @@ function renderLine(item: DiffChunk, side: "left" | "right") {
   const isLeft = side === "left";
   const showLine = isLeft ? item.type !== "insert" : item.type !== "delete";
 
+  // Shared line style for both visible lines and placeholders to keep panes aligned
+  const lineStyle = {
+    padding: "2px 8px",
+    borderRadius: "4px",
+    minHeight: "1.25rem",
+  } as const;
+
   if (!showLine) {
-    return <div style={{ height: "1.25rem" }} />;
+    // Placeholder for hidden lines (insert on left, delete on right) - use same
+    // min-height and padding as visible lines so the two panes stay vertically aligned
+    return <div style={lineStyle} />;
   }
 
   const lineNum = isLeft ? item.oldLineNum : item.newLineNum;
@@ -60,7 +69,7 @@ function renderLine(item: DiffChunk, side: "left" | "right") {
     : <RedactionHighlight value={item.value} />;
 
   return (
-    <div className={lineClass} style={{ padding: "2px 8px", borderRadius: "4px", minHeight: "1.25rem" }}>
+    <div className={lineClass} style={lineStyle}>
       <span className="text-muted-foreground mr-2 select-none" style={{ width: "3rem", display: "inline-block", textAlign: "right" }}>
         {lineNum ?? ""}
       </span>

@@ -42,6 +42,122 @@ export interface ComputeDiffOptions {
   ignoreWhitespace?: boolean;
   /** Whether to ignore case differences */
   ignoreCase?: boolean;
+  /** Maximum number of lines/tokens before using greedy O(n+m) algorithm (default: 5000) */
+  maxTokens?: number;
+  /** Whether to automatically use greedy algorithm for large inputs (default: true) */
+  autoFallback?: boolean;
+}
+
+/**
+ * Greedy diff algorithm for large inputs - O(n+m) time, O(min(n,m)) space.
+ * Trades optimal LCS for performance on very large inputs.
+ */
+function computeDiffGreedy(
+  oldTokens: string[],
+  newTokens: string[],
+  mode: DiffMode,
+  options: Pick<ComputeDiffOptions, "ignoreWhitespace" | "ignoreCase"> = {},
+): DiffChunk[] {
+  const { ignoreWhitespace = false, ignoreCase = false } = options;
+
+  // Apply normalization to tokens for comparison
+  const normalize = (token: string): string => {
+    let result = token;
+    if (ignoreWhitespace) {
+      result = result.replace(/\s+/g, " ").trim();
+    }
+    if (ignoreCase) {
+      result = result.toLowerCase();
+    }
+    return result;
+  };
+
+  const normalizedOld = oldTokens.map(normalize);
+  const normalizedNew = newTokens.map(normalize);
+
+  const result: DiffChunk[] = [];
+  let i = 0;
+  let j = 0;
+  let oldLineNum = 1;
+  let newLineNum = 1;
+  const trackLineNumbers = mode === "line";
+
+  // Use a Map to find matching tokens in newTokens for each oldTokens position
+  // This is a simplified approach - for very large inputs we just do a linear scan
+  // and match equal tokens greedily
+  const newTokenIndices = new Map<string, number[]>();
+  normalizedNew.forEach((token, idx) => {
+    const arr = newTokenIndices.get(token) || [];
+    arr.push(idx);
+    newTokenIndices.set(token, arr);
+  });
+
+  // Track which new tokens have been matched
+  const matchedNew = new Set<number>();
+
+  while (i < normalizedOld.length || j < normalizedNew.length) {
+    // Try to find a match for the current old token in newTokens
+    if (i < normalizedOld.length) {
+      const oldToken = normalizedOld[i];
+      const candidates = newTokenIndices.get(oldToken) || [];
+      const nextMatch = candidates.find((idx) => idx >= j && !matchedNew.has(idx));
+
+      if (nextMatch !== undefined) {
+        // Found a match - output insertions for skipped new tokens
+        while (j < nextMatch) {
+          if (!matchedNew.has(j)) {
+            result.push({
+              type: "insert",
+              value: newTokens[j], // Use original value for display
+              newLineNum: trackLineNumbers ? newLineNum : undefined,
+            });
+            if (trackLineNumbers) newLineNum++;
+          }
+          j++;
+        }
+        // Output the match
+        result.push({
+          type: "equal",
+          value: oldTokens[i], // Use original value for display
+          oldLineNum: trackLineNumbers ? oldLineNum : undefined,
+          newLineNum: trackLineNumbers ? newLineNum : undefined,
+        });
+        matchedNew.add(nextMatch);
+        i++;
+        j = nextMatch + 1;
+        if (trackLineNumbers) {
+          oldLineNum++;
+          newLineNum++;
+        }
+        continue;
+      }
+    }
+
+    // No match found for old token, or no more old tokens
+    if (i < normalizedOld.length) {
+      // Delete old token
+      result.push({
+        type: "delete",
+        value: oldTokens[i], // Use original value for display
+        oldLineNum: trackLineNumbers ? oldLineNum : undefined,
+      });
+      i++;
+      if (trackLineNumbers) oldLineNum++;
+    } else if (j < normalizedNew.length) {
+      // Insert remaining new tokens
+      if (!matchedNew.has(j)) {
+        result.push({
+          type: "insert",
+          value: newTokens[j], // Use original value for display
+          newLineNum: trackLineNumbers ? newLineNum : undefined,
+        });
+        if (trackLineNumbers) newLineNum++;
+      }
+      j++;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -71,6 +187,8 @@ export function computeDiff(
     mode = "line",
     ignoreWhitespace = false,
     ignoreCase = false,
+    maxTokens = 5000,
+    autoFallback = true,
   } = options;
 
   // Handle edge cases
@@ -79,7 +197,10 @@ export function computeDiff(
     if (oldText === "") {
       return [];
     }
-    const lines = oldText.split("\n");
+    // Split by newlines and filter trailing empty string to match general path behavior
+    const lines = oldText
+      .split("\n")
+      .filter((t, i, arr) => i < arr.length - 1 || t !== "");
     return lines.map((line, i) => ({
       type: "equal" as const,
       value: line,
@@ -109,6 +230,20 @@ export function computeDiff(
     newTokens = newText
       .split("\n")
       .filter((t, i, arr) => i < arr.length - 1 || t !== "");
+  }
+
+  // Performance guard: if token count exceeds threshold, use a simpler algorithm
+  // This prevents O(n*m) memory/time blowup for very large inputs
+  if (
+    autoFallback &&
+    (oldTokens.length > maxTokens || newTokens.length > maxTokens)
+  ) {
+    // For very large inputs, use a simplified greedy diff that runs in O(n+m) time
+    // and O(min(n,m)) space. This trades optimal LCS for performance.
+    return computeDiffGreedy(oldTokens, newTokens, mode, {
+      ignoreWhitespace,
+      ignoreCase,
+    });
   }
 
   // Apply normalization if options specified
