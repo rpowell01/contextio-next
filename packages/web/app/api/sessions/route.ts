@@ -14,6 +14,8 @@ import {
   computeTokenUsage,
   aggregateRedactionMetaBySession,
   readCaptureFile,
+  listRedactionMetaFiles,
+  loadRedactionMeta,
 } from "@/lib/sessions/utils";
 import { withRequestCache } from "@/lib/request-cache";
 import {
@@ -271,36 +273,36 @@ async function handleGet(request: Request): Promise<Response> {
     // Load pre-aggregated redaction metadata from .redact-meta.json files
     const redactionMetaBySession = await aggregateRedactionMetaBySession();
 
-    // Read raw capture data for accurate byte counts
-    const files = await listCaptureFiles();
+    // Read from .redact-meta.json files instead of full capture files
+    // This avoids parsing large JSON bodies and is much faster
+    const metaFiles = await listRedactionMetaFiles();
     const rawCaptures: RawCaptureData[] = [];
 
-    for (const filename of files) {
+    for (const filename of metaFiles) {
       try {
-        const captureDir = await getCaptureDir();
-        const filepath = join(captureDir, filename);
-        const stats = await fs.stat(filepath);
-        if (stats.size > MAX_FILE_SIZE) continue;
-        const data = await readCaptureFile(filepath);
-        if (!data) continue;
+        const meta = await loadRedactionMeta(filename);
+        if (!meta) continue;
+
+        // Extract timings - default to 0 if not present
+        const timings = meta.timings
+          ? { total_ms: meta.timings.total_ms ?? 0 }
+          : { total_ms: 0 };
 
         rawCaptures.push({
-          sessionId: data.sessionId as string | null,
-          source: data.source as string | null,
-          provider: data.provider as string,
-          targetUrl: data.targetUrl as string,
-          requestBytes: (data.requestBytes as number) || 0,
-          responseBytes: (data.responseBytes as number) || 0,
-          timings: (data.timings as { total_ms: number }) || {
-            total_ms: 0,
-          },
-          timestamp: data.timestamp as string,
+          sessionId: meta.sessionId,
+          source: meta.source ?? "unknown",
+          provider: meta.provider ?? "unknown",
+          targetUrl: meta.targetUrl ?? "",
+          requestBytes: meta.requestBytes ?? 0,
+          responseBytes: meta.responseBytes ?? 0,
+          timings,
+          timestamp: meta.timestamp ?? new Date().toISOString(),
           requestBody: undefined,
           responseBody: undefined,
         });
       } catch (error) {
         console.error(
-          `Error reading capture for grouped sessions ${filename}:`,
+          `Error reading metadata for grouped sessions ${filename}:`,
           error,
         );
         continue;

@@ -126,6 +126,15 @@ export async function loadRedactionMeta(
     postValue: string;
     path: string;
   }>;
+  // Added for sessions/metrics API performance - allows reading metadata instead of full captures
+  requestBytes?: number;
+  responseBytes?: number;
+  timings?: {
+    send_ms?: number;
+    wait_ms?: number;
+    receive_ms?: number;
+    total_ms?: number;
+  };
 } | null> {
   const { fs, path } = await getNodeUtils();
   try {
@@ -147,6 +156,15 @@ export async function loadRedactionMeta(
         postValue: string;
         path: string;
       }>;
+      // Added for sessions/metrics API performance
+      requestBytes?: number;
+      responseBytes?: number;
+      timings?: {
+        send_ms?: number;
+        wait_ms?: number;
+        receive_ms?: number;
+        total_ms?: number;
+      };
     };
 
     if (typeof meta.totalRedactions !== "number") return null;
@@ -162,6 +180,9 @@ export async function loadRedactionMeta(
       generatedAt: meta.generatedAt,
       source: meta.source,
       matches: meta.matches,
+      requestBytes: meta.requestBytes,
+      responseBytes: meta.responseBytes,
+      timings: meta.timings,
     };
   } catch {
     return null;

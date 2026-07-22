@@ -141,6 +141,15 @@ export interface CaptureRedactionMetadata {
   checksum?: string;
   schemaVersion?: string;
   matches?: Array<RedactionMatch>;
+  // Added for sessions/metrics API performance - allows reading metadata instead of full captures
+  requestBytes?: number;
+  responseBytes?: number;
+  timings?: {
+    send_ms?: number;
+    wait_ms?: number;
+    receive_ms?: number;
+    total_ms?: number;
+  };
 }
 
 export interface RedactionMetaWatcher {
@@ -423,6 +432,10 @@ function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedacti
   try {
     const counts = computeCaptureRedactionCounts(rawData);
     const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
+    const rawTimings =
+      rawCapture?.timings && typeof rawCapture.timings === "object"
+        ? (rawCapture.timings as Record<string, unknown>)
+        : {};
   return {
     captureId,
     totalRedactions: counts.totalRedactions,
@@ -437,6 +450,15 @@ function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedacti
     timestamp: (rawCapture?.timestamp as string) ?? undefined,
     checksum: (rawCapture?.checksum as string) ?? undefined,
     schemaVersion: (rawCapture?.schemaVersion as string) ?? undefined,
+    // Include byte counts and timings for sessions/metrics API performance
+    requestBytes: typeof rawCapture?.requestBytes === "number" ? rawCapture.requestBytes : undefined,
+    responseBytes: typeof rawCapture?.responseBytes === "number" ? rawCapture.responseBytes : undefined,
+    timings: {
+      send_ms: typeof rawTimings.send_ms === "number" ? rawTimings.send_ms : undefined,
+      wait_ms: typeof rawTimings.wait_ms === "number" ? rawTimings.wait_ms : undefined,
+      receive_ms: typeof rawTimings.receive_ms === "number" ? rawTimings.receive_ms : undefined,
+      total_ms: typeof rawTimings.total_ms === "number" ? rawTimings.total_ms : undefined,
+    },
   };
   } catch (err) {
     console.error(
@@ -519,6 +541,22 @@ async function mergeExistingMetadata(
 
     if (!enriched.timestamp && typeof existing.timestamp === "string") {
       enriched.timestamp = existing.timestamp;
+    }
+
+    // Preserve byte counts and timings from existing metadata if not in computed
+    if (enriched.requestBytes === undefined && typeof existing.requestBytes === "number") {
+      enriched.requestBytes = existing.requestBytes;
+    }
+    if (enriched.responseBytes === undefined && typeof existing.responseBytes === "number") {
+      enriched.responseBytes = existing.responseBytes;
+    }
+    if (existing.timings && typeof existing.timings === "object" && !Array.isArray(existing.timings)) {
+      enriched.timings = enriched.timings ?? {};
+      for (const key of ["send_ms", "wait_ms", "receive_ms", "total_ms"] as const) {
+        if (enriched.timings[key] === undefined && typeof existing.timings[key] === "number") {
+          enriched.timings[key] = existing.timings[key];
+        }
+      }
     }
 
     return enriched;

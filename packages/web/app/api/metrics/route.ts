@@ -1,24 +1,25 @@
-import fs from "fs/promises";
-import { join } from "path";
-
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
-import { getCaptureDir, MAX_FILE_SIZE, listCaptureFiles, readCaptureFile } from "@/lib/sessions/utils";
-import { countRedactionsInResponse, getCaptureRedactionStats } from "@/lib/sessions/redaction-utils";
-import { computeTokenUsage } from "@/lib/sessions/utils";
+import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/utils";
 import { withRequestCache } from "@/lib/request-cache";
 
 /**
- * Parse a single capture file and extract metrics.
+ * Parse a single capture metadata and extract metrics.
  */
-function parseCapture(data: Record<string, unknown>): {
+function parseCaptureMeta(meta: {
+  timestamp?: string | null;
+  provider?: string | null;
+  requestBytes?: number;
+  responseBytes?: number;
+  totalRedactions: number;
+}): {
   traffic: TrafficMetric | null;
   providerUsage: ProviderUsage | null;
   redaction: RedactionMetric | null;
 } {
-  const timestamp = (data.timestamp as string) ?? new Date().toISOString();
-  const provider = (data.provider as string) ?? "unknown";
-  const requestBytes = (data.requestBytes as number) ?? 0;
-  const responseBytes = (data.responseBytes as number) ?? 0;
+  const timestamp = meta.timestamp ?? new Date().toISOString();
+  const provider = meta.provider ?? "unknown";
+  const requestBytes = meta.requestBytes ?? 0;
+  const responseBytes = meta.responseBytes ?? 0;
 
   const traffic: TrafficMetric = {
     timestamp,
@@ -26,41 +27,18 @@ function parseCapture(data: Record<string, unknown>): {
     responseBytes,
   };
 
-  // Extract token usage from response body (and request body as fallback)
-  const responseBody = data.responseBody as string | null | undefined;
-  const requestBody = data.requestBody as Record<string, unknown> | undefined;
-  const tokenUsage = computeTokenUsage(responseBody, requestBody);
-
+  // Token usage is not available in metadata files (requires full response body)
+  // So we return 0 for tokens in metadata-only mode
   const providerUsage: ProviderUsage = {
     provider,
     requestCount: 1,
-    totalInputTokens: tokenUsage.input,
-    totalOutputTokens: tokenUsage.output,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
   };
-
-  // Count redactions from persisted capture stats, falling back to request body only
-  let redactionCount = 0;
-  try {
-    const cachedStats = getCaptureRedactionStats(data);
-    if (cachedStats) {
-      redactionCount = cachedStats.totalRedactions;
-    } else {
-      redactionCount = countRedactionsInResponse(
-        data.responseBody as string | null | undefined,
-        data.requestBody,
-        false,
-      ).totalRedactions;
-    }
-  } catch (error) {
-    console.error(
-      `Error counting redactions for ${data.timestamp ?? "unknown"} capture:`,
-      error,
-    );
-  }
 
   const redaction: RedactionMetric = {
     timestamp,
-    count: redactionCount,
+    count: meta.totalRedactions,
   };
 
   return { traffic, providerUsage, redaction };
@@ -173,38 +151,30 @@ export async function GET(request: Request): Promise<Response> {
     const now = new Date();
     const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
 
-    const files = await listCaptureFiles();
+    const metaFiles = await listRedactionMetaFiles();
     const captures: Array<{
       traffic: TrafficMetric | null;
       providerUsage: ProviderUsage | null;
       redaction: RedactionMetric | null;
     }> = [];
 
-    for (const filename of files) {
+    for (const filename of metaFiles) {
       try {
-        const captureDir = await getCaptureDir();
-        const filepath = join(captureDir, filename);
-        const stats = await fs.stat(filepath);
-        if (stats.size > MAX_FILE_SIZE) {
-          console.warn(`Capture file too large, skipping: ${filename}`);
-          continue;
-        }
-
-        const data = await readCaptureFile(filepath);
-        if (!data) continue;
-        const parsed = parseCapture(data);
+        const meta = await loadRedactionMeta(filename);
+        if (!meta) continue;
 
         // Filter by timestamp on the server side
-        if (parsed.traffic) {
-          const ts = new Date(parsed.traffic.timestamp);
+        if (meta.timestamp) {
+          const ts = new Date(meta.timestamp);
           if (ts < cutoff) {
             continue;
           }
         }
 
+        const parsed = parseCaptureMeta(meta);
         captures.push(parsed);
       } catch (error) {
-        console.error(`Error processing capture ${filename}:`, error);
+        console.error(`Error processing metadata ${filename}:`, error);
         continue;
       }
     }
