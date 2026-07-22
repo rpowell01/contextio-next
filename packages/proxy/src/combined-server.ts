@@ -193,6 +193,16 @@ export function createCombinedProxy(
   if (resolved.oidc) {
     const authBaseUrl = (resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`).replace(/\/+$/, "");
     console.log(`[startup] OIDC callback URL: ${authBaseUrl}/auth/callback`);
+    console.log(`[startup] OIDC baseUrl used: ${resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`}`);
+    console.log(`[startup] OIDC issuer: ${resolved.oidc.issuer}`);
+    console.log(`[startup] OIDC clientId: ${resolved.oidc.clientId}`);
+  } else {
+    console.log(`[startup] OIDC not enabled (resolved.oidc is ${resolved.oidc})`);
+    console.log(`[startup] CONTEXTIO_OIDC_ENABLED=${process.env.CONTEXTIO_OIDC_ENABLED}`);
+    console.log(`[startup] CONTEXTIO_OIDC_ISSUER=${process.env.CONTEXTIO_OIDC_ISSUER ? 'SET' : 'NOT SET'}`);
+    console.log(`[startup] CONTEXTIO_OIDC_CLIENT_ID=${process.env.CONTEXTIO_OIDC_CLIENT_ID ? 'SET' : 'NOT SET'}`);
+    console.log(`[startup] CONTEXTIO_OIDC_CLIENT_SECRET=${process.env.CONTEXTIO_OIDC_CLIENT_SECRET ? 'SET' : 'NOT SET'}`);
+    console.log(`[startup] CONTEXTIO_OIDC_SESSION_SECRET=${process.env.CONTEXTIO_OIDC_SESSION_SECRET ? 'SET' : 'NOT SET'}`);
   }
 
   // Create Next.js server instance and get its request handler

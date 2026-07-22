@@ -73,6 +73,31 @@ _Add your build and test commands here_
 
 _Add a brief overview of your project architecture_
 
+## OIDC Authentication Configuration
+
+OIDC (OpenID Connect) authentication can be configured via environment variables **or** web UI settings file (`/app/custom-policy/settings.json`).
+
+**Precedence (highest to lowest):**
+1. Programmatic overrides (in code)
+2. Environment variables (`CONTEXTIO_OIDC_*`)
+3. Web UI settings file (`/app/custom-policy/settings.json`)
+4. Legacy env vars (`OIDC_*` - all must be set together)
+5. Defaults
+
+**Required secrets (MUST come from env vars, NOT settings file):**
+- `CONTEXTIO_OIDC_ISSUER` - OIDC issuer URL (e.g., `https://accounts.google.com`)
+- `CONTEXTIO_OIDC_CLIENT_ID` - OAuth2 client ID
+- `CONTEXTIO_OIDC_CLIENT_SECRET` - OAuth2 client secret
+- `CONTEXTIO_OIDC_SESSION_SECRET` - Session cookie signing secret (min 32 chars)
+
+**Optional settings (can come from settings file):**
+- `CONTEXTIO_OIDC_ENABLED` / `settings.oidcEnabled` - Enable OIDC (bool)
+- `CONTEXTIO_OIDC_PUBLIC_URL` / `settings.oidcPublicUrl` - Public URL for callback (e.g., `https://contextio.example.com`)
+- `CONTEXTIO_OIDC_SCOPE` - Space-separated scopes (default: `openid profile email`)
+
+**Legacy env vars (deprecated, requires all 5):**
+- `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_SESSION_SECRET`, `OIDC_SCOPE`
+
 ## Conventions & Patterns
 
 _Add your project-specific conventions here_

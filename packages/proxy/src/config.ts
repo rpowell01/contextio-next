@@ -20,15 +20,18 @@ function normalizeUpstreamUrl(url: string): string {
 	return url.replace(/\/v1$/, "");
 }
 
-/** Web UI settings interface for capture cleanup settings. */
-interface WebUICaptureCleanupSettings {
+/** Web UI settings interface for capture cleanup and OIDC settings. */
+interface WebUISettings {
 	captureCleanupEnabled?: boolean;
 	captureCleanupIntervalHours?: number;
 	captureCleanupMaxAgeDays?: number;
+	// OIDC settings (non-sensitive, can be configured via UI)
+	oidcEnabled?: boolean;
+	oidcPublicUrl?: string;
 }
 
 /** Read web UI settings from the JSON file. */
-function readWebUISettings(): WebUICaptureCleanupSettings {
+function readWebUISettings(): WebUISettings {
 	const settingsPath = "/app/custom-policy/settings.json";
 	try {
 		const data = fs.readFileSync(settingsPath, "utf8");
@@ -37,6 +40,8 @@ function readWebUISettings(): WebUICaptureCleanupSettings {
 			captureCleanupEnabled: parsed.captureCleanupEnabled,
 			captureCleanupIntervalHours: parsed.captureCleanupIntervalHours,
 			captureCleanupMaxAgeDays: parsed.captureCleanupMaxAgeDays,
+			oidcEnabled: parsed.oidcEnabled,
+			oidcPublicUrl: parsed.oidcPublicUrl,
 		};
 		console.log(`[config] read settings.json: ${JSON.stringify(result)}`);
 		return result;
@@ -90,13 +95,22 @@ export interface ResolvedProxyConfig {
  *
  * Reads CONTEXTIO_OIDC_* environment variables. If OIDC is enabled but
  * required fields are missing, throws a descriptive error.
+ *
+ * Note: oidcEnabled and oidcPublicUrl can be set via web UI settings file
+ * (/app/custom-policy/settings.json) but are overridden by environment variables.
+ * Secrets (issuer, client_id, client_secret, session_secret) MUST come from env vars.
  */
 export function resolveOidcConfig(
 	overrides?: ProxyConfig,
 ): OidcProviderConfig | null {
+	const settings = readWebUISettings();
+
 	const enabled = overrides?.oidc?.issuer
 		|| process.env.CONTEXTIO_OIDC_ENABLED === "true"
+		|| settings.oidcEnabled === true
 		|| (process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET);
+
+	console.log(`[config] OIDC resolve: enabled=${enabled}, env.CONTEXTIO_OIDC_ENABLED=${process.env.CONTEXTIO_OIDC_ENABLED}, settings.oidcEnabled=${settings.oidcEnabled}, hasLegacyCreds=${!!(process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET)}`);
 
 	if (!enabled) {
 		return null;
@@ -129,6 +143,8 @@ export function resolveOidcConfig(
 	if (!issuer.startsWith("https://")) {
 		throw new Error("OIDC issuer must use HTTPS");
 	}
+
+	console.log(`[config] OIDC configured: issuer=${issuer}, clientId=${clientId}, scope=${scope.join(" ")}`);
 
 	return {
 		issuer,
@@ -243,7 +259,10 @@ export function resolveConfig(
 		overrides?.publicUrl ||
 		process.env.CONTEXTIO_OIDC_PUBLIC_URL ||
 		process.env.CONTEXTIO_PUBLIC_URL || // deprecated alias
+		readWebUISettings().oidcPublicUrl ||
 		null;
+
+	console.log(`[config] publicUrl resolved: overrides.publicUrl=${overrides?.publicUrl}, env.CONTEXTIO_OIDC_PUBLIC_URL=${process.env.CONTEXTIO_OIDC_PUBLIC_URL}, settings.oidcPublicUrl=${readWebUISettings().oidcPublicUrl}, final=${publicUrl}`);
 
 	const upstreams: Upstreams = {
 		...defaultUpstreams,

@@ -174,6 +174,8 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'fi' >> /app/start.sh && \
     echo '# Ensure policy file is writable by node user' >> /app/start.sh && \
     echo 'chmod 666 "$POLICY_FILE" 2>/dev/null || true' >> /app/start.sh && \
+    echo '# Ensure custom-policy directory is readable (for settings.json)' >> /app/start.sh && \
+    echo 'chmod 755 /app/custom-policy 2>/dev/null || true' >> /app/start.sh && \
     echo 'echo "Using policy file: $POLICY_FILE"' >> /app/start.sh && \
     echo '# Log policy file status' >> /app/start.sh && \
     echo 'if [ -f "/app/custom-policy/custom-policy.json" ] && [ ! -f "/app/custom-policy/custom-policy.json.default" ]; then' >> /app/start.sh && \
@@ -191,7 +193,7 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
 
 # Fix permissions for node user (after all files are created)
 # Only change ownership of files we control, not mounted volumes
-RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /app/default-policy.json /app/captures /home/node/.contextio-next && \
+RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /app/default-policy.json /app/captures /app/custom-policy /home/node/.contextio-next && \
     chmod +x /app/start.sh
 
 USER node
