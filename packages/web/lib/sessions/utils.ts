@@ -108,6 +108,7 @@ export async function listRedactionMetaFiles(): Promise<string[]> {
 
 /**
  * Load redaction metadata from a metadata file.
+ * Handles both encrypted and plaintext metadata files.
  */
 export async function loadRedactionMeta(
   filename: string,
@@ -141,7 +142,9 @@ export async function loadRedactionMeta(
     const captureDir = await getCaptureDir();
     const filepath = path.join(captureDir, filename);
     const raw = await fs.readFile(filepath, "utf8");
-    const meta = JSON.parse(raw) as {
+
+    // Check if the file is encrypted (has the encrypted payload structure)
+    let meta: {
       totalRedactions?: number;
       byRule?: Record<string, number>;
       sessionId?: string;
@@ -156,7 +159,6 @@ export async function loadRedactionMeta(
         postValue: string;
         path: string;
       }>;
-      // Added for sessions/metrics API performance
       requestBytes?: number;
       responseBytes?: number;
       timings?: {
@@ -165,9 +167,40 @@ export async function loadRedactionMeta(
         receive_ms?: number;
         total_ms?: number;
       };
-    };
+    } | null = null;
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const isEncrypted =
+        typeof parsed.ciphertext === "string" &&
+        typeof parsed.salt === "string" &&
+        typeof parsed.iv === "string";
 
-    if (typeof meta.totalRedactions !== "number") return null;
+      if (isEncrypted) {
+        // Decrypt using the same key as the logger plugin
+        const keyMaterial = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY;
+        if (!keyMaterial) {
+          console.error(
+            "[loadRedactionMeta] Encryption enabled but CONTEXTIO_LOGGER_ENCRYPTION_KEY not set",
+          );
+          return null;
+        }
+        // Re-use the decrypt function from logger package
+        const { decrypt } = await import("@contextio/logger");
+        const plaintext = await decrypt(raw, keyMaterial);
+        meta = JSON.parse(plaintext) as typeof meta;
+      } else {
+        meta = parsed;
+      }
+    } catch (e) {
+      // If JSON parse fails or decryption fails, file is corrupted/unreadable
+      console.error(
+        `[loadRedactionMeta] Failed to parse metadata file ${filename}:`,
+        e instanceof Error ? e.message : String(e),
+      );
+      return null;
+    }
+
+    if (!meta || typeof meta.totalRedactions !== "number") return null;
     if (!meta.byRule || typeof meta.byRule !== "object") return null;
 
     return {
