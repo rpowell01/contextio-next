@@ -70,6 +70,12 @@ function processCapture(
       timestamp: typeof data.timestamp === "string" ? data.timestamp : null,
       provider: typeof data.provider === "string" ? data.provider : null,
       targetUrl: typeof data.targetUrl === "string" ? data.targetUrl : null,
+      source: typeof data.source === "string" ? data.source : null,
+      timings: data.timings
+        ? { total_ms: data.timings.total_ms ?? 0 }
+        : { total_ms: 0 },
+      requestBytes: typeof data.requestBytes === "number" ? data.requestBytes : 0,
+      responseBytes: typeof data.responseBytes === "number" ? data.responseBytes : 0,
       ...leanStats,
     });
 

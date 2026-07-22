@@ -315,8 +315,8 @@ function isValidMetricsData(data: unknown): data is MetricsData {
   const metrics = data as Record<string, unknown>;
 
   return (
-    typeof metrics.totalInputTokens === "number" &&
-    typeof metrics.totalOutputTokens === "number" &&
+    (typeof metrics.totalInputTokens === "number" || metrics.totalInputTokens === undefined) &&
+    (typeof metrics.totalOutputTokens === "number" || metrics.totalOutputTokens === undefined) &&
     typeof metrics.totalRequestBytes === "number" &&
     typeof metrics.totalResponseBytes === "number" &&
     Array.isArray(metrics.providers) &&

@@ -689,6 +689,42 @@ const captureId = captureFilename.replace(/\.json$/, "");
     }
   };
 
+  async function scanExistingCaptures(): Promise<void> {
+    console.log("[redaction-meta-watcher] Scanning existing capture files...");
+    try {
+      const entries = await readdir(dir);
+      const captureFiles = entries.filter(
+        (f) =>
+          f.endsWith(".json") &&
+          !f.endsWith(".tmp") &&
+          !f.includes("redact-meta") &&
+          isValidFilename(f),
+      );
+
+      let processed = 0;
+      for (const filename of captureFiles) {
+        const metaPath = join(dir, metaFilenameFor(filename));
+        try {
+          await readFile(metaPath, "utf8");
+          // Meta file exists, skip
+          continue;
+        } catch {
+          // Meta file doesn't exist, process this capture
+          await processCaptureFile(filename);
+          processed++;
+        }
+      }
+      console.log(
+        `[redaction-meta-watcher] Scanned ${captureFiles.length} existing captures, processed ${processed} new meta files`,
+      );
+    } catch (err) {
+      console.error(
+        "[redaction-meta-watcher] Error scanning existing captures:",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
   const handleChange = async (
     eventType: "rename" | "change",
     filename: string | null,
@@ -700,6 +736,14 @@ const captureId = captureFilename.replace(/\.json$/, "");
 const startWatcher = (): void => {
     if (stopped) return;
     console.log("[redaction-meta-watcher] Starting watcher on:", dir);
+
+    // Scan existing capture files on startup to process any that don't have meta files
+    scanExistingCaptures().catch((err) => {
+      console.error(
+        "[redaction-meta-watcher] Failed to scan existing captures:",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
 
     watcher = fs.watch(dir, { persistent: false }, (eventType, filename) => {
       if (eventType === "rename" || eventType === "change") {
