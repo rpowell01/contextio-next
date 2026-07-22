@@ -486,7 +486,7 @@ export function createRedactionMetaWatcher(
   const dir = opts.captureDir;
   const pending = new Map<
     string,
-    { metadata: CaptureRedactionMetadata | null; timer: NodeJS.Timeout }
+    { metadata: CaptureRedactionMetadata; timer: NodeJS.Timeout }
   >();
   let stopped = false;
   let watcher: fs.FSWatcher | null = null;
@@ -573,12 +573,12 @@ async function mergeExistingMetadata(
     pending.delete(captureFilename);
     clearTimeout(state.timer);
 
-    if (state.metadata === null) return;
+    const metadataToMerge = state.metadata;
 
     try {
       const metadata = await mergeExistingMetadata(
         metaPath,
-        state.metadata,
+        metadataToMerge,
       );
 
       await atomicWriteMetadata(metaPath, metadata, opts.encryption);
@@ -598,7 +598,7 @@ async function mergeExistingMetadata(
 
   const schedule = (
     captureFilename: string,
-    metadata: CaptureRedactionMetadata | null,
+    metadata: CaptureRedactionMetadata,
   ): void => {
     if (stopped) return;
     // Cancel any existing timer for the same file (batching).
@@ -672,7 +672,13 @@ const captureId = captureFilename.replace(/\.json$/, "");
       if (existingMeta) {
         const matches = existingMeta.matches;
         if (Array.isArray(matches) && matches.length > 0) {
-          console.log(`[redaction-meta-watcher] Fast-path: preserving redact plugin matches for ${captureFilename}`);
+          // Merge capture data fields into existing meta instead of skipping entirely
+          // The redact plugin creates meta first but doesn't include requestBytes/responseBytes/timings
+          console.log(`[redaction-meta-watcher] Merging capture data into existing meta for ${captureFilename}`);
+          if (metadata) {
+            const enrichedMeta = await mergeExistingMetadata(metaPath, metadata);
+            schedule(captureFilename, enrichedMeta);
+          }
           return;
         }
         console.log(`[redaction-meta-watcher] Meta exists but empty/invalid matches, re-processing: ${captureFilename}`);
@@ -680,7 +686,9 @@ const captureId = captureFilename.replace(/\.json$/, "");
         console.log(`[redaction-meta-watcher] No meta file after 5s, will create: ${captureFilename}`);
       }
 
-      schedule(captureFilename, metadata);
+      if (metadata) {
+        schedule(captureFilename, metadata);
+      }
     } catch (err) {
       console.error(
         `[redaction-meta-watcher] Error processing ${captureFilename}:`,
