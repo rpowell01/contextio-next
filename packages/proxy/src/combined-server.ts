@@ -261,7 +261,8 @@ export function createCombinedProxy(
 
     // OIDC authentication check for web UI routes only
     // If OIDC is enabled, require valid session for all other routes (Next.js web UI)
-    if (resolved.oidc) {
+    // Do NOT protect /api/* (web API routes) - AI tools need unauthenticated access
+    if (resolved.oidc && !path.startsWith("/api/")) {
       const session = validateSession(req, resolved.oidc.sessionSecret);
       if (!session) {
         // Redirect to login with return URL
