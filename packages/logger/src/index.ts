@@ -183,15 +183,19 @@ export function createLoggerPlugin(config?: LoggerConfig): LoggerPlugin {
    * Build a filename from capture metadata.
    * Format: {source}_{sessionId}_{timestamp}-{counter}.json
    * Falls back to "unknown" for missing source, omits session if null.
+   * Session ID in filename is truncated to 8 chars for compatibility with pruning.
    */
   function buildFilename(capture: CaptureData): string {
     if (capture.captureId) return capture.captureId;
     const source = capture.source || "unknown";
     const safe = source.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const session = capture.sessionId ? `_${capture.sessionId}` : "";
+    // Truncate session ID to 8 chars for filename (UUIDs are long)
+    const sessionShort = capture.sessionId
+      ? `_${capture.sessionId.substring(0, 8)}`
+      : "";
     const ts = Date.now();
     const seq = String(counter++).padStart(6, "0");
-    return `${safe}${session}_${ts}-${seq}.json`;
+    return `${safe}${sessionShort}_${ts}-${seq}.json`;
   }
 
   /**
@@ -199,7 +203,7 @@ export function createLoggerPlugin(config?: LoggerConfig): LoggerPlugin {
    *
    * Filename format: `{source}_{sessionId}_{timestamp}-{counter}.json`
    * The session ID is the second underscore-delimited segment and is
-   * always 8 lowercase hex chars. Returns null if not present.
+   * always 8 lowercase hex chars (truncated from UUIDs). Returns null if not present.
    */
   function extractSessionFromFilename(filename: string): string | null {
     const parts = filename.replace(/\.json$/, "").split("_");

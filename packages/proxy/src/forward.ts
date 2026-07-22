@@ -320,7 +320,11 @@ export function createProxyHandler(
 
     // Extract session ID and source from routing headers
     const headers = req.headers as Record<string, string | undefined>;
-    const sessionId = headers["x-session-affinity"] || urlSessionId;
+    // Priority: x-session-affinity (generic), x-claude-code-session-id (Anthropic/Claude Code), URL-embedded
+    const sessionId =
+      headers["x-session-affinity"] ||
+      headers["x-claude-code-session-id"] ||
+      urlSessionId;
     // Extract source from headers in priority order, fallback to URL source
     let source: string | null | undefined = headers["x-real-ip"]?.trim();
     if (!source) {
