@@ -9,6 +9,9 @@ export interface Settings {
   captureCleanupIntervalHours: number;
   captureCleanupMaxAgeDays: number;
   theme: "light" | "dark" | "system" | "high-contrast";
+  // OIDC Authentication settings
+  oidcEnabled: boolean;
+  oidcPublicUrl: string;
 }
 
 export type SettingSource =
@@ -51,6 +54,14 @@ export const SETTING_ENV_MAP: Record<
   theme: {
     envVar: "CONTEXTIO_THEME",
     dynamic: true,
+  },
+  oidcEnabled: {
+    envVar: "CONTEXTIO_OIDC_ENABLED",
+    dynamic: false,
+  },
+  oidcPublicUrl: {
+    envVar: "CONTEXTIO_OIDC_PUBLIC_URL",
+    dynamic: false,
   },
 };
 
@@ -143,6 +154,16 @@ export function applyEnvOverrides(settings: Settings): {
           accepted = true;
         }
         break;
+      case "oidcEnabled":
+        if (raw === "true" || raw === "false") {
+          override.oidcEnabled = raw === "true";
+          accepted = true;
+        }
+        break;
+      case "oidcPublicUrl":
+        override.oidcPublicUrl = raw;
+        accepted = true;
+        break;
       default:
         break;
     }
@@ -187,6 +208,8 @@ export const DEFAULT_SETTINGS: Settings = {
   captureCleanupIntervalHours: 24,
   captureCleanupMaxAgeDays: 30,
   theme: "system",
+  oidcEnabled: false,
+  oidcPublicUrl: "",
 };
 
 export function validateSettings(input: unknown): Settings {
@@ -248,6 +271,8 @@ export function validateSettings(input: unknown): Settings {
       365,
     ),
     theme: validateEnum("theme", ["light", "dark", "system", "high-contrast"]) as "light" | "dark" | "system" | "high-contrast",
+    oidcEnabled: validateBoolean("oidcEnabled"),
+    oidcPublicUrl: validateString("oidcPublicUrl", 0),
   };
 }
 
@@ -313,5 +338,13 @@ export function validateSettingsLenient(input: unknown): Settings {
       ["light", "dark", "system", "high-contrast"].includes(obj.theme)
         ? (obj.theme as "light" | "dark" | "system" | "high-contrast")
         : DEFAULT_SETTINGS.theme,
+    oidcEnabled:
+      typeof obj.oidcEnabled === "boolean"
+        ? obj.oidcEnabled
+        : DEFAULT_SETTINGS.oidcEnabled,
+    oidcPublicUrl:
+      typeof obj.oidcPublicUrl === "string"
+        ? obj.oidcPublicUrl
+        : DEFAULT_SETTINGS.oidcPublicUrl,
   };
 }

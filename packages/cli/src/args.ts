@@ -147,7 +147,7 @@ export function buildProgram(
 		.option("--oidc-client-secret <secret>", "OIDC client secret")
 		.option("--oidc-session-secret <secret>", "OIDC session secret for signing cookies")
 		.option(
-			"--public-url <url>",
+			"--oidc-public-url <url>",
 			"public-facing URL for the proxy (e.g., https://contextio.example.com)",
 		)
 		.allowUnknownOption(false)
@@ -236,7 +236,7 @@ export function buildProgram(
 			oidcClientId: opts.oidcClientId || null,
 			oidcClientSecret: opts.oidcClientSecret || null,
 			oidcSessionSecret: opts.oidcSessionSecret || null,
-			publicUrl: opts.publicUrl || null,
+			publicUrl: opts.oidcPublicUrl || null,
 			wrap,
 		});
 	});

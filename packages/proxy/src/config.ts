@@ -164,10 +164,13 @@ export function resolveOidcConfig(
  * - `CONTEXTIO_OIDC_CLIENT_SECRET` - OAuth2 client secret
  * - `CONTEXTIO_OIDC_SESSION_SECRET` - Secret for signing/encrypting session cookies
  * - `CONTEXTIO_OIDC_SCOPE` - Space-separated scopes (default: "openid profile email")
+ * - `CONTEXTIO_OIDC_PUBLIC_URL` - Public-facing URL (e.g., https://contextio.example.com)
+ *   Used for OIDC callback URLs when behind a reverse proxy
  *
  * Legacy (deprecated) env vars:
  * - `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_SESSION_SECRET`, `OIDC_SCOPE`
  *   All must be set together to enable OIDC without CONTEXTIO_OIDC_ENABLED.
+ * - `CONTEXTIO_PUBLIC_URL` - Deprecated alias for CONTEXTIO_OIDC_PUBLIC_URL
  */
 export function resolveConfig(
 	overrides?: ProxyConfig,
@@ -238,7 +241,8 @@ export function resolveConfig(
 
 	const publicUrl =
 		overrides?.publicUrl ||
-		process.env.CONTEXTIO_PUBLIC_URL ||
+		process.env.CONTEXTIO_OIDC_PUBLIC_URL ||
+		process.env.CONTEXTIO_PUBLIC_URL || // deprecated alias
 		null;
 
 	const upstreams: Upstreams = {

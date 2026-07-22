@@ -448,7 +448,7 @@ const proxyArgs = buildProxyArgs(args, proxyPort);
 	}
 	// Pass public URL via env for callback URL construction behind reverse proxy
 	if (args.publicUrl) {
-		childEnv.CONTEXTIO_PUBLIC_URL = args.publicUrl;
+		childEnv.CONTEXTIO_OIDC_PUBLIC_URL = args.publicUrl;
 	}
 	const child = spawn("node", [CLI_ENTRY, ...proxyArgs], {
 		detached: true,

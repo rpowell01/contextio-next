@@ -50,6 +50,10 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "How often the cleanup job runs. Changing this only takes effect after the proxy is restarted.",
   captureCleanupMaxAgeDays:
     "Capture files older than this are deleted. Changing this only takes effect after the proxy is restarted.",
+  oidcEnabled:
+    "Enable OpenID Connect authentication for the web UI. Requires a proxy restart and valid OIDC config (issuer, client ID, client secret, session secret) via environment variables.",
+  oidcPublicUrl:
+    "Public-facing URL for the proxy (e.g., https://contextio.example.com). Used for OIDC callback URLs when behind a reverse proxy. Requires a proxy restart to apply.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
@@ -108,6 +112,8 @@ export default function SettingsPage() {
     captureCleanupEnabled: false,
     captureCleanupIntervalHours: 24,
     captureCleanupMaxAgeDays: 30,
+    oidcEnabled: false,
+    oidcPublicUrl: "",
   });
   const [metadata, setMetadata] = useState<Record<
     keyof Settings,
@@ -512,6 +518,48 @@ export default function SettingsPage() {
             />
           </div>
         );
+      case "oidcEnabled":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="oidcEnabled"
+              checked={settings.oidcEnabled}
+              onChange={(e) => updateSetting("oidcEnabled", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isSettingOverridden("oidcEnabled")}
+            />
+            <Label htmlFor="oidcEnabled" className="text-sm">
+              Enable OpenID Connect authentication
+            </Label>
+            <SettingHelp
+              meta={getMeta("oidcEnabled")}
+              description={SETTING_DESCRIPTIONS.oidcEnabled}
+            />
+          </div>
+        );
+      case "oidcPublicUrl":
+        return (
+          <div>
+            <Label htmlFor="oidcPublicUrl" className="block text-sm font-medium mb-2">
+              OIDC Public URL
+            </Label>
+            <Input
+              id="oidcPublicUrl"
+              value={settings.oidcPublicUrl}
+              onChange={(e) => updateSetting("oidcPublicUrl", e.target.value)}
+              placeholder="https://contextio.example.com"
+              disabled={isSettingOverridden("oidcPublicUrl")}
+              className={
+                isSettingOverridden("oidcPublicUrl") ? "bg-muted cursor-not-allowed" : ""
+              }
+            />
+            <SettingHelp
+              meta={getMeta("oidcPublicUrl")}
+              description={SETTING_DESCRIPTIONS.oidcPublicUrl}
+            />
+          </div>
+        );
       case "captureCleanupEnabled":
         return (
           <div className="flex items-center justify-between mb-4">
@@ -766,7 +814,11 @@ export default function SettingsPage() {
           </div>
           <div className="rounded-lg border p-6">
             <h3 className="font-semibold mb-4">Security</h3>
-            <div className="space-y-4">{renderSetting("encryptionAtRest")}</div>
+            <div className="space-y-4">
+              {renderSetting("encryptionAtRest")}
+              {renderSetting("oidcEnabled")}
+              {renderSetting("oidcPublicUrl")}
+            </div>
           </div>
           <div className="rounded-lg border p-6">
             <h3 className="font-semibold mb-4">Appearance</h3>
