@@ -296,6 +296,8 @@ export function createAuthHandler(options: AuthOptions): http.RequestListener {
         await handleCallback(req, res, oidc, callbackUrl);
       } else if (path === "/auth/logout" && (req.method === "GET" || req.method === "POST")) {
         await handleLogout(req, res, oidc);
+      } else if (path === "/auth/logged-out" && req.method === "GET") {
+        await handleLoggedOut(req, res);
       } else if (path === "/auth/session" && req.method === "GET") {
         await handleSession(req, res, oidc);
       } else {
@@ -497,7 +499,7 @@ async function handleLogout(
   oidc: OidcProviderConfig,
 ): Promise<void> {
   const url = new URL(req.url || "", `http://${req.headers.host}`);
-  const redirectUrl = url.searchParams.get("redirect") || "/";
+  const redirectUrl = url.searchParams.get("redirect") || "/auth/logged-out";
 
   // Clear session cookie
   clearSessionCookie(res);
@@ -507,7 +509,9 @@ async function handleLogout(
     const metadata = await getProviderMetadata(oidc.issuer);
     if (metadata.end_session_endpoint) {
       const logoutUrl = new URL(metadata.end_session_endpoint);
-      logoutUrl.searchParams.set("post_logout_redirect_uri", `${new URL(redirectUrl, `http://${req.headers.host}`).href}`);
+      // Redirect to a public "logged out" page on this proxy after provider logout
+      const postLogoutUrl = new URL(redirectUrl, `http://${req.headers.host}`).href;
+      logoutUrl.searchParams.set("post_logout_redirect_uri", postLogoutUrl);
       logoutUrl.searchParams.set("client_id", oidc.clientId);
 
       res.writeHead(302, { Location: logoutUrl.toString() });
@@ -518,7 +522,7 @@ async function handleLogout(
     // Ignore metadata fetch errors, fall through to local logout
   }
 
-  // Local logout only
+  // Local logout only - redirect to logged-out page
   res.writeHead(302, { Location: redirectUrl });
   res.end();
 }
@@ -561,6 +565,39 @@ async function handleSession(
       expiresAt: session.expiresAt,
     }),
   );
+}
+
+/**
+ * Handles /auth/logged-out - shows a simple logout confirmation page.
+ */
+async function handleLoggedOut(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Logged Out</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 400px; margin: 4rem auto; padding: 2rem; text-align: center; }
+    h1 { color: #333; }
+    p { color: #666; }
+    a { color: #0066cc; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>You have been logged out</h1>
+  <p>Your session has been ended successfully.</p>
+  <p><a href="/auth/login">Sign in again</a></p>
+</body>
+</html>
+  `;
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
 }
 
 /**

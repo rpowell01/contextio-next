@@ -54,8 +54,8 @@ export function Header({ navigationConfig }: HeaderProps) {
       });
       setUser(null);
       // Redirect to proxy's /auth/logout which will clear proxy session
-      // and redirect to OIDC provider's logout endpoint
-      window.location.href = "/auth/logout?redirect=" + encodeURIComponent("/auth/login");
+      // and redirect to OIDC provider logout, then to /auth/logged-out
+      window.location.href = "/auth/logout?redirect=" + encodeURIComponent("/auth/logged-out");
     } catch (error) {
       console.error("Logout failed:", error);
     }
