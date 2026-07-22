@@ -38,12 +38,12 @@ const SESSION_COOKIE_NAME = "contextio_session";
 
 /**
  * Gets the session secret from environment variables.
- * Must match the proxy's OIDC_SESSION_SECRET.
+ * Must match the proxy's CONTEXTIO_OIDC_SESSION_SECRET.
  */
 function getSessionSecret(): string {
-  const secret = process.env.OIDC_SESSION_SECRET;
+  const secret = process.env.CONTEXTIO_OIDC_SESSION_SECRET || process.env.OIDC_SESSION_SECRET;
   if (!secret) {
-    throw new Error("OIDC_SESSION_SECRET environment variable is not set");
+    throw new Error("CONTEXTIO_OIDC_SESSION_SECRET (or OIDC_SESSION_SECRET) environment variable is not set");
   }
   return secret;
 }
