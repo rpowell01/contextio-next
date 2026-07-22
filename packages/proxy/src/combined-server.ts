@@ -184,8 +184,16 @@ export function createCombinedProxy(
   const adminHandler = createAdminHandler({ plugins, logTraffic, startTime });
 
   const authHandler = resolved.oidc
-    ? createAuthHandler({ oidc: resolved.oidc, baseUrl: `http://${resolved.bindHost}:${resolved.port}` })
+    ? createAuthHandler({
+        oidc: resolved.oidc,
+        baseUrl: resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`,
+      })
     : null;
+
+  if (resolved.oidc) {
+    const authBaseUrl = (resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`).replace(/\/+$/, "");
+    console.log(`[startup] OIDC callback URL: ${authBaseUrl}/auth/callback`);
+  }
 
   // Create Next.js server instance and get its request handler
   let nextHandler: http.RequestListener | null = null;
