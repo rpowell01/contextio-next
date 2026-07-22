@@ -10,12 +10,15 @@ import {
   readCaptureFile,
 } from "@/lib/sessions/utils";
 import {
-  computeCaptureRedactionCounts,
   countRedactionsInResponse,
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
-import type { CaptureRedactionStats } from "@/lib/sessions/redaction-utils";
 import { withRequestCache } from "@/lib/request-cache";
+
+interface CaptureRedactionStats {
+  totalRedactions: number;
+  byRule: Record<string, number>;
+}
 
 interface RawCaptureData extends Record<string, unknown> {
   sessionId: string | null;
@@ -153,15 +156,13 @@ function computeSessionMetrics(
     totalInputTokens += tokenUsage.input;
     totalOutputTokens += tokenUsage.output;
 
-    const redactionCounts = computeCaptureRedactionCounts(
-      c as unknown as Record<string, unknown>,
-      false,
-      undefined,
-      c.originalRequestBody,
-    );
-    totalRedactions += redactionCounts.totalRedactions;
-    for (const [rule, count] of Object.entries(redactionCounts.byRule)) {
-      byRule[rule] = (byRule[rule] || 0) + (count as number);
+    // Redactions: use the pre-computed redactionStats from the capture file
+    // (populated by the redact plugin) instead of rescanning response bodies
+    if (c.redactionStats) {
+      totalRedactions += c.redactionStats.totalRedactions ?? 0;
+      for (const [rule, count] of Object.entries(c.redactionStats.byRule ?? {})) {
+        byRule[rule] = (byRule[rule] || 0) + (count as number);
+      }
     }
   }
 
@@ -322,20 +323,7 @@ export async function GET(
           timings: c.timings,
           source: c.source,
           metrics: computeCaptureMetrics(c),
-          redactionStats: (() => {
-            const redaction = computeCaptureRedactionCounts(
-              c as unknown as Record<string, unknown>,
-              true,
-              getCaptureRedactionStats(
-                c as unknown as Record<string, unknown>,
-              ) ?? undefined,
-              c.originalRequestBody,
-            );
-            return {
-              totalRedactions: redaction.totalRedactions,
-              byRule: redaction.byRule,
-            };
-          })(),
+          redactionStats: c.redactionStats ?? { totalRedactions: 0, byRule: {} },
         })),
       };
 
