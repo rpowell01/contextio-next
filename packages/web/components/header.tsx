@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getNavigationItems, NavigationConfig } from "@/lib/nav-config";
 
@@ -19,7 +19,6 @@ export interface HeaderProps {
 
 export function Header({ navigationConfig }: HeaderProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const navigation = getNavigationItems(navigationConfig);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,8 +53,9 @@ export function Header({ navigationConfig }: HeaderProps) {
         credentials: "include",
       });
       setUser(null);
-      router.push("/auth/login");
-      router.refresh();
+      // Redirect to proxy's /auth/logout which will clear proxy session
+      // and redirect to OIDC provider's logout endpoint
+      window.location.href = "/auth/logout?redirect=" + encodeURIComponent("/auth/login");
     } catch (error) {
       console.error("Logout failed:", error);
     }
