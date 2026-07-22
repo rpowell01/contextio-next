@@ -131,11 +131,12 @@ export function createProxy(
   const combinedHandler: http.RequestListener = (req, res) => {
     const url = req.url || "";
 
-    // OIDC authentication check for protected routes
-    // If OIDC is enabled, require valid session for all non-auth, non-admin routes
-    if (resolved.oidc) {
+    // OIDC authentication check for protected routes only
+    // Do NOT protect proxy API routes (/v1/*, /chat/*) - AI tools need unauthenticated access
+    // Do NOT protect /auth/ (public auth endpoints) or /admin/* (admin API)
+    if (resolved.oidc && !url.startsWith("/auth/") && !url.startsWith("/admin/") && !url.startsWith("/v1/") && !url.startsWith("/chat/")) {
       const session = validateSession(req, resolved.oidc.sessionSecret);
-      if (!session && !url.startsWith("/auth/") && !url.startsWith("/admin/")) {
+      if (!session) {
         // Redirect to login with return URL
         const loginUrl = `/auth/login?redirect=${encodeURIComponent(url)}`;
         res.writeHead(302, { Location: loginUrl });

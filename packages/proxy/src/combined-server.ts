@@ -253,8 +253,14 @@ export function createCombinedProxy(
       return;
     }
 
-    // OIDC authentication check for protected routes
-    // If OIDC is enabled, require valid session for all other routes
+    // Proxy routing paths (public - AI tools need unauthenticated access)
+    if (path.startsWith("/chat/") || path.startsWith("/v1/")) {
+      proxyHandler(req, res);
+      return;
+    }
+
+    // OIDC authentication check for web UI routes only
+    // If OIDC is enabled, require valid session for all other routes (Next.js web UI)
     if (resolved.oidc) {
       const session = validateSession(req, resolved.oidc.sessionSecret);
       if (!session) {
@@ -264,12 +270,6 @@ export function createCombinedProxy(
         res.end();
         return;
       }
-    }
-
-    // Proxy routing paths
-    if (path.startsWith("/chat/") || path.startsWith("/v1/")) {
-      proxyHandler(req, res);
-      return;
     }
 
     // Everything else → Next.js (web UI, /api/*, etc.)
