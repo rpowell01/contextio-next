@@ -152,6 +152,10 @@ export async function GET(request: Request): Promise<Response> {
     const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
 
     const metaFiles = await listRedactionMetaFiles();
+    // Sort for deterministic "first capture per session" deduping
+    metaFiles.sort();
+
+    const seenSessions = new Set<string>();
     const captures: Array<{
       traffic: TrafficMetric | null;
       providerUsage: ProviderUsage | null;
@@ -162,6 +166,13 @@ export async function GET(request: Request): Promise<Response> {
       try {
         const meta = await loadRedactionMeta(filename);
         if (!meta) continue;
+
+        // Skip title-* sessions (match Redactions page behavior)
+        if (meta.sessionId?.startsWith("title-")) continue;
+
+        // Dedupe by sessionId: only keep first capture per session
+        if (meta.sessionId && seenSessions.has(meta.sessionId)) continue;
+        if (meta.sessionId) seenSessions.add(meta.sessionId);
 
         // Filter by timestamp on the server side
         if (meta.timestamp) {

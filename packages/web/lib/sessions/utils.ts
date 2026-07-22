@@ -224,12 +224,18 @@ export async function loadRedactionMeta(
 
 /**
  * Aggregate redaction counts from metadata files, grouped by sessionId.
+ * Matches the Redactions page behavior: dedupes by sessionId (keeps first
+ * capture per session) and filters out title-* sessions.
  * Returns a map of sessionId -> { totalRedactions, byRule }.
  */
 export async function aggregateRedactionMetaBySession(): Promise<
   Map<string, { totalRedactions: number; byRule: Record<string, number> }>
 > {
   const metaFiles = await listRedactionMetaFiles();
+
+  // Sort meta files by filename to ensure deterministic "first" per session
+  metaFiles.sort();
+
   const sessionMap = new Map<
     string,
     { totalRedactions: number; byRule: Record<string, number> }
@@ -239,15 +245,25 @@ export async function aggregateRedactionMetaBySession(): Promise<
     const meta = await loadRedactionMeta(filename);
     if (!meta || !meta.sessionId) continue;
 
-    const existing = sessionMap.get(meta.sessionId) ?? {
-      totalRedactions: 0,
-      byRule: {},
-    };
-    existing.totalRedactions += meta.totalRedactions;
-    for (const [rule, count] of Object.entries(meta.byRule)) {
-      existing.byRule[rule] = (existing.byRule[rule] ?? 0) + count;
+    // Skip title-* sessions (same as Redactions page)
+    if (meta.sessionId.startsWith("title-")) continue;
+
+    // Only keep first meta file per session (dedupe by sessionId)
+    if (sessionMap.has(meta.sessionId)) continue;
+
+    const byRule: Record<string, number> = {};
+    if (meta.byRule && typeof meta.byRule === "object") {
+      for (const [rule, count] of Object.entries(meta.byRule)) {
+        if (typeof count === "number") {
+          byRule[rule] = count;
+        }
+      }
     }
-    sessionMap.set(meta.sessionId, existing);
+
+    sessionMap.set(meta.sessionId, {
+      totalRedactions: meta.totalRedactions ?? 0,
+      byRule,
+    });
   }
 
   return sessionMap;

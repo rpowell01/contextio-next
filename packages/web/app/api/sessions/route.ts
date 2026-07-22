@@ -12,7 +12,6 @@ import {
   MAX_FILE_SIZE,
   computeContextValues,
   computeTokenUsage,
-  aggregateRedactionMetaBySession,
   readCaptureFile,
   listRedactionMetaFiles,
   loadRedactionMeta,
@@ -271,17 +270,62 @@ async function handleGet(request: Request): Promise<Response> {
   // Return grouped summaries if requested
   if (groupBySourceDest) {
     // Load pre-aggregated redaction metadata from .redact-meta.json files
-    const redactionMetaBySession = await aggregateRedactionMetaBySession();
+    // Match Redactions page behavior: dedupe by sessionId (first capture per session)
+    // and skip title-* sessions
+    const metaFiles = await listRedactionMetaFiles();
+    // Sort for deterministic "first capture per session" deduping
+    metaFiles.sort();
+
+    const redactionMetaBySession = new Map<
+      string,
+      { totalRedactions: number; byRule: Record<string, number> }
+    >();
+
+    const seenSessions = new Set<string>();
+
+    for (const filename of metaFiles) {
+      try {
+        const meta = await loadRedactionMeta(filename);
+        if (!meta) continue;
+
+        // Skip title-* sessions (match Redactions page behavior)
+        if (meta.sessionId?.startsWith("title-")) continue;
+
+        // Dedupe by sessionId: only keep first capture per session
+        if (meta.sessionId && seenSessions.has(meta.sessionId)) continue;
+        if (meta.sessionId) seenSessions.add(meta.sessionId);
+
+        // Store redaction metadata for this session
+        if (meta.sessionId) {
+          redactionMetaBySession.set(meta.sessionId, {
+            totalRedactions: meta.totalRedactions ?? 0,
+            byRule: (meta.byRule as Record<string, number>) ?? {},
+          });
+        }
+      } catch (error) {
+        console.error(
+          `Error reading redaction metadata for grouped sessions ${filename}:`,
+          error,
+        );
+        continue;
+      }
+    }
 
     // Read from .redact-meta.json files instead of full capture files
     // This avoids parsing large JSON bodies and is much faster
-    const metaFiles = await listRedactionMetaFiles();
     const rawCaptures: RawCaptureData[] = [];
 
     for (const filename of metaFiles) {
       try {
         const meta = await loadRedactionMeta(filename);
         if (!meta) continue;
+
+        // Skip title-* sessions
+        if (meta.sessionId?.startsWith("title-")) continue;
+
+        // Dedupe by sessionId
+        if (meta.sessionId && seenSessions.has(meta.sessionId)) continue;
+        if (meta.sessionId) seenSessions.add(meta.sessionId);
 
         // Extract timings - default to 0 if not present
         const timings = meta.timings
