@@ -6,7 +6,7 @@ import type { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth/session";
 
 // Public paths that don't require authentication
-const PUBLIC_PATHS = ["/auth/login", "/auth/callback", "/auth/logout", "/auth/logged-out", "/_next", "/favicon.ico", "/api/auth"];
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/logout", "/auth/logged-out", "/_next", "/favicon.ico", "/api/auth"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((publicPath) => pathname.startsWith(publicPath));
@@ -25,7 +25,7 @@ export default async function middleware(request: NextRequest) {
 
   if (!session) {
     // Redirect to login with return URL
-    const loginUrl = new URL("/auth/login", request.url);
+    const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }

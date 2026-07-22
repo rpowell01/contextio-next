@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface ProvidersResponse {
   providers: Array<{
@@ -11,7 +12,9 @@ interface ProvidersResponse {
   }>;
 }
 
-export default function LoginPage() {
+function LoginPageContent() {
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect") || "/";
   const [providers, setProviders] = useState<ProvidersResponse["providers"]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +27,12 @@ export default function LoginPage() {
           throw new Error("Failed to fetch providers");
         }
         const data = await response.json();
-        setProviders(data.providers || []);
+        // Append redirect parameter to each provider's authUrl
+        const providersWithRedirect = (data.providers || []).map((p: ProvidersResponse["providers"][0]) => ({
+          ...p,
+          authUrl: `${p.authUrl}&redirect=${encodeURIComponent(redirect)}`,
+        }));
+        setProviders(providersWithRedirect);
       } catch (err) {
         setError("Failed to load authentication options");
         console.error("Providers fetch failed:", err);
@@ -33,7 +41,7 @@ export default function LoginPage() {
       }
     }
     fetchProviders();
-  }, []);
+  }, [redirect]);
 
   if (loading) {
     return (
@@ -104,5 +112,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-[60vh] items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
