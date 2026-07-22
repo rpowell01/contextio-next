@@ -281,6 +281,7 @@ async function handleGet(request: Request): Promise<Response> {
       { totalRedactions: number; byRule: Record<string, number> }
     >();
 
+    const rawCaptures: RawCaptureData[] = [];
     const seenSessions = new Set<string>();
 
     for (const filename of metaFiles) {
@@ -302,30 +303,6 @@ async function handleGet(request: Request): Promise<Response> {
             byRule: (meta.byRule as Record<string, number>) ?? {},
           });
         }
-      } catch (error) {
-        console.error(
-          `Error reading redaction metadata for grouped sessions ${filename}:`,
-          error,
-        );
-        continue;
-      }
-    }
-
-    // Read from .redact-meta.json files instead of full capture files
-    // This avoids parsing large JSON bodies and is much faster
-    const rawCaptures: RawCaptureData[] = [];
-
-    for (const filename of metaFiles) {
-      try {
-        const meta = await loadRedactionMeta(filename);
-        if (!meta) continue;
-
-        // Skip title-* sessions
-        if (meta.sessionId?.startsWith("title-")) continue;
-
-        // Dedupe by sessionId
-        if (meta.sessionId && seenSessions.has(meta.sessionId)) continue;
-        if (meta.sessionId) seenSessions.add(meta.sessionId);
 
         // Extract timings - default to 0 if not present
         const timings = meta.timings
