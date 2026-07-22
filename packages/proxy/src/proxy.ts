@@ -122,6 +122,11 @@ export function createProxy(
       })
     : null;
 
+  if (resolved.oidc) {
+    const authBaseUrl = (resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`).replace(/\/+$/, "");
+    console.log(`[startup] OIDC callback URL: ${authBaseUrl}/auth/callback`);
+  }
+
   // Combined handler that routes /admin/* to admin handler, /auth/* to auth handler
   const combinedHandler: http.RequestListener = (req, res) => {
     const url = req.url || "";
