@@ -13,7 +13,7 @@ import { lookup } from "mime-types";
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
-import { createAuthHandler } from "./auth.js";
+import { createAuthHandler, validateSession } from "./auth.js";
 import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
 import { join } from "node:path";
 import fs from "node:fs/promises";
@@ -231,28 +231,43 @@ export function createCombinedProxy(
 // Combined handler: routes based on path
   const combinedHandler: http.RequestListener = async (req, res) => {
     const url = req.url || "";
+    const parsedUrl = new URL(url, `http://${req.headers.host}`);
+    const path = parsedUrl.pathname;
 
     // Serve Next.js static assets directly (faster, bypasses Next.js handler)
-    if (url.startsWith("/_next/static/")) {
+    if (path.startsWith("/_next/static/")) {
       const served = await serveStaticFile(req, res);
       if (served) return;
       // If not found, fall through to Next.js for 404 handling
     }
 
     // Proxy admin API
-    if (url.startsWith("/admin/")) {
+    if (path.startsWith("/admin/")) {
       adminHandler(req, res);
       return;
     }
 
-    // Auth endpoints
-    if (url.startsWith("/auth/") && authHandler) {
+    // Auth endpoints (public - no auth required)
+    if (path.startsWith("/auth/") && authHandler) {
       authHandler(req, res);
       return;
     }
 
+    // OIDC authentication check for protected routes
+    // If OIDC is enabled, require valid session for all other routes
+    if (resolved.oidc) {
+      const session = validateSession(req, resolved.oidc.sessionSecret);
+      if (!session) {
+        // Redirect to login with return URL
+        const loginUrl = `/auth/login?redirect=${encodeURIComponent(path + parsedUrl.search)}`;
+        res.writeHead(302, { Location: loginUrl });
+        res.end();
+        return;
+      }
+    }
+
     // Proxy routing paths
-    if (url.startsWith("/chat/") || url.startsWith("/v1/")) {
+    if (path.startsWith("/chat/") || path.startsWith("/v1/")) {
       proxyHandler(req, res);
       return;
     }

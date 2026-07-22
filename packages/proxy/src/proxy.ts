@@ -14,7 +14,7 @@ import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
-import { createAuthHandler } from "./auth.js";
+import { createAuthHandler, validateSession } from "./auth.js";
 import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
 
 async function cleanupCaptureFiles(config: {
@@ -130,6 +130,20 @@ export function createProxy(
   // Combined handler that routes /admin/* to admin handler, /auth/* to auth handler
   const combinedHandler: http.RequestListener = (req, res) => {
     const url = req.url || "";
+
+    // OIDC authentication check for protected routes
+    // If OIDC is enabled, require valid session for all non-auth, non-admin routes
+    if (resolved.oidc) {
+      const session = validateSession(req, resolved.oidc.sessionSecret);
+      if (!session && !url.startsWith("/auth/") && !url.startsWith("/admin/")) {
+        // Redirect to login with return URL
+        const loginUrl = `/auth/login?redirect=${encodeURIComponent(url)}`;
+        res.writeHead(302, { Location: loginUrl });
+        res.end();
+        return;
+      }
+    }
+
     if (url.startsWith("/admin/")) {
       adminHandler(req, res);
     } else if (url.startsWith("/auth/") && authHandler) {
