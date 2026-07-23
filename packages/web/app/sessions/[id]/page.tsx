@@ -1,7 +1,7 @@
 "use client";
 
 import { MainLayout } from "@/components/main-layout";
-import { formatDateTime, safeJsonStringify } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils";
 import type { SessionDetail, CaptureDetail } from "@/types/api";
 import Link from "next/link";
 import { apiClient } from "@/lib/api";
@@ -23,7 +23,6 @@ function renderJson(data: unknown): string {
 }
 
 interface CaptureFilters {
-  source: string;
   status: string;
   from: string;
   to: string;
@@ -31,7 +30,6 @@ interface CaptureFilters {
 }
 
 const DEFAULT_FILTERS: CaptureFilters = {
-  source: "",
   status: "",
   from: "",
   to: "",
@@ -137,11 +135,6 @@ function SessionView({
     let captures = [...session.captures];
 
     // Apply filters
-    if (filters.source) {
-      captures = captures.filter((c) =>
-        c.source?.toLowerCase().includes(filters.source.toLowerCase())
-      );
-    }
     if (filters.status) {
       captures = captures.filter((c) => c.responseStatus?.toString() === filters.status);
     }
@@ -341,8 +334,21 @@ function SessionView({
 
             {session.metrics && (
               <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Session Metrics (Average per Capture)</h3>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <h3 className="font-semibold mb-3">Session Metrics</h3>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  {/* Total cumulative tokens - new metrics */}
+                  <div>
+                    <span className="text-muted-foreground">Total Cumulative Input Tokens:</span>{" "}
+                    <span className="font-medium">
+                      {filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalInputTokens ?? 0), 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Cumulative Output Tokens:</span>{" "}
+                    <span className="font-medium">
+                      {filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalOutputTokens ?? 0), 0).toLocaleString()}
+                    </span>
+                  </div>
                   <div>
                     <span className="text-muted-foreground">Avg Success Count:</span>{" "}
                     <span className="font-medium">
@@ -365,14 +371,6 @@ function SessionView({
                       {filteredAndSortedCaptures.length > 0
                         ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.errorRate ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(4)
                         : "0.0000"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Avg Context Values:</span>{" "}
-                    <span className="font-medium">
-                      {filteredAndSortedCaptures.length > 0
-                        ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalContextValues ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
-                        : "0.00"}
                     </span>
                   </div>
                   <div>
@@ -416,7 +414,7 @@ function SessionView({
                 <h3 className="font-semibold mb-3">Redaction Statistics</h3>
                 <div className="space-y-2">
                   <div className="text-sm">
-                    <span className="text-muted-foreground">Total Redactions:</span>{" "}
+                    <span className="text-muted-foreground">Total Cumulative Redactions:</span>{" "}
                     {session.redactionStats.totalRedactions}
                   </div>
                   {Object.keys(session.redactionStats.byRule).length > 0 && (
@@ -431,32 +429,6 @@ function SessionView({
                       </ul>
                     </div>
                   )}
-                </div>
-              </div>
-            )}
-
-            {session.contextValues && Object.keys(session.contextValues).length > 0 && (
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">Context Values</h3>
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2">Key</th>
-                        <th className="text-left py-2">Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(session.contextValues).map(([key, value]) => (
-                        <tr key={key} className="border-b">
-                          <td className="py-2 font-mono text-xs">{key}</td>
-                          <td className="py-2 font-mono text-xs max-w-xs truncate">
-                            {typeof value === "string" ? value : safeJsonStringify(value)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
                 </div>
               </div>
             )}
@@ -478,19 +450,6 @@ function SessionView({
                 {/* Filters */}
                 <div className="rounded-lg border p-4 mb-4 bg-muted/30">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <div>
-                      <label htmlFor="source" className="block text-sm font-medium mb-1">
-                        Source
-                      </label>
-                      <input
-                        id="source"
-                        type="text"
-                        placeholder="Filter by source..."
-                        value={filters.source}
-                        onChange={(e) => handleFilterChange("source", e.target.value)}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      />
-                    </div>
                     <div>
                       <label htmlFor="status" className="block text-sm font-medium mb-1">
                         Status
@@ -563,8 +522,8 @@ function SessionView({
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2">Capture</th>
                         <th className="text-left py-2">Timestamp</th>
+                        <th className="text-left py-2">Capture</th>
                         <th className="text-right py-2">Req (bytes)</th>
                         <th className="text-right py-2">Res (bytes)</th>
                         <th className="text-right py-2">Total (bytes)</th>
@@ -573,7 +532,6 @@ function SessionView({
                         <th className="text-right py-2">Success</th>
                         <th className="text-right py-2">Error</th>
                         <th className="text-right py-2">Error Rate</th>
-                        <th className="text-right py-2">Context Values</th>
                         <th className="text-left py-2">Model</th>
                         <th className="text-right py-2">Input Tokens</th>
                         <th className="text-right py-2">Output Tokens</th>
@@ -584,10 +542,10 @@ function SessionView({
                     <tbody>
                       {filteredAndSortedCaptures.map((capture) => (
                         <tr key={capture.id} className="border-b">
+                          <td className="py-2 text-xs">{formatDateTime(capture.timestamp)}</td>
                           <td className="py-2 font-mono text-xs">
                             <Link href={`/sessions/${session.sessionId}?captureId=${capture.id}`} className="text-primary hover:underline">{capture.id}</Link>
                           </td>
-                          <td className="py-2 text-xs">{formatDateTime(capture.timestamp)}</td>
                           <td className="py-2 text-right font-mono text-xs">{capture.requestBytes.toLocaleString()}</td>
                           <td className="py-2 text-right font-mono text-xs">{capture.responseBytes.toLocaleString()}</td>
                           <td className="py-2 text-right font-mono text-xs">{(capture.requestBytes + capture.responseBytes).toLocaleString()}</td>
@@ -596,7 +554,6 @@ function SessionView({
                           <td className="py-2 text-right font-mono text-xs">{capture.metrics?.successCount ?? 0}</td>
                           <td className="py-2 text-right font-mono text-xs">{capture.metrics?.errorCount ?? 0}</td>
                           <td className="py-2 text-right font-mono text-xs">{(capture.metrics?.errorRate ?? 0).toFixed(2)}</td>
-                          <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalContextValues ?? 0}</td>
                           <td className="py-2 text-left text-xs font-mono text-muted-foreground">{capture.metrics?.model ?? "—"}</td>
                           <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalInputTokens.toLocaleString() ?? 0}</td>
                           <td className="py-2 text-right font-mono text-xs">{capture.metrics?.totalOutputTokens.toLocaleString() ?? 0}</td>
