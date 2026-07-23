@@ -87,6 +87,286 @@
   --color-input: 51 51 51;
 }
 
+/* Material Design Light (Google Material 3) */
+[data-theme="material-light"] {
+  --color-bg: 255 251 245;
+  --color-bg-secondary: 249 245 238;
+  --color-bg-tertiary: 243 238 230;
+  --color-text: 28 27 31;
+  --color-text-secondary: 68 66 70;
+  --color-text-muted: 103 101 105;
+  --color-border: 216 212 206;
+  --color-border-hover: 195 191 185;
+  --color-primary: 101 91 158;
+  --color-primary-foreground: 255 255 255;
+  --color-secondary: 245 241 235;
+  --color-secondary-foreground: 28 27 31;
+  --color-accent: 245 241 235;
+  --color-accent-foreground: 28 27 31;
+  --color-destructive: 186 26 36;
+  --color-destructive-foreground: 255 255 255;
+  --color-ring: 101 91 158;
+  --color-card: 255 251 245;
+  --color-card-foreground: 28 27 31;
+  --color-popover: 255 251 245;
+  --color-popover-foreground: 28 27 31;
+  --color-muted: 245 241 235;
+  --color-muted-foreground: 103 101 105;
+  --color-input: 216 212 206;
+}
+
+/* Material Design Dark (Google Material 3) */
+[data-theme="material-dark"] {
+  --color-bg: 28 27 31;
+  --color-bg-secondary: 38 36 44;
+  --color-bg-tertiary: 49 47 55;
+  --color-text: 231 228 241;
+  --color-text-secondary: 186 183 195;
+  --color-text-muted: 120 117 129;
+  --color-border: 58 55 66;
+  --color-border-hover: 79 76 89;
+  --color-primary: 199 192 246;
+  --color-primary-foreground: 45 40 82;
+  --color-secondary: 58 55 66;
+  --color-secondary-foreground: 231 228 241;
+  --color-accent: 58 55 66;
+  --color-accent-foreground: 231 228 241;
+  --color-destructive: 248 175 179;
+  --color-destructive-foreground: 88 17 26;
+  --color-ring: 199 192 246;
+  --color-card: 38 36 44;
+  --color-card-foreground: 231 228 241;
+  --color-popover: 38 36 44;
+  --color-popover-foreground: 231 228 241;
+  --color-muted: 58 55 66;
+  --color-muted-foreground: 120 117 129;
+  --color-input: 58 55 66;
+}
+
+/* Solarized Light */
+[data-theme="solarized-light"] {
+  --color-bg: 253 246 227;
+  --color-bg-secondary: 238 232 213;
+  --color-bg-tertiary: 223 217 198;
+  --color-text: 101 123 131;
+  --color-text-secondary: 147 161 161;
+  --color-text-muted: 147 161 161;
+  --color-border: 147 161 161;
+  --color-border-hover: 131 148 150;
+  --color-primary: 38 139 210;
+  --color-primary-foreground: 253 246 227;
+  --color-secondary: 223 217 198;
+  --color-secondary-foreground: 101 123 131;
+  --color-accent: 223 217 198;
+  --color-accent-foreground: 101 123 131;
+  --color-destructive: 220 50 47;
+  --color-destructive-foreground: 253 246 227;
+  --color-ring: 38 139 210;
+  --color-card: 253 246 227;
+  --color-card-foreground: 101 123 131;
+  --color-popover: 253 246 227;
+  --color-popover-foreground: 101 123 131;
+  --color-muted: 223 217 198;
+  --color-muted-foreground: 147 161 161;
+  --color-input: 147 161 161;
+}
+
+/* Solarized Dark */
+[data-theme="solarized-dark"] {
+  --color-bg: 0 43 54;
+  --color-bg-secondary: 7 54 66;
+  --color-bg-tertiary: 14 65 78;
+  --color-text: 131 148 150;
+  --color-text-secondary: 101 123 131;
+  --color-text-muted: 88 110 117;
+  --color-border: 88 110 117;
+  --color-border-hover: 101 123 131;
+  --color-primary: 38 139 210;
+  --color-primary-foreground: 0 43 54;
+  --color-secondary: 14 65 78;
+  --color-secondary-foreground: 131 148 150;
+  --color-accent: 14 65 78;
+  --color-accent-foreground: 131 148 150;
+  --color-destructive: 203 75 22;
+  --color-destructive-foreground: 0 43 54;
+  --color-ring: 38 139 210;
+  --color-card: 7 54 66;
+  --color-card-foreground: 131 148 150;
+  --color-popover: 7 54 66;
+  --color-popover-foreground: 131 148 150;
+  --color-muted: 14 65 78;
+  --color-muted-foreground: 88 110 117;
+  --color-input: 88 110 117;
+}
+
+/* Dracula Theme */
+[data-theme="dracula"] {
+  --color-bg: 40 42 54;
+  --color-bg-secondary: 52 54 68;
+  --color-bg-tertiary: 68 71 90;
+  --color-text: 248 248 242;
+  --color-text-secondary: 189 147 249;
+  --color-text-muted: 98 114 164;
+  --color-border: 68 71 90;
+  --color-border-hover: 98 114 164;
+  --color-primary: 189 147 249;
+  --color-primary-foreground: 40 42 54;
+  --color-secondary: 68 71 90;
+  --color-secondary-foreground: 248 248 242;
+  --color-accent: 68 71 90;
+  --color-accent-foreground: 248 248 242;
+  --color-destructive: 255 85 85;
+  --color-destructive-foreground: 40 42 54;
+  --color-ring: 189 147 249;
+  --color-card: 52 54 68;
+  --color-card-foreground: 248 248 242;
+  --color-popover: 52 54 68;
+  --color-popover-foreground: 248 248 242;
+  --color-muted: 68 71 90;
+  --color-muted-foreground: 98 114 164;
+  --color-input: 68 71 90;
+}
+
+/* Nord Theme */
+[data-theme="nord"] {
+  --color-bg: 46 52 64;
+  --color-bg-secondary: 59 66 82;
+  --color-bg-tertiary: 67 76 94;
+  --color-text: 216 222 233;
+  --color-text-secondary: 168 176 191;
+  --color-text-muted: 76 86 106;
+  --color-border: 59 66 82;
+  --color-border-hover: 67 76 94;
+  --color-primary: 129 161 193;
+  --color-primary-foreground: 46 52 64;
+  --color-secondary: 59 66 82;
+  --color-secondary-foreground: 216 222 233;
+  --color-accent: 59 66 82;
+  --color-accent-foreground: 216 222 233;
+  --color-destructive: 191 97 106;
+  --color-destructive-foreground: 46 52 64;
+  --color-ring: 129 161 193;
+  --color-card: 59 66 82;
+  --color-card-foreground: 216 222 233;
+  --color-popover: 59 66 82;
+  --color-popover-foreground: 216 222 233;
+  --color-muted: 59 66 82;
+  --color-muted-foreground: 168 176 191;
+  --color-input: 59 66 82;
+}
+
+/* GitHub Light */
+[data-theme="github-light"] {
+  --color-bg: 255 255 255;
+  --color-bg-secondary: 246 248 250;
+  --color-bg-tertiary: 235 238 241;
+  --color-text: 24 24 27;
+  --color-text-secondary: 55 56 61;
+  --color-text-muted: 105 106 112;
+  --color-border: 209 212 216;
+  --color-border-hover: 186 189 194;
+  --color-primary: 9 105 218;
+  --color-primary-foreground: 255 255 255;
+  --color-secondary: 235 238 241;
+  --color-secondary-foreground: 24 24 27;
+  --color-accent: 235 238 241;
+  --color-accent-foreground: 24 24 27;
+  --color-destructive: 191 0 35;
+  --color-destructive-foreground: 255 255 255;
+  --color-ring: 9 105 218;
+  --color-card: 255 255 255;
+  --color-card-foreground: 24 24 27;
+  --color-popover: 255 255 255;
+  --color-popover-foreground: 24 24 27;
+  --color-muted: 235 238 241;
+  --color-muted-foreground: 105 106 112;
+  --color-input: 209 212 216;
+}
+
+/* GitHub Dark */
+[data-theme="github-dark"] {
+  --color-bg: 13 17 23;
+  --color-bg-secondary: 22 27 34;
+  --color-bg-tertiary: 35 41 50;
+  --color-text: 192 202 216;
+  --color-text-secondary: 139 148 158;
+  --color-text-muted: 88 96 105;
+  --color-border: 48 54 61;
+  --color-border-hover: 65 73 82;
+  --color-primary: 88 166 255;
+  --color-primary-foreground: 13 17 23;
+  --color-secondary: 35 41 50;
+  --color-secondary-foreground: 192 202 216;
+  --color-accent: 35 41 50;
+  --color-accent-foreground: 192 202 216;
+  --color-destructive: 248 128 128;
+  --color-destructive-foreground: 13 17 23;
+  --color-ring: 88 166 255;
+  --color-card: 22 27 34;
+  --color-card-foreground: 192 202 216;
+  --color-popover: 22 27 34;
+  --color-popover-foreground: 192 202 216;
+  --color-muted: 35 41 50;
+  --color-muted-foreground: 139 148 158;
+  --color-input: 48 54 61;
+}
+
+/* One Dark (Atom/VS Code) */
+[data-theme="one-dark"] {
+  --color-bg: 40 44 52;
+  --color-bg-secondary: 49 54 63;
+  --color-bg-tertiary: 60 66 78;
+  --color-text: 171 178 191;
+  --color-text-secondary: 125 132 144;
+  --color-text-muted: 92 99 112;
+  --color-border: 60 66 78;
+  --color-border-hover: 70 78 90;
+  --color-primary: 97 175 239;
+  --color-primary-foreground: 40 44 52;
+  --color-secondary: 60 66 78;
+  --color-secondary-foreground: 171 178 191;
+  --color-accent: 60 66 78;
+  --color-accent-foreground: 171 178 191;
+  --color-destructive: 244 113 116;
+  --color-destructive-foreground: 40 44 52;
+  --color-ring: 97 175 239;
+  --color-card: 49 54 63;
+  --color-card-foreground: 171 178 191;
+  --color-popover: 49 54 63;
+  --color-popover-foreground: 171 178 191;
+  --color-muted: 60 66 78;
+  --color-muted-foreground: 125 132 144;
+  --color-input: 60 66 78;
+}
+
+/* Monokai */
+[data-theme="monokai"] {
+  --color-bg: 39 40 34;
+  --color-bg-secondary: 52 53 44;
+  --color-bg-tertiary: 62 63 53;
+  --color-text: 248 248 242;
+  --color-text-secondary: 189 147 249;
+  --color-text-muted: 117 113 94;
+  --color-border: 74 75 61;
+  --color-border-hover: 89 90 76;
+  --color-primary: 102 217 239;
+  --color-primary-foreground: 39 40 34;
+  --color-secondary: 62 63 53;
+  --color-secondary-foreground: 248 248 242;
+  --color-accent: 62 63 53;
+  --color-accent-foreground: 248 248 242;
+  --color-destructive: 249 38 114;
+  --color-destructive-foreground: 39 40 34;
+  --color-ring: 102 217 239;
+  --color-card: 52 53 44;
+  --color-card-foreground: 248 248 242;
+  --color-popover: 52 53 44;
+  --color-popover-foreground: 248 248 242;
+  --color-muted: 62 63 53;
+  --color-muted-foreground: 117 113 94;
+  --color-input: 74 75 61;
+}
+
 /* Base styles */
 html,
 body {

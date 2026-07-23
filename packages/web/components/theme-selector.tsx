@@ -6,8 +6,38 @@ import { useTheme } from "@/components/theme-provider";
 
 interface ThemeSelectorProps {
   className?: string;
-  value: "light" | "dark" | "system" | "high-contrast";
-  onChange: (theme: "light" | "dark" | "system" | "high-contrast") => void;
+  value:
+    | "light"
+    | "dark"
+    | "system"
+    | "high-contrast"
+    | "material-light"
+    | "material-dark"
+    | "solarized-light"
+    | "solarized-dark"
+    | "dracula"
+    | "nord"
+    | "github-light"
+    | "github-dark"
+    | "one-dark"
+    | "monokai";
+  onChange: (
+    theme:
+      | "light"
+      | "dark"
+      | "system"
+      | "high-contrast"
+      | "material-light"
+      | "material-dark"
+      | "solarized-light"
+      | "solarized-dark"
+      | "dracula"
+      | "nord"
+      | "github-light"
+      | "github-dark"
+      | "one-dark"
+      | "monokai"
+  ) => void;
 }
 
 const THEME_OPTIONS = [
@@ -15,6 +45,16 @@ const THEME_OPTIONS = [
   { value: "dark", label: "Dark", icon: "🌙" },
   { value: "system", label: "System", icon: "💻" },
   { value: "high-contrast", label: "High Contrast", icon: "🌓" },
+  { value: "material-light", label: "Material (Light)", icon: "🎨" },
+  { value: "material-dark", label: "Material (Dark)", icon: "🌑" },
+  { value: "solarized-light", label: "Solarized (Light)", icon: "☀️" },
+  { value: "solarized-dark", label: "Solarized (Dark)", icon: "🌙" },
+  { value: "dracula", label: "Dracula", icon: "🧛" },
+  { value: "nord", label: "Nord", icon: "❄️" },
+  { value: "github-light", label: "GitHub (Light)", icon: "🐙" },
+  { value: "github-dark", label: "GitHub (Dark)", icon: "🌑" },
+  { value: "one-dark", label: "One Dark", icon: "🌃" },
+  { value: "monokai", label: "Monokai", icon: "🍇" },
 ] as const;
 
 export function ThemeSelector({ className, value, onChange }: ThemeSelectorProps) {
@@ -70,7 +110,21 @@ const activeDescendantId = `theme-option-${focusedIndex}`;
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const handleSelect = (theme: "light" | "dark" | "system" | "high-contrast") => {
+  const handleSelect = (theme:
+    | "light"
+    | "dark"
+    | "system"
+    | "high-contrast"
+    | "material-light"
+    | "material-dark"
+    | "solarized-light"
+    | "solarized-dark"
+    | "dracula"
+    | "nord"
+    | "github-light"
+    | "github-dark"
+    | "one-dark"
+    | "monokai") => {
     onChange(theme);
     setIsOpen(false);
     buttonRef.current?.focus();

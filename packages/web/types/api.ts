@@ -461,6 +461,16 @@ export type MetricsData = {
   totalInputTokens?: number;
   /** Total output tokens across all responses */
   totalOutputTokens?: number;
+  /** Redaction statistics: deduplicated (unique per session) */
+  redactionStatsDeduped?: {
+    totalRedactions: number;
+    byRule: Record<string, number>;
+  };
+  /** Redaction statistics: sum across all captures */
+  redactionStatsSum?: {
+    totalRedactions: number;
+    byRule: Record<string, number>;
+  };
   /** Pagination information */
   pagination?: {
     page: number;

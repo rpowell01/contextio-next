@@ -4,12 +4,26 @@ import { createContext, useContext, useEffect, useState, ReactNode, useCallback,
 import { apiClient } from "@/lib/api";
 import type { Settings } from "@/lib/settings";
 
-type Theme = "light" | "dark" | "system" | "high-contrast";
+type Theme =
+  | "light"
+  | "dark"
+  | "system"
+  | "high-contrast"
+  | "material-light"
+  | "material-dark"
+  | "solarized-light"
+  | "solarized-dark"
+  | "dracula"
+  | "nord"
+  | "github-light"
+  | "github-dark"
+  | "one-dark"
+  | "monokai";
 
 interface ThemeContextType {
   theme: Theme;
   setTheme: (theme: Theme) => Promise<void>;
-  resolvedTheme: "light" | "dark" | "high-contrast";
+  resolvedTheme: "light" | "dark" | "high-contrast" | "material-light" | "material-dark" | "solarized-light" | "solarized-dark" | "dracula" | "nord" | "github-light" | "github-dark" | "one-dark" | "monokai";
   mounted: boolean;
   isOverridden: boolean;
 }
@@ -27,7 +41,9 @@ export function ThemeProvider({
   initialTheme = "system",
 }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(initialTheme);
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark" | "high-contrast">("light");
+  const [resolvedTheme, setResolvedTheme] = useState<
+    "light" | "dark" | "high-contrast" | "material-light" | "material-dark" | "solarized-light" | "solarized-dark" | "dracula" | "nord" | "github-light" | "github-dark" | "one-dark" | "monokai"
+  >("light");
   const [mounted, setMounted] = useState(false);
   const [isOverridden, setIsOverridden] = useState(false);
   const settingsRef = useRef<Settings | null>(null);
@@ -35,18 +51,18 @@ export function ThemeProvider({
   const mountedRef = useRef(true);
 
   // Resolve theme based on system preference
-  const resolveTheme = useCallback((t: Theme): "light" | "dark" | "high-contrast" => {
-    if (t === "system") {
-      if (typeof window !== "undefined" && window.matchMedia) {
-        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  const resolveTheme = useCallback(
+    (t: Theme): "light" | "dark" | "high-contrast" | "material-light" | "material-dark" | "solarized-light" | "solarized-dark" | "dracula" | "nord" | "github-light" | "github-dark" | "one-dark" | "monokai" => {
+      if (t === "system") {
+        if (typeof window !== "undefined" && window.matchMedia) {
+          return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        return "light";
       }
-      return "light";
-    }
-    if (t === "high-contrast") {
-      return "high-contrast";
-    }
-    return t;
-  }, []);
+      return t;
+    },
+    []
+  );
 
   // Apply theme to document
   const applyTheme = useCallback((t: Theme) => {

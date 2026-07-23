@@ -8,7 +8,21 @@ export interface Settings {
   captureCleanupEnabled: boolean;
   captureCleanupIntervalHours: number;
   captureCleanupMaxAgeDays: number;
-  theme: "light" | "dark" | "system" | "high-contrast";
+  theme:
+    | "light"
+    | "dark"
+    | "system"
+    | "high-contrast"
+    | "material-light"
+    | "material-dark"
+    | "solarized-light"
+    | "solarized-dark"
+    | "dracula"
+    | "nord"
+    | "github-light"
+    | "github-dark"
+    | "one-dark"
+    | "monokai";
   // OIDC Authentication settings
   oidcEnabled: boolean;
   oidcPublicUrl: string;
@@ -149,8 +163,39 @@ export function applyEnvOverrides(settings: Settings): {
         break;
       }
       case "theme":
-        if (["light", "dark", "system", "high-contrast"].includes(raw)) {
-          override.theme = raw as "light" | "dark" | "system" | "high-contrast";
+        if (
+          [
+            "light",
+            "dark",
+            "system",
+            "high-contrast",
+            "material-light",
+            "material-dark",
+            "solarized-light",
+            "solarized-dark",
+            "dracula",
+            "nord",
+            "github-light",
+            "github-dark",
+            "one-dark",
+            "monokai",
+          ].includes(raw)
+        ) {
+          override.theme = raw as
+            | "light"
+            | "dark"
+            | "system"
+            | "high-contrast"
+            | "material-light"
+            | "material-dark"
+            | "solarized-light"
+            | "solarized-dark"
+            | "dracula"
+            | "nord"
+            | "github-light"
+            | "github-dark"
+            | "one-dark"
+            | "monokai";
           accepted = true;
         }
         break;
@@ -270,7 +315,36 @@ export function validateSettings(input: unknown): Settings {
       1,
       365,
     ),
-    theme: validateEnum("theme", ["light", "dark", "system", "high-contrast"]) as "light" | "dark" | "system" | "high-contrast",
+    theme: validateEnum("theme", [
+      "light",
+      "dark",
+      "system",
+      "high-contrast",
+      "material-light",
+      "material-dark",
+      "solarized-light",
+      "solarized-dark",
+      "dracula",
+      "nord",
+      "github-light",
+      "github-dark",
+      "one-dark",
+      "monokai",
+    ]) as
+      | "light"
+      | "dark"
+      | "system"
+      | "high-contrast"
+      | "material-light"
+      | "material-dark"
+      | "solarized-light"
+      | "solarized-dark"
+      | "dracula"
+      | "nord"
+      | "github-light"
+      | "github-dark"
+      | "one-dark"
+      | "monokai",
     oidcEnabled: validateBoolean("oidcEnabled"),
     oidcPublicUrl: validateString("oidcPublicUrl", 0),
   };
@@ -335,8 +409,37 @@ export function validateSettingsLenient(input: unknown): Settings {
         : DEFAULT_SETTINGS.captureCleanupMaxAgeDays,
     theme:
       typeof obj.theme === "string" &&
-      ["light", "dark", "system", "high-contrast"].includes(obj.theme)
-        ? (obj.theme as "light" | "dark" | "system" | "high-contrast")
+      [
+        "light",
+        "dark",
+        "system",
+        "high-contrast",
+        "material-light",
+        "material-dark",
+        "solarized-light",
+        "solarized-dark",
+        "dracula",
+        "nord",
+        "github-light",
+        "github-dark",
+        "one-dark",
+        "monokai",
+      ].includes(obj.theme)
+        ? (obj.theme as
+            | "light"
+            | "dark"
+            | "system"
+            | "high-contrast"
+            | "material-light"
+            | "material-dark"
+            | "solarized-light"
+            | "solarized-dark"
+            | "dracula"
+            | "nord"
+            | "github-light"
+            | "github-dark"
+            | "one-dark"
+            | "monokai")
         : DEFAULT_SETTINGS.theme,
     oidcEnabled:
       typeof obj.oidcEnabled === "boolean"

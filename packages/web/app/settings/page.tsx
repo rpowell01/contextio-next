@@ -668,6 +668,31 @@ export default function SettingsPage() {
 
   const renderThemeSetting = () => {
     const themeDisabled = themeIsOverridden;
+    // Theme options organized by category
+    const themeOptions = [
+      { value: "light", label: "Light" },
+      { value: "dark", label: "Dark" },
+      { value: "system", label: "System (follows OS preference)" },
+      { value: "high-contrast", label: "High Contrast" },
+      // Material Design (Google Material 3)
+      { value: "material-light", label: "Material (Light)" },
+      { value: "material-dark", label: "Material (Dark)" },
+      // Solarized
+      { value: "solarized-light", label: "Solarized (Light)" },
+      { value: "solarized-dark", label: "Solarized (Dark)" },
+      // Dracula
+      { value: "dracula", label: "Dracula" },
+      // Nord
+      { value: "nord", label: "Nord" },
+      // GitHub
+      { value: "github-light", label: "GitHub (Light)" },
+      { value: "github-dark", label: "GitHub (Dark)" },
+      // One Dark (Atom/VS Code)
+      { value: "one-dark", label: "One Dark" },
+      // Monokai
+      { value: "monokai", label: "Monokai" },
+    ];
+
     return (
       <div>
         <Label htmlFor="theme" className="block text-sm font-medium mb-2">
@@ -682,17 +707,18 @@ export default function SettingsPage() {
           id="theme"
           value={theme}
           onChange={(e) =>
-            setTheme(e.target.value as "light" | "dark" | "system" | "high-contrast")
+            setTheme(e.target.value as "light" | "dark" | "system" | "high-contrast" | "material-light" | "material-dark" | "solarized-light" | "solarized-dark" | "dracula" | "nord" | "github-light" | "github-dark" | "one-dark" | "monokai")
           }
           disabled={themeDisabled}
           className={`w-full rounded-md px-3 py-2 text-sm border ${
             themeDisabled ? "bg-muted cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-primary"
           }`}
         >
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="system">System (follows OS preference)</option>
-          <option value="high-contrast">High Contrast</option>
+          {themeOptions.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
         </select>
         <SettingHelp
           meta={getMeta("theme")}

@@ -11,6 +11,7 @@ function parseCaptureMeta(meta: {
   requestBytes?: number;
   responseBytes?: number;
   totalRedactions: number;
+  byRule?: Record<string, number>;
 }): {
   traffic: TrafficMetric | null;
   providerUsage: ProviderUsage | null;
@@ -46,14 +47,25 @@ function parseCaptureMeta(meta: {
 
 /**
  * Aggregate metrics from all capture files.
+ * For traffic: include ALL captures (not deduplicated)
+ * For redactions: provide both deduplicated (unique) and sum counts with byRule breakdown
  */
 function aggregateMetrics(
   captures: Array<{
     traffic: TrafficMetric | null;
     providerUsage: ProviderUsage | null;
     redaction: RedactionMetric | null;
+    totalRedactions: number;
+    byRule?: Record<string, number>;
+    provider: string;
+    sessionId: string | null;
   }>,
-): MetricsData {
+): MetricsData & {
+  totalRedactionsDeduped: number;
+  totalRedactionsSum: number;
+  redactionByRuleDeduped: Record<string, number>;
+  redactionByRuleSum: Record<string, number>;
+} {
   const traffic: TrafficMetric[] = [];
   const providerMap: Map<string, ProviderUsage> = new Map();
   const redactions: RedactionMetric[] = [];
@@ -62,6 +74,14 @@ function aggregateMetrics(
   let totalResponseBytes = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let totalRedactionsSum = 0;
+
+  // For deduplicated redaction count: track by sessionId
+  const redactionBySession = new Map<string, number>();
+  // For byRule breakdown: sum across all sessions (deduplicated by taking max per session)
+  const redactionByRuleDeduped: Record<string, Map<string, number>> = {};
+  // For byRule breakdown: sum across ALL captures
+  const redactionByRuleSum: Record<string, number> = {};
 
   for (const capture of captures) {
     if (capture.traffic) {
@@ -88,6 +108,65 @@ function aggregateMetrics(
     if (capture.redaction) {
       redactions.push(capture.redaction);
     }
+
+    // Sum of redactions across ALL captures
+    totalRedactionsSum += capture.totalRedactions;
+
+    // Sum byRule across ALL captures
+    if (capture.byRule && typeof capture.byRule === "object") {
+      for (const [rule, count] of Object.entries(capture.byRule)) {
+        if (typeof count === "number") {
+          redactionByRuleSum[rule] = (redactionByRuleSum[rule] ?? 0) + count;
+        }
+      }
+    }
+
+    // Deduplicated redaction count (one per session, taking max per session)
+    if (capture.sessionId &&
+      typeof capture.totalRedactions === "number" &&
+      capture.totalRedactions > 0
+    ) {
+      // Keep the maximum redaction count per session (if multiple captures in same session have different counts)
+      const existing = redactionBySession.get(capture.sessionId);
+      if (existing === undefined || capture.totalRedactions > existing) {
+        redactionBySession.set(capture.sessionId, capture.totalRedactions);
+      }
+    }
+
+    // For byRule deduplicated: we need the max count per rule per session
+    if (capture.sessionId && capture.byRule && typeof capture.byRule === "object") {
+      for (const [rule, count] of Object.entries(capture.byRule)) {
+        if (typeof count === "number") {
+          if (!redactionByRuleDeduped[rule]) {
+            redactionByRuleDeduped[rule] = new Map<string, number>();
+          }
+          const sessionMap = redactionByRuleDeduped[rule];
+          const existing = sessionMap.get(capture.sessionId);
+          if (existing === undefined || count > existing) {
+            sessionMap.set(capture.sessionId, count);
+          }
+        }
+      }
+    }
+  }
+
+  // Sum up deduplicated counts across all sessions
+  let totalRedactionsDeduped = 0;
+  const redactionByRuleDedupedFinal: Record<string, number> = {};
+
+  for (const sessionId of redactionBySession.keys()) {
+    totalRedactionsDeduped += redactionBySession.get(sessionId) ?? 0;
+  }
+
+  // Sum up deduplicated byRule counts (max per session per rule)
+  for (const [rule, sessionMap] of Object.entries(redactionByRuleDeduped)) {
+    let ruleSum = 0;
+    for (const count of sessionMap.values()) {
+      ruleSum += count;
+    }
+    if (ruleSum > 0) {
+      redactionByRuleDedupedFinal[rule] = ruleSum;
+    }
   }
 
   const providers = Array.from(providerMap.values());
@@ -100,6 +179,10 @@ function aggregateMetrics(
     totalResponseBytes,
     totalInputTokens: totalInputTokens === 0 ? undefined : totalInputTokens,
     totalOutputTokens: totalOutputTokens === 0 ? undefined : totalOutputTokens,
+    totalRedactionsDeduped,
+    totalRedactionsSum,
+    redactionByRuleDeduped: redactionByRuleDedupedFinal,
+    redactionByRuleSum,
   };
 }
 
@@ -152,14 +235,16 @@ export async function GET(request: Request): Promise<Response> {
     const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
 
     const metaFiles = await listRedactionMetaFiles();
-    // Sort for deterministic "first capture per session" deduping
+    // Sort for deterministic ordering
     metaFiles.sort();
 
-    const seenSessions = new Set<string>();
     const captures: Array<{
       traffic: TrafficMetric | null;
       providerUsage: ProviderUsage | null;
       redaction: RedactionMetric | null;
+      totalRedactions: number;
+      provider: string;
+      sessionId: string | null;
     }> = [];
 
     for (const filename of metaFiles) {
@@ -167,12 +252,8 @@ export async function GET(request: Request): Promise<Response> {
         const meta = await loadRedactionMeta(filename);
         if (!meta) continue;
 
-        // Skip title-* sessions (match Redactions page behavior)
+        // Skip title-* sessions
         if (meta.sessionId?.startsWith("title-")) continue;
-
-        // Dedupe by sessionId: only keep first capture per session
-        if (meta.sessionId && seenSessions.has(meta.sessionId)) continue;
-        if (meta.sessionId) seenSessions.add(meta.sessionId);
 
         // Filter by timestamp on the server side
         if (meta.timestamp) {
@@ -182,8 +263,16 @@ export async function GET(request: Request): Promise<Response> {
           }
         }
 
+        // For traffic and provider usage: include ALL captures (not deduplicated)
+        // For redactions: we need both deduplicated and sum, so we track sessionId
         const parsed = parseCaptureMeta(meta);
-        captures.push(parsed);
+
+        captures.push({
+          ...parsed,
+          totalRedactions: meta.totalRedactions ?? 0,
+          provider: meta.provider ?? "unknown",
+          sessionId: meta.sessionId ?? null,
+        });
       } catch (error) {
         console.error(`Error processing metadata ${filename}:`, error);
         continue;
@@ -214,6 +303,14 @@ export async function GET(request: Request): Promise<Response> {
     const response = Response.json({
       ...metrics,
       traffic: metrics.traffic,
+      redactionStatsDeduped: {
+        totalRedactions: metrics.totalRedactionsDeduped,
+        byRule: metrics.redactionByRuleDeduped,
+      },
+      redactionStatsSum: {
+        totalRedactions: metrics.totalRedactionsSum,
+        byRule: metrics.redactionByRuleSum,
+      },
       pagination: {
         page,
         pageSize,

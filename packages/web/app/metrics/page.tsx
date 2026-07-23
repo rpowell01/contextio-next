@@ -48,7 +48,13 @@ export default function MetricsPage() {
 
       try {
         const controller = new AbortController();
-        const data = await apiClient.getMetrics(timeRange.hours, maxDataPoints || undefined, page, pageSize, controller.signal);
+        const data = await apiClient.getMetrics(
+          timeRange.hours,
+          maxDataPoints || undefined,
+          page,
+          pageSize,
+          controller.signal,
+        );
 
         if (!isValidMetricsData(data)) {
           throw new Error("Invalid metrics data received from API");
@@ -154,7 +160,7 @@ export default function MetricsPage() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
               <div className="rounded-lg border p-4">
                 <div className="text-sm text-muted-foreground">
                   Total Requests
@@ -168,33 +174,109 @@ export default function MetricsPage() {
                   )}
                 </div>
               </div>
+
+              {/* Unique Redactions (deduplicated by session) */}
+              <div className="rounded-lg border p-4 bg-blue-50 border-blue-200">
+                <div className="text-sm text-muted-foreground">
+                  Unique Redactions (per session)
+                </div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {formatNumber(metrics.redactionStatsDeduped?.totalRedactions ?? 0)}
+                </div>
+              </div>
+
+              {/* Total Redactions (sum across all captures) */}
+              <div className="rounded-lg border p-4 bg-red-50 border-red-200">
+                <div className="text-sm text-muted-foreground">
+                  Total Redactions (all captures)
+                </div>
+                <div className="text-2xl font-bold text-red-600">
+                  {formatNumber(metrics.redactionStatsSum?.totalRedactions ?? 0)}
+                </div>
+              </div>
+
               <div className="rounded-lg border p-4">
                 <div className="text-sm text-muted-foreground">
-                  Input Tokens
+                  Request Bytes
                 </div>
                 <div className="text-2xl font-bold">
-                  {formatNumber(metrics.totalInputTokens ?? 0)}
+                  {formatBytes(metrics.totalRequestBytes)}
                 </div>
               </div>
               <div className="rounded-lg border p-4">
                 <div className="text-sm text-muted-foreground">
-                  Output Tokens
+                  Response Bytes
                 </div>
                 <div className="text-2xl font-bold">
-                  {formatNumber(metrics.totalOutputTokens ?? 0)}
-                </div>
-              </div>
-              <div className="rounded-lg border p-4">
-                <div className="text-sm text-muted-foreground">
-                  Total Redactions
-                </div>
-                <div className="text-2xl font-bold">
-                  {formatNumber(
-                    metrics.redactions.reduce((sum, r) => sum + r.count, 0),
-                  )}
+                  {formatBytes(metrics.totalResponseBytes)}
                 </div>
               </div>
             </div>
+
+            {/* Redaction Breakdown by Rule */}
+            {(metrics.redactionStatsDeduped ||
+              metrics.redactionStatsSum) && (
+              <div className="rounded-lg border p-4">
+                <h3 className="text-lg font-semibold mb-4">
+                  Redaction Breakdown by Rule
+                </h3>
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                  {/* Unique (deduplicated) breakdown */}
+                  {metrics.redactionStatsDeduped &&
+                    Object.keys(metrics.redactionStatsDeduped.byRule).length > 0 && (
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <h4 className="text-sm font-medium text-blue-600 mb-2">
+                          Unique per Session
+                        </h4>
+                        <div className="grid gap-2 md:grid-cols-4">
+                          {Object.entries(metrics.redactionStatsDeduped.byRule).map(
+                            ([rule, count]) => (
+                              <div
+                                key={rule}
+                                className="rounded border p-2 bg-blue-50"
+                              >
+                                <div className="text-xs text-muted-foreground capitalize">
+                                  {rule.replace(/_/g, " ")}
+                                </div>
+                                <div className="text-lg font-bold text-blue-600">
+                                  {formatNumber(count)}
+                                </div>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Total (sum) breakdown */}
+                  {metrics.redactionStatsSum &&
+                    Object.keys(metrics.redactionStatsSum.byRule).length > 0 && (
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <h4 className="text-sm font-medium text-red-600 mb-2">
+                          Sum Across All Captures
+                        </h4>
+                        <div className="grid gap-2 md:grid-cols-4">
+                          {Object.entries(metrics.redactionStatsSum.byRule).map(
+                            ([rule, count]) => (
+                              <div
+                                key={rule}
+                                className="rounded border p-2 bg-red-50"
+                              >
+                                <div className="text-xs text-muted-foreground capitalize">
+                                  {rule.replace(/_/g, " ")}
+                                </div>
+                                <div className="text-lg font-bold text-red-600">
+                                  {formatNumber(count)}
+                                </div>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
 
             {/* Traffic Chart */}
             {metrics.traffic.length > 0 ? (
@@ -243,8 +325,8 @@ export default function MetricsPage() {
               </div>
             </div>
 
-{/* Pagination Controls */}
-            {(metrics.pagination && metrics.pagination.totalPages > 1) && (
+            {/* Pagination Controls */}
+            {metrics.pagination && metrics.pagination.totalPages > 1 && (
               <div className="rounded-lg border p-4">
                 <h3 className="text-lg font-semibold mb-4">Pagination</h3>
                 <div className="flex items-center justify-between">
@@ -253,15 +335,17 @@ export default function MetricsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={page <= 1}
                       className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       ← Previous
                     </button>
                     <button
-                      onClick={() => setPage(p => p + 1)}
-                      disabled={metrics.pagination && page >= metrics.pagination.totalPages}
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={
+                        metrics.pagination && page >= metrics.pagination.totalPages
+                      }
                       className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Next →
@@ -271,8 +355,8 @@ export default function MetricsPage() {
               </div>
             )}
 
-            </div>
-          )}
+          </div>
+        )}
 
         {/* Provider Usage */}
         <div className="rounded-lg border p-4">
@@ -297,8 +381,7 @@ export default function MetricsPage() {
                 <div className="text-right text-sm">
                   <div>{formatNumber(provider.requestCount)} requests</div>
                   <div className="text-muted-foreground">
-                    {formatNumber(provider.totalInputTokens)} in,{" "}
-                    {formatNumber(provider.totalOutputTokens)} out
+                    Tokens not available in metadata-only mode
                   </div>
                 </div>
               </div>
@@ -315,8 +398,10 @@ function isValidMetricsData(data: unknown): data is MetricsData {
   const metrics = data as Record<string, unknown>;
 
   return (
-    (typeof metrics.totalInputTokens === "number" || metrics.totalInputTokens === undefined) &&
-    (typeof metrics.totalOutputTokens === "number" || metrics.totalOutputTokens === undefined) &&
+    (typeof metrics.totalInputTokens === "number" ||
+      metrics.totalInputTokens === undefined) &&
+    (typeof metrics.totalOutputTokens === "number" ||
+      metrics.totalOutputTokens === undefined) &&
     typeof metrics.totalRequestBytes === "number" &&
     typeof metrics.totalResponseBytes === "number" &&
     Array.isArray(metrics.providers) &&
