@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useState, useEffect, useRef, useCallback } from "react";
 
 import { DiffDialog } from "@/components/ui/diff-dialog";
-import { RedactionHighlight } from "@/components/ui/redaction-highlight";
 
 interface RedactionSummary {
   totalRedactions: number;
@@ -563,7 +562,11 @@ const handleCloseDiff = useCallback(() => {
                 onClick={(e) => handleOpenDiff(e, row)}
                 title={row.redactionSummary}
               >
-                <RedactionHighlight value={row.redactionSummary} />
+                {row.redactionSummary.split(', ').map((item, idx) => (
+                  <span key={idx} className="block whitespace-nowrap">
+                    {item}
+                  </span>
+                ))}
               </span>
                         </td>
                       </tr>
