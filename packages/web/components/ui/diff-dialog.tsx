@@ -175,10 +175,13 @@ export function DiffDialog({
       const pane = panes[paneIndex];
       if (!pane) continue;
 
-      // Try to find element with data attribute
-      const target = pane.querySelector(`[data-redaction-${kebabType}]`);
+      // Try to find element with data attribute on the mark (placeholder) elements
+      const target = pane.querySelector(`mark[data-redaction-type="${kebabType}"]`);
       if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        // Add a brief highlight animation
+        target.classList.add("scroll-target-highlight");
+        setTimeout(() => target.classList.remove("scroll-target-highlight"), 2000);
         break;
       }
     }
@@ -272,7 +275,13 @@ export function DiffDialog({
           <span key={i}>
             {part}
             {i < matches.length && (
-              <mark className="redaction-placeholder">{matches[i]}</mark>
+              <mark
+                key={`placeholder-${i}-${matches[i]}`}
+                className="redaction-placeholder"
+                data-redaction={matches[i].replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
+              >
+                {matches[i]}
+              </mark>
             )}
           </span>
         ))}
@@ -304,13 +313,6 @@ export function DiffDialog({
         : "bg-transparent"
     }`;
 
-    // Determine which redaction types appear in this line
-    // Use placeholderType for matching against content (which has placeholders like [API_KEY_REDACTED])
-    // Use placeholderType for data attributes so scrolling works
-    const lineRedactionPlaceholderTypes = redactionTypes
-      .filter((r) => item.value && r.placeholderType && item.value.includes(`[${r.placeholderType}]`))
-      .map((r) => r.placeholderType!);
-
     // For right pane (post-redaction), use RedactionHighlight to highlight placeholders
     // For left pane (pre-redaction), also use RedactionHighlight with isPre=true to highlight likely PII
     const renderValue = isLeft
@@ -321,8 +323,6 @@ export function DiffDialog({
       <div
         className={lineClass}
         style={lineStyle}
-        data-redaction-types={lineRedactionPlaceholderTypes.join(",")}
-        {...(lineRedactionPlaceholderTypes.length > 0 && lineRedactionPlaceholderTypes.reduce((acc, t) => ({ ...acc, [`data-redaction-${t.toLowerCase().replace(/_/g, "-")}`]: "" }), {}))}
       >
         <span className="text-muted-foreground mr-2 select-none" style={{ width: "3rem", display: "inline-block", textAlign: "right" }}>
           {lineNum ?? ""}
@@ -359,46 +359,54 @@ export function DiffDialog({
         </DialogDescription>
 
         <div className="flex flex-col gap-3 p-4 border-b border-border flex-shrink-0">
-          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span>
-              Type:{" "}
-              {redactionTypes.length > 0 ? (
-                <span className="flex flex-wrap gap-1">
-                  {redactionTypes.map((r) => (
-                    <button
-                      key={r.apiType}
-                      type="button"
-                      onClick={() => scrollToRedactionType(r.apiType)}
-                      className="px-2 py-1 text-xs rounded transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                      aria-label={`Scroll to ${r.apiType} (${r.count} occurrences)`}
-                    >
-                      {r.apiType} ({r.count})
-                    </button>
-                  ))}
-                </span>
-              ) : (
-                <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span>
+          {/* Metadata table */}
+          <table className="w-full text-xs text-muted-foreground border-collapse">
+            <tbody>
+              <tr>
+                <td className="font-medium text-foreground w-24 pb-2">Type</td>
+                <td className="pb-2">
+                  {redactionTypes.length > 0 ? (
+                    <span className="flex flex-wrap gap-1">
+                      {redactionTypes.map((r) => (
+                        <button
+                          key={r.apiType}
+                          type="button"
+                          onClick={() => scrollToRedactionType(r.apiType)}
+                          className="px-2 py-1 text-xs rounded transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                          aria-label={`Scroll to ${r.apiType} (${r.count} occurrences)`}
+                        >
+                          {r.apiType} ({r.count})
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td className="font-medium text-foreground w-24 pb-2">Provider</td>
+                <td className="pb-2 font-mono">{provider}</td>
+              </tr>
+              {targetUrl && (
+                <tr>
+                  <td className="font-medium text-foreground w-24 pb-2">Target</td>
+                  <td className="pb-2 font-mono truncate max-w-[300px]">{targetUrl}</td>
+                </tr>
               )}
-            </span>
-            <span>
-              Provider: <span className="font-mono">{provider}</span>
-            </span>
-            {targetUrl && (
-              <span>
-                Target: <span className="font-mono truncate max-w-[200px]">{targetUrl}</span>
-              </span>
-            )}
-            {timestamp && (
-              <span>
-                Time: <span className="font-mono">{new Date(timestamp).toLocaleString()}</span>
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span>
-              Capture: <span className="font-mono">{captureId}</span>
-            </span>
-          </div>
+              {timestamp && (
+                <tr>
+                  <td className="font-medium text-foreground w-24 pb-2">Time</td>
+                  <td className="pb-2 font-mono">{new Date(timestamp).toLocaleString()}</td>
+                </tr>
+              )}
+              <tr>
+                <td className="font-medium text-foreground w-24 pb-2">Capture</td>
+                <td className="pb-2 font-mono">{captureId}</td>
+              </tr>
+            </tbody>
+          </table>
+
           {hasHiddenLines && (
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
               Showing changes with context ({diff.length} lines of {fullDiff.length})
