@@ -317,7 +317,7 @@ const handleCloseDiff = useCallback(() => {
       case 'requestSource':
         return <span className="text-muted-foreground">{row.requestSource ?? "—"}</span>;
       case 'requestProvider':
-        return <span>{row.requestProvider}</span>;
+        return <span className="text-center">{row.requestProvider}</span>;
       case 'requestTarget':
         return <span className="max-w-xs truncate">{row.requestTarget}</span>;
       case 'sessionId':
@@ -338,7 +338,7 @@ const handleCloseDiff = useCallback(() => {
       case 'timestamp':
         return <span className="font-mono text-xs">{new Date(row.timestamp).toLocaleString()}</span>;
       case 'totalRedactions':
-        return <span className="font-medium text-red-600">{row.totalRedactions}</span>;
+        return <span className="font-medium text-red-600 text-center">{row.totalRedactions}</span>;
       default:
         return null;
     }
@@ -509,7 +509,7 @@ const handleCloseDiff = useCallback(() => {
                          sessionId: 'Session ID',
                          captureId: 'Capture ID',
                          timestamp: 'Date/Time',
-                         totalRedactions: 'Redactions',
+                         totalRedactions: 'Total Redactions',
                        };
                        const isLast = idx === columnOrder.length - 1;
                        return (
@@ -537,7 +537,7 @@ const handleCloseDiff = useCallback(() => {
                          </th>
                        );
                      })}
-<th className="text-left py-3 px-4">Redactions</th>
+<th className="text-left py-3 px-4">Redactions by Type</th>
                     </tr>
                  </thead>
 <tbody>
@@ -546,12 +546,22 @@ const handleCloseDiff = useCallback(() => {
                     return (
                       <tr key={rowKey} className="border-b hover:bg-accent/50">
                         {columnOrder.map((key) => (
-                          <td key={key}>{renderCell(key, row)}</td>
+                          <td
+                            key={key}
+                            className={
+                              key === 'requestProvider' || key === 'totalRedactions'
+                                ? 'text-center'
+                                : undefined
+                            }
+                          >
+                            {renderCell(key, row)}
+                          </td>
                         ))}
-                        <td className="py-3 px-4 max-w-xs truncate">
+                        <td className="py-3 px-4 max-w-xs whitespace-normal break-words">
               <span
                 className="text-primary underline cursor-pointer hover:text-primary/80"
                 onClick={(e) => handleOpenDiff(e, row)}
+                title={row.redactionSummary}
               >
                 <RedactionHighlight value={row.redactionSummary} />
               </span>
