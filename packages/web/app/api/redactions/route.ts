@@ -41,8 +41,10 @@ const getRedactionsSummary = unstable_cache(
   async (): Promise<RedactionSummary> => {
     const metaFiles = await listRedactionMetaFiles();
 
-    // Group meta files by sessionId to avoid duplicate counts from multiple captures per session
-    const metaBySession = new Map<string, { filename: string; meta: Record<string, unknown> }>();
+    // Track max redactions per session (to match metrics page behavior)
+    const maxRedactionsBySession = new Map<string, number>();
+    // Track placeholder counts by session (max per session)
+    const placeholderBySession = new Map<string, Record<string, number>>();
 
     for (const filename of metaFiles) {
       try {
@@ -54,25 +56,7 @@ const getRedactionsSummary = unstable_cache(
         // Skip title generation captures
         if (sessionId.startsWith("title-")) continue;
 
-        // Keep first meta file per session
-        if (!metaBySession.has(sessionId)) {
-          metaBySession.set(sessionId, { filename, meta });
-        }
-      } catch (error) {
-        console.error(`Error reading redaction meta ${filename}:`, error);
-        continue;
-      }
-    }
-
-    let totalRedactions = 0;
-    const byPlaceholder: Record<string, number> = {};
-
-    for (const [_sessionId, { filename, meta }] of metaBySession) {
-      try {
-        if (typeof meta.totalRedactions === "number") {
-          totalRedactions += meta.totalRedactions;
-        }
-        // Use matches array to get actual placeholders used in content
+        // Get placeholder counts from matches
         const matches = (meta.matches as Array<{
           ruleId: string;
           preValue: string;
@@ -80,14 +64,35 @@ const getRedactionsSummary = unstable_cache(
           path: string;
         }> | undefined) ?? [];
 
-        // Use computePlaceholderCounts which correctly handles postValue
         const counts = computePlaceholderCounts(matches);
+        const totalRedactions = meta.totalRedactions ?? 0;
+
+        // Track max total redactions per session
+        const existingMax = maxRedactionsBySession.get(sessionId) ?? 0;
+        if (totalRedactions > existingMax) {
+          maxRedactionsBySession.set(sessionId, totalRedactions);
+          // Also update placeholder breakdown to match the max capture
+          placeholderBySession.set(sessionId, counts);
+        }
+      } catch (error) {
+        console.error(`Error reading redaction meta ${filename}:`, error);
+        continue;
+      }
+    }
+
+    // Sum up max redactions across all sessions
+    let totalRedactions = 0;
+    const byPlaceholder: Record<string, number> = {};
+
+    for (const [sessionId, maxCount] of maxRedactionsBySession) {
+      totalRedactions += maxCount;
+
+      // Add placeholder breakdown from the max capture for this session
+      const counts = placeholderBySession.get(sessionId);
+      if (counts) {
         for (const [placeholder, count] of Object.entries(counts)) {
           byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + count;
         }
-      } catch (error) {
-        console.error(`Error processing redaction meta ${filename}:`, error);
-        continue;
       }
     }
 
