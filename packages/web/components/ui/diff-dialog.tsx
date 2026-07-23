@@ -88,7 +88,7 @@ export function DiffDialog({
 
   // Parse redaction types from the comma-separated string like "[RULE_REDACTED] (count), [RULE2_REDACTED] (count)"
   // Supports hyphens in rule names like "API-KEY-PREFIXED_REDACTED"
-  const redactionTypes = useMemo(() => {
+  const rawRedactionTypes = useMemo(() => {
     if (!redactionType) return [];
     const matches = redactionType.match(/\[([A-Z][A-Z0-9_-]*_REDACTED)\]\s*\((\d+)\)/g);
     if (!matches) return [];
@@ -96,21 +96,76 @@ export function DiffDialog({
       const ruleMatch = m.match(/\[([A-Z][A-Z0-9_-]*_REDACTED)\]/);
       const countMatch = m.match(/\((\d+)\)/);
       return {
-        type: ruleMatch ? ruleMatch[1] : "",
+        apiType: ruleMatch ? ruleMatch[1] : "",
         count: countMatch ? parseInt(countMatch[1], 10) : 0,
         display: m,
       };
-    }).filter(r => r.type);
+    }).filter(r => r.apiType);
   }, [redactionType]);
 
+  // Extract actual placeholder types (e.g., [API_KEY_REDACTED]) from post-redaction content
+  const placeholderTypes = useMemo(() => {
+    const types = new Set<string>();
+    // Check both pre and post content for placeholders
+    const allContent = [diffPreContent, diffPostContent].filter(Boolean).join("\n");
+    const matches = allContent.match(/\[([A-Z][A-Z0-9_]*_REDACTED)\]/g);
+    if (matches) {
+      matches.forEach(m => {
+        const t = m.match(/\[([A-Z][A-Z0-9_]*_REDACTED)\]/);
+        if (t) types.add(t[1]);
+      });
+    }
+    return Array.from(types);
+  }, [diffPreContent, diffPostContent]);
+
+  // Map API type to placeholder type for scrolling
+  // e.g., API-KEY-PREFIXED_REDACTED -> API_KEY_REDACTED
+  const apiToPlaceholderMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const apiType of rawRedactionTypes.map(r => r.apiType)) {
+      // Try exact match first
+      if (placeholderTypes.includes(apiType)) {
+        map.set(apiType, apiType);
+        continue;
+      }
+      // Try normalized: remove hyphens, remove suffixes like -PREFIXED, -US, etc.
+      const normalized = apiType
+        .replace(/-/g, "_")
+        .replace(/_PREFIXED(_REDACTED)$/, "$1")
+        .replace(/_US(_REDACTED)$/, "$1");
+      if (placeholderTypes.includes(normalized)) {
+        map.set(apiType, normalized);
+        continue;
+      }
+      // Fallback: find placeholder that starts with the same base (e.g., API_KEY for API-KEY-PREFIXED)
+      const base = apiType.split("_")[0].replace(/-/g, "_");
+      const match = placeholderTypes.find(p => p.startsWith(base + "_"));
+      if (match) {
+        map.set(apiType, match);
+      } else {
+        map.set(apiType, apiType); // fallback to itself
+      }
+    }
+    return map;
+  }, [rawRedactionTypes, placeholderTypes]);
+
+  // Build final redaction types with placeholder type for scrolling
+  const redactionTypes = useMemo(() => {
+    return rawRedactionTypes.map(r => ({
+      ...r,
+      placeholderType: apiToPlaceholderMap.get(r.apiType) || r.apiType,
+    }));
+  }, [rawRedactionTypes, apiToPlaceholderMap]);
+
   // Scroll to a specific redaction type in both panes
-  const scrollToRedactionType = useCallback((type: string) => {
+  const scrollToRedactionType = useCallback((apiType: string) => {
     const panes = viewMode === "diff"
       ? [leftPaneDiffRef.current, rightPaneDiffRef.current]
       : [leftPaneSyntaxRef.current, rightPaneSyntaxRef.current];
 
-    // Convert type to the same kebab-case format used in data attributes
-    const kebabType = type.toLowerCase().replace(/_/g, "-");
+    // Look up the placeholder type for this API type
+    const placeholderType = apiToPlaceholderMap.get(apiType) || apiType;
+    const kebabType = placeholderType.toLowerCase().replace(/_/g, "-");
 
     panes.forEach((pane) => {
       if (!pane) return;
@@ -120,7 +175,7 @@ export function DiffDialog({
         target.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     });
-  }, [viewMode]);
+  }, [viewMode, apiToPlaceholderMap]);
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>, source: "left" | "right") => {
     if (isScrollingRef.current) return;
@@ -243,9 +298,11 @@ export function DiffDialog({
     }`;
 
     // Determine which redaction types appear in this line
-    const lineRedactionTypes = redactionTypes
-      .filter((r) => item.value && item.value.includes(`[${r.type}]`))
-      .map((r) => r.type);
+    // Use placeholderType for matching against content (which has placeholders like [API_KEY_REDACTED])
+    // Use placeholderType for data attributes so scrolling works
+    const lineRedactionPlaceholderTypes = redactionTypes
+      .filter((r) => item.value && r.placeholderType && item.value.includes(`[${r.placeholderType}]`))
+      .map((r) => r.placeholderType!);
 
     // For right pane (post-redaction), use RedactionHighlight to highlight placeholders
     // For left pane (pre-redaction), also use RedactionHighlight with isPre=true to highlight likely PII
@@ -257,8 +314,8 @@ export function DiffDialog({
       <div
         className={lineClass}
         style={lineStyle}
-        data-redaction-types={lineRedactionTypes.join(",")}
-        {...(lineRedactionTypes.length > 0 && lineRedactionTypes.reduce((acc, t) => ({ ...acc, [`data-redaction-${t.toLowerCase().replace(/_/g, "-")}`]: "" }), {}))}
+        data-redaction-types={lineRedactionPlaceholderTypes.join(",")}
+        {...(lineRedactionPlaceholderTypes.length > 0 && lineRedactionPlaceholderTypes.reduce((acc, t) => ({ ...acc, [`data-redaction-${t.toLowerCase().replace(/_/g, "-")}`]: "" }), {}))}
       >
         <span className="text-muted-foreground mr-2 select-none" style={{ width: "3rem", display: "inline-block", textAlign: "right" }}>
           {lineNum ?? ""}
@@ -302,13 +359,13 @@ export function DiffDialog({
                 <span className="flex flex-wrap gap-1">
                   {redactionTypes.map((r) => (
                     <button
-                      key={r.type}
+                      key={r.apiType}
                       type="button"
-                      onClick={() => scrollToRedactionType(r.type)}
-                      className="px-2 py-1 text-xs rounded transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground font-mono"
-                      aria-label={`Scroll to ${r.type} (${r.count} occurrences)`}
+                      onClick={() => scrollToRedactionType(r.apiType)}
+                      className="px-2 py-1 text-xs rounded transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      aria-label={`Scroll to ${r.apiType} (${r.count} occurrences)`}
                     >
-                      {r.type} ({r.count})
+                      {r.apiType} ({r.count})
                     </button>
                   ))}
                 </span>
