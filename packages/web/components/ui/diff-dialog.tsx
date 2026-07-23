@@ -10,7 +10,6 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { computeDiff, type DiffChunk, filterDiffWithContext } from "@/lib/diff";
-import { RedactionHighlight } from "@/components/ui/redaction-highlight";
 import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
 
 interface DiffDialogProps {
@@ -30,55 +29,12 @@ interface DiffDialogProps {
 
 type ViewMode = "diff" | "syntax";
 
-// Shared line style for both visible lines and placeholders to keep panes aligned
 const lineStyle = {
   padding: "2px 8px",
   borderRadius: "4px",
   minHeight: "1.25rem",
 } as const;
 
-function renderLine(item: DiffChunk, side: "left" | "right") {
-  const isLeft = side === "left";
-  const showLine = isLeft ? item.type !== "insert" : item.type !== "delete";
-
-  if (!showLine) {
-    // Placeholder for hidden lines (insert on left, delete on right) - use same
-    // min-height and padding as visible lines so the two panes stay vertically aligned
-    return <div style={lineStyle} />;
-  }
-
-  const lineNum = isLeft ? item.oldLineNum : item.newLineNum;
-  const lineClass = `font-mono text-xs whitespace-pre-wrap ${
-    isLeft
-      ? item.type === "delete"
-        ? "diff-line-delete"
-        : item.type === "insert"
-        ? "diff-line-insert"
-        : "bg-transparent"
-      : item.type === "delete"
-      ? "diff-line-delete"
-      : item.type === "insert"
-      ? "diff-line-insert"
-      : "bg-transparent"
-  }`;
-
-  // For right pane (post-redaction), use RedactionHighlight to highlight placeholders
-  // For left pane (pre-redaction), render plain text since it's the original content
-  const renderValue = isLeft
-    ? <span>{item.value}</span>
-    : <RedactionHighlight value={item.value} />;
-
-  return (
-    <div className={lineClass} style={lineStyle}>
-      <span className="text-muted-foreground mr-2 select-none" style={{ width: "3rem", display: "inline-block", textAlign: "right" }}>
-        {lineNum ?? ""}
-      </span>
-      {renderValue}
-    </div>
-  );
-}
-
-// Validate JSON content properly
 function isValidJson(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
@@ -130,6 +86,37 @@ export function DiffDialog({
   const rightPaneSyntaxRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
 
+  // Parse redaction types from the comma-separated string like "[RULE_REDACTED] (count), [RULE2_REDACTED] (count)"
+  const redactionTypes = useMemo(() => {
+    if (!redactionType) return [];
+    const matches = redactionType.match(/\[([A-Z][A-Z0-9_]*_REDACTED)\]\s*\((\d+)\)/g);
+    if (!matches) return [];
+    return matches.map((m) => {
+      const ruleMatch = m.match(/\[([A-Z][A-Z0-9_]*_REDACTED)\]/);
+      const countMatch = m.match(/\((\d+)\)/);
+      return {
+        type: ruleMatch ? ruleMatch[1] : "",
+        count: countMatch ? parseInt(countMatch[1], 10) : 0,
+        display: m,
+      };
+    }).filter(r => r.type);
+  }, [redactionType]);
+
+  // Scroll to a specific redaction type in both panes
+  const scrollToRedactionType = useCallback((type: string) => {
+    const panes = viewMode === "diff"
+      ? [leftPaneDiffRef.current, rightPaneDiffRef.current]
+      : [leftPaneSyntaxRef.current, rightPaneSyntaxRef.current];
+
+    panes.forEach((pane) => {
+      if (!pane) return;
+      const target = pane.querySelector(`[data-redaction-type="${type}"]`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  }, [viewMode]);
+
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>, source: "left" | "right") => {
     if (isScrollingRef.current) return;
     isScrollingRef.current = true;
@@ -152,6 +139,129 @@ export function DiffDialog({
       isScrollingRef.current = false;
     });
   }, [viewMode]);
+
+  // Highlights redaction placeholders in text.
+  // For pre-redaction (isPre=true): highlights text that matches PII patterns
+  // For post-redaction (isPre=false): highlights the [RULE_REDACTED] placeholders
+  const RedactionHighlight = useCallback(({
+    value,
+    isPre = false,
+  }: {
+    value: string | undefined | null;
+    isPre?: boolean;
+  }) => {
+    const placeholderPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
+    const safeValue = String(value || "");
+
+    if (isPre) {
+      const piiPatterns = [
+        /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, // email
+        /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
+        /\b(SK|AK|RK|sk|ak|rk)_[A-Za-z0-9]{32,}\b/g, // API keys
+        /\bBearer\s+[A-Za-z0-9._-]+\b/g, // Bearer tokens
+        /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, // phone
+        /\b(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)[_-]?[=:]\s*["']?[A-Za-z0-9+/=_-]{20,}["']?/gi, // key=value patterns
+      ];
+
+      const parts: (string | React.ReactElement)[] = [safeValue];
+      for (const pattern of piiPatterns) {
+        const newParts: (string | React.ReactElement)[] = [];
+        for (const part of parts) {
+          if (typeof part === "string") {
+            const split = part.split(pattern);
+            const matches = part.match(pattern) || [];
+            split.forEach((segment, i) => {
+              if (segment) newParts.push(segment);
+              if (i < matches.length) {
+                newParts.push(
+                  <mark key={`pii-${i}-${Date.now()}`} className="redaction-placeholder pre-redaction-highlight">
+                    {matches[i]}
+                  </mark>
+                );
+              }
+            });
+          } else {
+            newParts.push(part);
+          }
+        }
+        parts.length = 0;
+        parts.push(...newParts);
+      }
+
+      return <code className="font-mono text-xs">{parts}</code>;
+    }
+
+    // For post-redaction, highlight the [RULE_REDACTED] placeholders
+    const partsPost = safeValue.split(placeholderPattern);
+    const matches = safeValue.match(placeholderPattern);
+
+    if (!matches || matches.length === 0) {
+      return <code className="font-mono text-xs">{value}</code>;
+    }
+
+    return (
+      <code className="font-mono text-xs">
+        {partsPost.map((part, i) => (
+          <span key={i}>
+            {part}
+            {i < matches.length && (
+              <mark className="redaction-placeholder">{matches[i]}</mark>
+            )}
+          </span>
+        ))}
+      </code>
+    );
+  }, []);
+
+  // Render a single diff line with redaction highlighting and data attributes for navigation
+  const renderLine = (item: DiffChunk, side: "left" | "right") => {
+    const isLeft = side === "left";
+    const showLine = isLeft ? item.type !== "insert" : item.type !== "delete";
+
+    if (!showLine) {
+      return <div style={lineStyle} />;
+    }
+
+    const lineNum = isLeft ? item.oldLineNum : item.newLineNum;
+    const lineClass = `font-mono text-xs whitespace-pre-wrap ${
+      isLeft
+        ? item.type === "delete"
+          ? "diff-line-delete"
+          : item.type === "insert"
+          ? "diff-line-insert"
+          : "bg-transparent"
+        : item.type === "delete"
+        ? "diff-line-delete"
+        : item.type === "insert"
+        ? "diff-line-insert"
+        : "bg-transparent"
+    }`;
+
+    // Determine which redaction types appear in this line
+    const lineRedactionTypes = redactionTypes
+      .filter((r) => item.value && item.value.includes(`[${r.type}]`))
+      .map((r) => r.type);
+
+    // For right pane (post-redaction), use RedactionHighlight to highlight placeholders
+    // For left pane (pre-redaction), also use RedactionHighlight with isPre=true to highlight likely PII
+    const renderValue = isLeft
+      ? <RedactionHighlight value={item.value} isPre />
+      : <RedactionHighlight value={item.value} />;
+
+    return (
+      <div
+        className={lineClass}
+        style={lineStyle}
+        data-redaction-types={lineRedactionTypes.join(",")}
+        {...(lineRedactionTypes.length > 0 && lineRedactionTypes.reduce((acc, t) => ({ ...acc, [`data-redaction-${t.toLowerCase().replace(/_/g, "-")}`]: "" }), {}))}
+      >
+        <span className="text-muted-foreground mr-2 select-none" style={{ width: "3rem", display: "inline-block", textAlign: "right" }}>
+          {lineNum ?? ""}
+        </span>
+        {renderValue}
+      </div>
+    );
+  };
 
   const renderDiffPane = (diffChunks: typeof diff, side: "left" | "right") => (
     <div className="font-mono text-xs">
@@ -179,36 +289,50 @@ export function DiffDialog({
           Side-by-side diff showing pre-redaction and post-redaction content
         </DialogDescription>
 
-        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
-          <div>
-            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-1">
+        <div className="flex flex-col gap-3 p-4 border-b border-border flex-shrink-0">
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <span>
+              Type: <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span>
+            </span>
+            <span>
+              Capture: <span className="font-mono">{captureId}</span>
+            </span>
+            {provider && (
               <span>
-                Type: <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span>
+                Provider: <span className="font-mono">{provider}</span>
               </span>
+            )}
+            {targetUrl && (
               <span>
-                Capture: <span className="font-mono">{captureId}</span>
+                Target: <span className="font-mono truncate max-w-[200px]">{targetUrl}</span>
               </span>
-              {provider && (
-                <span>
-                  Provider: <span className="font-mono">{provider}</span>
-                </span>
-              )}
-              {targetUrl && (
-                <span>
-                  Target: <span className="font-mono truncate max-w-[200px]">{targetUrl}</span>
-                </span>
-              )}
-              {timestamp && (
-                <span>
-                  Time: <span className="font-mono">{new Date(timestamp).toLocaleString()}</span>
-                </span>
-              )}
-            </div>
+            )}
+            {timestamp && (
+              <span>
+                Time: <span className="font-mono">{new Date(timestamp).toLocaleString()}</span>
+              </span>
+            )}
           </div>
           {hasHiddenLines && (
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
               Showing changes with context ({diff.length} lines of {fullDiff.length})
             </span>
+          )}
+          {/* Redaction type chips for quick navigation */}
+          {redactionTypes.length > 0 && (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Redaction types - click to scroll">
+              {redactionTypes.map((r) => (
+                <button
+                  key={r.type}
+                  type="button"
+                  onClick={() => scrollToRedactionType(r.type)}
+                  className="px-2 py-1 text-xs rounded bg-accent text-accent-foreground hover:bg-accent/80 transition-colors font-mono border border-border"
+                  aria-label={`Scroll to ${r.type} (${r.count} occurrences)`}
+                >
+                  {r.type} ({r.count})
+                </button>
+              ))}
+            </div>
           )}
           {/* View mode toggle for JSON content */}
           {isJsonContent && (
