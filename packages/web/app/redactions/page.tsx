@@ -12,27 +12,26 @@ interface RedactionSummary {
   byType: Record<string, number>;
 }
 
-interface RedactionDetailRow {
-  redactionType: string;
+interface RedactionCaptureRow {
+  captureId: string;
+  sessionId: string | null;
+  timestamp: string;
   requestSource: string | null;
   requestProvider: string;
   requestTarget: string;
-  sessionId: string | null;
-  captureId: string;
-  preRedactionValue: string;
-  postRedactionValue: string;
-  path: string;
-  matchIndex: number;
-  fullOriginal?: string;
-  fullRedacted?: string;
-  timestamp: string;
+  /** Comma-separated list like "[API_KEY_REDACTED] (1), [PHONE_REDACTED] (5)" */
+  redactionSummary: string;
+  /** Total redaction count for this capture */
+  totalRedactions: number;
+  /** Breakdown by rule for this capture */
+  byRule: Record<string, number>;
 }
 
 const PAGE_SIZE = 50;
 
 export default function RedactionsPage() {
   const [summary, _setSummary] = useState<RedactionSummary | null>(null);
-  const [details, _setDetails] = useState<RedactionDetailRow[]>([]);
+  const [details, _setDetails] = useState<RedactionCaptureRow[]>([]);
   const [_loadingSummary, _setLoadingSummary] = useState(true);
   const [_loadingDetails, _setLoadingDetails] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,6 +63,7 @@ export default function RedactionsPage() {
     'requestTarget',
     'sessionId',
     'captureId',
+    'totalRedactions',
   ]);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
@@ -131,21 +131,22 @@ const fetchSummary = useCallback(async () => {
     fetchSummary();
   }, [fetchSummary]);
 
-const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionDetailRow) => {
+const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionCaptureRow) => {
     lastFocusedTrigger.current = e.currentTarget as HTMLElement;
-    
-    // Fetch specific match data from detail endpoint using matchIndex
-    let preContent = row.preRedactionValue;
-    let postContent = row.postRedactionValue;
+
+    // Fetch first match for this capture from the detail API
+    // We use the first match for the diff view; the full redaction list is shown in the summary
+    let preContent = "";
+    let postContent = "";
     let fullOriginal: string | undefined;
     let fullRedacted: string | undefined;
-    
+
     try {
-      const res = await fetch(`/api/redactions/detail/${row.captureId}/${row.matchIndex}`);
+      const res = await fetch(`/api/redactions/detail/${row.captureId}/0`);
       if (res.ok) {
         const detail = await res.json();
-        preContent = detail.preRedactionValue || row.preRedactionValue;
-        postContent = detail.postRedactionValue || row.postRedactionValue;
+        preContent = detail.preRedactionValue || "";
+        postContent = detail.postRedactionValue || "";
         fullOriginal = detail.fullOriginal;
         fullRedacted = detail.fullRedacted;
       } else {
@@ -155,13 +156,15 @@ const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionDet
       console.warn('Failed to fetch redaction detail:', err);
     }
 
+    // For comma-separated list, we show the summary and open with first redaction
+    // The dialog could be enhanced to show multiple redactions
     setDiffDialogData({
       preContent,
       postContent,
       fullOriginal,
       fullRedacted,
       captureId: row.captureId,
-      redactionType: row.redactionType,
+      redactionType: row.redactionSummary, // Show summary in dialog title
       provider: row.requestProvider,
       targetUrl: row.requestTarget,
       timestamp: row.timestamp,
@@ -309,10 +312,8 @@ const handleCloseDiff = useCallback(() => {
   };
   const handleDragEnd = () => setDraggedKey(null);
 
-  const renderCell = (key: string, row: RedactionDetailRow) => {
+  const renderCell = (key: string, row: RedactionCaptureRow) => {
     switch (key) {
-      case 'redactionType':
-        return <span className="font-medium capitalize">{row.redactionType.replace(/_/g, " ")}</span>;
       case 'requestSource':
         return <span className="text-muted-foreground">{row.requestSource ?? "—"}</span>;
       case 'requestProvider':
@@ -336,6 +337,8 @@ const handleCloseDiff = useCallback(() => {
         );
       case 'timestamp':
         return <span className="font-mono text-xs">{new Date(row.timestamp).toLocaleString()}</span>;
+      case 'totalRedactions':
+        return <span className="font-medium text-red-600">{row.totalRedactions}</span>;
       default:
         return null;
     }
@@ -476,7 +479,7 @@ const handleCloseDiff = useCallback(() => {
               <div>
                 <h2 className="text-xl font-semibold">Redaction Details</h2>
                 <p className="text-sm text-muted-foreground">
-                  {totalCount} total redaction entries • Page {page} of {totalPages || 1}
+                  {totalCount} total captures • Page {page} of {totalPages || 1}
                 </p>
               </div>
               {_loadingDetails && (
@@ -506,6 +509,7 @@ const handleCloseDiff = useCallback(() => {
                          sessionId: 'Session ID',
                          captureId: 'Capture ID',
                          timestamp: 'Date/Time',
+                         totalRedactions: 'Redactions',
                        };
                        const isLast = idx === columnOrder.length - 1;
                        return (
@@ -533,7 +537,7 @@ const handleCloseDiff = useCallback(() => {
                          </th>
                        );
                      })}
-<th className="text-left py-3 px-4">Redaction Diff</th>
+<th className="text-left py-3 px-4">Redactions</th>
                     </tr>
                  </thead>
 <tbody>
@@ -549,7 +553,7 @@ const handleCloseDiff = useCallback(() => {
                 className="text-primary underline cursor-pointer hover:text-primary/80"
                 onClick={(e) => handleOpenDiff(e, row)}
               >
-                <RedactionHighlight value={row.postRedactionValue} />
+                <RedactionHighlight value={row.redactionSummary} />
               </span>
                         </td>
                       </tr>
@@ -570,7 +574,7 @@ const handleCloseDiff = useCallback(() => {
             {totalPages > 1 && (
               <div className="border-t p-4 flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">
-                  Showing {Math.min((page - 1) * PAGE_SIZE + 1, totalCount)} to {Math.min(page * PAGE_SIZE, totalCount)} of {totalCount} entries
+                  Showing {Math.min((page - 1) * PAGE_SIZE + 1, totalCount)} to {Math.min(page * PAGE_SIZE, totalCount)} of {totalCount} captures
                 </div>
                 <div className="flex items-center gap-2">
                   <button

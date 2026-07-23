@@ -10,23 +10,25 @@ interface RedactionSummary {
   byType: Record<string, number>;
 }
 
-interface RedactionDetailRow {
-  redactionType: string;
+/** Aggregated row: one per captureId, with comma-separated redaction list */
+interface RedactionCaptureRow {
+  captureId: string;
+  sessionId: string | null;
+  timestamp: string;
   requestSource: string | null;
   requestProvider: string;
   requestTarget: string;
-  sessionId: string | null;
-  captureId: string;
-  preRedactionValue: string;
-  postRedactionValue: string;
-  path: string;
-  matchIndex: number;
-  timestamp: string;
+  /** Comma-separated list like "[API_KEY_REDACTED] (1), [PHONE_REDACTED] (5)" */
+  redactionSummary: string;
+  /** Total redaction count for this capture */
+  totalRedactions: number;
+  /** Breakdown by rule for this capture */
+  byRule: Record<string, number>;
 }
 
 interface PaginatedRedactionResponse {
   summary: RedactionSummary;
-  details: RedactionDetailRow[];
+  details: RedactionCaptureRow[];
   page: number;
   pageSize: number;
   totalPages: number;
@@ -88,7 +90,7 @@ for (const [_sessionId, { filename, meta }] of metaBySession) {
   { revalidate: 30, tags: ["redactions-summary"] },
 );
 
-// Get paginated detail rows from meta files only
+// Get paginated detail rows from meta files only - grouped by captureId
 async function getRedactionDetailsFromMeta(
   page: number,
   pageSize: number,
@@ -97,21 +99,21 @@ async function getRedactionDetailsFromMeta(
   sortDir: "asc" | "desc" | null,
 ): Promise<PaginatedRedactionResponse> {
   const metaFiles = await listRedactionMetaFiles();
-  
+
   // Group meta files by sessionId to avoid duplicate counts from multiple captures per session
   const metaBySession = new Map<string, { filename: string; meta: Record<string, unknown> }>();
-  
+
   for (const filename of metaFiles) {
     try {
       const meta = await loadRedactionMeta(filename);
       if (!meta) continue;
-      
+
       const sessionId = (meta.sessionId as string | null) ?? "_no_session";
-      
+
       // Skip title generation captures
       if (sessionId.startsWith("title-")) continue;
-      
-      // Keep first meta file per session (they should have identical counts)
+
+      // Keep first meta file per session
       if (!metaBySession.has(sessionId)) {
         metaBySession.set(sessionId, { filename, meta });
       }
@@ -124,7 +126,16 @@ async function getRedactionDetailsFromMeta(
   const byType: Record<string, number> = {};
 
   // First pass: collect all data from meta files (deduplicated by sessionId)
-  const allRows: RedactionDetailRow[] = [];
+  const captureMap = new Map<string, {
+    captureId: string;
+    sessionId: string | null;
+    timestamp: string;
+    requestSource: string | null;
+    requestProvider: string;
+    requestTarget: string;
+    byRule: Record<string, number>;
+    totalCount: number;
+  }>();
 
   for (const [sessionId, { filename, meta }] of metaBySession) {
     try {
@@ -147,7 +158,7 @@ async function getRedactionDetailsFromMeta(
         }
       }
 
-      // Create one detail row per match (using matches array if available in meta)
+      // Get matches from meta
       const matches =
         (meta.matches as
           | Array<{
@@ -157,31 +168,33 @@ async function getRedactionDetailsFromMeta(
               path: string;
             }>
           | undefined) ?? [];
-      // Add rows for each individual match (individual match entries)
-      if (matches.length > 0) {
-        for (let i = 0; i < matches.length; i++) {
-          const match = matches[i];
-          const matchRec = match as Record<string, unknown>;
-          allRows.push({
-            redactionType: (matchRec.ruleId ?? matchRec.rule ?? "") as string,
-            requestSource: source,
-            requestProvider: provider,
-            requestTarget: targetUrl,
-            sessionId: sessionId === "_no_session" ? null : sessionId,
-            captureId,
-            preRedactionValue: (matchRec.original ??
-              matchRec.preValue ??
-              matchRec.pre ??
-              "") as string,
-            postRedactionValue: (matchRec.placeholder ??
-              matchRec.postValue ??
-              matchRec.post ??
-              "") as string,
-            path: (matchRec.path ?? "") as string,
-            matchIndex: i,
-            timestamp,
-          });
+
+      // Aggregate by captureId
+      const existing = captureMap.get(captureId);
+      if (existing) {
+        // Merge into existing capture
+        existing.totalCount += matches.length;
+        for (const match of matches) {
+          const ruleId: string = (match as Record<string, unknown>).ruleId as string ?? "unknown";
+          existing.byRule[ruleId] = (existing.byRule[ruleId] ?? 0) + 1;
         }
+      } else {
+        // New capture
+        const byRule: Record<string, number> = {};
+        for (const match of matches) {
+          const ruleId: string = (match as Record<string, unknown>).ruleId as string ?? "unknown";
+          byRule[ruleId] = (byRule[ruleId] ?? 0) + 1;
+        }
+        captureMap.set(captureId, {
+          captureId,
+          sessionId: sessionId === "_no_session" ? null : sessionId,
+          timestamp,
+          requestSource: source,
+          requestProvider: provider,
+          requestTarget: targetUrl,
+          byRule,
+          totalCount: matches.length,
+        });
       }
     } catch (error) {
       console.error(`Error processing redaction meta ${filename}:`, error);
@@ -189,33 +202,59 @@ async function getRedactionDetailsFromMeta(
     }
   }
 
+  // Build aggregated rows
+  let allRows: RedactionCaptureRow[] = Array.from(captureMap.values()).map(c => ({
+    captureId: c.captureId,
+    sessionId: c.sessionId,
+    timestamp: c.timestamp,
+    requestSource: c.requestSource,
+    requestProvider: c.requestProvider,
+    requestTarget: c.requestTarget,
+    redactionSummary: Object.entries(c.byRule)
+      .map(([rule, count]) => `[${rule.toUpperCase()}_REDACTED] (${count})`)
+      .join(", "),
+    totalRedactions: c.totalCount,
+    byRule: c.byRule,
+  }));
+
   // Apply filters
-  let filteredRows = allRows;
   if (Object.keys(filters).length > 0) {
-    filteredRows = allRows.filter((row) => {
+    allRows = allRows.filter((row) => {
       return Object.entries(filters).every(([key, val]) => {
         if (!val) return true;
-        const cell = row[key as keyof RedactionDetailRow];
-        return String(cell ?? "")
-          .toLowerCase()
-          .includes(val.toLowerCase());
+        // Special handling for redactionType filter - check if the rule exists in byRule
+        if (key === "redactionType") {
+          return Object.keys(row.byRule).some(
+            (k) => k.toLowerCase() === val.toLowerCase(),
+          );
+        }
+        // Only index valid keys of RedactionCaptureRow
+        if (key in row) {
+          const cell = row[key as keyof RedactionCaptureRow];
+          return String(cell ?? "")
+            .toLowerCase()
+            .includes(val.toLowerCase());
+        }
+        return false;
       });
     });
   }
 
   // Apply sorting
   const sortableKeys = [
-    "redactionType",
+    "captureId",
     "requestSource",
     "requestProvider",
     "requestTarget",
     "sessionId",
-    "captureId",
-  ];
-  if (sortKey && sortDir && sortableKeys.includes(sortKey)) {
-    filteredRows = [...filteredRows].sort((a, b) => {
-      const aVal = a[sortKey as keyof RedactionDetailRow];
-      const bVal = b[sortKey as keyof RedactionDetailRow];
+    "timestamp",
+    "totalRedactions",
+  ] as const;
+  if (sortKey && sortDir && sortableKeys.includes(sortKey as typeof sortableKeys[number])) {
+    const key = sortKey as keyof RedactionCaptureRow;
+    allRows = [...allRows].sort((a, b) => {
+      const aVal = a[key];
+      const bVal = b[key];
       if (aVal === null || aVal === undefined)
         return sortDir === "asc" ? 1 : -1;
       if (bVal === null || bVal === undefined)
@@ -227,12 +266,12 @@ async function getRedactionDetailsFromMeta(
   }
 
   // Apply pagination
-  const totalCount = filteredRows.length;
+  const totalCount = allRows.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const clampedPage = Math.min(page, totalPages);
   const start = (clampedPage - 1) * pageSize;
   const end = start + pageSize;
-  const pageRows = filteredRows.slice(start, end);
+  const pageRows = allRows.slice(start, end);
 
   return {
     summary: { totalRedactions, byType },
