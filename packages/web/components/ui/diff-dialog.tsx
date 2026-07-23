@@ -87,12 +87,13 @@ export function DiffDialog({
   const isScrollingRef = useRef(false);
 
   // Parse redaction types from the comma-separated string like "[RULE_REDACTED] (count), [RULE2_REDACTED] (count)"
+  // Supports hyphens in rule names like "API-KEY-PREFIXED_REDACTED"
   const redactionTypes = useMemo(() => {
     if (!redactionType) return [];
-    const matches = redactionType.match(/\[([A-Z][A-Z0-9_]*_REDACTED)\]\s*\((\d+)\)/g);
+    const matches = redactionType.match(/\[([A-Z][A-Z0-9_-]*_REDACTED)\]\s*\((\d+)\)/g);
     if (!matches) return [];
     return matches.map((m) => {
-      const ruleMatch = m.match(/\[([A-Z][A-Z0-9_]*_REDACTED)\]/);
+      const ruleMatch = m.match(/\[([A-Z][A-Z0-9_-]*_REDACTED)\]/);
       const countMatch = m.match(/\((\d+)\)/);
       return {
         type: ruleMatch ? ruleMatch[1] : "",
