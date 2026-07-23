@@ -167,14 +167,21 @@ export function DiffDialog({
     const placeholderType = apiToPlaceholderMap.get(apiType) || apiType;
     const kebabType = placeholderType.toLowerCase().replace(/_/g, "-");
 
-    panes.forEach((pane) => {
-      if (!pane) return;
-      // Look for the individual data attribute we set
+    // Search in right pane first (where placeholders actually appear)
+    // Then fall back to left pane
+    const searchOrder = [1, 0]; // right pane first, then left pane
+
+    for (const paneIndex of searchOrder) {
+      const pane = panes[paneIndex];
+      if (!pane) continue;
+
+      // Try to find element with data attribute
       const target = pane.querySelector(`[data-redaction-${kebabType}]`);
       if (target) {
         target.scrollIntoView({ behavior: "smooth", block: "center" });
+        break;
       }
-    });
+    }
   }, [viewMode, apiToPlaceholderMap]);
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>, source: "left" | "right") => {
