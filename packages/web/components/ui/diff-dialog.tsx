@@ -108,9 +108,13 @@ export function DiffDialog({
       ? [leftPaneDiffRef.current, rightPaneDiffRef.current]
       : [leftPaneSyntaxRef.current, rightPaneSyntaxRef.current];
 
+    // Convert type to the same kebab-case format used in data attributes
+    const kebabType = type.toLowerCase().replace(/_/g, "-");
+
     panes.forEach((pane) => {
       if (!pane) return;
-      const target = pane.querySelector(`[data-redaction-type="${type}"]`);
+      // Look for the individual data attribute we set
+      const target = pane.querySelector(`[data-redaction-${kebabType}]`);
       if (target) {
         target.scrollIntoView({ behavior: "smooth", block: "center" });
       }
@@ -292,7 +296,24 @@ export function DiffDialog({
         <div className="flex flex-col gap-3 p-4 border-b border-border flex-shrink-0">
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
             <span>
-              Type: <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span>
+              Type:{" "}
+              {redactionTypes.length > 0 ? (
+                <span className="flex flex-wrap gap-1">
+                  {redactionTypes.map((r) => (
+                    <button
+                      key={r.type}
+                      type="button"
+                      onClick={() => scrollToRedactionType(r.type)}
+                      className="px-2 py-1 text-xs rounded bg-accent text-accent-foreground hover:bg-accent/80 transition-colors font-mono border border-border"
+                      aria-label={`Scroll to ${r.type} (${r.count} occurrences)`}
+                    >
+                      {r.type} ({r.count})
+                    </button>
+                  ))}
+                </span>
+              ) : (
+                <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span>
+              )}
             </span>
             <span>
               Capture: <span className="font-mono">{captureId}</span>
@@ -317,22 +338,6 @@ export function DiffDialog({
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
               Showing changes with context ({diff.length} lines of {fullDiff.length})
             </span>
-          )}
-          {/* Redaction type chips for quick navigation */}
-          {redactionTypes.length > 0 && (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Redaction types - click to scroll">
-              {redactionTypes.map((r) => (
-                <button
-                  key={r.type}
-                  type="button"
-                  onClick={() => scrollToRedactionType(r.type)}
-                  className="px-2 py-1 text-xs rounded bg-accent text-accent-foreground hover:bg-accent/80 transition-colors font-mono border border-border"
-                  aria-label={`Scroll to ${r.type} (${r.count} occurrences)`}
-                >
-                  {r.type} ({r.count})
-                </button>
-              ))}
-            </div>
           )}
           {/* View mode toggle for JSON content */}
           {isJsonContent && (
