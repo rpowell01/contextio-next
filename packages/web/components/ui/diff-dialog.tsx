@@ -374,13 +374,8 @@ export function DiffDialog({
               )}
             </span>
             <span>
-              Capture: <span className="font-mono">{captureId}</span>
+              Provider: <span className="font-mono">{provider}</span>
             </span>
-            {provider && (
-              <span>
-                Provider: <span className="font-mono">{provider}</span>
-              </span>
-            )}
             {targetUrl && (
               <span>
                 Target: <span className="font-mono truncate max-w-[200px]">{targetUrl}</span>
@@ -391,6 +386,11 @@ export function DiffDialog({
                 Time: <span className="font-mono">{new Date(timestamp).toLocaleString()}</span>
               </span>
             )}
+          </div>
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <span>
+              Capture: <span className="font-mono">{captureId}</span>
+            </span>
           </div>
           {hasHiddenLines && (
             <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
