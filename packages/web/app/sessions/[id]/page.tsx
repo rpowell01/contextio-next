@@ -433,6 +433,32 @@ function SessionView({
               </div>
             )}
 
+            {session.contextValues && Object.keys(session.contextValues).length > 0 && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">Context Values</h3>
+                <div className="max-h-64 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">Key</th>
+                        <th className="text-left py-2">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(session.contextValues).map(([key, value]) => (
+                        <tr key={key} className="border-b">
+                          <td className="py-2 font-mono text-xs">{key}</td>
+                          <td className="py-2 font-mono text-xs max-w-xs truncate">
+                            {typeof value === "string" ? value : JSON.stringify(value)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {filteredAndSortedCaptures.length > 0 && (
               <div className="rounded-lg border p-4">
                 <div className="flex items-center justify-between mb-4">
