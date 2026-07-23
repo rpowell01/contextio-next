@@ -90,7 +90,7 @@ function computeSessionMetrics(
 ): {
   metrics: SessionMetrics;
   contextValues: Record<string, unknown>;
-  redactionStats: { totalRedactions: number; byRule: Record<string, number> };
+  redactionStats: { totalRedactions: number; byRule: Record<string, number>; uniqueRedactions: number };
   source: string;
   destination: string;
   firstTimestamp: string;
@@ -104,6 +104,8 @@ function computeSessionMetrics(
   let totalTimeMs = 0;
   let totalRedactions = 0;
   const byRule: Record<string, number> = {};
+  // Track max count per placeholder within this session (for unique redactions)
+  const uniqueByRule: Record<string, number> = {};
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let totalContextValues = 0;
@@ -164,9 +166,13 @@ function computeSessionMetrics(
       for (const [rule, count] of Object.entries(c.redactionStats.byRule ?? {})) {
         const placeholder = ruleNameToPlaceholder(rule);
         byRule[placeholder] = (byRule[placeholder] || 0) + (count as number);
+        // Track max per placeholder for unique redactions count
+        uniqueByRule[placeholder] = Math.max(uniqueByRule[placeholder] || 0, count as number);
       }
     }
   }
+
+  const uniqueRedactions = Object.values(uniqueByRule).reduce((sum, v) => sum + v, 0);
 
   const timeSec = totalTimeMs / 1000 || 1;
   const inboundThroughput = totalRequestBytes / timeSec;
@@ -201,13 +207,14 @@ function computeSessionMetrics(
     redactionStats: {
       totalRedactions,
       byRule,
+      uniqueRedactions,
     },
   };
 
   return {
     metrics,
     contextValues,
-    redactionStats: { totalRedactions, byRule },
+    redactionStats: { totalRedactions, byRule, uniqueRedactions },
     source,
     destination,
     firstTimestamp,

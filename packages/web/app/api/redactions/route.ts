@@ -4,6 +4,7 @@ import {
 } from "@/lib/sessions/utils";
 import { consumeToken } from "@/lib/csrf";
 import { unstable_cache } from "next/cache";
+import { computePlaceholderCounts } from "@/lib/sessions/placeholder-map";
 
 interface RedactionSummary {
   totalRedactions: number;
@@ -72,19 +73,17 @@ const getRedactionsSummary = unstable_cache(
           totalRedactions += meta.totalRedactions;
         }
         // Use matches array to get actual placeholders used in content
-        const matches =
-          (meta.matches as
-            | Array<{
-                ruleId: string;
-                original: string;
-                placeholder: string;
-                path: string;
-              }>
-            | undefined) ?? [];
+        const matches = (meta.matches as Array<{
+          ruleId: string;
+          preValue: string;
+          postValue: string;
+          path: string;
+        }> | undefined) ?? [];
 
-        for (const match of matches) {
-          const placeholder = (match as Record<string, unknown>).placeholder as string ?? "unknown";
-          byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + 1;
+        // Use computePlaceholderCounts which correctly handles postValue
+        const counts = computePlaceholderCounts(matches);
+        for (const [placeholder, count] of Object.entries(counts)) {
+          byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + count;
         }
       } catch (error) {
         console.error(`Error processing redaction meta ${filename}:`, error);
@@ -154,28 +153,27 @@ async function getRedactionDetailsFromMeta(
       const timestamp =
         (meta.generatedAt as string) ?? new Date().toISOString();
 
-      // Add counts to summary (once per session)
-      if (typeof meta.totalRedactions === "number") {
-        totalRedactions += meta.totalRedactions;
-      }
-      if (meta.byRule && typeof meta.byRule === "object") {
-        for (const [rule, count] of Object.entries(meta.byRule)) {
-          if (typeof count === "number") {
-            byType[rule] = (byType[rule] ?? 0) + count;
-          }
-        }
-      }
-
-      // Get matches from meta
+      // Get matches from meta - use postValue which contains the placeholder
       const matches =
         (meta.matches as
           | Array<{
               ruleId: string;
-              original: string;
-              placeholder: string;
+              preValue: string;
+              postValue: string;
               path: string;
             }>
           | undefined) ?? [];
+
+      // Add counts to summary (once per session)
+      if (typeof meta.totalRedactions === "number") {
+        totalRedactions += meta.totalRedactions;
+      }
+      // Use matches to get placeholder breakdown (consistent with capture detail)
+      for (const match of matches) {
+        const rawPlaceholder = match.postValue ?? "unknown";
+        const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
+        byType[placeholder] = (byType[placeholder] ?? 0) + 1;
+      }
 
       // Aggregate by captureId using actual placeholder (what appears in content)
       const existing = captureMap.get(captureId);
@@ -183,14 +181,16 @@ async function getRedactionDetailsFromMeta(
         // Merge into existing capture
         existing.totalCount += matches.length;
         for (const match of matches) {
-          const placeholder = (match as Record<string, unknown>).placeholder as string ?? "unknown";
+          const rawPlaceholder = match.postValue ?? "unknown";
+          const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
           existing.byPlaceholder[placeholder] = (existing.byPlaceholder[placeholder] ?? 0) + 1;
         }
       } else {
         // New capture
         const byPlaceholder: Record<string, number> = {};
         for (const match of matches) {
-          const placeholder = (match as Record<string, unknown>).placeholder as string ?? "unknown";
+          const rawPlaceholder = match.postValue ?? "unknown";
+          const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
           byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + 1;
         }
         captureMap.set(captureId, {

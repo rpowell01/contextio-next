@@ -109,6 +109,7 @@ export interface SessionMetrics {
   redactionStats: {
     totalRedactions: number;
     byRule: Record<string, number>;
+    uniqueRedactions?: number;
   };
 }
 
@@ -145,6 +146,7 @@ export interface SessionDetail extends Session {
   redactionStats?: {
     totalRedactions: number;
     byRule: Record<string, number>;
+    uniqueRedactions?: number;
   };
 /** Breakdown of individual captures within the session */
   captures?: Array<{
@@ -163,6 +165,7 @@ export interface SessionDetail extends Session {
     redactionStats?: {
       totalRedactions: number;
       byRule: Record<string, number>;
+      uniqueRedactions?: number;
     };
   }>;
 }

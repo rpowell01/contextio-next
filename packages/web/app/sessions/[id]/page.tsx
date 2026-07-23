@@ -417,6 +417,12 @@ function SessionView({
                     <span className="text-muted-foreground">Total Cumulative Redactions:</span>{" "}
                     {session.redactionStats.totalRedactions}
                   </div>
+                  {session.redactionStats.uniqueRedactions !== undefined && session.redactionStats.uniqueRedactions > 0 && (
+                    <div className="text-sm text-blue-600">
+                      <span className="text-muted-foreground">Unique Redactions (per rule max):</span>{" "}
+                      {session.redactionStats.uniqueRedactions}
+                    </div>
+                  )}
                   {Object.keys(session.redactionStats.byRule).length > 0 && (
                     <div className="text-sm">
                       <span className="text-muted-foreground">By Rule:</span>
