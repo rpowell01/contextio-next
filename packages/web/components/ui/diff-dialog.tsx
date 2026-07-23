@@ -305,7 +305,7 @@ export function DiffDialog({
                       key={r.type}
                       type="button"
                       onClick={() => scrollToRedactionType(r.type)}
-                      className="px-2 py-1 text-xs rounded bg-accent text-accent-foreground hover:bg-accent/80 transition-colors font-mono border border-border"
+                      className="px-2 py-1 text-xs rounded transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground font-mono"
                       aria-label={`Scroll to ${r.type} (${r.count} occurrences)`}
                     >
                       {r.type} ({r.count})
