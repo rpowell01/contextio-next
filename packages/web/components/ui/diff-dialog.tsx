@@ -51,14 +51,14 @@ function renderLine(item: DiffChunk, side: "left" | "right") {
   const lineClass = `font-mono text-xs whitespace-pre-wrap ${
     isLeft
       ? item.type === "delete"
-        ? "bg-red-50"
+        ? "diff-line-delete"
         : item.type === "insert"
-        ? "bg-green-50"
+        ? "diff-line-insert"
         : "bg-transparent"
       : item.type === "delete"
-      ? "bg-red-50"
+      ? "diff-line-delete"
       : item.type === "insert"
-      ? "bg-green-50"
+      ? "diff-line-insert"
       : "bg-transparent"
   }`;
 

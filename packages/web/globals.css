@@ -145,16 +145,43 @@ button:focus {
   color: rgb(var(--color-primary-foreground));
 }
 
-/* Apply theme immediately to prevent flash */
-html[data-theme="dark"] {
-  color-scheme: dark;
+/* Diff dialog line backgrounds - theme aware */
+.diff-line-delete {
+  background-color: rgb(var(--color-destructive) / 0.1);
+}
+.diff-line-insert {
+  background-color: rgb(34 197 94 / 0.1);
 }
 
-html[data-theme="light"] {
-  color-scheme: light;
+/* In dark/high-contrast, ensure text is visible */
+[data-theme="dark"] .diff-line-delete,
+[data-theme="high-contrast"] .diff-line-delete {
+  color: rgb(var(--color-destructive));
+}
+[data-theme="dark"] .diff-line-insert,
+[data-theme="high-contrast"] .diff-line-insert {
+  color: rgb(34 197 94);
 }
 
-html[data-theme="high-contrast"] {
-  color-scheme: dark;
+/* Redaction highlight - theme aware */
+.redaction-placeholder {
+  background-color: rgb(var(--color-destructive) / 0.15);
+  color: rgb(var(--color-destructive));
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+[data-theme="dark"] .redaction-placeholder,
+[data-theme="high-contrast"] .redaction-placeholder {
+  background-color: rgb(var(--color-destructive) / 0.25);
+  color: rgb(var(--color-destructive-foreground));
+}
+
+/* In high contrast, ensure strong visibility */
+[data-theme="high-contrast"] .redaction-placeholder {
+  background-color: rgb(var(--color-destructive));
+  color: rgb(var(--color-destructive-foreground));
+  border: 1px solid currentColor;
 }
 

@@ -40,16 +40,7 @@ export function RedactionHighlight({
         <span key={i}>
           {part}
           {i < matches.length && (
-            <mark
-              style={{
-                backgroundColor: "#fef2f2",
-                color: "#991b1b",
-                fontWeight: "700",
-                padding: "2px 6px",
-                borderRadius: "4px",
-                fontFamily: "inherit",
-              }}
-            >
+            <mark className="redaction-placeholder">
               {matches[i]}
             </mark>
           )}
