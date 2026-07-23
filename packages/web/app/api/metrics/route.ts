@@ -1,6 +1,7 @@
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
 import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/utils";
 import { withRequestCache } from "@/lib/request-cache";
+import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 
 /**
  * Parse a single capture metadata and extract metrics.
@@ -48,7 +49,7 @@ function parseCaptureMeta(meta: {
 /**
  * Aggregate metrics from all capture files.
  * For traffic: include ALL captures (not deduplicated)
- * For redactions: provide both deduplicated (unique) and sum counts with byRule breakdown
+ * For redactions: provide both deduplicated (unique) and sum counts with byPlaceholder breakdown
  */
 function aggregateMetrics(
   captures: Array<{
@@ -63,8 +64,8 @@ function aggregateMetrics(
 ): MetricsData & {
   totalRedactionsDeduped: number;
   totalRedactionsSum: number;
-  redactionByRuleDeduped: Record<string, number>;
-  redactionByRuleSum: Record<string, number>;
+  redactionByPlaceholderDeduped: Record<string, number>;
+  redactionByPlaceholderSum: Record<string, number>;
 } {
   const traffic: TrafficMetric[] = [];
   const providerMap: Map<string, ProviderUsage> = new Map();
@@ -78,10 +79,10 @@ function aggregateMetrics(
 
   // For deduplicated redaction count: track by sessionId
   const redactionBySession = new Map<string, number>();
-  // For byRule breakdown: sum across all sessions (deduplicated by taking max per session)
-  const redactionByRuleDeduped: Record<string, Map<string, number>> = {};
-  // For byRule breakdown: sum across ALL captures
-  const redactionByRuleSum: Record<string, number> = {};
+  // For byPlaceholder breakdown: sum across all sessions (deduplicated by taking max per session)
+  const redactionByPlaceholderDeduped: Record<string, Map<string, number>> = {};
+  // For byPlaceholder breakdown: sum across ALL captures
+  const redactionByPlaceholderSum: Record<string, number> = {};
 
   for (const capture of captures) {
     if (capture.traffic) {
@@ -112,11 +113,12 @@ function aggregateMetrics(
     // Sum of redactions across ALL captures
     totalRedactionsSum += capture.totalRedactions;
 
-    // Sum byRule across ALL captures
+    // Sum byPlaceholder across ALL captures
     if (capture.byRule && typeof capture.byRule === "object") {
       for (const [rule, count] of Object.entries(capture.byRule)) {
         if (typeof count === "number") {
-          redactionByRuleSum[rule] = (redactionByRuleSum[rule] ?? 0) + count;
+          const placeholder = ruleNameToPlaceholder(rule);
+          redactionByPlaceholderSum[placeholder] = (redactionByPlaceholderSum[placeholder] ?? 0) + count;
         }
       }
     }
@@ -133,14 +135,15 @@ function aggregateMetrics(
       }
     }
 
-    // For byRule deduplicated: we need the max count per rule per session
+    // For byPlaceholder deduplicated: we need the max count per rule per session
     if (capture.sessionId && capture.byRule && typeof capture.byRule === "object") {
       for (const [rule, count] of Object.entries(capture.byRule)) {
         if (typeof count === "number") {
-          if (!redactionByRuleDeduped[rule]) {
-            redactionByRuleDeduped[rule] = new Map<string, number>();
+          const placeholder = ruleNameToPlaceholder(rule);
+          if (!redactionByPlaceholderDeduped[placeholder]) {
+            redactionByPlaceholderDeduped[placeholder] = new Map<string, number>();
           }
-          const sessionMap = redactionByRuleDeduped[rule];
+          const sessionMap = redactionByPlaceholderDeduped[placeholder];
           const existing = sessionMap.get(capture.sessionId);
           if (existing === undefined || count > existing) {
             sessionMap.set(capture.sessionId, count);
@@ -152,20 +155,20 @@ function aggregateMetrics(
 
   // Sum up deduplicated counts across all sessions
   let totalRedactionsDeduped = 0;
-  const redactionByRuleDedupedFinal: Record<string, number> = {};
+  const redactionByPlaceholderDedupedFinal: Record<string, number> = {};
 
   for (const sessionId of redactionBySession.keys()) {
     totalRedactionsDeduped += redactionBySession.get(sessionId) ?? 0;
   }
 
-  // Sum up deduplicated byRule counts (max per session per rule)
-  for (const [rule, sessionMap] of Object.entries(redactionByRuleDeduped)) {
+  // Sum up deduplicated byPlaceholder counts (max per session per rule)
+  for (const [placeholder, sessionMap] of Object.entries(redactionByPlaceholderDeduped)) {
     let ruleSum = 0;
     for (const count of sessionMap.values()) {
       ruleSum += count;
     }
     if (ruleSum > 0) {
-      redactionByRuleDedupedFinal[rule] = ruleSum;
+      redactionByPlaceholderDedupedFinal[placeholder] = ruleSum;
     }
   }
 
@@ -181,8 +184,8 @@ function aggregateMetrics(
     totalOutputTokens: totalOutputTokens === 0 ? undefined : totalOutputTokens,
     totalRedactionsDeduped,
     totalRedactionsSum,
-    redactionByRuleDeduped: redactionByRuleDedupedFinal,
-    redactionByRuleSum,
+    redactionByPlaceholderDeduped: redactionByPlaceholderDedupedFinal,
+    redactionByPlaceholderSum,
   };
 }
 
@@ -305,11 +308,11 @@ export async function GET(request: Request): Promise<Response> {
       traffic: metrics.traffic,
       redactionStatsDeduped: {
         totalRedactions: metrics.totalRedactionsDeduped,
-        byRule: metrics.redactionByRuleDeduped,
+        byRule: metrics.redactionByPlaceholderDeduped,
       },
       redactionStatsSum: {
         totalRedactions: metrics.totalRedactionsSum,
-        byRule: metrics.redactionByRuleSum,
+        byRule: metrics.redactionByPlaceholderSum,
       },
       pagination: {
         page,

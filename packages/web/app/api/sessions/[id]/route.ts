@@ -13,6 +13,7 @@ import {
   countRedactionsInResponse,
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
+import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 import { withRequestCache } from "@/lib/request-cache";
 
 interface CaptureRedactionStats {
@@ -161,7 +162,8 @@ function computeSessionMetrics(
     if (c.redactionStats) {
       totalRedactions += c.redactionStats.totalRedactions ?? 0;
       for (const [rule, count] of Object.entries(c.redactionStats.byRule ?? {})) {
-        byRule[rule] = (byRule[rule] || 0) + (count as number);
+        const placeholder = ruleNameToPlaceholder(rule);
+        byRule[placeholder] = (byRule[placeholder] || 0) + (count as number);
       }
     }
   }

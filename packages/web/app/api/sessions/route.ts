@@ -22,6 +22,11 @@ import {
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
 import type { CaptureRedactionStats } from "@/lib/sessions/redaction-utils";
+import {
+  convertByRuleToByPlaceholder,
+  ruleNameToPlaceholder,
+  computePlaceholderCounts,
+} from "@/lib/sessions/placeholder-map";
 
 interface RawCaptureData extends Record<string, unknown> {
   sessionId: string | null;
@@ -107,14 +112,18 @@ function groupCapturesIntoSessions(
 
     // Use pre-aggregated redaction metadata if available
     let totalRedactions = 0;
-    const byRule: Record<string, number> = {};
+    const byPlaceholder: Record<string, number> = {};
     if (
       redactionMetaBySession &&
       redactionMetaBySession.has(sessionId)
     ) {
       const meta = redactionMetaBySession.get(sessionId)!;
       totalRedactions = meta.totalRedactions;
-      Object.assign(byRule, meta.byRule);
+      // Convert rule names to placeholder names for consistency with redactions page
+      for (const [rule, count] of Object.entries(meta.byRule)) {
+        const placeholder = ruleNameToPlaceholder(rule);
+        byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + count;
+      }
     } else {
       // Fallback: compute from captures (legacy behavior)
       for (const c of sessionCaptures) {
@@ -132,7 +141,8 @@ function groupCapturesIntoSessions(
         for (const [rule, count] of Object.entries(
           redactionCounts.byRule,
         )) {
-          byRule[rule] = (byRule[rule] || 0) + count;
+          const placeholder = ruleNameToPlaceholder(rule);
+          byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + count;
         }
       }
     }
@@ -186,7 +196,7 @@ function groupCapturesIntoSessions(
           : 0,
       redactionStats: {
         totalRedactions,
-        byRule,
+        byRule: byPlaceholder, // Already converted to placeholder keys
       },
     };
   }
@@ -296,11 +306,16 @@ async function handleGet(request: Request): Promise<Response> {
         if (meta.sessionId && seenSessions.has(meta.sessionId)) continue;
         if (meta.sessionId) seenSessions.add(meta.sessionId);
 
-        // Store redaction metadata for this session
+        // Store redaction metadata for this session - use matches for accurate placeholders
         if (meta.sessionId) {
+          // Prefer computing placeholders from actual matches (what's in content)
+          const byPlaceholder = meta.matches && Array.isArray(meta.matches)
+            ? computePlaceholderCounts(meta.matches as unknown as Array<{ ruleId: string; placeholder?: string; postValue?: string }>)
+            : convertByRuleToByPlaceholder((meta.byRule as Record<string, number>) ?? {});
+
           redactionMetaBySession.set(meta.sessionId, {
             totalRedactions: meta.totalRedactions ?? 0,
-            byRule: (meta.byRule as Record<string, number>) ?? {},
+            byRule: byPlaceholder,
           });
         }
 

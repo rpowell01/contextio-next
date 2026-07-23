@@ -22,8 +22,8 @@ interface RedactionCaptureRow {
   redactionSummary: string;
   /** Total redaction count for this capture */
   totalRedactions: number;
-  /** Breakdown by rule for this capture */
-  byRule: Record<string, number>;
+  /** Breakdown by placeholder for this capture */
+  byPlaceholder: Record<string, number>;
 }
 
 interface PaginatedRedactionResponse {
@@ -39,20 +39,20 @@ interface PaginatedRedactionResponse {
 const getRedactionsSummary = unstable_cache(
   async (): Promise<RedactionSummary> => {
     const metaFiles = await listRedactionMetaFiles();
-    
+
     // Group meta files by sessionId to avoid duplicate counts from multiple captures per session
     const metaBySession = new Map<string, { filename: string; meta: Record<string, unknown> }>();
-    
+
     for (const filename of metaFiles) {
       try {
         const meta = await loadRedactionMeta(filename);
         if (!meta) continue;
-        
+
         const sessionId = (meta.sessionId as string | null) ?? "_no_session";
-        
+
         // Skip title generation captures
         if (sessionId.startsWith("title-")) continue;
-        
+
         // Keep first meta file per session
         if (!metaBySession.has(sessionId)) {
           metaBySession.set(sessionId, { filename, meta });
@@ -64,19 +64,27 @@ const getRedactionsSummary = unstable_cache(
     }
 
     let totalRedactions = 0;
-    const byType: Record<string, number> = {};
+    const byPlaceholder: Record<string, number> = {};
 
-for (const [_sessionId, { filename, meta }] of metaBySession) {
+    for (const [_sessionId, { filename, meta }] of metaBySession) {
       try {
         if (typeof meta.totalRedactions === "number") {
           totalRedactions += meta.totalRedactions;
         }
-        if (meta.byRule && typeof meta.byRule === "object") {
-          for (const [rule, count] of Object.entries(meta.byRule)) {
-            if (typeof count === "number") {
-              byType[rule] = (byType[rule] ?? 0) + count;
-            }
-          }
+        // Use matches array to get actual placeholders used in content
+        const matches =
+          (meta.matches as
+            | Array<{
+                ruleId: string;
+                original: string;
+                placeholder: string;
+                path: string;
+              }>
+            | undefined) ?? [];
+
+        for (const match of matches) {
+          const placeholder = (match as Record<string, unknown>).placeholder as string ?? "unknown";
+          byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + 1;
         }
       } catch (error) {
         console.error(`Error processing redaction meta ${filename}:`, error);
@@ -84,7 +92,7 @@ for (const [_sessionId, { filename, meta }] of metaBySession) {
       }
     }
 
-    return { totalRedactions, byType };
+    return { totalRedactions, byType: byPlaceholder };
   },
   ["redactions-summary"],
   { revalidate: 30, tags: ["redactions-summary"] },
@@ -133,7 +141,7 @@ async function getRedactionDetailsFromMeta(
     requestSource: string | null;
     requestProvider: string;
     requestTarget: string;
-    byRule: Record<string, number>;
+    byPlaceholder: Record<string, number>;
     totalCount: number;
   }>();
 
@@ -169,21 +177,21 @@ async function getRedactionDetailsFromMeta(
             }>
           | undefined) ?? [];
 
-      // Aggregate by captureId
+      // Aggregate by captureId using actual placeholder (what appears in content)
       const existing = captureMap.get(captureId);
       if (existing) {
         // Merge into existing capture
         existing.totalCount += matches.length;
         for (const match of matches) {
-          const ruleId: string = (match as Record<string, unknown>).ruleId as string ?? "unknown";
-          existing.byRule[ruleId] = (existing.byRule[ruleId] ?? 0) + 1;
+          const placeholder = (match as Record<string, unknown>).placeholder as string ?? "unknown";
+          existing.byPlaceholder[placeholder] = (existing.byPlaceholder[placeholder] ?? 0) + 1;
         }
       } else {
         // New capture
-        const byRule: Record<string, number> = {};
+        const byPlaceholder: Record<string, number> = {};
         for (const match of matches) {
-          const ruleId: string = (match as Record<string, unknown>).ruleId as string ?? "unknown";
-          byRule[ruleId] = (byRule[ruleId] ?? 0) + 1;
+          const placeholder = (match as Record<string, unknown>).placeholder as string ?? "unknown";
+          byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + 1;
         }
         captureMap.set(captureId, {
           captureId,
@@ -192,7 +200,7 @@ async function getRedactionDetailsFromMeta(
           requestSource: source,
           requestProvider: provider,
           requestTarget: targetUrl,
-          byRule,
+          byPlaceholder,
           totalCount: matches.length,
         });
       }
@@ -210,11 +218,11 @@ async function getRedactionDetailsFromMeta(
     requestSource: c.requestSource,
     requestProvider: c.requestProvider,
     requestTarget: c.requestTarget,
-    redactionSummary: Object.entries(c.byRule)
-      .map(([rule, count]) => `[${rule.toUpperCase()}_REDACTED] (${count})`)
+    redactionSummary: Object.entries(c.byPlaceholder)
+      .map(([placeholder, count]) => `[${placeholder}] (${count})`)
       .join(", "),
     totalRedactions: c.totalCount,
-    byRule: c.byRule,
+    byPlaceholder: c.byPlaceholder,
   }));
 
   // Apply filters
@@ -222,9 +230,9 @@ async function getRedactionDetailsFromMeta(
     allRows = allRows.filter((row) => {
       return Object.entries(filters).every(([key, val]) => {
         if (!val) return true;
-        // Special handling for redactionType filter - check if the rule exists in byRule
+        // Special handling for redactionType filter - check if the placeholder exists in byPlaceholder
         if (key === "redactionType") {
-          return Object.keys(row.byRule).some(
+          return Object.keys(row.byPlaceholder).some(
             (k) => k.toLowerCase() === val.toLowerCase(),
           );
         }

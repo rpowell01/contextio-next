@@ -22,8 +22,8 @@ interface RedactionCaptureRow {
   redactionSummary: string;
   /** Total redaction count for this capture */
   totalRedactions: number;
-  /** Breakdown by rule for this capture */
-  byRule: Record<string, number>;
+  /** Breakdown by placeholder for this capture */
+  byPlaceholder: Record<string, number>;
 }
 
 const PAGE_SIZE = 50;
@@ -353,21 +353,12 @@ const handleCloseDiff = useCallback(() => {
     setPage(1); // Reset to first page when sort changes
   };
 
-  // Convert preset rule name to ruleId format
-  // Rule names from presets use hyphens (e.g., "api-key-prefixed")
-  // The redaction engine stores rule.name directly as ruleId
-  // So we use the name as-is, no conversion needed
-  const presetNameToRuleId = (presetName: string): string => {
-    return presetName;
-  };
-
-  const handleRedactionTypeClick = (type: string) => {
-    const ruleId = presetNameToRuleId(type);
-    console.log('[RedactionFilter] Clicked type:', type, '-> ruleId:', ruleId, 'current:', selectedRedactionType);
-    if (selectedRedactionType === ruleId) {
+  const handleRedactionTypeClick = (placeholderType: string) => {
+    console.log('[RedactionFilter] Clicked placeholder type:', placeholderType, 'current:', selectedRedactionType);
+    if (selectedRedactionType === placeholderType) {
       setSelectedRedactionType(null);
     } else {
-      setSelectedRedactionType(ruleId);
+      setSelectedRedactionType(placeholderType);
     }
     setPage(1); // Reset to first page when filter changes
   };
@@ -437,7 +428,7 @@ const handleCloseDiff = useCallback(() => {
               <h2 className="text-xl font-semibold">Breakdown by Redaction Type</h2>
               {selectedRedactionType && (
                 <button
-                  onClick={() => handleRedactionTypeClick(presetNameToRuleId(selectedRedactionType))}
+                  onClick={() => handleRedactionTypeClick(selectedRedactionType)}
                   className="text-xs text-primary hover:underline"
                 >
                   Clear filter
@@ -446,17 +437,17 @@ const handleCloseDiff = useCallback(() => {
             </div>
             <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-5">
               {summary && Object.keys(summary.byType ?? {}).length > 0 ? (
-                Object.entries(summary.byType ?? {}).map(([type, count]) => (
+                Object.entries(summary.byType ?? {}).map(([placeholder, count]) => (
                   <button
-                    key={type}
-                    onClick={() => handleRedactionTypeClick(type)}
+                    key={placeholder}
+                    onClick={() => handleRedactionTypeClick(placeholder)}
                     className={`rounded-lg border p-3 transition-colors text-left ${
-                      selectedRedactionType === presetNameToRuleId(type)
+                      selectedRedactionType === placeholder
                         ? 'bg-primary/10 border-primary'
                         : 'hover:bg-accent'
                     }`}
                   >
-                    <div className="text-sm text-muted-foreground capitalize">{type.replace(/_/g, " ")}</div>
+                    <div className="text-sm text-muted-foreground capitalize">{placeholder.replace(/_/g, " ")}</div>
                     <div className="text-2xl font-bold">{count}</div>
                   </button>
                 ))
