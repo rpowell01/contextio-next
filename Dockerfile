@@ -89,21 +89,23 @@ LABEL org.opencontainers.image.licenses="MIT"
 RUN corepack enable
 
 # Copy node_modules and packages directory (symlinks in node_modules point here)
+# Exclude web package since we use standalone output
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
+RUN rm -rf /app/packages/web
 
 # Copy proxy dist to root for combined entry
 COPY --from=build /app/packages/proxy/dist ./dist
 
-# Copy full web package (needs .next build output for Next.js server)
-COPY --from=build /app/packages/web ./packages/web
+# Copy Next.js standalone build output (includes server.js, public folder, .next/static)
+COPY --from=build /app/packages/web/.next/standalone ./packages/web
 
-# Copy Next.js build output (.next directory) for web server
-COPY --from=build /app/packages/web/.next ./packages/web/.next
+# Copy Next.js static assets
+COPY --from=build /app/packages/web/.next/static ./packages/web/.next/static
 
-# Fix ownership of the Next.js output so the node user can write runtime caches
-# (prerender cache, fetch cache, server app chunks, etc.)
-RUN chown -R node:node /app/packages/web/.next
+# Copy public folder to standalone output (Next.js copies public to standalone during build)
+# This is needed because standalone output doesn't always include public
+COPY --from=build /app/packages/web/public ./packages/web/public
 
 # Copy bundled default policy file
 COPY --from=build /app/packages/web/public/default-policy.json /app/default-policy.json
