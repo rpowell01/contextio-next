@@ -34,6 +34,18 @@ import { compilePolicy, fromPreset, loadPolicyFile } from "./policy.js";
 import type { PresetName } from "./presets.js";
 import { buildRedactMetaPayload, createStats, redactWithPolicy, writeRedactionMeta } from "./redact.js";
 import { createStreamRehydrator } from "./stream.js";
+import type {
+  Detector,
+  DetectorConfig,
+  DetectionResult,
+  DetectedSpan,
+  DetectorMode,
+  RedactDetectorConfig,
+  DetectorPipelineConfig,
+} from "./detector.js";
+import type { RuleDetectorConfig } from "./ruleDetector.js";
+import type { GlinerOnnxConfig } from "./glinerDetector.js";
+import { detectorRegistry, registerDetector, createDetector } from "./detector.js";
 
 /** Configuration for {@link createRedactPlugin}. */
 export interface RedactPluginConfig {
@@ -43,6 +55,19 @@ export interface RedactPluginConfig {
   policyFile?: string;
   /** Pre-compiled policy object. Overrides both `preset` and `policyFile`. */
   policy?: CompiledPolicy;
+  /**
+   * Detection mode:
+   * - "rules": rule-based only (default, fast, deterministic)
+   * - "llm": LLM-based only (semantic understanding, slower)
+   * - "hybrid": rules first for high-confidence patterns, LLM for ambiguous PII
+   * - "auto": automatically choose based on content characteristics
+   * Default: "rules"
+   */
+  detectorMode?: DetectorMode;
+  /**
+   * LLM detector configuration. Used when detectorMode is "llm", "hybrid", or "auto".
+   */
+  detectorConfig?: RedactDetectorConfig;
   /**
    * Enable reversible redaction. When true, the plugin tracks
    * original values per session and restores them in LLM responses.
@@ -246,3 +271,21 @@ export type { RedactionStats } from "./redact.js";
 export { redactWithPolicy, redactValue, createStats } from "./redact.js";
 export type { MappingEntry } from "./mapping.js";
 export { ReplacementMap } from "./mapping.js";
+
+// Detector API
+export type {
+  Detector,
+  DetectorConfig,
+  DetectionResult,
+  DetectedSpan,
+  DetectorMode,
+  RedactDetectorConfig,
+  DetectorPipelineConfig,
+  DetectorFactory,
+} from "./detector.js";
+export { detectorRegistry, registerDetector, createDetector } from "./detector.js";
+export type { RuleDetectorConfig } from "./ruleDetector.js";
+export { RuleDetector, createRuleDetector } from "./ruleDetector.js";
+export type { GlinerOnnxConfig } from "./glinerDetector.js";
+export { GlinerOnnxDetector, createGlinerOnnxDetector, prepareGlinerModel } from "./glinerDetector.js";
+export { DetectorPipeline, createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";

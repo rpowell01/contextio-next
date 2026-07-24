@@ -37,10 +37,12 @@
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
-    "@contextio/core": "workspace:*"
+    "@contextio/core": "workspace:*",
+    "onnxruntime-node": "^1.20.0"
   },
   "devDependencies": {
     "@types/node": "^22",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "execa": "^9.0.0"
   }
 }
