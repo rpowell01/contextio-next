@@ -239,7 +239,7 @@ onRequest(ctx: RequestContext): RequestContext {
 // Public API
 export type { RedactionRule } from "./rules.js";
 export type { PresetName } from "./presets.js";
-export { PRESETS } from "./presets.js";
+export { PRESETS, getAllPlaceholderTokens, getPlaceholderPatterns } from "./presets.js";
 export type { PolicyJson, PolicyRuleJson, CompiledPolicy } from "./policy.js";
 export { compilePolicy, loadPolicyFile, fromPreset } from "./policy.js";
 export type { RedactionStats } from "./redact.js";

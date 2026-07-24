@@ -285,6 +285,7 @@ function redactString(
   rules: RedactionRule[],
   allowlistStrings: Set<string>,
   allowlistPatterns: RegExp[],
+  placeholderAllowlist: Set<string>,
   stats: RedactionStats,
   map: ReplacementMap | null,
   currentPath: string[] = [],
@@ -306,6 +307,8 @@ function redactString(
       // Apply replacements in reverse order to preserve indices
       for (let i = matches.length - 1; i >= 0; i--) {
         const { start, end, match, captured } = matches[i];
+        // Skip if match is a known placeholder token (prevent re-redaction)
+        if (placeholderAllowlist.has(match)) continue;
         if (isAllowlisted(match, allowlistStrings, allowlistPatterns)) continue;
         if (rule.allowlist && isRuleAllowlisted(match, captured, rule.allowlist)) continue;
         if (rule.minEntropy !== undefined && shannonEntropy(captured ?? match) < rule.minEntropy) continue;
@@ -320,6 +323,8 @@ function redactString(
       // No context gating: simple replace
       result = result.replace(rule.pattern, (matchArg, ...args) => {
         const captured = typeof args[0] === "string" ? args[0] : undefined;
+        // Skip if match is a known placeholder token (prevent re-redaction)
+        if (placeholderAllowlist.has(matchArg)) return matchArg;
         if (isAllowlisted(matchArg, allowlistStrings, allowlistPatterns)) return matchArg;
         if (rule.allowlist && isRuleAllowlisted(matchArg, captured, rule.allowlist)) return matchArg;
         if (rule.minEntropy !== undefined && shannonEntropy(captured ?? matchArg) < rule.minEntropy) return matchArg;
@@ -357,6 +362,7 @@ export function redactWithPolicy(
       policy.rules,
       policy.allowlist.strings,
       policy.allowlist.patterns,
+      policy.placeholderAllowlist,
       stats,
       map,
       currentPath,
@@ -392,7 +398,7 @@ export function redactValue(
   _depth: string[] = [],
 ): unknown {
   if (typeof value === "string") {
-    return redactString(value, rules, allowlist, [], stats, null, []);
+    return redactString(value, rules, allowlist, [], new Set(), stats, null, []);
   }
 
   if (Array.isArray(value)) {

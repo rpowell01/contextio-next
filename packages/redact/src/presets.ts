@@ -278,3 +278,38 @@ export const PRESETS: Record<PresetName, RedactionRule[]> = {
   pii: [...SECRETS_RULES, ...PII_RULES],
   strict: [...SECRETS_RULES, ...PII_RULES, ...STRICT_RULES],
 };
+
+/**
+ * Get all placeholder tokens from all presets.
+ * Placeholder tokens are the replacement strings without brackets,
+ * e.g., "[API_KEY_REDACTED]" -> "API_KEY_REDACTED".
+ * This is used to populate the global placeholder allowlist to prevent
+ * re-redaction of already-redacted placeholder tokens in captured JSON.
+ */
+export function getAllPlaceholderTokens(): string[] {
+  const tokens = new Set<string>();
+
+  for (const preset of Object.values(PRESETS)) {
+    for (const rule of preset) {
+      // Rule replacement is like "[API_KEY_REDACTED]"
+      // Extract the placeholder name without brackets
+      const placeholder = rule.replacement.replace(/^\[|\]$/g, "");
+      if (placeholder) {
+        tokens.add(placeholder);
+        // Also add the bracketed version since that's what appears in content
+        tokens.add(`[${placeholder}]`);
+      }
+    }
+  }
+
+  return Array.from(tokens).sort();
+}
+
+/**
+ * Get all placeholder tokens as RegExp patterns for the global allowlist.
+ * These patterns will prevent re-redaction of any known placeholder token.
+ */
+export function getPlaceholderPatterns(): RegExp[] {
+  const tokens = getAllPlaceholderTokens();
+  return tokens.map((token) => new RegExp(`^\\[${token}\\]$`));
+}

@@ -28,7 +28,7 @@
 
 import fs from "node:fs";
 
-import { PRESETS, type PresetName } from "./presets.js";
+import { PRESETS, type PresetName, getAllPlaceholderTokens } from "./presets.js";
 import type { RedactionRule } from "./rules.js";
 
 // --- Policy JSON schema types ---
@@ -89,6 +89,12 @@ export interface CompiledPolicy {
     strings: Set<string>;
     patterns: RegExp[];
   };
+  /**
+   * Placeholder allowlist: known placeholder tokens (e.g., "API_KEY_REDACTED",
+   * "EMAIL_REDACTED") to prevent re-redaction of already-redacted content
+   * in captured JSON.
+   */
+  placeholderAllowlist: Set<string>;
   paths: {
     only: PathMatcher[] | null;
     skip: PathMatcher[];
@@ -208,9 +214,14 @@ export function compilePolicy(json: PolicyJson): CompiledPolicy {
     : null;
   const pathsSkip = (json.paths?.skip ?? []).map(parsePath);
 
+  // Get placeholder tokens from all presets (to prevent re-redaction)
+  const placeholderTokens = getAllPlaceholderTokens();
+  const placeholderAllowlist = new Set(placeholderTokens);
+
   return {
     rules,
     allowlist: { strings: allowlistStrings, patterns: allowlistPatterns },
+    placeholderAllowlist,
     paths: { only: pathsOnly, skip: pathsSkip },
   };
 }
