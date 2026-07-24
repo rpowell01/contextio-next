@@ -206,3 +206,15 @@ export async function getUserPicture(): Promise<string | null> {
   const session = await getSession();
   return session?.picture ?? null;
 }
+
+/**
+ * Clears the session cookie (for logout).
+ * Note: This only clears the local cookie. For full logout,
+ * redirect to /auth/logout which also clears the proxy session
+ * and optionally redirects to the OIDC provider's logout endpoint.
+ */
+export async function clearSession(): Promise<void> {
+  const { cookies } = await import("next/headers");
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE_NAME);
+}

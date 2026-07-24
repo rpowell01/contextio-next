@@ -2,9 +2,6 @@ import path from "path";
 
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    nodeMiddleware: true,
-  },
   turbopack: {
     // Handle node: protocol imports by aliasing to non-prefixed versions
     // which Next.js/Turbopack can externalize via serverExternalPackages

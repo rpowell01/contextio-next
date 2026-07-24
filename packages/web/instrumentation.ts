@@ -1,13 +1,17 @@
-// Use Node.js runtime for instrumentation to support Node.js built-ins (crypto, fs, etc.)
+// Use Node.js runtime for instrumentation to support Node.js built-ins
 export const runtime = "nodejs";
-
-// Static imports for Node.js built-ins - use default import for CommonJS interop
-import os from "os";
-import { join } from "path";
-import fs from "fs/promises";
 
 const SETTINGS_DIR = "/app/custom-policy";
 const SETTINGS_FILE = "/app/custom-policy/settings.json";
+
+async function getNodeModules() {
+  const [os, path, fs] = await Promise.all([
+    import("os"),
+    import("path"),
+    import("fs/promises"),
+  ]);
+  return { homedir: os.homedir, join: path.join, fs };
+}
 
 function validateCsrfSecret(): void {
   if (process.env.NODE_ENV === "production") {
@@ -19,12 +23,12 @@ function validateCsrfSecret(): void {
 
 async function applyPersistedSettings(): Promise<void> {
   try {
-    const raw = await fs.readFile(SETTINGS_FILE, "utf8");
+    const { readFile } = await import("fs/promises");
+    const raw = await readFile(SETTINGS_FILE, "utf8");
     const parsed = JSON.parse(raw);
     if (typeof parsed === "object" && parsed !== null) {
       const obj = parsed as Record<string, unknown>;
       if (typeof obj.logDir === "string") {
-        // Use inline applyLogDir instead of importing from server-utils
         const { applyLogDir } = await import("@/lib/sessions/server-utils");
         applyLogDir(obj.logDir);
       }
@@ -46,12 +50,13 @@ function defaultSettings() {
 }
 
 async function getCaptureDir(): Promise<string> {
-  // Use default path or env var
-  const captureDir = process.env.LOGGER_CAPTURE_DIR || join(os.homedir(), ".contextio", "captures");
+  const { homedir, join } = await getNodeModules();
+  const captureDir = process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
   return captureDir;
 }
 
 async function listCaptureFiles(): Promise<string[]> {
+  const { homedir, join, fs } = await getNodeModules();
   const captureDir = await getCaptureDir();
   try {
     const files = await fs.readdir(captureDir);
@@ -70,11 +75,7 @@ function metaFilenameFor(captureFilename: string): string {
   return `${base}.redact-meta.json`;
 }
 
-async function loadSettings(): Promise<{
-  enabled: boolean;
-  maxAgeDays: number;
-  intervalHours: number;
-}> {
+async function loadSettings(): Promise<{ enabled: boolean; maxAgeDays: number; intervalHours: number }> {
   let cleanupSettings: { enabled: boolean; maxAgeDays: number; intervalHours: number } | null = null;
   try {
     const { ensureSettingsFile } = await import("@/lib/settings-server");
@@ -114,6 +115,7 @@ async function runCleanup() {
 
   const cutoff = Date.now() - settings.maxAgeDays * 24 * 60 * 60 * 1000;
   const files = await listCaptureFiles();
+  const { join, fs } = await getNodeModules();
   const captureDir = await getCaptureDir();
 
   for (const file of files) {
@@ -143,8 +145,6 @@ async function startCleanupScheduler() {
   const intervalMs = settings.intervalHours * 60 * 60 * 1000;
 
   cleanupTimer = setInterval(runWithCatch, intervalMs);
-  // In Node.js, Timer has unref(). In Edge/workerd, setInterval returns a number.
-  // Guard against environments without unref().
   if (cleanupTimer && typeof cleanupTimer.unref === "function") {
     cleanupTimer.unref();
   }
@@ -155,9 +155,6 @@ async function startCleanupScheduler() {
 
 export async function register(): Promise<void> {
   // Validate CSRF secret in ALL runtimes (including Edge) before middleware runs
-  validateCsrfSecret();
-
-  // Validate CSRF secret before any middleware runs
   validateCsrfSecret();
 
   // Apply persisted settings at server startup
