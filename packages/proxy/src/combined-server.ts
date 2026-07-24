@@ -85,10 +85,10 @@ async function serveStaticFile(req: http.IncomingMessage, res: http.ServerRespon
     const relativePath = url.slice("/_next/static/".length);
     // Prevent path traversal
     if (relativePath.includes("..")) return false;
-    
+
     const filePath = join(staticRoot, relativePath);
     const stats = await stat(filePath);
-    
+
     if (!stats.isFile()) return false;
 
     const contentType = lookup(filePath) || "application/octet-stream";
@@ -97,10 +97,10 @@ async function serveStaticFile(req: http.IncomingMessage, res: http.ServerRespon
       "Cache-Control": "public, max-age=31536000, immutable",
       "Content-Length": stats.size,
     });
-    
+
     const stream = createReadStream(filePath);
     stream.pipe(res);
-    
+
     return new Promise((resolve, reject) => {
       stream.on("end", () => resolve(true));
       stream.on("error", (err) => {
@@ -111,6 +111,55 @@ async function serveStaticFile(req: http.IncomingMessage, res: http.ServerRespon
         reject(err);
       });
     });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Serve public assets from Next.js standalone output (e.g., /site.webmanifest, /favicon.ico)
+ */
+async function servePublicAsset(req: http.IncomingMessage, res: http.ServerResponse, publicDir: string): Promise<boolean> {
+  const url = req.url || "";
+  const pathname = url.split("?")[0];
+
+  // Only serve known public assets
+  const publicAssets = [
+    "/site.webmanifest",
+    "/favicon.ico",
+    "/contextio-next-brand.png",
+  ];
+
+  const isPublicAsset = publicAssets.some(asset => pathname === asset || pathname.startsWith(asset + "?") || pathname.startsWith("/ContextIO-Next-");
+  // Also handle ContextIO-Next- prefixed favicons
+  if (!isPublicAsset && !pathname.startsWith("/ContextIO-Next-")) {
+    return false;
+  }
+
+  try {
+    // Prevent path traversal
+    if (pathname.includes("..")) return false;
+
+    const filePath = join(publicDir, pathname);
+
+    // Security: ensure path is within publicDir
+    const resolvedPath = await fs.realpath(filePath).catch(() => null);
+    const resolvedPublicDir = await fs.realpath(publicDir).catch(() => null);
+    if (!resolvedPath || !resolvedPublicDir || !resolvedPath.startsWith(resolvedPublicDir)) {
+      return false;
+    }
+
+    const stats = await stat(resolvedPath);
+    if (!stats.isFile()) return false;
+
+    const mimeType = lookup(resolvedPath) || "application/octet-stream";
+    res.writeHead(200, {
+      "Content-Type": mimeType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+    });
+
+    createReadStream(resolvedPath).pipe(res);
+    return true;
   } catch {
     return false;
   }
@@ -250,6 +299,11 @@ export function createCombinedProxy(
       if (served) return;
       // If not found, fall through to Next.js for 404 handling
     }
+
+    // Serve public assets (manifest, favicon, logo) from standalone output
+    const publicDir = join(process.cwd(), "packages/web/public");
+    const publicServed = await servePublicAsset(req, res, publicDir);
+    if (publicServed) return;
 
     // Proxy admin API
     if (path.startsWith("/admin/")) {
