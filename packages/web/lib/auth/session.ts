@@ -3,10 +3,8 @@
  *
  * Provides server-side session validation using the same encrypted cookie
  * format as the proxy. Reads the session secret from OIDC_SESSION_SECRET env var.
+ * Uses Web Crypto API (available in Edge runtime).
  */
-
-import { cookies } from "next/headers";
-import { createDecipheriv, createHmac, timingSafeEqual } from "crypto";
 
 export interface AuthSession {
   /** User's subject identifier from the ID token. */
@@ -36,10 +34,53 @@ interface SessionCookie {
 
 const SESSION_COOKIE_NAME = "contextio_session";
 
-/**
- * Gets the session secret from environment variables.
- * Must match the proxy's CONTEXTIO_OIDC_SESSION_SECRET.
- */
+// Crypto operations using Web Crypto API
+async function deriveKey(sessionSecret: string, purpose: string): Promise<CryptoKey> {
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(sessionSecret),
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits", "deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: encoder.encode(purpose),
+      iterations: 100000,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function deriveHmacKey(sessionSecret: string): Promise<CryptoKey> {
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(sessionSecret),
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits", "deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: encoder.encode("hmac-key"),
+      iterations: 100000,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    { name: "HMAC", hash: "SHA-256", length: 256 },
+    false,
+    ["sign", "verify"]
+  );
+}
+
 function getSessionSecret(): string {
   const secret = process.env.CONTEXTIO_OIDC_SESSION_SECRET || process.env.OIDC_SESSION_SECRET;
   if (!secret) {
@@ -48,49 +89,39 @@ function getSessionSecret(): string {
   return secret;
 }
 
-/**
- * Derives an encryption key from the session secret using HMAC-SHA256.
- * Uses first 32 bytes for AES-256-GCM.
- */
-function deriveEncryptionKey(sessionSecret: string): Buffer {
-  return createHmac("sha256", sessionSecret).update("encryption-key").digest().subarray(0, 32);
-}
-
-/**
- * Derives an HMAC key from the session secret.
- */
-function deriveHmacKey(sessionSecret: string): Buffer {
-  return createHmac("sha256", sessionSecret).update("hmac-key").digest();
-}
-
-/**
- * Decrypts and validates session cookie.
- * Returns session if valid, null if invalid/missing/expired.
- */
-function decryptSession(cookie: SessionCookie, sessionSecret: string): AuthSession | null {
+async function decryptSession(cookie: SessionCookie, sessionSecret: string): Promise<AuthSession | null> {
   try {
-    const key = deriveEncryptionKey(sessionSecret);
-    const hmacKey = deriveHmacKey(sessionSecret);
+    const encryptionKey = await deriveKey(sessionSecret, "encryption-key");
+    const hmacKey = await deriveHmacKey(sessionSecret);
 
     // Verify HMAC
-    const encryptedWithTag = Buffer.from(cookie.data, "base64url");
-    const expectedHmac = createHmac("sha256", hmacKey).update(encryptedWithTag).digest();
-    const providedHmac = Buffer.from(cookie.hmac, "base64url");
+    const encryptedWithTag = Uint8Array.from(atob(cookie.data.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    const expectedHmac = new Uint8Array(await crypto.subtle.sign("HMAC", hmacKey, encryptedWithTag));
+    const providedHmac = Uint8Array.from(atob(cookie.hmac.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 
-    if (!timingSafeEqual(expectedHmac, providedHmac)) {
-      return null;
+    if (expectedHmac.length !== providedHmac.length) return null;
+    let equal = true;
+    for (let i = 0; i < expectedHmac.length; i++) {
+      if (expectedHmac[i] !== providedHmac[i]) {
+        equal = false;
+        break;
+      }
     }
+    if (!equal) return null;
 
     // Split encrypted data and auth tag (last 16 bytes)
-    const authTag = encryptedWithTag.subarray(-16);
-    const encrypted = encryptedWithTag.subarray(0, -16);
+    const authTag = encryptedWithTag.slice(-16);
+    const encrypted = encryptedWithTag.slice(0, -16);
 
-    const iv = Buffer.from(cookie.iv, "base64url");
-    const decipher = createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(authTag);
+    const iv = Uint8Array.from(atob(cookie.iv.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 
-    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-    const session = JSON.parse(decrypted.toString("utf8")) as AuthSession;
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      encryptionKey,
+      new Uint8Array([...encrypted, ...authTag])
+    );
+
+    const session = JSON.parse(new TextDecoder().decode(decrypted)) as AuthSession;
 
     // Check expiration
     const now = Math.floor(Date.now() / 1000);
@@ -109,6 +140,7 @@ function decryptSession(cookie: SessionCookie, sessionSecret: string): AuthSessi
  * Returns the session if valid, null otherwise.
  */
 export async function getSession(): Promise<AuthSession | null> {
+  const { cookies } = await import("next/headers");
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
 
@@ -131,17 +163,6 @@ export async function getSession(): Promise<AuthSession | null> {
  */
 export async function getUser(): Promise<AuthSession | null> {
   return getSession();
-}
-
-/**
- * Clears the session cookie (for logout).
- * Note: This only clears the local cookie. For full logout,
- * redirect to /auth/logout which also clears the proxy session
- * and optionally redirects to the OIDC provider's logout endpoint.
- */
-export async function clearSession(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE_NAME);
 }
 
 /**
