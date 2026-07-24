@@ -27,7 +27,7 @@ RUN corepack enable && \
     export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     pnpm config set minimum-release-age 0 --global && \
     pnpm install --ignore-scripts && \
-    pnpm rebuild sharp unrs-resolver
+    pnpm rebuild sharp unrs-resolver onnxruntime-node
 
 # Copy source files
 COPY packages/core/src packages/core/src
