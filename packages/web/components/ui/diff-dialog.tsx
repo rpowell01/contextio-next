@@ -479,7 +479,7 @@ export function DiffDialog({
         <div className="flex-1 min-h-0 overflow-hidden">
           {/* Diff View Panels (shown when viewMode === "diff") */}
           {viewMode === "diff" && (
-            <>
+            <div className="flex flex-col md:flex-row overflow-hidden flex-1 min-h-0">
               <div className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
                 <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
                   <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
@@ -510,12 +510,12 @@ export function DiffDialog({
                   {renderDiffPane(diff, "right")}
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* Syntax Highlighted Panels (shown when viewMode === "syntax") */}
           {viewMode === "syntax" && (
-            <>
+            <div className="flex flex-col md:flex-row overflow-hidden flex-1 min-h-0">
               <div className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
                 <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
                   <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
@@ -546,7 +546,7 @@ export function DiffDialog({
                   {renderSyntaxPane(diffPostContent)}
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
       </DialogContent>
