@@ -6,10 +6,17 @@ import type { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth/session";
 
 // Public paths that don't require authentication
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/logout", "/auth/logged-out", "/_next", "/favicon.ico", "/api/auth"];
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/logout", "/auth/logged-out", "/_next", "/favicon.ico", "/api/auth", "/site.webmanifest"];
+
+// Also allow all public folder assets (images, manifests, etc.)
+function isPublicAsset(pathname: string): boolean {
+  return pathname.startsWith("/contextio-next-brand.png") ||
+         pathname.startsWith("/ContextIO-Next-") ||
+         pathname === "/site.webmanifest";
+}
 
 function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((publicPath) => pathname.startsWith(publicPath));
+  return PUBLIC_PATHS.some((publicPath) => pathname.startsWith(publicPath)) || isPublicAsset(pathname);
 }
 
 export default async function middleware(request: NextRequest) {
@@ -55,7 +62,10 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - site.webmanifest (PWA manifest)
+     * - contextio-next-brand.png (brand logo)
+     * - ContextIO-Next-*.png (favicon sizes)
      */
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|site.webmanifest|contextio-next-brand.png|ContextIO-Next-).*)",
   ],
 };
