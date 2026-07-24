@@ -287,5 +287,20 @@ export { detectorRegistry, registerDetector, createDetector } from "./detector.j
 export type { RuleDetectorConfig } from "./ruleDetector.js";
 export { RuleDetector, createRuleDetector } from "./ruleDetector.js";
 export type { GlinerOnnxConfig } from "./glinerDetector.js";
-export { GlinerOnnxDetector, createGlinerOnnxDetector, prepareGlinerModel } from "./glinerDetector.js";
+
+// Lazy export for GLiNER detector to avoid loading onnxruntime-node in environments
+// where native modules are not available (e.g., Next.js static generation on Alpine)
+let _glinerModule: typeof import("./glinerDetector.js") | null = null;
+async function loadGlinerModule() {
+  if (!_glinerModule) {
+    _glinerModule = await import("./glinerDetector.js");
+  }
+  return _glinerModule;
+}
+
+export async function getGlinerDetector() {
+  const mod = await loadGlinerModule();
+  return { GlinerOnnxDetector: mod.GlinerOnnxDetector, createGlinerOnnxDetector: mod.createGlinerOnnxDetector, prepareGlinerModel: mod.prepareGlinerModel };
+}
+
 export { DetectorPipeline, createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";

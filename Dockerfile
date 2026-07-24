@@ -60,7 +60,7 @@ RUN GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") \
     BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
     VERSION=$(cat package.json | grep '"version"' | head -1 | sed 's/.*"version": "\([^"]*\)".*/\1/') \
     && export GIT_COMMIT BUILD_TIME VERSION \
-    && pnpm -r build
+    && pnpm exec turbo build
 
 
 FROM node:22-alpine AS runtime
