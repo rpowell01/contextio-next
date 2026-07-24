@@ -414,13 +414,31 @@ function SessionView({
                 <h3 className="font-semibold mb-3">Redaction Statistics</h3>
                 <div className="space-y-2">
                   <div className="text-sm">
-                    <span className="text-muted-foreground">Total Cumulative Redactions:</span>{" "}
-                    {session.redactionStats.totalRedactions}
+                    <span
+                      className="text-muted-foreground"
+                      title="Sum of all redactions across every capture in this session. Multiple captures with the same placeholder are all counted."
+                    >
+                      Total Cumulative Redactions:
+                    </span>{" "}
+                    <span
+                      title="Sum of all redactions across every capture in this session. Multiple captures with the same placeholder are all counted."
+                    >
+                      {session.redactionStats.totalRedactions}
+                    </span>
                   </div>
                   {session.redactionStats.uniqueRedactions !== undefined && session.redactionStats.uniqueRedactions > 0 && (
                     <div className="text-sm text-blue-600">
-                      <span className="text-muted-foreground">Unique Redactions (per rule max):</span>{" "}
-                      {session.redactionStats.uniqueRedactions}
+                      <span
+                        className="text-muted-foreground"
+                        title="Deduplicated count: for each placeholder type, takes the maximum count found in any single capture within this session, then sums across placeholder types. Matches the 'Unique per Session' metric on the Metrics page."
+                      >
+                        Unique Redactions (per rule max):
+                      </span>{" "}
+                      <span
+                        title="Deduplicated count: for each placeholder type, takes the maximum count found in any single capture within this session, then sums across placeholder types. Matches the 'Unique per Session' metric on the Metrics page."
+                      >
+                        {session.redactionStats.uniqueRedactions}
+                      </span>
                     </div>
                   )}
                   {Object.keys(session.redactionStats.byRule).length > 0 && (
@@ -429,7 +447,12 @@ function SessionView({
                       <ul className="ml-2 mt-1 list-disc list-inside">
                         {Object.entries(session.redactionStats.byRule).map(([rule, count]) => (
                           <li key={rule}>
-                            <span className="font-medium">{rule}:</span> {count}
+                            <span className="font-medium">{rule}:</span>{" "}
+                            <span
+                              title="Max count of this placeholder in any single capture within this session."
+                            >
+                              {count}
+                            </span>
                           </li>
                         ))}
                       </ul>

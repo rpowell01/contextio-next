@@ -176,22 +176,28 @@ export default function MetricsPage() {
               </div>
 
               {/* Unique Redactions (deduplicated by session) */}
-              <div className="rounded-lg border p-4 bg-blue-50 border-blue-200">
+              <div className="rounded-lg border p-4 bg-blue-50 border-blue-200"
+                   title="Sum of max redactions per placeholder per session. For each session, take the highest count of each placeholder type across all its captures, then sum across all sessions.">
                 <div className="text-sm text-muted-foreground">
                   Unique Redactions (per session)
                 </div>
                 <div className="text-2xl font-bold text-blue-600">
-                  {formatNumber(metrics.redactionStatsDeduped?.totalRedactions ?? 0)}
+                  <span title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used, then summed across all sessions. This avoids double-counting when a session has multiple captures.">
+                    {formatNumber(metrics.redactionStatsDeduped?.totalRedactions ?? 0)}
+                  </span>
                 </div>
               </div>
 
               {/* Total Redactions (sum across all captures) */}
-              <div className="rounded-lg border p-4 bg-red-50 border-red-200">
+              <div className="rounded-lg border p-4 bg-red-50 border-red-200"
+                   title="Sum of all redactions across every capture. Every capture's redactions are counted individually (no deduplication).">
                 <div className="text-sm text-muted-foreground">
                   Total Redactions (all captures)
                 </div>
                 <div className="text-2xl font-bold text-red-600">
-                  {formatNumber(metrics.redactionStatsSum?.totalRedactions ?? 0)}
+                  <span title="Sum of all redactions across every capture. Every capture's redactions are counted individually with no deduplication. A single session with multiple captures will have its redactions counted multiple times.">
+                    {formatNumber(metrics.redactionStatsSum?.totalRedactions ?? 0)}
+                  </span>
                 </div>
               </div>
 
@@ -225,7 +231,8 @@ export default function MetricsPage() {
                   {metrics.redactionStatsDeduped &&
                     Object.keys(metrics.redactionStatsDeduped.byRule).length > 0 && (
                       <div className="md:col-span-2 lg:col-span-4">
-                        <h4 className="text-sm font-medium text-blue-600 mb-2">
+                        <h4 className="text-sm font-medium text-blue-600 mb-2"
+                            title="Unique per session: for each session, takes the max count of this placeholder across all its captures, then sums across sessions.">
                           Unique per Session
                         </h4>
                         <div className="grid gap-2 md:grid-cols-4">
@@ -234,12 +241,15 @@ export default function MetricsPage() {
                               <div
                                 key={rule}
                                 className="rounded border p-2 bg-blue-50"
+                                title="Max count of this placeholder in any single capture per session, summed across all sessions."
                               >
                                 <div className="text-xs text-muted-foreground capitalize">
                                   {rule.replace(/_/g, " ")}
                                 </div>
                                 <div className="text-lg font-bold text-blue-600">
-                                  {formatNumber(count)}
+                                  <span title="Max count of this placeholder in any single capture per session, summed across all sessions.">
+                                    {formatNumber(count)}
+                                  </span>
                                 </div>
                               </div>
                             ),
@@ -252,7 +262,8 @@ export default function MetricsPage() {
                   {metrics.redactionStatsSum &&
                     Object.keys(metrics.redactionStatsSum.byRule).length > 0 && (
                       <div className="md:col-span-2 lg:col-span-4">
-                        <h4 className="text-sm font-medium text-red-600 mb-2">
+                        <h4 className="text-sm font-medium text-red-600 mb-2"
+                            title="Sum across all captures: adds up every occurrence of this placeholder across every capture in every session.">
                           Sum Across All Captures
                         </h4>
                         <div className="grid gap-2 md:grid-cols-4">
@@ -261,12 +272,15 @@ export default function MetricsPage() {
                               <div
                                 key={rule}
                                 className="rounded border p-2 bg-red-50"
+                                title="Total occurrences of this placeholder across all captures in all sessions."
                               >
                                 <div className="text-xs text-muted-foreground capitalize">
                                   {rule.replace(/_/g, " ")}
                                 </div>
                                 <div className="text-lg font-bold text-red-600">
-                                  {formatNumber(count)}
+                                  <span title="Total occurrences of this placeholder across all captures in all sessions.">
+                                    {formatNumber(count)}
+                                  </span>
                                 </div>
                               </div>
                             ),

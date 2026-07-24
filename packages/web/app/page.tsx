@@ -145,7 +145,11 @@ export default function HomePage() {
                   </button>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {redactionsSummary?.totalRedactions ?? 0} redactions found
+                  <span
+                    title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used. This avoids double-counting when a session has multiple captures."
+                  >
+                    {redactionsSummary?.totalRedactions ?? 0}
+                  </span> redactions found
                 </p>
               </div>
             </div>

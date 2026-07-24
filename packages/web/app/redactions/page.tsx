@@ -399,7 +399,8 @@ const handleCloseDiff = useCallback(() => {
 
           {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border p-4 bg-red-50 border-red-200">
+            <div className="rounded-lg border p-4 bg-red-50 border-red-200"
+                 title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used. This matches the 'Unique Redactions (per session)' on the Metrics page.">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">Total Redactions</div>
                 <button
@@ -418,7 +419,11 @@ const handleCloseDiff = useCallback(() => {
                   )}
                 </button>
               </div>
-              <div className="text-3xl font-bold text-red-600 mt-1">{summary?.totalRedactions ?? 0}</div>
+              <div className="text-3xl font-bold text-red-600 mt-1">
+                <span title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used. This avoids double-counting when a session has multiple captures.">
+                  {summary?.totalRedactions ?? 0}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -446,9 +451,14 @@ const handleCloseDiff = useCallback(() => {
                         ? 'bg-primary/10 border-primary'
                         : 'hover:bg-accent'
                     }`}
+                    title="Maximum count of this placeholder type in any single session. Click to filter the details table below."
                   >
                     <div className="text-sm text-muted-foreground capitalize">{placeholder.replace(/_/g, " ")}</div>
-                    <div className="text-2xl font-bold">{count}</div>
+                    <div className="text-2xl font-bold">
+                      <span title="Max count of this placeholder in any single capture per session, summed across all sessions.">
+                        {count}
+                      </span>
+                    </div>
                   </button>
                 ))
               ) : (
