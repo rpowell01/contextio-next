@@ -3,7 +3,7 @@ import path from "path";
 const nextConfig = {
   reactStrictMode: true,
   turbopack: {},
-  serverExternalPackages: ["@contextio/logger", "@contextio/redact", "onnxruntime-node", "fs/promises", "path", "os", "crypto", "stream", "util", "buffer", "querystring", "url", "zlib", "http", "https", "assert", "constants", "process"],
+  serverExternalPackages: ["@contextio/logger", "@contextio/redact", "onnxruntime-node", "@huggingface/tokenizers", "fs/promises", "path", "os", "crypto", "stream", "util", "buffer", "querystring", "url", "zlib", "http", "https", "assert", "constants", "process"],
   webpack: (config, { isServer }) => {
     config.resolve.alias["@"] = path.join(process.cwd(), "");
 
@@ -44,7 +44,7 @@ const nextConfig = {
     };
 
     // Exclude native Node.js modules from bundling
-    const nativeModules = ["onnxruntime-node", "onnxruntime-node/napi", "onnxruntime-web", "sharp", "unrs-resolver"];
+    const nativeModules = ["onnxruntime-node", "onnxruntime-node/napi", "onnxruntime-web", "sharp", "unrs-resolver", "@huggingface/tokenizers"];
 
     if (!isServer) {
       config.resolve.fallback = {

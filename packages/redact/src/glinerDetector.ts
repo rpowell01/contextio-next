@@ -14,9 +14,10 @@
  * - gliner-pii-v1 (ONNX): PII-specific fine-tuned variant
  */
 
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
+import { Tokenizer } from "@huggingface/tokenizers";
 
 import type {
   Detector,
@@ -25,128 +26,7 @@ import type {
   DetectedSpan,
 } from "./detector.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// --- Tokenizer implementation ---
-
-interface TokenizerConfig {
-  vocab: Map<string, number>;
-  unkTokenId: number;
-  padTokenId: number;
-  clsTokenId: number;
-  sepTokenId: number;
-  maxLength: number;
-}
-
-/**
- * Simple BERT-style WordPiece tokenizer.
- * In production, use @huggingface/tokenizers for full fidelity.
- */
-class SimpleTokenizer {
-  private vocab: Map<string, number>;
-  private unkTokenId: number;
-  private padTokenId: number;
-  private clsTokenId: number;
-  private sepTokenId: number;
-  private maxLength: number;
-  private invVocab: Map<number, string>;
-
-  constructor(config: TokenizerConfig) {
-    this.vocab = config.vocab;
-    this.unkTokenId = config.unkTokenId;
-    this.padTokenId = config.padTokenId;
-    this.clsTokenId = config.clsTokenId;
-    this.sepTokenId = config.sepTokenId;
-    this.maxLength = config.maxLength;
-    this.invVocab = new Map();
-    for (const [token, id] of this.vocab) {
-      this.invVocab.set(id, token);
-    }
-  }
-
-  static async load(modelDir: string): Promise<SimpleTokenizer> {
-    const fs = await import("node:fs/promises");
-    const vocabPath = join(modelDir, "vocab.txt");
-    const configPath = join(modelDir, "tokenizer_config.json");
-
-    const vocabContent = await fs.readFile(vocabPath, "utf-8");
-    const configContent = await fs.readFile(configPath, "utf-8");
-    const config = JSON.parse(configContent);
-
-    const vocab = new Map<string, number>();
-    let idx = 0;
-    for (const line of vocabContent.trim().split("\n")) {
-      const token = line.trim();
-      if (token) vocab.set(token, idx++);
-    }
-
-    return new SimpleTokenizer({
-      vocab,
-      unkTokenId: vocab.get(config.unk_token ?? "[UNK]") ?? 100,
-      padTokenId: vocab.get(config.pad_token ?? "[PAD]") ?? 0,
-      clsTokenId: vocab.get(config.cls_token ?? "[CLS]") ?? 101,
-      sepTokenId: vocab.get(config.sep_token ?? "[SEP]") ?? 102,
-      maxLength: config.model_max_length ?? 512,
-    });
-  }
-
-  encode(text: string): { inputIds: number[]; attentionMask: number[] } {
-    // Basic wordpiece tokenization (simplified)
-    // For production, use a proper tokenizer
-    const words = text.toLowerCase().split(/\s+/);
-    const tokens: string[] = [];
-
-    for (const word of words) {
-      let matched = "";
-      for (let i = word.length; i > 0; i--) {
-        const prefix = word.slice(0, i);
-        if (this.vocab.has(prefix)) {
-          matched = prefix;
-          break;
-        }
-      }
-      if (matched) {
-        tokens.push(matched);
-        // Add remaining as ## continuations
-        const remainder = word.slice(matched.length);
-        if (remainder) {
-          tokens.push("##" + remainder);
-        }
-      } else {
-        tokens.push("[UNK]");
-      }
-    }
-
-    // Add special tokens
-    const inputIds = [
-      this.clsTokenId,
-      ...tokens.slice(0, this.maxLength - 2).map((t) => this.vocab.get(t) ?? this.unkTokenId),
-      this.sepTokenId,
-    ];
-
-    // Pad to maxLength
-    const attentionMask = inputIds.map(() => 1);
-    while (inputIds.length < this.maxLength) {
-      inputIds.push(this.padTokenId);
-      attentionMask.push(0);
-    }
-
-    return { inputIds, attentionMask };
-  }
-
-  decode(inputIds: number[]): string {
-    return inputIds
-      .map((id) => this.invVocab.get(id) ?? "[UNK]")
-      .join(" ")
-      .replace(/ ##/g, "")
-      .replace(/\[CLS\]|\[SEP\]|\[PAD\]/g, "")
-      .trim();
-  }
-
-  getVocabSize(): number {
-    return this.vocab.size;
-  }
-}
+const __dirname = join(fileURLToPath(import.meta.url), "..");
 
 // --- GLiNER ONNX Detector ---
 
@@ -159,7 +39,7 @@ export interface GlinerOnnxConfig extends DetectorConfig {
   labels?: string[];
   /** Confidence threshold for detections. Default: 0.5 */
   threshold?: number;
-  /** Maximum text length. Default: 512 */
+  /** Maximum text length (tokens). Default: 512 */
   maxLength?: number;
   /** Whether to use flat NMS (non-maximum suppression) for overlapping spans. Default: true */
   flatNms?: boolean;
@@ -183,12 +63,13 @@ interface TokenSpan {
  * GLiNER ONNX detector for PII/NER.
  *
  * Loads a quantized GLiNER model and runs inference via ONNX Runtime.
- * Provides high-performance
- * optimized for CPU inference with INT8 quantization.
+ * Uses Hugging Face tokenizers for accurate token-to-character position mapping.
+ * Provides high-performance local inference optimized for CPU with INT8 quantization.
  */
 export class GlinerOnnxDetector implements Detector {
   readonly name = "gliner-onnx";
-  readonly description = "GLiNER Named Entity Recognition via ONNX Runtime (local, fast, private)";
+  readonly description =
+    "GLiNER Named Entity Recognition via ONNX Runtime (local, fast, private)";
 
   private _labels: string[] = [
     "PERSON",
@@ -215,7 +96,7 @@ export class GlinerOnnxDetector implements Detector {
   }
 
   private session: InferenceSession | null = null;
-  private tokenizer: SimpleTokenizer | null = null;
+  private tokenizer: Awaited<ReturnType<typeof Tokenizer.from_pretrained>> | null = null;
   private config: GlinerOnnxConfig;
   private initialized = false;
 
@@ -233,28 +114,32 @@ export class GlinerOnnxDetector implements Detector {
   async initialize(config?: DetectorConfig): Promise<void> {
     if (this.initialized) return;
 
-    const { InferenceSession } = await import("onnxruntime-node");
+    // Load tokenizer from model directory using Hugging Face tokenizers
+    // This provides accurate offset mappings for token-to-character conversion
+    this.tokenizer = await Tokenizer.from_pretrained(this.config.modelDir);
 
-    const finalConfig = { ...this.config, ...config } as GlinerOnnxConfig;
-
-    // Load tokenizer
-    this.tokenizer = await SimpleTokenizer.load(finalConfig.modelDir);
+    // Configure tokenizer for GLiNER
+    this.tokenizer.enable_truncation(this.config.maxLength ?? 512);
+    this.tokenizer.enable_padding({
+      length: this.config.maxLength ?? 512,
+      pad_id: this.tokenizer.get_vocab().get("[PAD]") ?? 0,
+      pad_token: "[PAD]",
+    });
 
     // Create inference session
-    const modelPath = join(finalConfig.modelDir, "model.onnx");
+    const modelPath = join(this.config.modelDir, "model.onnx");
     this.session = await InferenceSession.create(modelPath, {
-      executionProviders: finalConfig.providers ?? ["cpu"],
+      executionProviders: this.config.providers ?? ["cpu"],
       graphOptimizationLevel: "all",
       enableCpuMemArena: true,
       enableMemPattern: true,
     });
 
-    // If custom labels provided, we may need to adjust
-    if (finalConfig.labels && finalConfig.labels.length > 0) {
-      this._labels = [...finalConfig.labels];
+    // If custom labels provided, use them
+    if (this.config.labels && this.config.labels.length > 0) {
+      this._labels = [...this.config.labels];
     }
 
-    this.config = finalConfig;
     this.initialized = true;
   }
 
@@ -281,17 +166,28 @@ export class GlinerOnnxDetector implements Detector {
     const finalConfig = { ...this.config, ...config } as GlinerOnnxConfig;
     const threshold = config?.threshold ?? finalConfig.threshold ?? 0.5;
 
-    // Tokenize input
-    const { inputIds, attentionMask } = this.tokenizer!.encode(text);
+    // Tokenize input with offset mappings for accurate position tracking
+    const encoding = this.tokenizer!.encode(text);
+    const inputIds = encoding.ids;
+    const attentionMask = encoding.attention_mask;
+    const offsets = encoding.offsets; // Array of [start, end] character positions for each token
 
     // Prepare inputs for ONNX
-    // GLiNER expects: input_ids, attention_mask, (labels)
+    // GLiNER expects: input_ids, attention_mask
     const batchSize = 1;
     const seqLen = inputIds.length;
 
     // Create input tensors
-    const inputIdsTensor = new Tensor("int64", BigInt64Array.from(inputIds.map((x) => BigInt(x))), [batchSize, seqLen]);
-    const attentionMaskTensor = new Tensor("int64", BigInt64Array.from(attentionMask.map((x) => BigInt(x))), [batchSize, seqLen]);
+    const inputIdsTensor = new Tensor(
+      "int64",
+      BigInt64Array.from(inputIds.map((x: number) => BigInt(x))),
+      [batchSize, seqLen],
+    );
+    const attentionMaskTensor = new Tensor(
+      "int64",
+      BigInt64Array.from(attentionMask.map((x: number) => BigInt(x))),
+      [batchSize, seqLen],
+    );
 
     // Run inference
     const feeds = {
@@ -308,10 +204,21 @@ export class GlinerOnnxDetector implements Detector {
     const logitsData = logits.data as Float32Array;
     const dims = logits.dims; // [batch, seq_len, num_labels] or [batch, seq_len, num_labels, 2]
 
-    const spans = this.parseLogits(logitsData, dims, text, finalConfig.labels ?? this.labels, threshold, finalConfig);
+    const spans = this.parseLogits(
+      logitsData,
+      dims,
+      text,
+      offsets,
+      finalConfig.labels ?? this.labels,
+      threshold,
+      finalConfig,
+    );
 
     // Apply NMS if enabled
-    const finalSpans = finalConfig.flatNms !== false ? this.applyNMS(spans, finalConfig.nmsThreshold ?? 0.5) : spans;
+    const finalSpans =
+      finalConfig.flatNms !== false
+        ? this.applyNMS(spans, finalConfig.nmsThreshold ?? 0.5)
+        : spans;
 
     return {
       spans: finalSpans,
@@ -320,22 +227,21 @@ export class GlinerOnnxDetector implements Detector {
   }
 
   /**
-   * Parse model logits into detected spans.
+   * Parse model logits into detected spans using precise offset mappings from tokenizer.
    */
   private parseLogits(
     logits: Float32Array,
     dims: readonly number[],
     originalText: string,
+    offsets: Array<[number, number]>,
     labels: readonly string[],
     threshold: number,
     config: GlinerOnnxConfig,
   ): DetectedSpan[] {
     const spans: DetectedSpan[] = [];
 
-    // Expected dims: [batch=1, seq_len, num_labels, 2] for span-based
-    // or [batch=1, seq_len, num_labels] for token classification
-    // GLiNER typically outputs span logits: start and end for each label
-
+    // Expected dims: [batch=1, seq_len, num_labels] for token classification
+    // or [batch=1, seq_len, num_labels, 2] for span-based
     if (dims.length === 4 && dims[3] === 2) {
       // Span-based output: [1, seq_len, num_labels, 2]
       const [, seqLen, numLabels] = dims;
@@ -349,8 +255,8 @@ export class GlinerOnnxDetector implements Detector {
             const endLogit = logits[end * numLabels * 2 + labelIdx * 2 + 1];
             const score = Math.min(startLogit, endLogit); // Conservative
             if (score >= threshold) {
-              // Map token positions to character positions (approximate)
-              const charSpan = this.tokenPosToCharPos(originalText, start, end, config.maxLength ?? 512);
+              // Map token positions to character positions using offset mappings
+              const charSpan = this.tokenPosToCharPos(offsets, start, end + 1);
               if (charSpan) {
                 spans.push({
                   text: originalText.slice(charSpan.start, charSpan.end),
@@ -397,7 +303,7 @@ export class GlinerOnnxDetector implements Detector {
             currentSpan.scores.push(sigmoidScore);
           } else {
             if (currentSpan) {
-              const charSpan = this.tokenPosToCharPos(originalText, currentSpan.start, currentSpan.end, config.maxLength ?? 512);
+              const charSpan = this.tokenPosToCharPos(offsets, currentSpan.start, currentSpan.end);
               if (charSpan) {
                 spans.push({
                   text: originalText.slice(charSpan.start, charSpan.end),
@@ -413,7 +319,7 @@ export class GlinerOnnxDetector implements Detector {
           }
         } else {
           if (currentSpan) {
-            const charSpan = this.tokenPosToCharPos(originalText, currentSpan.start, currentSpan.end, config.maxLength ?? 512);
+            const charSpan = this.tokenPosToCharPos(offsets, currentSpan.start, currentSpan.end);
             if (charSpan) {
               spans.push({
                 text: originalText.slice(charSpan.start, charSpan.end),
@@ -431,7 +337,7 @@ export class GlinerOnnxDetector implements Detector {
 
       // Flush last span
       if (currentSpan) {
-        const charSpan = this.tokenPosToCharPos(originalText, currentSpan.start, currentSpan.end, config.maxLength ?? 512);
+        const charSpan = this.tokenPosToCharPos(offsets, currentSpan.start, currentSpan.end);
         if (charSpan) {
           spans.push({
             text: originalText.slice(charSpan.start, charSpan.end),
@@ -449,34 +355,27 @@ export class GlinerOnnxDetector implements Detector {
   }
 
   /**
-   * Approximate token position to character position mapping.
-   * This is a simplified version; production should use offset mappings from tokenizer.
+   * Convert token positions to character positions using tokenizer offset mappings.
+   * Returns the character span [start, end) for the given token range.
    */
   private tokenPosToCharPos(
-    text: string,
+    offsets: Array<[number, number]>,
     tokenStart: number,
-    tokenEnd: number,
-    maxLength: number,
+    tokenEnd: number, // exclusive
   ): { start: number; end: number } | null {
-    // Skip special tokens (CLS at 0, SEP at end)
-    const contentStart = 1;
-    const contentEnd = Math.min(text.split(/\s+/).length + 1, maxLength - 1);
+    // Validate token range
+    if (tokenStart >= offsets.length || tokenEnd > offsets.length || tokenStart >= tokenEnd) {
+      return null;
+    }
 
-    if (tokenStart < contentStart || tokenEnd > contentEnd) return null;
+    const startOffset = offsets[tokenStart]?.[0];
+    const endOffset = offsets[tokenEnd - 1]?.[1];
 
-    // Very rough approximation: assume average token = 4 chars + 1 space
-    const avgTokenLen = 5;
-    const start = Math.min((tokenStart - contentStart) * avgTokenLen, text.length);
-    const end = Math.min(start + (tokenEnd - tokenStart) * avgTokenLen, text.length);
+    if (startOffset === undefined || endOffset === undefined || startOffset >= endOffset) {
+      return null;
+    }
 
-    // Refine by finding word boundaries
-    let refinedStart = start;
-    while (refinedStart > 0 && /\w/.test(text[refinedStart - 1])) refinedStart--;
-    let refinedEnd = end;
-    while (refinedEnd < text.length && /\w/.test(text[refinedEnd])) refinedEnd++;
-
-    if (refinedStart >= refinedEnd) return null;
-    return { start: refinedStart, end: refinedEnd };
+    return { start: startOffset, end: endOffset };
   }
 
   /**
@@ -550,4 +449,5 @@ export async function prepareGlinerModel(
   console.log(`1. Install optimum: pip install optimum[onnx]`);
   console.log(`2. Run: optimum-cli export onnx --model urchade/${modelId} --task token-classification ${outputDir}`);
   console.log(`3. Quantize: optimum-cli quantize --onnx-model ${outputDir}/model.onnx --quantization dynamic ${outputDir}/model_int8.onnx`);
+  console.log(`4. Ensure tokenizer files (vocab.txt, tokenizer_config.json, special_tokens_map.json) are in ${outputDir}`);
 }

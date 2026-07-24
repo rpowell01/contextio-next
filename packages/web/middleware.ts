@@ -6,13 +6,25 @@ import type { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth/session";
 
 // Public paths that don't require authentication
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/logout", "/auth/logged-out", "/_next", "/favicon.ico", "/api/auth", "/site.webmanifest"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth/callback",
+  "/auth/logout",
+  "/auth/logged-out",
+  "/_next",
+  "/favicon.ico",
+  "/api/auth/providers",
+  "/api/auth/logout",
+  "/api/auth/callback",
+];
 
 // Also allow all public folder assets (images, manifests, etc.)
 function isPublicAsset(pathname: string): boolean {
-  return pathname.startsWith("/contextio-next-brand.png") ||
-         pathname.startsWith("/ContextIO-Next-") ||
-         pathname === "/site.webmanifest";
+  return (
+    pathname.startsWith("/contextio-next-brand.png") ||
+    pathname.startsWith("/ContextIO-Next-") ||
+    pathname === "/site.webmanifest"
+  );
 }
 
 function isPublicPath(pathname: string): boolean {
@@ -66,6 +78,6 @@ export const config = {
      * - /contextio-next-brand.png (brand logo)
      * - /ContextIO-Next- (favicon sizes)
      */
-    "/((?!\\/api|\\/_next\\/static|\\/_next\\/image|\\/favicon\\.ico|\\/site\\.webmanifest|\\/contextio-next-brand\\.png|\\/ContextIO-Next-).*)",
+    "/((?!api|_next/static|_next/image|favicon\\.ico|site\\.webmanifest|contextio-next-brand\\.png|ContextIO-Next-).*)",
   ],
 };
