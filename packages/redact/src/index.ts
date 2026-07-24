@@ -47,8 +47,8 @@ import type { RuleDetectorConfig } from "./ruleDetector.js";
 import type { GlinerOnnxConfig } from "./glinerDetector.js";
 import { detectorRegistry, registerDetector, createDetector } from "./detector.js";
 import { createRuleDetector } from "./ruleDetector.js";
-import { createGlinerOnnxDetector } from "./glinerDetector.js";
 import { createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";
+// GLiNER detector is loaded lazily to avoid onnxruntime-node in Next.js static build
 
 /** Configuration for {@link createRedactPlugin}. */
 export interface RedactPluginConfig {
@@ -334,7 +334,9 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
           if (!glinerConfig.modelPath) {
             throw new Error("LLM detector requires detectorConfig.modelPath to be set");
           }
-          const llmDetector = await createGlinerOnnxDetector({
+          // Lazy load GLiNER module to avoid onnxruntime-node in Next.js static build
+          const { createGlinerOnnxDetector: createGLiner } = await getGlinerDetector();
+          const llmDetector = await createGLiner({
             name: "gliner-onnx",
             modelDir: glinerConfig.modelPath,
             threshold: glinerConfig.llmThreshold ?? 0.5,
@@ -349,7 +351,9 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
           const glinerConfig = detectorConfig as RedactDetectorConfig;
           let llmDetector: Detector | null = null;
           if (glinerConfig.modelPath) {
-            llmDetector = await createGlinerOnnxDetector({
+            // Lazy load GLiNER module to avoid onnxruntime-node in Next.js static build
+            const { createGlinerOnnxDetector: createGLiner } = await getGlinerDetector();
+            llmDetector = await createGLiner({
               name: "gliner-onnx",
               modelDir: glinerConfig.modelPath,
               threshold: glinerConfig.llmThreshold ?? 0.5,
