@@ -261,14 +261,20 @@ export function createCombinedProxy(
     try {
       // Use Next.js standalone output - import next from the standalone node_modules
       // and create a server with the standalone config
-      const nextPath = join(process.cwd(), "packages/web/.next/standalone/packages/web/node_modules/next");
+      // In production (Docker), the standalone output is at packages/web/
+      // In development, it's at packages/web/.next/standalone/packages/web/
+      const isProduction = process.env.NODE_ENV === "production";
+      const standaloneDir = isProduction
+        ? join(process.cwd(), "packages/web")
+        : join(process.cwd(), "packages/web/.next/standalone/packages/web");
+      const nextPath = join(standaloneDir, "node_modules/next");
       const nextModule = await import(nextPath);
       const next = nextModule.default || nextModule;
 
       // The standalone config is embedded in the server.js, we need to read it
       // For now, use minimal config with the correct distDir
       const nextServer = next({
-        dir: join(process.cwd(), "packages/web/.next/standalone/packages/web"),
+        dir: standaloneDir,
         dev: false,
         conf: {
           distDir: ".next",
@@ -284,6 +290,7 @@ export function createCombinedProxy(
       }
     } catch (err) {
       console.warn("Next.js handler not available, web UI will not work:", err instanceof Error ? err.message : String(err));
+      console.error(err); // Log full error for debugging
     }
   };
 
