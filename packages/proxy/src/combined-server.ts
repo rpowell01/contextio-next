@@ -130,7 +130,7 @@ async function servePublicAsset(req: http.IncomingMessage, res: http.ServerRespo
     "/contextio-next-brand.png",
   ];
 
-  const isPublicAsset = publicAssets.some(asset => pathname === asset || pathname.startsWith(asset + "?") || pathname.startsWith("/ContextIO-Next-");
+  const isPublicAsset = publicAssets.some(asset => pathname === asset || pathname.startsWith(asset + "?") || pathname.startsWith("/ContextIO-Next-"));
   // Also handle ContextIO-Next- prefixed favicons
   if (!isPublicAsset && !pathname.startsWith("/ContextIO-Next-")) {
     return false;
