@@ -259,26 +259,28 @@ export function createCombinedProxy(
 
   const initNextJs = async (): Promise<void> => {
     try {
-      // Import Next.js dynamically - use root node_modules where next is hoisted
-      const nextModule = await import(
-        join(process.cwd(), "node_modules/next/dist/server/next.js")
+      // With Next.js standalone output, the server is at packages/web/server.js
+      // This server already includes all necessary routes and middleware
+      const nextServerModule = await import(
+        join(process.cwd(), "packages/web/server.js")
       );
 
-      // Create Next.js server instance using the exported createServer function
-      const nextServer = nextModule.default({
-        dir: join(process.cwd(), "packages/web"),
-        dev: false,
-        port: 0,
-        hostname: "0.0.0.0",
-        customServer: false,
-      });
+      // The standalone server.js exports a listen function and may have a getRequestHandler
+      // If it uses the standard Next.js server, we can use it directly
+      const nextServer = nextServerModule.default || nextServerModule;
 
-      // Prepare the server (loads routes, compiles, etc.)
-      await nextServer.prepare();
+      if (typeof nextServer.prepare === "function") {
+        // Standard Next.js server interface
+        await nextServer.prepare();
+        nextHandler = nextServer.getRequestHandler();
+      } else if (typeof nextServer === "function") {
+        // If it's a request handler directly
+        nextHandler = nextServer;
+      } else {
+        console.warn("Unexpected Next.js standalone server export:", Object.keys(nextServer));
+      }
 
-      // Get the request handler
-      nextHandler = nextServer.getRequestHandler();
-      console.log("Next.js handler loaded successfully");
+      console.log("Next.js handler loaded successfully from standalone output");
     } catch (err) {
       console.warn("Next.js handler not available, web UI will not work:", err instanceof Error ? err.message : String(err));
     }
