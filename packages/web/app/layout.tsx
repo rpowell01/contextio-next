@@ -9,18 +9,16 @@ export const metadata: Metadata = {
   description: "Web interface for ContextIO-Next proxy monitoring and inspection",
   icons: {
     icon: [
-      { url: "/contextio-next-brand.png", sizes: "32x32", type: "image/png" },
-      { url: "/contextio-next-brand.png", sizes: "16x16", type: "image/png" },
-      { url: "/contextio-next-brand.png", sizes: "48x48", type: "image/png" },
+      { url: "/ContextIO-Next-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/ContextIO-Next-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/ContextIO-Next-48x48.png", sizes: "48x48", type: "image/png" },
+      { url: "/ContextIO-Next-64x64.png", sizes: "64x64", type: "image/png" },
     ],
-    shortcut: "/contextio-next-brand.png",
-    apple: [
-      { url: "/contextio-next-brand.png", sizes: "180x180", type: "image/png" },
-      { url: "/contextio-next-brand.png", sizes: "152x152", type: "image/png" },
-    ],
+    shortcut: "/ContextIO-Next-32x32.png",
+    apple: "/ContextIO-Next-64x64.png",
     other: [
-      { rel: "icon", url: "/contextio-next-brand.png", sizes: "192x192", type: "image/png" },
-      { rel: "icon", url: "/contextio-next-brand.png", sizes: "512x512", type: "image/png" },
+      { rel: "icon", url: "/ContextIO-Next-64x64.png", sizes: "192x192", type: "image/png" },
+      { rel: "icon", url: "/ContextIO-Next-64x64.png", sizes: "512x512", type: "image/png" },
       { rel: "manifest", url: "/site.webmanifest" },
     ],
   },

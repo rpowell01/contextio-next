@@ -92,7 +92,7 @@ export default function HomePage() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        {/* Brand Hero Section */}
+{/* Brand Hero Section */}
         <div className="text-center py-8 md:py-12">
           <Image
             src="/contextio-next-brand.png"
@@ -101,7 +101,7 @@ export default function HomePage() {
             height={200}
             className="mx-auto max-w-full h-auto"
             priority
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 80vw, 200px"
+            sizes="(max-width: 640px) 150px, (max-width: 1024px) 200px, 200px"
           />
         </div>
 
