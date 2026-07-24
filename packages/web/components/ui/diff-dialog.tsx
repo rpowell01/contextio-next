@@ -176,7 +176,7 @@ export function DiffDialog({
       if (!pane) continue;
 
       // Try to find element with data attribute on the mark (placeholder) elements
-      const target = pane.querySelector(`mark[data-redaction-type="${kebabType}"]`);
+      const target = pane.querySelector(`mark[data-redaction="${kebabType}"]`);
       if (target) {
         target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
         // Add a brief highlight animation

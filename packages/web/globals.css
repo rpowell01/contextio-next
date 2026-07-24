@@ -486,3 +486,35 @@ button:focus {
   border: 1px solid currentColor;
 }
 
+/* Scroll target highlight animation for diff dialog auto-scroll */
+.scroll-target-highlight {
+  animation: scrollHighlight 2s ease-out;
+}
+
+@keyframes scrollHighlight {
+  0% {
+    background-color: rgb(var(--color-primary) / 0.4);
+    box-shadow: 0 0 0 2px rgb(var(--color-primary));
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+[data-theme="dark"] .scroll-target-highlight,
+[data-theme="high-contrast"] .scroll-target-highlight {
+  animation: scrollHighlightDark 2s ease-out;
+}
+
+@keyframes scrollHighlightDark {
+  0% {
+    background-color: rgb(var(--color-primary) / 0.5);
+    box-shadow: 0 0 0 2px rgb(var(--color-primary));
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+

@@ -102,7 +102,7 @@ const getRedactionsSummary = unstable_cache(
   { revalidate: 30, tags: ["redactions-summary"] },
 );
 
-// Get paginated detail rows from meta files only - grouped by captureId
+// Get paginated detail rows from meta files - ALL captures (not deduplicated by session)
 async function getRedactionDetailsFromMeta(
   page: number,
   pageSize: number,
@@ -112,8 +112,8 @@ async function getRedactionDetailsFromMeta(
 ): Promise<PaginatedRedactionResponse> {
   const metaFiles = await listRedactionMetaFiles();
 
-  // Group meta files by sessionId to avoid duplicate counts from multiple captures per session
-  const metaBySession = new Map<string, { filename: string; meta: Record<string, unknown> }>();
+  // Collect ALL meta files (not deduplicated by session) to show full detail
+  const allMeta: Array<{ filename: string; meta: Record<string, unknown> }> = [];
 
   for (const filename of metaFiles) {
     try {
@@ -125,110 +125,61 @@ async function getRedactionDetailsFromMeta(
       // Skip title generation captures
       if (sessionId.startsWith("title-")) continue;
 
-      // Keep first meta file per session
-      if (!metaBySession.has(sessionId)) {
-        metaBySession.set(sessionId, { filename, meta });
-      }
+      allMeta.push({ filename, meta });
     } catch {
       continue;
     }
   }
 
-  let totalRedactions = 0;
-  const byType: Record<string, number> = {};
+  // Sort by timestamp descending (newest first)
+  allMeta.sort((a, b) => {
+    const tsA = (a.meta.generatedAt as string) ?? (a.meta.timestamp as string) ?? "";
+    const tsB = (b.meta.generatedAt as string) ?? (b.meta.timestamp as string) ?? "";
+    return new Date(tsB).getTime() - new Date(tsA).getTime();
+  });
 
-  // First pass: collect all data from meta files (deduplicated by sessionId)
-  const captureMap = new Map<string, {
-    captureId: string;
-    sessionId: string | null;
-    timestamp: string;
-    requestSource: string | null;
-    requestProvider: string;
-    requestTarget: string;
-    byPlaceholder: Record<string, number>;
-    totalCount: number;
-  }>();
+  // Build rows from ALL meta files (each capture is a row)
+  let allRows: RedactionCaptureRow[] = allMeta.map(({ filename, meta }) => {
+    const captureId = filename.replace(/\.redact-meta\.json$/, "") + ".json";
+    const sessionId = (meta.sessionId as string | null) ?? "_no_session";
+    const source = (meta.source as string | null) ?? null;
+    const provider = (meta.provider as string) ?? "unknown";
+    const targetUrl = (meta.targetUrl as string) ?? "";
+    const timestamp =
+      (meta.generatedAt as string) ?? (meta.timestamp as string) ?? new Date().toISOString();
 
-  for (const [sessionId, { filename, meta }] of metaBySession) {
-    try {
-      const captureId = filename.replace(/\.redact-meta\.json$/, "") + ".json";
-      const source = (meta.source as string | null) ?? null;
-      const provider = (meta.provider as string) ?? "unknown";
-      const targetUrl = (meta.targetUrl as string) ?? "";
-      const timestamp =
-        (meta.generatedAt as string) ?? new Date().toISOString();
+    // Get matches from meta - use postValue which contains the placeholder
+    const matches =
+      (meta.matches as
+        | Array<{
+            ruleId: string;
+            preValue: string;
+            postValue: string;
+            path: string;
+          }>
+        | undefined) ?? [];
 
-      // Get matches from meta - use postValue which contains the placeholder
-      const matches =
-        (meta.matches as
-          | Array<{
-              ruleId: string;
-              preValue: string;
-              postValue: string;
-              path: string;
-            }>
-          | undefined) ?? [];
-
-      // Add counts to summary (once per session)
-      if (typeof meta.totalRedactions === "number") {
-        totalRedactions += meta.totalRedactions;
-      }
-      // Use matches to get placeholder breakdown (consistent with capture detail)
-      for (const match of matches) {
-        const rawPlaceholder = match.postValue ?? "unknown";
-        const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
-        byType[placeholder] = (byType[placeholder] ?? 0) + 1;
-      }
-
-      // Aggregate by captureId using actual placeholder (what appears in content)
-      const existing = captureMap.get(captureId);
-      if (existing) {
-        // Merge into existing capture
-        existing.totalCount += matches.length;
-        for (const match of matches) {
-          const rawPlaceholder = match.postValue ?? "unknown";
-          const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
-          existing.byPlaceholder[placeholder] = (existing.byPlaceholder[placeholder] ?? 0) + 1;
-        }
-      } else {
-        // New capture
-        const byPlaceholder: Record<string, number> = {};
-        for (const match of matches) {
-          const rawPlaceholder = match.postValue ?? "unknown";
-          const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
-          byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + 1;
-        }
-        captureMap.set(captureId, {
-          captureId,
-          sessionId: sessionId === "_no_session" ? null : sessionId,
-          timestamp,
-          requestSource: source,
-          requestProvider: provider,
-          requestTarget: targetUrl,
-          byPlaceholder,
-          totalCount: matches.length,
-        });
-      }
-    } catch (error) {
-      console.error(`Error processing redaction meta ${filename}:`, error);
-      continue;
+    const byPlaceholder: Record<string, number> = {};
+    for (const match of matches) {
+      const rawPlaceholder = match.postValue ?? "unknown";
+      const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
+      byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + 1;
     }
-  }
 
-  // Build aggregated rows
-  let allRows: RedactionCaptureRow[] = Array.from(captureMap.values()).map(c => ({
-    captureId: c.captureId,
-    sessionId: c.sessionId,
-    timestamp: c.timestamp,
-    requestSource: c.requestSource,
-    requestProvider: c.requestProvider,
-    requestTarget: c.requestTarget,
-    redactionSummary: Object.entries(c.byPlaceholder)
-      .map(([placeholder, count]) => `[${placeholder}] (${count})`)
-      .join(", "),
-    totalRedactions: c.totalCount,
-    byPlaceholder: c.byPlaceholder,
-  }));
+    return {
+      captureId,
+      sessionId: sessionId === "_no_session" ? null : sessionId,
+      timestamp,
+      requestSource: source,
+      requestProvider: provider,
+      requestTarget: targetUrl,
+      redactionSummary: Object.entries(byPlaceholder)
+        .map(([placeholder, count]) => `[${placeholder}] (${count})`)
+        .join(", "),
+      totalRedactions: (meta.totalRedactions as number) ?? matches.length,
+      byPlaceholder,
+    };
+  });
 
   // Apply filters
   if (Object.keys(filters).length > 0) {
@@ -286,8 +237,11 @@ async function getRedactionDetailsFromMeta(
   const end = start + pageSize;
   const pageRows = allRows.slice(start, end);
 
+  // Get summary using cached max-per-session logic
+  const summary = await getRedactionsSummary();
+
   return {
-    summary: { totalRedactions, byType },
+    summary,
     details: pageRows,
     page: clampedPage,
     pageSize,
