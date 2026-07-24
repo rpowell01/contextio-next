@@ -97,11 +97,11 @@ export default function HomePage() {
           <Image
             src="/contextio-next-brand.png"
             alt="ContextIO-Next brand logo"
-            width={400}
+            width={200}
             height={200}
             className="mx-auto max-w-full h-auto"
             priority
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 80vw, 400px"
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 80vw, 200px"
           />
         </div>
 

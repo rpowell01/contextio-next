@@ -1,0 +1,23 @@
+{
+  "name": "ContextIO-Next",
+  "short_name": "ContextIO",
+  "description": "Web interface for ContextIO-Next proxy monitoring and inspection",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/contextio-next-brand.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/contextio-next-brand.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
