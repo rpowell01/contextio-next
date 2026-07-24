@@ -110,7 +110,14 @@ export function resolveOidcConfig(
 		|| settings.oidcEnabled === true
 		|| (process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET);
 
-	console.log(`[config] OIDC resolve: enabled=${enabled}, env.CONTEXTIO_OIDC_ENABLED=${process.env.CONTEXTIO_OIDC_ENABLED}, settings.oidcEnabled=${settings.oidcEnabled}, hasLegacyCreds=${!!(process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET)}`);
+	console.log(`[config] OIDC resolve: enabled=${enabled}`);
+		console.log(`[config]   env.CONTEXTIO_OIDC_ENABLED=${process.env.CONTEXTIO_OIDC_ENABLED}`);
+		console.log(`[config]   settings.oidcEnabled=${settings.oidcEnabled}`);
+		console.log(`[config]   hasLegacyCreds=${!!(process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET)}`);
+		console.log(`[config]   env.CONTEXTIO_OIDC_ISSUER=${process.env.CONTEXTIO_OIDC_ISSUER ? 'SET' : 'NOT SET'}`);
+		console.log(`[config]   env.CONTEXTIO_OIDC_CLIENT_ID=${process.env.CONTEXTIO_OIDC_CLIENT_ID ? 'SET' : 'NOT SET'}`);
+		console.log(`[config]   env.CONTEXTIO_OIDC_PUBLIC_URL=${process.env.CONTEXTIO_OIDC_PUBLIC_URL || 'NOT SET'}`);
+		console.log(`[config]   settings.oidcPublicUrl=${settings.oidcPublicUrl || 'NOT SET'}`);
 
 	if (!enabled) {
 		return null;
