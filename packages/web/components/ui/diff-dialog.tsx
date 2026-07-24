@@ -351,14 +351,26 @@ export function DiffDialog({
         aria-labelledby="diff-dialog-title"
         aria-describedby="diff-dialog-description"
       >
-        <DialogTitle id="diff-dialog-title">
-          {title}
-        </DialogTitle>
-        <DialogDescription id="diff-dialog-description" className="sr-only">
-          Side-by-side diff showing pre-redaction and post-redaction content
-        </DialogDescription>
+        {/* Header bar - fixed at top with close button on right */}
+        <div className="flex items-start justify-between gap-4 p-4 border-b border-border flex-shrink-0">
+          <div className="flex-1 min-w-0">
+            <DialogTitle id="diff-dialog-title" className="text-lg font-semibold">
+              {title}
+            </DialogTitle>
+            <DialogDescription id="diff-dialog-description" className="sr-only">
+              Side-by-side diff showing pre-redaction and post-redaction content
+            </DialogDescription>
+          </div>
+          <DialogClose
+            className="p-1 rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background flex-shrink-0"
+            aria-label="Close diff dialog"
+          >
+            <X className="h-5 w-5" />
+          </DialogClose>
+        </div>
 
-        <div className="flex flex-col gap-3 p-4 border-b border-border flex-shrink-0">
+        {/* Metadata table and controls - scrollable if needed */}
+        <div className="flex flex-col gap-3 p-4 border-b border-border flex-shrink-0 overflow-y-auto max-h-[20vh]">
           {/* Metadata table */}
           <table className="w-full text-xs text-muted-foreground border-collapse">
             <tbody>
@@ -407,65 +419,64 @@ export function DiffDialog({
             </tbody>
           </table>
 
-          {hasHiddenLines && (
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-              Showing changes with context ({diff.length} lines of {fullDiff.length})
-            </span>
-          )}
-          {/* View mode toggle for JSON content */}
-          {isJsonContent && (
-            <div className="flex items-center gap-2" role="tablist" aria-label="View mode">
-              <button
-                role="tab"
-                aria-selected={viewMode === "diff"}
-                aria-controls="left-panel-diff right-panel-diff"
-                id="diff-tab"
-                onClick={() => setViewMode("diff")}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowRight") {
-                    e.preventDefault();
-                    setViewMode("syntax");
-                  }
-                }}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  viewMode === "diff"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-              >
-                Diff View
-              </button>
-              <button
-                role="tab"
-                aria-selected={viewMode === "syntax"}
-                aria-controls="left-panel-syntax right-panel-syntax"
-                id="syntax-tab"
-                onClick={() => setViewMode("syntax")}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowLeft") {
-                    e.preventDefault();
-                    setViewMode("diff");
-                  }
-                }}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  viewMode === "syntax"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-              >
-                <Code className="h-3 w-3 mr-1" />
-                Syntax Highlighted
-              </button>
-            </div>
-          )}
-          <DialogClose
-            className="p-1 rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-            aria-label="Close diff dialog"
-          >
-            <X className="h-5 w-5" />
-          </DialogClose>
+          {/* Info bar with context indicator and view mode toggle */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            {hasHiddenLines && (
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded flex-shrink-0">
+                Showing changes with context ({diff.length} lines of {fullDiff.length})
+              </span>
+            )}
+            {/* View mode toggle for JSON content */}
+            {isJsonContent && (
+              <div className="flex items-center gap-2" role="tablist" aria-label="View mode">
+                <button
+                  role="tab"
+                  aria-selected={viewMode === "diff"}
+                  aria-controls="left-panel-diff right-panel-diff"
+                  id="diff-tab"
+                  onClick={() => setViewMode("diff")}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowRight") {
+                      e.preventDefault();
+                      setViewMode("syntax");
+                    }
+                  }}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    viewMode === "diff"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  }`}
+                >
+                  Diff View
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={viewMode === "syntax"}
+                  aria-controls="left-panel-syntax right-panel-syntax"
+                  id="syntax-tab"
+                  onClick={() => setViewMode("syntax")}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowLeft") {
+                      e.preventDefault();
+                      setViewMode("diff");
+                    }
+                  }}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    viewMode === "syntax"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  }`}
+                >
+                  <Code className="h-3 w-3 mr-1" />
+                  Syntax Highlighted
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col md:flex-row overflow-hidden flex-1 min-h-0">
+
+        {/* Diff/Syntax panels - flex-1 to fill remaining space */}
+        <div className="flex-1 min-h-0 overflow-hidden">
           {/* Diff View Panels (shown when viewMode === "diff") */}
           {viewMode === "diff" && (
             <>
