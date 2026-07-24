@@ -1,5 +1,5 @@
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
-import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/utils";
+import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/server-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 

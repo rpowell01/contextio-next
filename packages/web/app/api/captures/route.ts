@@ -12,7 +12,7 @@ import {
   MAX_FILE_SIZE,
   listCaptureFiles,
   readCaptureFile,
-} from "@/lib/sessions/utils";
+} from "@/lib/sessions/server-utils";
 import { consumeToken } from "@/lib/csrf";
 import { withRequestCache } from "@/lib/request-cache";
 import { withAuth } from "@/lib/auth/guards";

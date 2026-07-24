@@ -5,7 +5,7 @@ import {
   readRedactionMetaFile,
   readCaptureFile,
   metaFilenameFor,
-} from "@/lib/sessions/utils";
+} from "@/lib/sessions/server-utils";
 
 import { withRequestCache } from "@/lib/request-cache";
 

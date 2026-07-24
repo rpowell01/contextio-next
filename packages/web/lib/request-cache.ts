@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from "node:async_hooks";
+import { AsyncLocalStorage } from "async_hooks";
 
 export interface RequestCache {
   captureCache: Map<string, Record<string, unknown>>;

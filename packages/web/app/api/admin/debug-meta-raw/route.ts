@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCaptureDir } from "@/lib/sessions/utils";
+import { getCaptureDir } from "@/lib/sessions/server-utils";
 import { promises as fs } from "fs";
 import path from "path";
 

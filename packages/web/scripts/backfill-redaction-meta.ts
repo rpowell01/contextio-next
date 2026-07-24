@@ -3,7 +3,7 @@
 import fs from "fs";
 import path from "path";
 
-import { getCaptureDir, metaFilenameFor } from "@/lib/sessions/utils";
+import { getCaptureDir, metaFilenameFor } from "@/lib/sessions/server-utils";
 import {
   computeCaptureRedactionCounts,
   getCaptureRedactionStats,

@@ -1,7 +1,7 @@
 import {
   listRedactionMetaFiles,
   loadRedactionMeta,
-} from "@/lib/sessions/utils";
+} from "@/lib/sessions/server-utils";
 import { consumeToken } from "@/lib/csrf";
 import { unstable_cache } from "next/cache";
 import { computePlaceholderCounts } from "@/lib/sessions/placeholder-map";

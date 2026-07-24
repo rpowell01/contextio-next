@@ -7,17 +7,17 @@ let _captureDir: string | undefined;
 
 // Import Node.js built-ins dynamically inside functions to avoid bundling issues
 export async function getHomedir(): Promise<string> {
-  const { homedir } = await import("node:os");
+  const { homedir } = await import("os");
   return homedir();
 }
 
 export function getNodeUtils(): Promise<{
-  fs: typeof import("node:fs/promises");
-  path: { join: typeof import("node:path").join; resolve: typeof import("node:path").resolve };
+  fs: typeof import("fs/promises");
+  path: { join: typeof import("path").join; resolve: typeof import("path").resolve };
 }> {
   return Promise.all([
-    import("node:fs/promises"),
-    import("node:path"),
+    import("fs/promises"),
+    import("path"),
   ]).then(([fs, path]) => ({
     fs,
     path: { join: path.join, resolve: path.resolve },

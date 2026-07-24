@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import type { Settings } from "@/lib/settings";
 import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults, getSettingMetadata, applyEnvOverrides } from "@/lib/settings";
-import { applyLogDir } from "@/lib/sessions/utils";
+import { applyLogDir } from "@/lib/sessions/server-utils";
 import { consumeToken } from "@/lib/csrf";
 
 async function ensureSettingsFile(): Promise<void> {

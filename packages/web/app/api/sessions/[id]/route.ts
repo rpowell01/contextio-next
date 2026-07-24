@@ -5,9 +5,11 @@ import {
   listCaptureFiles,
   getCaptureDir,
   MAX_FILE_SIZE,
+  readCaptureFile,
+} from "@/lib/sessions/server-utils";
+import {
   computeContextValues,
   computeTokenUsage,
-  readCaptureFile,
 } from "@/lib/sessions/utils";
 import {
   countRedactionsInResponse,

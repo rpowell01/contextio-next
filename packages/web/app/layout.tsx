@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/theme-provider";
 import "../globals.css";
-import { readSettingsFile } from "@/lib/node-utils";
+import { readSettingsFile } from "@/lib/settings-server";
 import { DEFAULT_SETTINGS, validateSettingsLenient, applyEnvOverrides } from "@/lib/settings";
 
 export const metadata: Metadata = {

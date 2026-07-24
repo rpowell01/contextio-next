@@ -5,13 +5,15 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getCaptureDir,
   MAX_FILE_SIZE,
-  extractCaptureMetadata,
   metaFilenameFor,
   isValidFilename,
-  getSessionMetadata,
   readCaptureFile,
   CaptureReadError,
-} from "@/lib/sessions/utils";
+} from "@/lib/sessions/server-utils";
+import {
+  extractCaptureMetadata,
+  getSessionMetadata,
+} from "@/lib/sessions/server-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import {
   computeCaptureRedactionCounts,

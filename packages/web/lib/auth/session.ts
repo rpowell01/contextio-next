@@ -6,7 +6,7 @@
  */
 
 import { cookies } from "next/headers";
-import { createDecipheriv, createHmac, timingSafeEqual } from "node:crypto";
+import { createDecipheriv, createHmac, timingSafeEqual } from "crypto";
 
 export interface AuthSession {
   /** User's subject identifier from the ID token. */

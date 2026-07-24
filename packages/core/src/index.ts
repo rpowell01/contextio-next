@@ -72,14 +72,6 @@ export {
   type OutputScanResult,
 } from "./output-scanner.js";
 
-// OIDC utilities
-export {
-  fetchProviderMetadata,
-  validateIdToken,
-  type OidcProviderMetadata,
-  type JwtPayload,
-} from "./oidc.js";
-
 // Default OIDC scopes
 export { DEFAULT_OIDC_SCOPE } from "./types.js";
 

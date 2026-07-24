@@ -2,12 +2,71 @@ import path from "path";
 
 const nextConfig = {
   reactStrictMode: true,
-  turbopack: {},
-  serverExternalPackages: ["@contextio/logger", "@contextio/redact", "onnxruntime-node", "@huggingface/tokenizers", "fs/promises", "path", "os", "crypto", "stream", "util", "buffer", "querystring", "url", "zlib", "http", "https", "assert", "constants", "process"],
+  turbopack: {
+    // Handle node: protocol imports by aliasing to non-prefixed versions
+    // which Next.js/Turbopack can externalize via serverExternalPackages
+    resolveAlias: {
+      "node:fs": "fs",
+      "node:fs/promises": "fs/promises",
+      "node:path": "path",
+      "node:os": "os",
+      "node:crypto": "crypto",
+      "node:stream": "stream",
+      "node:util": "util",
+      "node:buffer": "buffer",
+      "node:querystring": "querystring",
+      "node:url": "url",
+      "node:zlib": "zlib",
+      "node:http": "http",
+      "node:https": "https",
+      "node:assert": "assert",
+      "node:constants": "constants",
+      "node:process": "process",
+    },
+  },
+  serverExternalPackages: [
+    "@contextio/logger",
+    "@contextio/redact",
+    "onnxruntime-node",
+    "@huggingface/tokenizers",
+    // Node.js built-in modules with node: protocol (required for Turbopack dev mode)
+    "node:crypto",
+    "node:fs",
+    "node:fs/promises",
+    "node:path",
+    "node:os",
+    "node:stream",
+    "node:util",
+    "node:buffer",
+    "node:querystring",
+    "node:url",
+    "node:zlib",
+    "node:http",
+    "node:https",
+    "node:assert",
+    "node:constants",
+    "node:process",
+    // Also include non-node: protocol versions for compatibility
+    "crypto",
+    "fs",
+    "path",
+    "os",
+    "stream",
+    "util",
+    "buffer",
+    "querystring",
+    "url",
+    "zlib",
+    "http",
+    "https",
+    "assert",
+    "constants",
+    "process",
+  ],
   webpack: (config, { isServer }) => {
     config.resolve.alias["@"] = path.join(process.cwd(), "");
 
-    // Handle Node.js built-in modules (node: protocol) for both client and server
+    // Handle Node.js built-in modules - only apply fallback for client bundle
     const nodeBuiltinFallback = {
       fs: false,
       path: false,
@@ -25,22 +84,6 @@ const nextConfig = {
       constants: false,
       process: false,
       "fs/promises": false,
-      "node:crypto": false,
-      "node:fs": false,
-      "node:fs/promises": false,
-      "node:path": false,
-      "node:os": false,
-      "node:stream": false,
-      "node:util": false,
-      "node:buffer": false,
-      "node:querystring": false,
-      "node:url": false,
-      "node:zlib": false,
-      "node:http": false,
-      "node:https": false,
-      "node:assert": false,
-      "node:constants": false,
-      "node:process": false,
     };
 
     // Exclude native Node.js modules from bundling
@@ -56,7 +99,8 @@ const nextConfig = {
         config.resolve.alias[mod] = false;
       });
     } else {
-      // For server, also add fallback for node: protocol
+      // For server bundle, do NOT apply node:* fallbacks - let Node.js handle native modules
+      // Only apply non-node: fallbacks to avoid bundling issues
       config.resolve.fallback = {
         ...config.resolve.fallback,
         ...nodeBuiltinFallback,

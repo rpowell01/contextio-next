@@ -1,9 +1,61 @@
-import { applyLogDir, getCaptureDir, listCaptureFiles, metaFilenameFor } from "@/lib/sessions/utils";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
-import { ensureSettingsFile, readSettingsFile } from "@/lib/node-utils";
 
 let cleanupTimer: NodeJS.Timeout | null = null;
 let schedulerStarted = false;
+
+let _captureDir: string | undefined;
+
+async function getCaptureDir(): Promise<string> {
+  if (!_captureDir) {
+    const { homedir } = await import("os");
+    const home = await homedir();
+    _captureDir = process.env.LOGGER_CAPTURE_DIR || `${home}/.contextio/captures`;
+  }
+  return _captureDir;
+}
+
+function setCaptureDir(dir: string): void {
+  _captureDir = dir;
+}
+
+async function resolveLogDir(logDir: string): Promise<string> {
+  const { join, resolve } = await import("path");
+  const { homedir } = await import("os");
+  const trimmed = logDir.trim();
+  if (!trimmed) {
+    const home = await homedir();
+    return process.env.LOGGER_CAPTURE_DIR || `${home}/.contextio/captures`;
+  }
+  if (trimmed === "~") return homedir();
+  if (trimmed.startsWith("~/")) return join(await homedir(), trimmed.slice(2));
+  if (trimmed.startsWith("/")) return trimmed;
+  return resolve(process.cwd(), trimmed);
+}
+
+async function applyLogDir(logDir: string): Promise<void> {
+  const resolved = await resolveLogDir(logDir);
+  setCaptureDir(resolved);
+}
+
+function metaFilenameFor(captureFilename: string): string {
+  const base = captureFilename.endsWith(".json")
+    ? captureFilename.slice(0, -".json".length)
+    : captureFilename;
+  return `${base}.redact-meta.json`;
+}
+
+async function listCaptureFiles(): Promise<string[]> {
+  const captureDir = await getCaptureDir();
+  const { readdir } = await import("fs/promises");
+  try {
+    const files = await readdir(captureDir);
+    return files
+      .filter((f) => /^[a-zA-Z0-9_-]+\.json$/.test(f) && !f.endsWith(".tmp") && !f.includes("redact-meta"))
+      .sort();
+  } catch {
+    return [];
+  }
+}
 
 function defaultSettings() {
   return {
@@ -18,6 +70,8 @@ async function loadSettings(): Promise<{
   maxAgeDays: number;
   intervalHours: number;
 }> {
+  const { ensureSettingsFile, readSettingsFile } = await import("@/lib/settings-server");
+
   let capturedLogDir: string | undefined;
   let cleanupSettings: { enabled: boolean; maxAgeDays: number; intervalHours: number } | null = null;
   try {
@@ -62,11 +116,11 @@ async function runCleanup(): Promise<void> {
   const cutoff = Date.now() - settings.maxAgeDays * 24 * 60 * 60 * 1000;
   const files = await listCaptureFiles();
   const captureDir = await getCaptureDir();
-  
-  // Dynamic require for Node.js built-ins - only runs on server
-  const fs = await import("node:fs/promises");
-  const path = await import("node:path");
-  
+
+  // Dynamic import for Node.js built-ins - only runs on server
+  const fs = await import("fs/promises");
+  const path = await import("path");
+
   for (const file of files) {
     const filepath = path.join(captureDir, file);
     try {
@@ -94,7 +148,11 @@ export async function startCleanupScheduler(): Promise<NodeJS.Timeout | null> {
   const intervalMs = settings.intervalHours * 60 * 60 * 1000;
 
   cleanupTimer = setInterval(runWithCatch, intervalMs);
-  cleanupTimer.unref();
+  // In Node.js, Timer has unref(). In Edge/workerd, setInterval returns a number.
+  // Guard against environments without unref().
+  if (cleanupTimer && typeof cleanupTimer.unref === "function") {
+    cleanupTimer.unref();
+  }
   runWithCatch();
 
   return cleanupTimer;

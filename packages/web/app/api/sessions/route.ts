@@ -7,14 +7,16 @@ import type {
 } from "@/types/api";
 import {
   listCaptureFiles,
-  getSessionMetadata,
   getCaptureDir,
   MAX_FILE_SIZE,
-  computeContextValues,
-  computeTokenUsage,
   readCaptureFile,
   listRedactionMetaFiles,
   loadRedactionMeta,
+  getSessionMetadata,
+} from "@/lib/sessions/server-utils";
+import {
+  computeContextValues,
+  computeTokenUsage,
 } from "@/lib/sessions/utils";
 import { withRequestCache } from "@/lib/request-cache";
 import {

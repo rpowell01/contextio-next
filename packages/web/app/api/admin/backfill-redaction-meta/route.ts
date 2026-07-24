@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { listCaptureFiles, loadRedactionMeta, metaFilenameFor, getCaptureDir } from "@/lib/sessions/utils";
+import { listCaptureFiles, loadRedactionMeta, metaFilenameFor, getCaptureDir } from "@/lib/sessions/server-utils";
 import {
   computeCaptureRedactionCounts,
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
 
 async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
-  const fs = await import("node:fs/promises");
+  const fs = await import("fs/promises");
   const tmpPath = `${filePath}.tmp`;
   await fs.writeFile(tmpPath, JSON.stringify(data, null, 2));
   await fs.rename(tmpPath, filePath);
@@ -43,8 +43,8 @@ export async function POST(): Promise<NextResponse> {
       }
 
       try {
-        const fs = await import("node:fs/promises");
-        const path = await import("node:path");
+        const fs = await import("fs/promises");
+        const path = await import("path");
         const capturePath = path.join(captureDir, filename);
         const metaPath = path.join(captureDir, metaFilename);
         const raw = await fs.readFile(capturePath, "utf-8");

@@ -13,7 +13,7 @@
 
 import http from "node:http";
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { fetchProviderMetadata, validateIdToken, type OidcProviderMetadata } from "@contextio/core";
+import { fetchProviderMetadata, validateIdToken, type OidcProviderMetadata } from "@contextio/core/server";
 import type { OidcProviderConfig } from "@contextio/core";
 
 export interface AuthSession {

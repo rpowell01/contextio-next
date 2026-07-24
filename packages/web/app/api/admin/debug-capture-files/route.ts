@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCaptureDir, listCaptureFiles } from "@/lib/sessions/utils";
+import { getCaptureDir, listCaptureFiles } from "@/lib/sessions/server-utils";
 
 export async function GET(): Promise<NextResponse> {
   try {
