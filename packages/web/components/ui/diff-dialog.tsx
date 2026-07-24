@@ -369,8 +369,8 @@ export function DiffDialog({
           </DialogClose>
         </div>
 
-        {/* Metadata table and controls - scrollable if needed */}
-        <div className="flex flex-col gap-3 p-4 border-b border-border flex-shrink-0 overflow-y-auto max-h-[20vh]">
+        {/* Metadata table - fixed height, no scroll */}
+        <div className="flex flex-col gap-3 p-4 border-b border-border flex-shrink-0">
           {/* Metadata table */}
           <table className="w-full text-xs text-muted-foreground border-collapse">
             <tbody>
@@ -476,10 +476,10 @@ export function DiffDialog({
         </div>
 
         {/* Diff/Syntax panels - flex-1 to fill remaining space */}
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col">
           {/* Diff View Panels (shown when viewMode === "diff") */}
           {viewMode === "diff" && (
-            <div className="flex flex-col md:flex-row overflow-hidden flex-1 min-h-0">
+            <div className="flex flex-col md:flex-row flex-1 min-h-0">
               <div className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
                 <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
                   <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
