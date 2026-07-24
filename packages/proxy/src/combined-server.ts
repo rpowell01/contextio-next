@@ -259,28 +259,29 @@ export function createCombinedProxy(
 
   const initNextJs = async (): Promise<void> => {
     try {
-      // With Next.js standalone output, the server is at packages/web/server.js
-      // This server already includes all necessary routes and middleware
-      const nextServerModule = await import(
-        join(process.cwd(), "packages/web/server.js")
-      );
+      // Use Next.js standalone output - import next from the standalone node_modules
+      // and create a server with the standalone config
+      const nextPath = join(process.cwd(), "packages/web/.next/standalone/packages/web/node_modules/next");
+      const nextModule = await import(nextPath);
+      const next = nextModule.default || nextModule;
 
-      // The standalone server.js exports a listen function and may have a getRequestHandler
-      // If it uses the standard Next.js server, we can use it directly
-      const nextServer = nextServerModule.default || nextServerModule;
+      // The standalone config is embedded in the server.js, we need to read it
+      // For now, use minimal config with the correct distDir
+      const nextServer = next({
+        dir: join(process.cwd(), "packages/web/.next/standalone/packages/web"),
+        dev: false,
+        conf: {
+          distDir: ".next",
+        },
+      });
 
       if (typeof nextServer.prepare === "function") {
-        // Standard Next.js server interface
         await nextServer.prepare();
         nextHandler = nextServer.getRequestHandler();
-      } else if (typeof nextServer === "function") {
-        // If it's a request handler directly
-        nextHandler = nextServer;
+        console.log("Next.js handler loaded successfully from standalone output");
       } else {
-        console.warn("Unexpected Next.js standalone server export:", Object.keys(nextServer));
+        console.warn("Next.js server doesn't have prepare method");
       }
-
-      console.log("Next.js handler loaded successfully from standalone output");
     } catch (err) {
       console.warn("Next.js handler not available, web UI will not work:", err instanceof Error ? err.message : String(err));
     }
