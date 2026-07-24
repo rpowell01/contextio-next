@@ -259,20 +259,22 @@ export function createCombinedProxy(
 
   const initNextJs = async (): Promise<void> => {
     try {
-      // Use Next.js standalone output - import next from the standalone node_modules
-      // and create a server with the standalone config
-      // In production (Docker), the standalone output is at packages/web/
-      // In development, it's at packages/web/.next/standalone/packages/web/
+      // Use Next.js standalone output - import next from the root node_modules
+      // In production (Docker), next module is at /app/node_modules/next/dist/server/next.js
+      // In development, it's in the project's node_modules
       const isProduction = process.env.NODE_ENV === "production";
-      const standaloneDir = isProduction
-        ? join(process.cwd(), "packages/web")
-        : join(process.cwd(), "packages/web/.next/standalone/packages/web");
-      const nextPath = join(standaloneDir, "node_modules/next");
+      const nextPath = isProduction
+        ? join("/app", "node_modules/next/dist/server/next.js")
+        : join(process.cwd(), "packages/web/node_modules/next/dist/server/next.js");
       const nextModule = await import(nextPath);
       const next = nextModule.default || nextModule;
 
-      // The standalone config is embedded in the server.js, we need to read it
-      // For now, use minimal config with the correct distDir
+      // Use the standalone directory for Next.js pages and config
+      const standaloneDir = isProduction
+        ? join("/app", "packages/web")
+        : join(process.cwd(), "packages/web/.next/standalone/packages/web");
+
+      // Create Next.js server with the standalone config
       const nextServer = next({
         dir: standaloneDir,
         dev: false,
