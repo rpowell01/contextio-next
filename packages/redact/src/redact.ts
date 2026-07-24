@@ -240,7 +240,10 @@ function isRuleAllowlisted(fullMatch: string, capturedGroup: string | undefined,
 /**
  * Check if a JSON path matches a path matcher pattern.
  */
-function pathMatches(segments: string[], matcher: string[]): boolean {
+/**
+ * Check if a JSON path matches a path matcher pattern.
+ */
+export function pathMatches(segments: string[], matcher: string[]): boolean {
   if (matcher.length > segments.length) return false;
   for (let i = 0; i < matcher.length; i++) {
     if (matcher[i] === "*") continue;
@@ -249,7 +252,7 @@ function pathMatches(segments: string[], matcher: string[]): boolean {
   return true;
 }
 
-function shouldRedactPath(
+export function shouldRedactPath(
   path: string[],
   onlyMatchers: { segments: string[] }[] | null,
   skipMatchers: { segments: string[] }[],
@@ -280,7 +283,7 @@ function resolveReplacement(match: string, rule: RedactionRule, map: Replacement
  * Apply redaction rules to a single string, respecting context words
  * and allowlists.
  */
-function redactString(
+export function redactString(
   input: string,
   rules: RedactionRule[],
   allowlistStrings: Set<string>,

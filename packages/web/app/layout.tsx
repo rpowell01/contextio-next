@@ -7,6 +7,11 @@ import { DEFAULT_SETTINGS, validateSettingsLenient, applyEnvOverrides } from "@/
 export const metadata: Metadata = {
   title: "ContextIO-Next Web",
   description: "Web interface for ContextIO-Next proxy monitoring and inspection",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
 };
 
 // Read the server-resolved theme (including CONTEXTIO_THEME env override) so the

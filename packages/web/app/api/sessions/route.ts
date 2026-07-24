@@ -280,10 +280,9 @@ async function handleGet(request: Request): Promise<Response> {
   // Return grouped summaries if requested
   if (groupBySourceDest) {
     // Load pre-aggregated redaction metadata from .redact-meta.json files
-    // Match Redactions page behavior: dedupe by sessionId (first capture per session)
-    // and skip title-* sessions
+    // Include ALL captures per session to accurately count captures per session
+    // (skip title-* sessions only, no deduping by sessionId)
     const metaFiles = await listRedactionMetaFiles();
-    // Sort for deterministic "first capture per session" deduping
     metaFiles.sort();
 
     const redactionMetaBySession = new Map<
@@ -292,7 +291,6 @@ async function handleGet(request: Request): Promise<Response> {
     >();
 
     const rawCaptures: RawCaptureData[] = [];
-    const seenSessions = new Set<string>();
 
     for (const filename of metaFiles) {
       try {
@@ -302,21 +300,27 @@ async function handleGet(request: Request): Promise<Response> {
         // Skip title-* sessions (match Redactions page behavior)
         if (meta.sessionId?.startsWith("title-")) continue;
 
-        // Dedupe by sessionId: only keep first capture per session
-        if (meta.sessionId && seenSessions.has(meta.sessionId)) continue;
-        if (meta.sessionId) seenSessions.add(meta.sessionId);
-
         // Store redaction metadata for this session - use matches for accurate placeholders
+        // Accumulate across all captures for the same session
         if (meta.sessionId) {
           // Prefer computing placeholders from actual matches (what's in content)
           const byPlaceholder = meta.matches && Array.isArray(meta.matches)
             ? computePlaceholderCounts(meta.matches as unknown as Array<{ ruleId: string; placeholder?: string; postValue?: string }>)
             : convertByRuleToByPlaceholder((meta.byRule as Record<string, number>) ?? {});
 
-          redactionMetaBySession.set(meta.sessionId, {
-            totalRedactions: meta.totalRedactions ?? 0,
-            byRule: byPlaceholder,
-          });
+          const existing = redactionMetaBySession.get(meta.sessionId);
+          if (existing) {
+            // Accumulate redaction counts across all captures in this session
+            existing.totalRedactions += meta.totalRedactions ?? 0;
+            for (const [rule, count] of Object.entries(byPlaceholder)) {
+              existing.byRule[rule] = (existing.byRule[rule] ?? 0) + count;
+            }
+          } else {
+            redactionMetaBySession.set(meta.sessionId, {
+              totalRedactions: meta.totalRedactions ?? 0,
+              byRule: byPlaceholder,
+            });
+          }
         }
 
         // Extract timings - default to 0 if not present

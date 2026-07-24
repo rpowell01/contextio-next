@@ -46,6 +46,9 @@ import type {
 import type { RuleDetectorConfig } from "./ruleDetector.js";
 import type { GlinerOnnxConfig } from "./glinerDetector.js";
 import { detectorRegistry, registerDetector, createDetector } from "./detector.js";
+import { createRuleDetector } from "./ruleDetector.js";
+import { createGlinerOnnxDetector } from "./glinerDetector.js";
+import { createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";
 
 /** Configuration for {@link createRedactPlugin}. */
 export interface RedactPluginConfig {
@@ -99,6 +102,122 @@ interface SessionState {
   map: ReplacementMap;
   rehydrator: ReturnType<typeof createStreamRehydrator>;
   lastSeen: number;
+}
+
+/** Detector pipeline state (lazy initialized). */
+interface DetectorState {
+  pipeline: Detector | null;
+  initialized: boolean;
+  initializing: Promise<void> | null;
+}
+
+/**
+ * Apply detector spans to a string, returning the redacted string and
+ * updating stats/map for reversible mode.
+ */
+function applyDetectorSpans(
+  input: string,
+  spans: DetectedSpan[],
+  ruleName: string,
+  stats: ReturnType<typeof createStats>,
+  map: ReplacementMap | null,
+  placeholderAllowlist: Set<string>,
+): string {
+  if (spans.length === 0) return input;
+
+  // Sort spans by start position (descending) to apply replacements in reverse
+  const sortedSpans = [...spans].sort((a, b) => b.start - a.start);
+
+  let result = input;
+  for (const span of sortedSpans) {
+    const match = input.slice(span.start, span.end);
+    // Skip if match is a known placeholder token (prevent re-redaction)
+    if (placeholderAllowlist.has(match)) continue;
+    const replacement = map ? map.getOrCreate(match, ruleName) : `[${span.label}_${Date.now()}]`;
+    stats.totalReplacements++;
+    stats.byRule[ruleName] = (stats.byRule[ruleName] || 0) + 1;
+    result = result.slice(0, span.start) + replacement + result.slice(span.end);
+  }
+  return result;
+}
+
+/**
+ * Walk a JSON value and apply detector-based redaction to string leaves.
+ * Returns the redacted value and optionally runs rule-based redaction as well.
+ */
+async function redactWithDetector(
+  value: unknown,
+  policy: CompiledPolicy,
+  detector: Detector,
+  detectorMode: DetectorMode,
+  stats: ReturnType<typeof createStats>,
+  currentPath: string[] = [],
+  map: ReplacementMap | null = null,
+): Promise<unknown> {
+  if (typeof value === "string") {
+    // Check path filtering
+    if (policy.paths.only !== null || policy.paths.skip.length > 0) {
+      const { shouldRedactPath } = await import("./redact.js");
+      if (!shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip)) {
+        return value;
+      }
+    }
+
+    // Run detector on this string
+    const detectionResult = await detector.detect(value);
+    let redacted = value;
+
+    // Apply detector spans
+    if (detectionResult.spans.length > 0) {
+      redacted = applyDetectorSpans(
+        value,
+        detectionResult.spans,
+        detector.name,
+        stats,
+        map,
+        policy.placeholderAllowlist,
+      );
+    }
+
+    // In hybrid mode, also apply rule-based redaction
+    if (detectorMode === "hybrid") {
+      const { redactString, shouldRedactPath } = await import("./redact.js");
+      // Check path filtering
+      if (policy.paths.only !== null || policy.paths.skip.length > 0) {
+        if (!shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip)) {
+          return value;
+        }
+      }
+      redacted = redactString(
+        redacted,
+        policy.rules,
+        policy.allowlist.strings,
+        policy.allowlist.patterns,
+        policy.placeholderAllowlist,
+        stats,
+        map,
+        currentPath,
+      );
+    }
+
+    return redacted;
+  }
+
+  if (Array.isArray(value)) {
+    return Promise.all(value.map((item) =>
+      redactWithDetector(item, policy, detector, detectorMode, stats, [...currentPath, "*"], map)
+    ));
+  }
+
+  if (value !== null && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      result[key] = await redactWithDetector(val, policy, detector, detectorMode, stats, [...currentPath, key], map);
+    }
+    return result;
+  }
+
+  return value;
 }
 
 /** Resolve effective policy: explicit policy > policy file > preset (default: "pii"). */
@@ -174,53 +293,193 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
     return state;
   }
 
+  // Detector pipeline state (lazy initialized)
+  const detectorState: DetectorState = {
+    pipeline: null,
+    initialized: false,
+    initializing: null,
+  };
+
+  const detectorMode = config?.detectorMode ?? "rules";
+  const detectorConfig = config?.detectorConfig ?? {};
+
+  /**
+   * Initialize the detector pipeline based on detectorMode and detectorConfig.
+   * Called lazily on first request that needs it.
+   */
+  async function ensureDetectorInitialized(): Promise<Detector | null> {
+    if (detectorMode === "rules") return null;
+    if (detectorState.initialized) return detectorState.pipeline;
+    if (detectorState.initializing) {
+      await detectorState.initializing;
+      return detectorState.pipeline;
+    }
+
+    detectorState.initializing = (async () => {
+      try {
+        // Create rule detector
+        const ruleDetector = await createRuleDetector({
+          name: "rules",
+          rules: policy.rules,
+          allowlistStrings: Array.from(policy.allowlist.strings),
+          allowlistPatterns: Array.from(policy.allowlist.patterns).map((r) => r.source),
+          placeholderAllowlist: Array.from(policy.placeholderAllowlist),
+        });
+
+        let pipeline: Detector;
+
+        if (detectorMode === "llm") {
+          // LLM-only mode: use GLiNER detector
+          const glinerConfig = detectorConfig as RedactDetectorConfig;
+          if (!glinerConfig.modelPath) {
+            throw new Error("LLM detector requires detectorConfig.modelPath to be set");
+          }
+          const llmDetector = await createGlinerOnnxDetector({
+            name: "gliner-onnx",
+            modelDir: glinerConfig.modelPath,
+            threshold: glinerConfig.llmThreshold ?? 0.5,
+            labels: glinerConfig.llmLabels,
+          });
+          pipeline = await createDetectorPipeline({
+            detectors: [llmDetector],
+            mergeStrategy: "union",
+          });
+        } else if (detectorMode === "hybrid" || detectorMode === "auto") {
+          // Hybrid mode: rules + GLiNER with priority merge
+          const glinerConfig = detectorConfig as RedactDetectorConfig;
+          let llmDetector: Detector | null = null;
+          if (glinerConfig.modelPath) {
+            llmDetector = await createGlinerOnnxDetector({
+              name: "gliner-onnx",
+              modelDir: glinerConfig.modelPath,
+              threshold: glinerConfig.llmThreshold ?? 0.5,
+              labels: glinerConfig.llmLabels,
+            });
+          }
+
+          // In auto mode, we still use hybrid but could add logic to skip LLM for simple cases
+          const pipelineConfig = createHybridDetector(ruleDetector, llmDetector!, {
+            priorityOrder: ["rules", "gliner-onnx"],
+          });
+          pipeline = await createDetectorPipeline(pipelineConfig);
+        } else {
+          // Default to rules only
+          pipeline = ruleDetector;
+        }
+
+        detectorState.pipeline = pipeline;
+        detectorState.initialized = true;
+        if (verbose) {
+          console.error(`[redact] Initialized detector pipeline (mode: ${detectorMode})`);
+        }
+      } catch (err) {
+        console.error(`[redact] Failed to initialize detector pipeline:`, err);
+        detectorState.pipeline = null;
+        throw err;
+      } finally {
+        detectorState.initializing = null;
+      }
+    })();
+
+    await detectorState.initializing;
+    return detectorState.pipeline;
+  }
+
   return {
     name: "redact",
 
-onRequest(ctx: RequestContext): RequestContext {
-  if (!ctx.body) return ctx;
+  async onRequest(ctx: RequestContext): Promise<RequestContext> {
+    if (!ctx.body) return ctx;
 
-  const map = reversible ? getSession(ctx.sessionId).map : null;
-  const stats = createStats();
-  const redacted = redactWithPolicy(ctx.body, policy, stats, [], map);
-  // Reset stream rehydrator for this session (new response coming)
-  if (reversible) {
-    const session = getSession(ctx.sessionId);
-    session.rehydrator = createStreamRehydrator(session.map);
-  }
+    const map = reversible ? getSession(ctx.sessionId).map : null;
+    const stats = createStats();
 
-  const redactionStats = buildRedactMetaPayload(stats);
+    // Check if we should use detector-based redaction
+    if (detectorMode !== "rules") {
+      const detector = await ensureDetectorInitialized();
+      if (detector) {
+        const redacted = await redactWithDetector(ctx.body, policy, detector, detectorMode, stats, [], map);
+        // Reset stream rehydrator for this session (new response coming)
+        if (reversible) {
+          const session = getSession(ctx.sessionId);
+          session.rehydrator = createStreamRehydrator(session.map);
+        }
 
-  if (config?.captureDir && ctx.captureId) {
-    writeRedactionMeta(config.captureDir, ctx.captureId, {
-      provider: ctx.provider,
-      sessionId: ctx.sessionId,
-      targetUrl: ctx.targetUrl,
-      source: ctx.source,
-    }, redactionStats);
-  }
+        const redactionStats = buildRedactMetaPayload(stats);
 
-  if (stats.totalReplacements > 0 && verbose) {
-    const details = Object.entries(stats.byRule)
-    .map(([name, count]) => `${name}=${count}`)
-    .join(", ");
-    const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
-    console.error(
-      `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
-    );
-    if (map) {
-      console.error(
-        `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
-      );
+        if (config?.captureDir && ctx.captureId) {
+          writeRedactionMeta(config.captureDir, ctx.captureId, {
+            provider: ctx.provider,
+            sessionId: ctx.sessionId,
+            targetUrl: ctx.targetUrl,
+            source: ctx.source,
+          }, redactionStats);
+        }
+
+        if (stats.totalReplacements > 0 && verbose) {
+          const details = Object.entries(stats.byRule)
+          .map(([name, count]) => `${name}=${count}`)
+          .join(", ");
+          const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
+          console.error(
+            `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
+          );
+          if (map) {
+            console.error(
+              `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
+            );
+          }
+        }
+
+        return {
+          ...ctx,
+          redactionStats,
+          body: redacted as Record<string, any>,
+        };
+      }
+      // Fall through to rule-based if detector initialization failed
     }
-  }
 
-  return {
-    ...ctx,
-    redactionStats,
-    body: redacted as Record<string, any>,
-  };
-},
+    // Rule-based redaction (default)
+    const redacted = redactWithPolicy(ctx.body, policy, stats, [], map);
+    // Reset stream rehydrator for this session (new response coming)
+    if (reversible) {
+      const session = getSession(ctx.sessionId);
+      session.rehydrator = createStreamRehydrator(session.map);
+    }
+
+    const redactionStats = buildRedactMetaPayload(stats);
+
+    if (config?.captureDir && ctx.captureId) {
+      writeRedactionMeta(config.captureDir, ctx.captureId, {
+        provider: ctx.provider,
+        sessionId: ctx.sessionId,
+        targetUrl: ctx.targetUrl,
+        source: ctx.source,
+      }, redactionStats);
+    }
+
+    if (stats.totalReplacements > 0 && verbose) {
+      const details = Object.entries(stats.byRule)
+      .map(([name, count]) => `${name}=${count}`)
+      .join(", ");
+      const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
+      console.error(
+        `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
+      );
+      if (map) {
+        console.error(
+          `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
+        );
+      }
+    }
+
+    return {
+      ...ctx,
+      redactionStats,
+      body: redacted as Record<string, any>,
+    };
+  },
 
     // Rehydrate placeholders in non-streaming responses.
     onResponse: reversible
@@ -268,7 +527,7 @@ export { PRESETS, getAllPlaceholderTokens, getPlaceholderPatterns } from "./pres
 export type { PolicyJson, PolicyRuleJson, CompiledPolicy } from "./policy.js";
 export { compilePolicy, loadPolicyFile, fromPreset } from "./policy.js";
 export type { RedactionStats } from "./redact.js";
-export { redactWithPolicy, redactValue, createStats } from "./redact.js";
+export { redactWithPolicy, redactValue, createStats, redactString } from "./redact.js";
 export type { MappingEntry } from "./mapping.js";
 export { ReplacementMap } from "./mapping.js";
 
