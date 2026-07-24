@@ -58,14 +58,14 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - site.webmanifest (PWA manifest)
-     * - contextio-next-brand.png (brand logo)
-     * - ContextIO-Next-*.png (favicon sizes)
+     * - /api (API routes)
+     * - /_next/static (static files)
+     * - /_next/image (image optimization files)
+     * - /favicon.ico (favicon file)
+     * - /site.webmanifest (PWA manifest)
+     * - /contextio-next-brand.png (brand logo)
+     * - /ContextIO-Next- (favicon sizes)
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|site.webmanifest|contextio-next-brand.png|ContextIO-Next-).*)",
+    "/((?!\\/api|\\/_next\\/static|\\/_next\\/image|\\/favicon\\.ico|\\/site\\.webmanifest|\\/contextio-next-brand\\.png|\\/ContextIO-Next-).*)",
   ],
 };
