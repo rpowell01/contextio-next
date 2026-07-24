@@ -269,10 +269,21 @@ export function createCombinedProxy(
       return;
     }
 
+    // Public asset paths that should bypass auth (must match middleware config in packages/web/middleware.ts)
+    function isPublicAsset(pathname: string): boolean {
+      return (
+        pathname === "/site.webmanifest" ||
+        pathname === "/contextio-next-brand.png" ||
+        pathname.startsWith("/ContextIO-Next-") ||
+        pathname === "/favicon.ico"
+      );
+    }
+
     // OIDC authentication check for web UI routes only
     // If OIDC is enabled, require valid session for all other routes (Next.js web UI)
     // Do NOT protect /api/* (web API routes) - AI tools need unauthenticated access
-    if (resolved.oidc && !path.startsWith("/api/")) {
+    // Also skip public assets (manifest, logos, favicon)
+    if (resolved.oidc && !path.startsWith("/api/") && !isPublicAsset(path)) {
       const session = validateSession(req, resolved.oidc.sessionSecret);
       if (!session) {
         // Redirect to login with return URL
