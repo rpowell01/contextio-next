@@ -97,6 +97,7 @@ function LoginPageContent() {
                 <Link
                   key={provider.id}
                   href={provider.authUrl}
+                  prefetch={false}
                   className="flex w-full items-center justify-center gap-3 rounded-lg border bg-background px-4 py-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 >
                   <span className="font-medium">{provider.name}</span>
