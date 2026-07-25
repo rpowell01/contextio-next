@@ -54,6 +54,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Enable OpenID Connect authentication for the web UI. Requires a proxy restart and valid OIDC config (issuer, client ID, client secret, session secret) via environment variables.",
   oidcPublicUrl:
     "Public-facing URL for the proxy (e.g., https://contextio.example.com). Used for OIDC callback URLs when behind a reverse proxy. Requires a proxy restart to apply.",
+  showPageLoadTime:
+    "Display page load time in the bottom-left corner. Measures time from navigation start to fully interactive page (hydration + data fetch + render complete). Changes apply immediately.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
@@ -114,6 +116,7 @@ export default function SettingsPage() {
     captureCleanupMaxAgeDays: 30,
     oidcEnabled: false,
     oidcPublicUrl: "",
+    showPageLoadTime: false,
   });
   const [metadata, setMetadata] = useState<Record<
     keyof Settings,
@@ -560,6 +563,26 @@ export default function SettingsPage() {
             />
           </div>
         );
+      case "showPageLoadTime":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="showPageLoadTime"
+              checked={settings.showPageLoadTime}
+              onChange={(e) => updateSetting("showPageLoadTime", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isSettingOverridden("showPageLoadTime")}
+            />
+            <Label htmlFor="showPageLoadTime" className="text-sm">
+              Show page load time in footer
+            </Label>
+            <SettingHelp
+              meta={getMeta("showPageLoadTime")}
+              description={SETTING_DESCRIPTIONS.showPageLoadTime}
+            />
+          </div>
+        );
       case "captureCleanupEnabled":
         return (
           <div className="flex items-center justify-between mb-4">
@@ -848,7 +871,10 @@ export default function SettingsPage() {
           </div>
           <div className="rounded-lg border p-6">
             <h3 className="font-semibold mb-4">Appearance</h3>
-            <div className="space-y-4">{renderSetting("theme")}</div>
+            <div className="space-y-4">
+              {renderSetting("theme")}
+              {renderSetting("showPageLoadTime")}
+            </div>
           </div>
 
           <Button type="submit" className="w-full md:w-auto" disabled={loading}>

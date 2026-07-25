@@ -354,6 +354,7 @@ export function validateSettings(input: unknown): Settings {
       | "monokai",
     oidcEnabled: validateBoolean("oidcEnabled"),
     oidcPublicUrl: validateString("oidcPublicUrl", 0),
+    showPageLoadTime: validateBoolean("showPageLoadTime"),
   };
 }
 
@@ -456,5 +457,9 @@ export function validateSettingsLenient(input: unknown): Settings {
       typeof obj.oidcPublicUrl === "string"
         ? obj.oidcPublicUrl
         : DEFAULT_SETTINGS.oidcPublicUrl,
+    showPageLoadTime:
+      typeof obj.showPageLoadTime === "boolean"
+        ? obj.showPageLoadTime
+        : DEFAULT_SETTINGS.showPageLoadTime,
   };
 }

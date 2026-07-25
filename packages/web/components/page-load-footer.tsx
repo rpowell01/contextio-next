@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiClient } from "@/lib/api";
 
 /**
  * Page Load Footer component
@@ -9,23 +10,37 @@ import { useEffect, useState } from "react";
  * render, React hydration completes, data fetching finishes, and the page
  * is fully rendered and interactive).
  *
- * Only shows in development mode or when explicitly enabled via
- * NEXT_PUBLIC_CONTEXTIO_SHOW_LOAD_TIME env var.
+ * Show/hide is controlled by the `showPageLoadTime` setting.
  */
 export function PageLoadFooter() {
   const [loadTime, setLoadTime] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const [showFooter, setShowFooter] = useState<boolean>(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // Check if we should display the load time at component level
-  // This avoids mounting the effect and state when disabled
-  const isDev = process.env.NODE_ENV === "development";
-  const isEnabled = process.env.NEXT_PUBLIC_CONTEXTIO_SHOW_LOAD_TIME === "true";
-
-  if (!isDev && !isEnabled) {
-    return null;
-  }
-
+  // Fetch the showPageLoadTime setting on mount
   useEffect(() => {
+    async function loadSetting() {
+      try {
+        const data = await apiClient.getSettings();
+        if (data.settings && typeof data.settings.showPageLoadTime === "boolean") {
+          setShowFooter(data.settings.showPageLoadTime);
+        }
+      } catch (error) {
+        console.error("Failed to load page load time setting:", error);
+        // Default to false if settings can't be loaded
+        setShowFooter(false);
+      } finally {
+        setSettingsLoaded(true);
+      }
+    }
+    loadSetting();
+  }, []);
+
+  // Only measure load time if footer should be shown and settings are loaded
+  useEffect(() => {
+    if (!showFooter || !settingsLoaded) return;
+
     setIsVisible(true);
 
     // Measure true page load time: from navigation start to when this footer mounts.
@@ -44,9 +59,9 @@ export function PageLoadFooter() {
       const loadTimeMs = performance.now();
       setLoadTime(formatLoadTime(loadTimeMs));
     }
-  }, []);
+  }, [showFooter, settingsLoaded]);
 
-  if (!isVisible || loadTime === null) {
+  if (!showFooter || !isVisible || loadTime === null) {
     return null;
   }
 
