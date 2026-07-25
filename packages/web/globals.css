@@ -2,6 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom animations for progress bar */
+@keyframes progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.animate-progress-indeterminate {
+  animation: progress-indeterminate 1.5s infinite linear;
+}
+
+/* Respect prefers-reduced-motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .animate-progress-indeterminate {
+    animation: none;
+  }
+  .animate-progress-indeterminate::after {
+    content: "";
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: inherit;
+  }
+}
+
 /* CSS Custom Properties for Theming - RGB channels for opacity support */
 :root {
   /* Light theme (default) */
