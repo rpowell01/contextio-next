@@ -245,6 +245,9 @@ export function createCombinedProxy(
     console.log(`[startup] OIDC baseUrl used: ${resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`}`);
     console.log(`[startup] OIDC issuer: ${resolved.oidc.issuer}`);
     console.log(`[startup] OIDC clientId: ${resolved.oidc.clientId}`);
+    console.log(`[startup] OIDC scope: ${resolved.oidc.scope.join(" ")}`);
+    console.log(`[startup] OIDC sessionSecret length: ${resolved.oidc.sessionSecret.length}`);
+    console.log(`[startup] OIDC BUILD TIME: ${new Date().toISOString()}`);
   } else {
     console.log(`[startup] OIDC not enabled (resolved.oidc is ${resolved.oidc})`);
     console.log(`[startup] CONTEXTIO_OIDC_ENABLED=${process.env.CONTEXTIO_OIDC_ENABLED}`);
