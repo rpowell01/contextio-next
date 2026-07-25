@@ -1,6 +1,7 @@
 "use client";
 
 import { Header, HeaderProps } from "@/components/header";
+import { PageLoadFooter } from "@/components/page-load-footer";
 
 /**
  * Props for the MainLayout component.
@@ -21,6 +22,7 @@ export function MainLayout({ children, headerProps }: MainLayoutProps) {
     <div className="flex min-h-screen flex-col">
       <Header {...headerProps} />
       <main className="flex flex-1 flex-col p-4 md:p-6">{children}</main>
+      <PageLoadFooter />
     </div>
   );
 }
