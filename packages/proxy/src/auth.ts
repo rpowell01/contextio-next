@@ -376,6 +376,8 @@ async function handleCallback(
   const error = url.searchParams.get("error");
   const errorDescription = url.searchParams.get("error_description");
 
+  console.log("[auth] Callback received:", { code: !!code, state: !!state, error, errorDescription });
+
   // Handle OAuth2 error response
   if (error) {
     console.error("OIDC callback error:", error, errorDescription);
@@ -385,6 +387,7 @@ async function handleCallback(
   }
 
   if (!code || !state) {
+    console.error("[auth] Missing code or state");
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Missing code or state parameter" }));
     return;
@@ -393,14 +396,17 @@ async function handleCallback(
   // Verify state and get nonce
   const nonce = consumeState(state);
   if (!nonce) {
+    console.error("[auth] Invalid or expired state");
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Invalid or expired state parameter" }));
     return;
   }
+  console.log("[auth] State validated, nonce:", nonce);
 
   try {
     // Exchange code for tokens
     const metadata = await getProviderMetadata(oidc.issuer);
+    console.log("[auth] Token endpoint:", metadata.token_endpoint);
     const tokenResponse = await fetch(metadata.token_endpoint, {
       method: "POST",
       headers: {
@@ -415,6 +421,8 @@ async function handleCallback(
         client_secret: oidc.clientSecret,
       }),
     });
+
+    console.log("[auth] Token response status:", tokenResponse.status);
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
@@ -432,6 +440,8 @@ async function handleCallback(
       token_type: string;
     };
 
+    console.log("[auth] Tokens received:", { id_token: !!tokens.id_token, access_token: !!tokens.access_token });
+
     if (!tokens.id_token) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "No ID token in response" }));
@@ -445,9 +455,11 @@ async function handleCallback(
       oidc.clientId,
       oidc.issuer,
     );
+    console.log("[auth] ID token validated, payload:", { sub: payload.sub, email: payload.email, nonce: payload.nonce });
 
     // Verify nonce matches
     if (payload.nonce !== nonce) {
+      console.error("[auth] Nonce mismatch:", { expected: nonce, actual: payload.nonce });
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Invalid nonce in ID token" }));
       return;
@@ -468,12 +480,14 @@ async function handleCallback(
     // Encrypt and set session cookie
     const cookie = encryptSession(session, oidc.sessionSecret);
     setSessionCookie(res, cookie);
+    console.log("[auth] Session cookie set for user:", payload.sub);
 
     // Get redirect URL from cookie or default to home
     const cookies = parseCookies(req.headers.cookie);
     const redirectUrl = cookies.contextio_login_redirect
       ? decodeURIComponent(cookies.contextio_login_redirect)
       : "/";
+    console.log("[auth] Redirect URL from cookie:", redirectUrl);
 
     // Clear the redirect cookie - append to existing Set-Cookie header
     const existingCookies = res.getHeader("Set-Cookie");
@@ -485,6 +499,8 @@ async function handleCallback(
     cookieArray.push("contextio_login_redirect=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
     res.setHeader("Set-Cookie", cookieArray);
 
+    console.log("[auth] Final Set-Cookie headers:", res.getHeader("Set-Cookie"));
+    console.log("[auth] Redirecting to:", redirectUrl);
     res.writeHead(302, { Location: redirectUrl });
     res.end();
   } catch (error) {
