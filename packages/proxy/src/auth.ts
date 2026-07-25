@@ -70,14 +70,17 @@ export interface AuthOptions {
 
 /**
  * Derives encryption and HMAC keys from session secret using PBKDF2.
- * Matches packages/web/lib/auth/session.ts for cross-package compatibility.
+ * Matches packages/web/lib/auth/session.ts EXACTLY for cross-package compatibility.
+ * Web uses two separate PBKDF2 calls with fixed salts "encryption-key" and "hmac-key".
  */
-function deriveKeys(sessionSecret: string, salt: Buffer): { encryptionKey: Buffer; hmacKey: Buffer } {
-  const keyMaterial = pbkdf2Sync(sessionSecret, salt, 100000, 64, "sha256");
-  return {
-    encryptionKey: keyMaterial.subarray(0, 32),
-    hmacKey: keyMaterial.subarray(32, 64),
-  };
+function deriveEncryptionKey(sessionSecret: string, salt: Buffer): Buffer {
+  // Matches web: PBKDF2(sessionSecret, "encryption-key", 100000, 32, SHA-256)
+  return pbkdf2Sync(sessionSecret, "encryption-key", 100000, 32, "sha256");
+}
+
+function deriveHmacKey(sessionSecret: string): Buffer {
+  // Matches web: PBKDF2(sessionSecret, "hmac-key", 100000, 32, SHA-256)
+  return pbkdf2Sync(sessionSecret, "hmac-key", 100000, 32, "sha256");
 }
 
 /**
@@ -85,8 +88,9 @@ function deriveKeys(sessionSecret: string, salt: Buffer): { encryptionKey: Buffe
  * Matches packages/web/lib/auth/session.ts for cross-package compatibility.
  */
 function encryptSession(session: AuthSession, sessionSecret: string): SessionCookie {
-  const salt = randomBytes(16);
-  const { encryptionKey, hmacKey } = deriveKeys(sessionSecret, salt);
+  const salt = randomBytes(16); // Random salt for encryption key only
+  const encryptionKey = deriveEncryptionKey(sessionSecret, salt);
+  const hmacKey = deriveHmacKey(sessionSecret); // Fixed salt, no random salt
   const iv = randomBytes(12); // 96-bit IV for GCM
   const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);
 
@@ -114,7 +118,8 @@ function encryptSession(session: AuthSession, sessionSecret: string): SessionCoo
 function decryptSession(cookie: SessionCookie, sessionSecret: string): AuthSession | null {
   try {
     const salt = Buffer.from(cookie.salt, "base64url");
-    const { encryptionKey, hmacKey } = deriveKeys(sessionSecret, salt);
+    const encryptionKey = deriveEncryptionKey(sessionSecret, salt);
+    const hmacKey = deriveHmacKey(sessionSecret);
 
     // Verify HMAC
     const encryptedWithTag = Buffer.from(cookie.data, "base64url");
