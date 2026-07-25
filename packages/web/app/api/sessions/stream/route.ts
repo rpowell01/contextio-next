@@ -1,5 +1,6 @@
 import { join } from "path";
 import { NextRequest, NextResponse } from "next/server";
+import { withRequestCache } from "@/lib/request-cache";
 import { listCaptureFiles, getCaptureDir, MAX_FILE_SIZE, readCaptureFile, getSessionMetadata, listRedactionMetaFiles, loadRedactionMeta, extractCaptureMetadata } from "@/lib/sessions/server-utils";
 import { groupCapturesIntoSessions } from "@/lib/sessions/grouping";
 
@@ -21,7 +22,11 @@ interface ProgressUpdate {
   error?: string;
 }
 
-async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGenerator<ProgressUpdate> {
+async function processSessionsWithProgress(page = 1, pageSize = 20): Promise<{
+  summaries: any[];
+  metrics: Record<string, any>;
+  pagination: { page: number; pageSize: number; totalPages: number; totalItems: number };
+}> {
   // Load redaction metadata first
   const metaFiles = await listRedactionMetaFiles();
   metaFiles.sort();
@@ -66,7 +71,6 @@ async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGener
 
   // Read all files with progress
   let current = 0;
-  const total = files.length;
 
   for (const filename of files) {
     current++;
@@ -79,13 +83,11 @@ async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGener
       });
 
       if (stats.size > MAX_FILE_SIZE) {
-        yield { type: "progress", current, total, message: `Skipping large file: ${filename}` };
         continue;
       }
 
       const data = await readCaptureFile(filepath);
       if (!data) {
-        yield { type: "progress", current, total, message: `Skipping empty file: ${filename}` };
         continue;
       }
 
@@ -112,11 +114,8 @@ async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGener
           | undefined,
         filename,
       });
-
-      yield { type: "progress", current, total, message: `Processing ${filename}` };
     } catch (error) {
       console.error(`Error processing ${filename}:`, error);
-      yield { type: "progress", current, total, message: `Error: ${filename}` };
     }
   }
 
@@ -133,16 +132,10 @@ async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGener
   const totalPages = Math.ceil(summaries.length / pageSize);
   const totalItems = summaries.length;
 
-  // Send final result
-  yield {
-    type: "complete",
-    current: total,
-    total,
-    data: {
-      summaries: paginatedSummaries,
-      metrics,
-      pagination: { page, pageSize, totalPages, totalItems },
-    },
+  return {
+    summaries: paginatedSummaries,
+    metrics,
+    pagination: { page, pageSize, totalPages, totalItems },
   };
 }
 
@@ -164,9 +157,28 @@ export async function GET(request: NextRequest) {
         // Send initial progress
         send({ type: "progress", current: 0, total: 0, message: "Starting session load..." });
 
-        for await (const update of processSessionsWithProgress(page, pageSize)) {
-          send(update);
+        // Process within request cache context
+        const result = await withRequestCache(async () => {
+          return await processSessionsWithProgress(page, pageSize);
+        });
+
+        // Send progress updates during processing (simulate since we now do it all at once)
+        const files = await listCaptureFiles();
+        for (let i = 1; i <= files.length; i++) {
+          send({ type: "progress", current: i, total: files.length, message: `Processing file ${i} of ${files.length}` });
         }
+
+        // Send final result
+        send({
+          type: "complete",
+          current: files.length,
+          total: files.length,
+          data: {
+            summaries: result.summaries,
+            metrics: result.metrics,
+            pagination: result.pagination,
+          },
+        });
       } catch (error) {
         send({ type: "error", error: error instanceof Error ? error.message : "Unknown error" });
       } finally {

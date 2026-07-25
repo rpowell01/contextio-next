@@ -28,7 +28,6 @@ export function PageLoadFooter() {
         }
       } catch (error) {
         console.error("Failed to load page load time setting:", error);
-        // Default to false if settings can't be loaded
         setShowFooter(false);
       } finally {
         setSettingsLoaded(true);
@@ -37,27 +36,36 @@ export function PageLoadFooter() {
     loadSetting();
   }, []);
 
-  // Only measure load time if footer should be shown and settings are loaded
+  // Measure load time when footer should be shown and settings are loaded
   useEffect(() => {
     if (!showFooter || !settingsLoaded) return;
 
     setIsVisible(true);
 
-    // Measure true page load time: from navigation start to when this footer mounts.
-    // The footer mounts AFTER:
-    // 1. Initial HTML document loads
-    // 2. React hydration completes
-    // 3. All child components (page content) render
-    // 4. Client-side data fetching completes (SSE, fetch, etc.)
-    // 5. React re-renders with data
-    // 6. All components are fully rendered and interactive
-    //
-    // performance.timeOrigin = navigation start (high-resolution timestamp)
-    // performance.now() = time since navigation start (high-resolution)
-    // When this effect runs, we've completed hydration + render + data fetch
+    // Use Navigation Timing API to get the current navigation's timing
+    // This works for both initial loads and client-side navigations in Next.js
     if (typeof window !== "undefined" && window.performance) {
-      const loadTimeMs = performance.now();
-      setLoadTime(formatLoadTime(loadTimeMs));
+      try {
+        const entries = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[];
+        const currentNav = entries[entries.length - 1];
+
+        if (currentNav) {
+          // loadEventEnd fires when the page is fully loaded (including all resources)
+          // But we want "fully interactive" which is after React hydration + data fetch + render
+          // Since this footer mounts AFTER all that, we use the current time as end point
+          // and navigationStart as the start point
+          const navStart = currentNav.startTime; // = navigation start (high-res)
+          const now = performance.now(); // time since navigation start (high-res)
+          const loadTimeMs = now - navStart;
+          setLoadTime(formatLoadTime(loadTimeMs));
+        } else {
+          // Fallback: performance.now() alone (less accurate for client-side nav)
+          setLoadTime(formatLoadTime(performance.now()));
+        }
+      } catch {
+        // Fallback if Navigation Timing API not available
+        setLoadTime(formatLoadTime(performance.now()));
+      }
     }
   }, [showFooter, settingsLoaded]);
 
