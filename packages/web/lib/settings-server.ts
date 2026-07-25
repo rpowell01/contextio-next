@@ -54,4 +54,27 @@ export async function readSettingsFile(): Promise<string | null> {
 
 export async function writeSettingsFile(settings: unknown): Promise<void> {
   await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+ }
+
+// OIDC settings interface for server-side use
+export interface OidcSettings {
+  oidcEnabled: boolean;
+  oidcPublicUrl: string | null;
 }
+
+export async function getOidcSettings(): Promise<OidcSettings> {
+  try {
+    const raw = await fs.readFile(SETTINGS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null) {
+      const obj = parsed as Record<string, unknown>;
+      return {
+        oidcEnabled: obj.oidcEnabled === true,
+        oidcPublicUrl: typeof obj.oidcPublicUrl === "string" ? obj.oidcPublicUrl : null,
+      };
+    }
+  } catch {
+    // Ignore settings read errors
+  }
+  return { oidcEnabled: false, oidcPublicUrl: null };
+ }
