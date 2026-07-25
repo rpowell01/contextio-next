@@ -346,6 +346,11 @@ async function handleLogin(
 
     const authUrl = `${metadata.authorization_endpoint}?${params.toString()}`;
 
+    console.log("[auth] Generated authorize URL:", authUrl);
+    console.log("[auth] clientId:", oidc.clientId);
+    console.log("[auth] callbackUrl:", callbackUrl);
+    console.log("[auth] metadata.authorization_endpoint:", metadata.authorization_endpoint);
+
     // Set a cookie to remember where to redirect after login
     res.setHeader("Set-Cookie", `contextio_login_redirect=${encodeURIComponent(redirectUrl)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300`);
 
