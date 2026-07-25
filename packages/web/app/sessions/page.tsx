@@ -6,6 +6,7 @@ import type { SessionSummary } from "@/types/api";
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { usePageLoad } from "@/components/page-load-context";
 
 interface StreamingProgress {
   type: "progress" | "complete" | "error";
@@ -39,7 +40,12 @@ export default function SessionsPage() {
   const [progressTotal, setProgressTotal] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
 
+  // Page load tracking for footer
+  const { registerPageLoad, registerPageReady } = usePageLoad();
+
   const fetchSessions = useCallback(async () => {
+    // Signal that page loading has started
+    registerPageLoad();
     setSessionsLoading(true);
     setSessionsError(null);
     setProgressCurrent(0);
@@ -86,6 +92,7 @@ export default function SessionsPage() {
                 setProgressCurrent(update.total || 0);
                 setProgressTotal(update.total || 0);
                 setProgressMessage("Complete");
+                registerPageReady();
               } else if (update.type === "error") {
                 throw new Error(update.error || "Streaming error");
               }
@@ -98,8 +105,9 @@ export default function SessionsPage() {
     } catch (e) {
       setSessionsError(e instanceof Error ? e.message : "Unknown error");
       setSessionsLoading(false);
+      registerPageReady();
     }
-  }, [page, pageSize]);
+  }, [page, pageSize, registerPageLoad, registerPageReady]);
 
   useEffect(() => {
     fetchSessions();

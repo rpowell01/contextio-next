@@ -2,6 +2,7 @@
 
 import { Header, HeaderProps } from "@/components/header";
 import { PageLoadFooter } from "@/components/page-load-footer";
+import { PageLoadProvider } from "@/components/page-load-context";
 
 /**
  * Props for the MainLayout component.
@@ -19,10 +20,12 @@ interface MainLayoutProps {
  */
 export function MainLayout({ children, headerProps }: MainLayoutProps) {
   return (
-    <div className="flex min-h-screen flex-col">
-      <Header {...headerProps} />
-      <main className="flex flex-1 flex-col p-4 md:p-6">{children}</main>
-      <PageLoadFooter />
-    </div>
+    <PageLoadProvider>
+      <div className="flex min-h-screen flex-col">
+        <Header {...headerProps} />
+        <main className="flex flex-1 flex-col p-4 md:p-6">{children}</main>
+        <PageLoadFooter />
+      </div>
+    </PageLoadProvider>
   );
 }

@@ -1,32 +1,23 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
+import { usePageLoadWait } from "@/components/page-load-context";
 
 /**
  * Page Load Footer component
  * Measures and displays the TRUE page load time - from navigation start
- * to when this footer component mounts (which happens after all children
- * render, React hydration completes, data fetching finishes, and the page
- * is fully rendered and interactive).
+ * to when the page signals it's fully loaded (all data fetching complete,
+ * all components rendered, page interactive).
  *
  * Show/hide is controlled by the `showPageLoadTime` setting.
- *
- * For client-side navigations in Next.js, we track route changes using usePathname
- * and record the navigation start time ourselves, since Navigation Timing API
- * doesn't capture soft navigations.
  */
 export function PageLoadFooter() {
   const [loadTime, setLoadTime] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [showFooter, setShowFooter] = useState<boolean>(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const pathname = usePathname();
-
-  // Store navigation start time for the current route
-  // We use a ref so it persists across renders but doesn't trigger re-renders
-  const navStartRef = useRef<number>(performance.now());
+  const isPageLoading = usePageLoadWait();
 
   // Fetch the showPageLoadTime setting on mount
   useEffect(() => {
@@ -46,23 +37,34 @@ export function PageLoadFooter() {
     loadSetting();
   }, []);
 
-  // Reset navigation start time when route changes
-  // This runs when pathname changes (client-side navigation)
+  // Measure load time when:
+  // 1. Footer should be shown (setting enabled)
+  // 2. Settings are loaded
+  // 3. Page is no longer loading (all data fetched, UI ready)
   useEffect(() => {
-    navStartRef.current = performance.now();
-  }, [pathname]);
-
-  // Measure load time when footer should be shown and settings are loaded
-  useEffect(() => {
-    if (!showFooter || !settingsLoaded) return;
+    if (!showFooter || !settingsLoaded || isPageLoading) return;
 
     setIsVisible(true);
 
-    // Calculate time since navigation started (either hard or soft navigation)
-    // navStartRef.current was set either at initial load or at the last route change
-    const loadTimeMs = performance.now() - navStartRef.current;
-    setLoadTime(formatLoadTime(loadTimeMs));
-  }, [showFooter, settingsLoaded]);
+    // Use Navigation Timing API for accurate timing
+    if (typeof window !== "undefined" && window.performance) {
+      try {
+        const entries = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[];
+        const currentNav = entries[entries.length - 1];
+
+        if (currentNav) {
+          const navStart = currentNav.startTime; // navigation start (high-res)
+          const now = performance.now(); // time since navigation start (high-res)
+          const loadTimeMs = now - navStart;
+          setLoadTime(formatLoadTime(loadTimeMs));
+        } else {
+          setLoadTime(formatLoadTime(performance.now()));
+        }
+      } catch {
+        setLoadTime(formatLoadTime(performance.now()));
+      }
+    }
+  }, [showFooter, settingsLoaded, isPageLoading]);
 
   if (!showFooter || !isVisible || loadTime === null) {
     return null;
