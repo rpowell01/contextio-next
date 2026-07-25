@@ -12,7 +12,7 @@
  */
 
 import http from "node:http";
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { fetchProviderMetadata, validateIdToken, type OidcProviderMetadata } from "@contextio/core/server";
 import type { OidcProviderConfig } from "@contextio/core";
 
@@ -40,6 +40,8 @@ interface SessionCookie {
   hmac: string;
   /** Initialization vector used for encryption. */
   iv: string;
+  /** Salt used for key derivation. */
+  salt: string;
 }
 
 /** In-memory session store (in production, use Redis or similar). */
@@ -67,27 +69,26 @@ export interface AuthOptions {
 }
 
 /**
- * Derives an encryption key from the session secret using HMAC-SHA256.
- * Uses first 32 bytes for AES-256-GCM.
+ * Derives encryption and HMAC keys from session secret using PBKDF2.
+ * Matches packages/web/lib/auth/session.ts for cross-package compatibility.
  */
-function deriveEncryptionKey(sessionSecret: string): Buffer {
-  return createHmac("sha256", sessionSecret).update("encryption-key").digest().subarray(0, 32);
+function deriveKeys(sessionSecret: string, salt: Buffer): { encryptionKey: Buffer; hmacKey: Buffer } {
+  const keyMaterial = pbkdf2Sync(sessionSecret, salt, 100000, 64, "sha256");
+  return {
+    encryptionKey: keyMaterial.subarray(0, 32),
+    hmacKey: keyMaterial.subarray(32, 64),
+  };
 }
 
 /**
- * Derives an HMAC key from the session secret.
- */
-function deriveHmacKey(sessionSecret: string): Buffer {
-  return createHmac("sha256", sessionSecret).update("hmac-key").digest();
-}
-
-/**
- * Encrypts session data using AES-256-GCM.
+ * Encrypts session data using AES-256-GCM with PBKDF2 key derivation.
+ * Matches packages/web/lib/auth/session.ts for cross-package compatibility.
  */
 function encryptSession(session: AuthSession, sessionSecret: string): SessionCookie {
-  const key = deriveEncryptionKey(sessionSecret);
+  const salt = randomBytes(16);
+  const { encryptionKey, hmacKey } = deriveKeys(sessionSecret, salt);
   const iv = randomBytes(12); // 96-bit IV for GCM
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);
 
   const data = JSON.stringify(session);
   const encrypted = Buffer.concat([cipher.update(data, "utf8"), cipher.final()]);
@@ -96,23 +97,24 @@ function encryptSession(session: AuthSession, sessionSecret: string): SessionCoo
   // Combine encrypted data + auth tag
   const encryptedWithTag = Buffer.concat([encrypted, authTag]);
 
-  const hmacKey = deriveHmacKey(sessionSecret);
   const hmac = createHmac("sha256", hmacKey).update(encryptedWithTag).digest();
 
   return {
     data: encryptedWithTag.toString("base64url"),
     hmac: hmac.toString("base64url"),
     iv: iv.toString("base64url"),
+    salt: salt.toString("base64url"),
   };
 }
 
 /**
  * Decrypts and validates session cookie.
+ * Matches packages/web/lib/auth/session.ts for cross-package compatibility.
  */
 function decryptSession(cookie: SessionCookie, sessionSecret: string): AuthSession | null {
   try {
-    const key = deriveEncryptionKey(sessionSecret);
-    const hmacKey = deriveHmacKey(sessionSecret);
+    const salt = Buffer.from(cookie.salt, "base64url");
+    const { encryptionKey, hmacKey } = deriveKeys(sessionSecret, salt);
 
     // Verify HMAC
     const encryptedWithTag = Buffer.from(cookie.data, "base64url");
@@ -128,7 +130,7 @@ function decryptSession(cookie: SessionCookie, sessionSecret: string): AuthSessi
     const encrypted = encryptedWithTag.subarray(0, -16);
 
     const iv = Buffer.from(cookie.iv, "base64url");
-    const decipher = createDecipheriv("aes-256-gcm", key, iv);
+    const decipher = createDecipheriv("aes-256-gcm", encryptionKey, iv);
     decipher.setAuthTag(authTag);
 
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
