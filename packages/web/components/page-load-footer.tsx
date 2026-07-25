@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { apiClient } from "@/lib/api";
 import { usePageLoadWait } from "@/components/page-load-context";
 
@@ -18,6 +19,11 @@ export function PageLoadFooter() {
   const [showFooter, setShowFooter] = useState<boolean>(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const isPageLoading = usePageLoadWait();
+  const pathname = usePathname();
+
+  // Store navigation start time for the current route
+  // This resets on every route change (both hard and client-side navigation)
+  const navStartRef = useRef<number>(performance.now());
 
   // Fetch the showPageLoadTime setting on mount
   useEffect(() => {
@@ -37,6 +43,11 @@ export function PageLoadFooter() {
     loadSetting();
   }, []);
 
+  // Reset navigation start time when route changes (client-side navigation)
+  useEffect(() => {
+    navStartRef.current = performance.now();
+  }, [pathname]);
+
   // Measure load time when:
   // 1. Footer should be shown (setting enabled)
   // 2. Settings are loaded
@@ -46,24 +57,10 @@ export function PageLoadFooter() {
 
     setIsVisible(true);
 
-    // Use Navigation Timing API for accurate timing
-    if (typeof window !== "undefined" && window.performance) {
-      try {
-        const entries = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[];
-        const currentNav = entries[entries.length - 1];
-
-        if (currentNav) {
-          const navStart = currentNav.startTime; // navigation start (high-res)
-          const now = performance.now(); // time since navigation start (high-res)
-          const loadTimeMs = now - navStart;
-          setLoadTime(formatLoadTime(loadTimeMs));
-        } else {
-          setLoadTime(formatLoadTime(performance.now()));
-        }
-      } catch {
-        setLoadTime(formatLoadTime(performance.now()));
-      }
-    }
+    // Calculate time since this navigation started
+    // navStartRef.current was set either at initial load or at last route change
+    const loadTimeMs = performance.now() - navStartRef.current;
+    setLoadTime(formatLoadTime(loadTimeMs));
   }, [showFooter, settingsLoaded, isPageLoading]);
 
   if (!showFooter || !isVisible || loadTime === null) {
