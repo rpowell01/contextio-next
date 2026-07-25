@@ -1,12 +1,29 @@
 "use client";
 
 import { MainLayout } from "@/components/main-layout";
-import { apiClient } from "@/lib/api";
 import { formatDateTime } from "@/lib/utils";
 import type { SessionSummary } from "@/types/api";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ProgressBar } from "@/components/ui/progress-bar";
+
+interface StreamingProgress {
+  type: "progress" | "complete" | "error";
+  current?: number;
+  total?: number;
+  message?: string;
+  data?: {
+    summaries: SessionSummary[];
+    metrics: Record<string, any>;
+    pagination?: {
+      page: number;
+      pageSize: number;
+      totalPages: number;
+      totalItems: number;
+    };
+  };
+  error?: string;
+}
 
 export default function SessionsPage() {
   const [summaries, setSummaries] = useState<SessionSummary[]>([]);
@@ -17,23 +34,79 @@ export default function SessionsPage() {
   const [totalPages, setTotalPages] = useState<number>(1);
   const [totalItems, setTotalItems] = useState<number>(0);
 
-  useEffect(() => {
-    async function fetchSessions() {
-      try {
-        setSessionsLoading(true);
-        const data = await apiClient.getGroupedSessions(page, pageSize);
-        setSummaries(data.summaries);
-        setTotalPages(data.pagination?.totalPages || 1);
-        setTotalItems(data.pagination?.totalItems || 0);
-        setSessionsError(null);
-      } catch (e) {
-        setSessionsError(e instanceof Error ? e.message : "Unknown error");
-      } finally {
-        setSessionsLoading(false);
+  // Progress state for streaming
+  const [progressCurrent, setProgressCurrent] = useState(0);
+  const [progressTotal, setProgressTotal] = useState(0);
+  const [progressMessage, setProgressMessage] = useState("");
+
+  const fetchSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    setSessionsError(null);
+    setProgressCurrent(0);
+    setProgressTotal(0);
+    setProgressMessage("Starting...");
+
+    try {
+      const response = await fetch(`/api/sessions/stream?page=${page}&pageSize=${pageSize}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No reader available");
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const update: StreamingProgress = JSON.parse(line.slice(6));
+
+              if (update.type === "progress") {
+                setProgressCurrent(update.current || 0);
+                setProgressTotal(update.total || 0);
+                setProgressMessage(update.message || "");
+              } else if (update.type === "complete" && update.data) {
+                setSummaries(update.data.summaries);
+                setTotalPages(update.data.pagination?.totalPages || 1);
+                setTotalItems(update.data.pagination?.totalItems || 0);
+                setSessionsLoading(false);
+                setProgressCurrent(update.total || 0);
+                setProgressTotal(update.total || 0);
+                setProgressMessage("Complete");
+              } else if (update.type === "error") {
+                throw new Error(update.error || "Streaming error");
+              }
+            } catch (parseError) {
+              console.error("Failed to parse SSE message:", parseError, line);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      setSessionsError(e instanceof Error ? e.message : "Unknown error");
+      setSessionsLoading(false);
     }
-    fetchSessions();
   }, [page, pageSize]);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+
+  // Progress percentage
+  const progressPercent = progressTotal > 0 ? Math.round((progressCurrent / progressTotal) * 100) : 0;
 
   // Error state - show early
   if (sessionsError) {
@@ -57,7 +130,7 @@ export default function SessionsPage() {
     );
   }
 
-  // Loading state - show progress bar
+  // Loading state - show progress bar with actual percentage
   if (sessionsLoading) {
     return (
       <MainLayout>
@@ -70,7 +143,17 @@ export default function SessionsPage() {
           </div>
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">All Sessions</h2>
-            <ProgressBar indeterminate className="mb-4" height={3} />
+            <div className="space-y-2">
+              <ProgressBar
+                value={progressPercent}
+                className="mb-2"
+                height={4}
+              />
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <span>{progressMessage}</span>
+                {progressTotal > 0 && <span>{progressCurrent} / {progressTotal} files</span>}
+              </div>
+            </div>
           </div>
         </div>
       </MainLayout>

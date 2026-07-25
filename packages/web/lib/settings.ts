@@ -26,6 +26,8 @@ export interface Settings {
   // OIDC Authentication settings
   oidcEnabled: boolean;
   oidcPublicUrl: string;
+  // Display settings
+  showPageLoadTime: boolean;
 }
 
 export type SettingSource =
@@ -76,6 +78,10 @@ export const SETTING_ENV_MAP: Record<
   oidcPublicUrl: {
     envVar: "CONTEXTIO_OIDC_PUBLIC_URL",
     dynamic: false,
+  },
+  showPageLoadTime: {
+    envVar: "", // No env var override - controlled via settings UI only
+    dynamic: true,
   },
 };
 
@@ -255,6 +261,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   oidcEnabled: false,
   oidcPublicUrl: "",
+  showPageLoadTime: false,
 };
 
 export function validateSettings(input: unknown): Settings {
