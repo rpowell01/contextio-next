@@ -313,9 +313,9 @@ export function createAuthHandler(options: AuthOptions): http.RequestListener {
 }
 
 /**
- * Handles /auth/login - redirects to OIDC provider authorization endpoint.
- * Using 302 redirect (not HTML form) to ensure Pocket-ID authorize endpoint
- * properly establishes session context for subsequent login page API calls.
+ * Handles /auth/login - returns HTML page that auto-submits to OIDC provider.
+ * Using form POST avoids Next.js RSC prefetch following redirect to external provider
+ * which causes CORS errors when Pocket-ID authorize endpoint lacks CORS headers.
  */
 async function handleLogin(
   req: http.IncomingMessage,
@@ -352,9 +352,38 @@ async function handleLogin(
     // Set a cookie to remember where to redirect after login
     res.setHeader("Set-Cookie", `contextio_login_redirect=${encodeURIComponent(redirectUrl)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300`);
 
-    // 302 redirect - browser follows automatically, Pocket-ID session established
-    res.writeHead(302, { Location: authUrl });
-    res.end();
+    // Return HTML page with auto-submit form to avoid CORS issues with Next.js prefetch
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Signing in...</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 400px; margin: 4rem auto; padding: 2rem; text-align: center; }
+    .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #0066cc; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 2rem auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    p { color: #666; }
+  </style>
+</head>
+<body>
+  <div class="spinner" aria-label="Loading"></div>
+  <p>Redirecting to authentication provider...</p>
+  <form id="loginForm" method="GET" action="${authUrl}">
+    <noscript>
+      <button type="submit" style="padding: 0.75rem 1.5rem; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer;">Continue to Sign In</button>
+    </noscript>
+  </form>
+  <script>
+    // Auto-submit for browser navigation (avoids fetch/CORS issues)
+    document.getElementById('loginForm').submit();
+  </script>
+</body>
+</html>
+    `;
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(html);
   } catch (error) {
     console.error("Login error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
