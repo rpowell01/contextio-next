@@ -92,7 +92,6 @@ export function DiffDialog({
   const rightPaneDiffRef = useRef<HTMLDivElement>(null);
   const leftPaneSyntaxRef = useRef<HTMLDivElement>(null);
   const rightPaneSyntaxRef = useRef<HTMLDivElement>(null);
-  const isScrollingRef = useRef(false);
 
   // Parse redaction types from the comma-separated string like "[RULE_REDACTED] (count), [RULE2_REDACTED] (count)"
   // Supports hyphens in rule names like "API-KEY-PREFIXED_REDACTED"
@@ -195,28 +194,11 @@ export function DiffDialog({
     }
   }, [viewMode, apiToPlaceholderMap]);
 
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>, source: "left" | "right") => {
-    if (isScrollingRef.current) return;
-    isScrollingRef.current = true;
-
-    const sourcePane = e.currentTarget;
-    let targetPane: HTMLDivElement | null = null;
-
-    if (viewMode === "diff") {
-      targetPane = source === "left" ? rightPaneDiffRef.current : leftPaneDiffRef.current;
-    } else {
-      targetPane = source === "left" ? rightPaneSyntaxRef.current : leftPaneSyntaxRef.current;
-    }
-
-    if (targetPane) {
-      targetPane.scrollTop = sourcePane.scrollTop;
-      targetPane.scrollLeft = sourcePane.scrollLeft;
-    }
-
-    requestAnimationFrame(() => {
-      isScrollingRef.current = false;
-    });
-  }, [viewMode]);
+  const handleScroll = useCallback((_e: React.UIEvent<HTMLDivElement>, _source: "left" | "right") => {
+    // Disabled: pixel-based scroll sync doesn't work with diff insertions/deletions
+    // because line counts differ between panes. Use explicit navigation instead
+    // (click redaction type in header, or scroll independently).
+  }, []);
 
   // Highlights redaction placeholders in text.
   // For pre-redaction (isPre=true): highlights the exact original values from matches
