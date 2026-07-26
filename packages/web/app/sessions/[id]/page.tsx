@@ -7,6 +7,8 @@ import Link from "next/link";
 import { apiClient } from "@/lib/api";
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { usePageLoad } from "@/components/page-load-context";
 
 function renderJson(data: unknown): string {
   if (typeof data === "string") {
@@ -36,6 +38,20 @@ const DEFAULT_FILTERS: CaptureFilters = {
   redactionType: "",
 };
 
+// Skeleton components for loading states
+function CaptureSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="rounded-lg border p-4">
+          <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
+          <div className="h-64 bg-muted/20 rounded" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SessionView({
   params,
 }: {
@@ -44,6 +60,7 @@ function SessionView({
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
   const [id, setId] = useState<string | null>(null);
   const [selectedCaptureId, setSelectedCaptureId] = useState<string | null>(null);
   const [captureDetail, setCaptureDetail] = useState<
@@ -56,6 +73,9 @@ function SessionView({
   const [captureDetailError, setCaptureDetailError] = useState<string | null>(null);
   const [filters, setFilters] = useState<CaptureFilters>(DEFAULT_FILTERS);
   const searchParams = useSearchParams();
+
+  // Page load tracking for footer
+  const { registerPageLoad, registerPageReady } = usePageLoad();
 
   // Read captureId from query string to support deep-linking to a capture detail
   const queryCaptureId = searchParams.get("captureId");
@@ -77,24 +97,94 @@ function SessionView({
     setSelectedCaptureId(queryCaptureId);
   }, [queryCaptureId]);
 
+  const progressPercent = progress && progress.total > 0
+    ? Math.round((progress.current / progress.total) * 100)
+    : 0;
+
   useEffect(() => {
     if (!id) return;
 
     const fetchSession = async () => {
+      registerPageLoad();
       setLoading(true);
       setError(null);
+      setProgress({ current: 0, total: 0, message: "Starting..." });
+
       try {
-        const data = await apiClient.getSession(id);
-        setSession(data);
+        const stream = await apiClient.getSessionStream(id);
+
+        for await (const update of stream) {
+          if (update.type === "progress") {
+            setProgress({
+              current: update.current || 0,
+              total: update.total || 0,
+              message: update.message || "",
+            });
+          } else if (update.type === "complete" && update.data) {
+            // Build the session detail from the streamed data
+            const { session: sessionSummary, metrics, captures } = update.data;
+            const sessionDetail: SessionDetail = {
+              id: sessionSummary.sessionId,
+              sessionId: sessionSummary.sessionId,
+              source: sessionSummary.source,
+              provider: sessionSummary.destination,
+              apiFormat: "unknown",
+              targetUrl: captures[0]?.targetUrl || "",
+              requestBody: {},
+              responseStatus: 200,
+              responseIsStreaming: false,
+              responseBody: null,
+              timestamp: sessionSummary.firstTimestamp,
+              timings: { total_ms: sessionSummary.totalTimeMs },
+              metrics: {
+                totalInboundBytes: metrics?.totalInboundBytes ?? 0,
+                totalOutboundBytes: metrics?.totalOutboundBytes ?? 0,
+                inboundThroughput: metrics?.inboundThroughput ?? 0,
+                outboundThroughput: metrics?.outboundThroughput ?? 0,
+                totalContextValues: metrics?.totalContextValues ?? 0,
+                totalInputTokens: metrics?.totalInputTokens,
+                totalOutputTokens: metrics?.totalOutputTokens,
+                redactionStats: {
+                  totalRedactions: metrics?.redactionStats?.totalRedactions ?? 0,
+                  byRule: metrics?.redactionStats?.byRule ?? {},
+                },
+              },
+              contextValues: {},
+              redactionStats: {
+                totalRedactions: metrics?.redactionStats?.totalRedactions ?? 0,
+                byRule: metrics?.redactionStats?.byRule ?? {},
+              },
+              captures: captures.map((c: any) => ({
+                id: c.id,
+                timestamp: c.timestamp,
+                targetUrl: c.targetUrl,
+                requestBytes: c.requestBytes,
+                responseBytes: c.responseBytes,
+                responseStatus: c.responseStatus,
+                responseIsStreaming: c.responseIsStreaming,
+                timings: c.timings,
+                source: c.source,
+                metrics: c.metrics,
+                redactionStats: c.redactionStats,
+              })),
+            };
+            setSession(sessionDetail);
+            setProgress({ current: update.total || 0, total: update.total || 0, message: "Complete" });
+            setLoading(false);
+            registerPageReady();
+          } else if (update.type === "error") {
+            throw new Error(update.error || "Streaming error");
+          }
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Unknown error");
-      } finally {
         setLoading(false);
+        registerPageReady();
       }
     };
 
     fetchSession();
-  }, [id]);
+  }, [id, registerPageLoad, registerPageReady]);
 
   useEffect(() => {
     if (!selectedCaptureId) return;
@@ -170,16 +260,23 @@ function SessionView({
           </h1>
         </div>
 
-        {loading && !captureDetail && !captureDetailLoading ? (
-          <div className="space-y-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="rounded-lg border p-4">
-                <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
-                <div className="h-64 bg-muted/20 rounded" />
-              </div>
-            ))}
+        {/* Progress Bar */}
+        {(loading || progress) && (
+          <div className="space-y-2">
+            <ProgressBar
+              value={loading ? progressPercent : 100}
+              indeterminate={loading && progress && progress.total === 0 ? true : undefined}
+              height={6}
+              className="w-full"
+            />
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>{progress?.message || "Loading session..."}</span>
+              {progress && progress.total > 0 && (
+                <span>{progress.current} / {progress.total} ({progressPercent}%)</span>
+              )}
+            </div>
           </div>
-        ) : null}
+        )}
 
         {(captureDetailLoading || captureDetail) ? (
           <div className="space-y-6">
@@ -193,14 +290,7 @@ function SessionView({
             </div>
 
             {captureDetailLoading && (
-              <div className="space-y-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="rounded-lg border p-4">
-                    <div className="h-4 bg-muted-foreground/20 rounded mb-2" style={{ width: "200px" }} />
-                    <div className="h-64 bg-muted/20 rounded" />
-                  </div>
-                ))}
-              </div>
+              <CaptureSkeleton />
             )}
 
             {captureDetailError && (
@@ -219,24 +309,19 @@ function SessionView({
                     <h3 className="font-semibold mb-3">Request Details</h3>
                     <div className="space-y-2 text-sm">
                       <div>
-                        <span className="text-muted-foreground">Provider:</span>{" "}
-                        {captureDetail.provider}
+                        <span className="text-muted-foreground">Provider:</span> {captureDetail.provider}
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Method:</span>{" "}
-                        {captureDetail.method}
+                        <span className="text-muted-foreground">Method:</span> {captureDetail.method}
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Target:</span>{" "}
-                        {captureDetail.targetUrl}
+                        <span className="text-muted-foreground">Target:</span> {captureDetail.targetUrl}
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Request Size:</span>{" "}
-                        {captureDetail.requestBytes.toLocaleString()} bytes
+                        <span className="text-muted-foreground">Request Size:</span> {captureDetail.requestBytes.toLocaleString()} bytes
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Timestamp:</span>{" "}
-                        {formatDateTime(captureDetail.timestamp)}
+                        <span className="text-muted-foreground">Timestamp:</span> {formatDateTime(captureDetail.timestamp)}
                       </div>
                     </div>
                   </div>
@@ -245,20 +330,16 @@ function SessionView({
                     <h3 className="font-semibold mb-3">Response Details</h3>
                     <div className="space-y-2 text-sm">
                       <div>
-                        <span className="text-muted-foreground">Status:</span>{" "}
-                        {captureDetail.responseStatus}
+                        <span className="text-muted-foreground">Status:</span> {captureDetail.responseStatus}
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Streaming:</span>{" "}
-                        {captureDetail.responseIsStreaming ? "Yes" : "No"}
+                        <span className="text-muted-foreground">Streaming:</span> {captureDetail.responseIsStreaming ? "Yes" : "No"}
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Response Size:</span>{" "}
-                        {captureDetail.responseBytes.toLocaleString()} bytes
+                        <span className="text-muted-foreground">Response Size:</span> {captureDetail.responseBytes.toLocaleString()} bytes
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Total Time:</span>{" "}
-                        {captureDetail.timings.total_ms.toLocaleString()} ms
+                        <span className="text-muted-foreground">Total Time:</span> {captureDetail.timings.total_ms.toLocaleString()} ms
                       </div>
                     </div>
                   </div>
@@ -298,20 +379,16 @@ function SessionView({
                 <h3 className="font-semibold mb-3">Request Details</h3>
                 <div className="space-y-2 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Source:</span>{" "}
-                    {session.source}
+                    <span className="text-muted-foreground">Source:</span> {session.source}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Provider:</span>{" "}
-                    {session.provider}
+                    <span className="text-muted-foreground">Provider:</span> {session.provider}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Target:</span>{" "}
-                    {session.targetUrl}
+                    <span className="text-muted-foreground">Target:</span> {session.targetUrl}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Timestamp:</span>{" "}
-                    {formatDateTime(session.timestamp)}
+                    <span className="text-muted-foreground">Timestamp:</span> {formatDateTime(session.timestamp)}
                   </div>
                 </div>
               </div>
@@ -320,17 +397,14 @@ function SessionView({
                 <h3 className="font-semibold mb-3">Response Details</h3>
                 <div className="space-y-2 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Status:</span>{" "}
-                    {session.responseStatus}
+                    <span className="text-muted-foreground">Status:</span> {session.responseStatus}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Streaming:</span>{" "}
-                    {session.responseIsStreaming ? "Yes" : "No"}
+                    <span className="text-muted-foreground">Streaming:</span> {session.responseIsStreaming ? "Yes" : "No"}
                   </div>
                 </div>
               </div>
             </div>
-
 
             {session.metrics && (
               <div className="rounded-lg border p-4">
@@ -338,68 +412,59 @@ function SessionView({
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   {/* Total cumulative tokens - new metrics */}
                   <div>
-                    <span className="text-muted-foreground">Total Cumulative Input Tokens:</span>{" "}
-                    <span className="font-medium">
+                    <span className="text-muted-foreground">Total Cumulative Input Tokens:</span> <span className="font-medium">
                       {filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalInputTokens ?? 0), 0).toLocaleString()}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Total Cumulative Output Tokens:</span>{" "}
-                    <span className="font-medium">
+                    <span className="text-muted-foreground">Total Cumulative Output Tokens:</span> <span className="font-medium">
                       {filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalOutputTokens ?? 0), 0).toLocaleString()}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Avg Success Count:</span>{" "}
-                    <span className="font-medium">
+                    <span className="text-muted-foreground">Avg Success Count:</span> <span className="font-medium">
                       {filteredAndSortedCaptures.length > 0
                         ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.successCount ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
                         : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Avg Error Count:</span>{" "}
-                    <span className="font-medium">
+                    <span className="text-muted-foreground">Avg Error Count:</span> <span className="font-medium">
                       {filteredAndSortedCaptures.length > 0
                         ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.errorCount ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
                         : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Avg Error Rate:</span>{" "}
-                    <span className="font-medium">
+                    <span className="text-muted-foreground">Avg Error Rate:</span> <span className="font-medium">
                       {filteredAndSortedCaptures.length > 0
                         ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.errorRate ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(4)
                         : "0.0000"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Avg Input Tokens:</span>{" "}
-                    <span className="font-medium">
+                    <span className="text-muted-foreground">Avg Input Tokens:</span> <span className="font-medium">
                       {filteredAndSortedCaptures.length > 0
                         ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalInputTokens ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
                         : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Avg Output Tokens:</span>{" "}
-                    <span className="font-medium">
+                    <span className="text-muted-foreground">Avg Output Tokens:</span> <span className="font-medium">
                       {filteredAndSortedCaptures.length > 0
                         ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalOutputTokens ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
                         : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Avg Tokens / Second:</span>{" "}
-                    <span className="font-medium">
+                    <span className="text-muted-foreground">Avg Tokens / Second:</span> <span className="font-medium">
                       {filteredAndSortedCaptures.length > 0
                         ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.tokensPerSecond ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
                         : "0.00"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Avg Redactions:</span>{" "}
-                    <span className="font-medium">
+                    <span className="text-muted-foreground">Avg Redactions:</span> <span className="font-medium">
                       {filteredAndSortedCaptures.length > 0
                         ? (filteredAndSortedCaptures.reduce((sum, c) => sum + (c.metrics?.totalRedactions ?? 0), 0) / filteredAndSortedCaptures.length).toFixed(2)
                         : "0.00"}
@@ -419,8 +484,7 @@ function SessionView({
                       title="Sum of all redactions across every capture in this session. Multiple captures with the same placeholder are all counted."
                     >
                       Total Cumulative Redactions:
-                    </span>{" "}
-                    <span
+                    </span> <span
                       title="Sum of all redactions across every capture in this session. Multiple captures with the same placeholder are all counted."
                     >
                       {session.redactionStats.totalRedactions}
@@ -433,8 +497,7 @@ function SessionView({
                         title="Deduplicated count: for each placeholder type, takes the maximum count found in any single capture within this session, then sums across placeholder types. Matches the 'Unique per Session' metric on the Metrics page."
                       >
                         Unique Redactions (per rule max):
-                      </span>{" "}
-                      <span
+                      </span> <span
                         title="Deduplicated count: for each placeholder type, takes the maximum count found in any single capture within this session, then sums across placeholder types. Matches the 'Unique per Session' metric on the Metrics page."
                       >
                         {session.redactionStats.uniqueRedactions}
@@ -447,8 +510,7 @@ function SessionView({
                       <ul className="ml-2 mt-1 list-disc list-inside">
                         {Object.entries(session.redactionStats.byRule).map(([rule, count]) => (
                           <li key={rule}>
-                            <span className="font-medium">{rule}:</span>{" "}
-                            <span
+                            <span className="font-medium">{rule}:</span> <span
                               title="Max count of this placeholder in any single capture within this session."
                             >
                               {count}
@@ -635,9 +697,9 @@ function SessionView({
             </p>
           </div>
         )}
-  </div>
-</MainLayout>
-);
+      </div>
+    </MainLayout>
+  );
 }
 
 export default function SessionDetailPage({
@@ -651,4 +713,3 @@ export default function SessionDetailPage({
     </Suspense>
   );
 }
-

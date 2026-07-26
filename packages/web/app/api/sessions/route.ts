@@ -1,41 +1,21 @@
 import fs from "fs/promises";
 import { join } from "path";
-import type { Session } from "@/types/api";
+import type { Session, SessionDetail } from "@/types/api";
 import {
   listCaptureFiles,
+  getSessionMetadata,
   getCaptureDir,
   MAX_FILE_SIZE,
   readCaptureFile,
   listRedactionMetaFiles,
   loadRedactionMeta,
-  getSessionMetadata,
 } from "@/lib/sessions/server-utils";
 import { withRequestCache } from "@/lib/request-cache";
-import { groupCapturesIntoSessions } from "@/lib/sessions/grouping";
+import { groupCapturesIntoSessions, type RawCaptureData } from "@/lib/sessions/grouping";
 import {
   convertByRuleToByPlaceholder,
   computePlaceholderCounts,
 } from "@/lib/sessions/placeholder-map";
-
-interface RawCaptureData extends Record<string, unknown> {
-  sessionId: string | null;
-  source: string | null;
-  provider: string;
-  apiFormat?: string;
-  targetUrl: string;
-  requestBytes: number;
-  responseBytes: number;
-  timings: { total_ms: number };
-  timestamp: string;
-  requestBody?: unknown;
-  responseBody?: string;
-  responseStatus?: number;
-  responseIsStreaming?: boolean;
-  redactionStats?: {
-    totalRedactions: number;
-    byRule: Record<string, number>;
-  };
-}
 
 async function handleGet(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -57,7 +37,158 @@ async function handleGet(request: Request): Promise<Response> {
     pathParts[1] === "sessions" &&
     pathParts[2]
   ) {
-    // ... existing session detail code unchanged ...
+    const sessionId = pathParts[2];
+
+    // Get all captures for this session from metadata files (much faster!)
+    const metaFiles = await listRedactionMetaFiles();
+    const sessionCaptures: RawCaptureData[] = [];
+
+    for (const filename of metaFiles) {
+      try {
+        const meta = await loadRedactionMeta(filename);
+        if (!meta) continue;
+
+        // Skip title-* sessions
+        if (meta.sessionId?.startsWith("title-")) continue;
+
+        // Check if this file belongs to the requested session
+        if (meta.sessionId === sessionId || (meta.sessionId === null && sessionId === "unsorted")) {
+          // Build raw capture data from metadata - no full file reads needed!
+          const timings = meta.timings
+            ? { total_ms: meta.timings.total_ms ?? 0 }
+            : { total_ms: 0 };
+
+          sessionCaptures.push({
+            sessionId: meta.sessionId,
+            source: meta.source ?? "unknown",
+            provider: meta.provider ?? "unknown",
+            apiFormat: "unknown", // Not in metadata
+            targetUrl: meta.targetUrl ?? "",
+            requestBytes: meta.requestBytes ?? 0,
+            responseBytes: meta.responseBytes ?? 0,
+            timings,
+            timestamp: meta.timestamp ?? new Date().toISOString(),
+            requestBody: undefined, // We don't have full bodies in metadata
+            responseBody: undefined,
+            responseStatus: 200,
+            responseIsStreaming: false,
+            redactionStats: {
+              totalRedactions: meta.totalRedactions ?? 0,
+              byRule: meta.byRule ?? {},
+            },
+          });
+        }
+      } catch (error) {
+        console.error(`Error processing session metadata ${filename}:`, error);
+        continue;
+      }
+    }
+
+    if (sessionCaptures.length === 0) {
+      return Response.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    // Calculate metrics for this session using the grouping function
+    const redactionMetaBySession = new Map<
+      string,
+      { totalRedactions: number; byRule: Record<string, number> }
+    >();
+
+    // Accumulate redaction metadata
+    for (const c of sessionCaptures) {
+      if (c.sessionId && c.redactionStats) {
+        const existing = redactionMetaBySession.get(c.sessionId);
+        if (existing) {
+          existing.totalRedactions += c.redactionStats.totalRedactions ?? 0;
+          for (const [rule, count] of Object.entries(c.redactionStats.byRule)) {
+            existing.byRule[rule] = (existing.byRule[rule] ?? 0) + count;
+          }
+        } else {
+          redactionMetaBySession.set(c.sessionId, {
+            totalRedactions: c.redactionStats.totalRedactions ?? 0,
+            byRule: { ...c.redactionStats.byRule },
+          });
+        }
+      }
+    }
+
+    const { summaries, metrics } = groupCapturesIntoSessions(
+      sessionCaptures,
+      redactionMetaBySession,
+    );
+
+    const summary = summaries[0];
+    const sessionMetrics = metrics[sessionId];
+
+    // For response status and streaming, use first capture as representative
+    const firstCapture = sessionCaptures[0];
+    const responseStatus = 200;
+    const responseIsStreaming = false;
+
+    // Build detailed session response
+    const sessionDetail: SessionDetail = {
+      id: sessionId,
+      sessionId,
+      source: summary.source,
+      provider: summary.destination,
+      apiFormat: firstCapture?.apiFormat || "unknown",
+      targetUrl: firstCapture?.targetUrl || "",
+      requestBody: {},
+      responseStatus,
+      responseIsStreaming,
+      responseBody: null,
+      timestamp: summary.firstTimestamp,
+      timings: { total_ms: summary.totalTimeMs },
+      metrics: {
+        totalInboundBytes: sessionMetrics?.totalInboundBytes ?? 0,
+        totalOutboundBytes: sessionMetrics?.totalOutboundBytes ?? 0,
+        inboundThroughput: sessionMetrics?.inboundThroughput ?? 0,
+        outboundThroughput: sessionMetrics?.outboundThroughput ?? 0,
+        totalContextValues: sessionMetrics?.totalContextValues ?? 0,
+        totalInputTokens: sessionMetrics?.totalInputTokens,
+        totalOutputTokens: sessionMetrics?.totalOutputTokens,
+        redactionStats: {
+          totalRedactions: sessionMetrics?.redactionStats.totalRedactions ?? 0,
+          byRule: sessionMetrics?.redactionStats.byRule ?? {},
+        },
+      },
+      contextValues: {},
+      redactionStats: {
+        totalRedactions: sessionMetrics?.redactionStats.totalRedactions ?? 0,
+        byRule: sessionMetrics?.redactionStats.byRule ?? {},
+      },
+      captures: sessionCaptures.map((c) => ({
+        id: c.filename ?? "",
+        timestamp: c.timestamp,
+        targetUrl: c.targetUrl,
+        requestBytes: c.requestBytes,
+        responseBytes: c.responseBytes,
+        responseStatus: c.responseStatus,
+        responseIsStreaming: c.responseIsStreaming,
+        timings: c.timings,
+        source: c.source,
+        metrics: {
+          successCount: 0,
+          errorCount: 0,
+          errorRate: 0,
+          totalContextValues: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          tokensPerSecond: 0,
+          totalRedactions: c.redactionStats?.totalRedactions ?? 0,
+          model: null,
+        },
+        redactionStats: c.redactionStats
+          ? {
+              totalRedactions: c.redactionStats.totalRedactions,
+              byRule: c.redactionStats.byRule,
+              uniqueRedactions: 0,
+            }
+          : undefined,
+      })),
+    };
+
+    return Response.json(sessionDetail);
   }
 
   const files = await listCaptureFiles();

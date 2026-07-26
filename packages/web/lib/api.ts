@@ -265,6 +265,80 @@ class APIClient {
     return this.request(`/api/sessions/${id}`);
   }
 
+  async getSessionStream(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<AsyncGenerator<{
+    type: "progress" | "complete" | "error";
+    current?: number;
+    total?: number;
+    message?: string;
+    data?: {
+      session: any;
+      metrics: any;
+      captures: any[];
+    };
+    error?: string;
+  }>> {
+    const response = await fetch(`${getApiBaseUrl()}/api/sessions/${id}/stream`, {
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...this.csrfHeaders(),
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("Session not found");
+      }
+      throw new Error("Failed to stream session");
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("No reader available");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    return (async function* () {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                yield JSON.parse(line.slice(6));
+              } catch {
+                // Skip malformed lines
+              }
+            }
+          }
+        }
+
+        if (buffer.trim()) {
+          for (const line of buffer.trim().split("\n")) {
+            if (line.startsWith("data: ")) {
+              try {
+                yield JSON.parse(line.slice(6));
+              } catch {
+                // Skip malformed lines
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    })();
+  }
+
   async getSessionStats(sessionId: string): Promise<SessionStats> {
     return this.request(`/api/sessions/${sessionId}/stats`);
   }
@@ -492,6 +566,88 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
       params.set("pageSize", String(pageSize));
     }
     return this.request(`/api/metrics?${params.toString()}`, { signal });
+  }
+
+  async getMetricsStream(
+    hours: number = 24,
+    maxPoints?: number,
+    page?: number,
+    pageSize?: number,
+    signal?: AbortSignal,
+  ): Promise<AsyncGenerator<{
+    type: "progress" | "complete" | "error";
+    current?: number;
+    total?: number;
+    message?: string;
+    data?: MetricsData & { pagination?: { page: number; pageSize: number; totalPages: number; totalItems: number } };
+    error?: string;
+  }>> {
+    const params = new URLSearchParams();
+    params.set("hours", String(hours));
+    if (maxPoints !== undefined && maxPoints > 0) {
+      params.set("maxPoints", String(maxPoints));
+    }
+    if (page !== undefined && page > 0) {
+      params.set("page", String(page));
+    }
+    if (pageSize !== undefined && pageSize > 0) {
+      params.set("pageSize", String(pageSize));
+    }
+
+    const response = await fetch(`${getApiBaseUrl()}/api/metrics/stream?${params.toString()}`, {
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...this.csrfHeaders(),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to stream metrics");
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("No reader available");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    return (async function* () {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                yield JSON.parse(line.slice(6));
+              } catch {
+                // Skip malformed lines
+              }
+            }
+          }
+        }
+
+        if (buffer.trim()) {
+          for (const line of buffer.trim().split("\n")) {
+            if (line.startsWith("data: ")) {
+              try {
+                yield JSON.parse(line.slice(6));
+              } catch {
+                // Skip malformed lines
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    })();
   }
 
   async streamProxyLogs(

@@ -474,6 +474,14 @@ export type MetricsData = {
     totalRedactions: number;
     byRule: Record<string, number>;
   };
+  /** Total deduplicated redactions across all sessions */
+  totalRedactionsDeduped?: number;
+  /** Total sum of redactions across all captures */
+  totalRedactionsSum?: number;
+  /** Deduplicated redaction counts by placeholder */
+  redactionByPlaceholderDeduped?: Record<string, number>;
+  /** Sum of redaction counts by placeholder across all captures */
+  redactionByPlaceholderSum?: Record<string, number>;
   /** Pagination information */
   pagination?: {
     page: number;

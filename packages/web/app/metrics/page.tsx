@@ -5,14 +5,12 @@ import { formatBytes, formatNumber } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import type {
   MetricsData,
-  ProviderUsage,
-  RedactionMetric,
-  TrafficMetric,
   TimeRange,
 } from "@/types/api";
 import { TrafficChart } from "@/components/traffic-chart";
 import { useEffect, useState, useCallback } from "react";
 import { usePageLoad } from "@/components/page-load-context";
+import { ProgressBar } from "@/components/ui/progress-bar";
 
 const TIME_RANGES: TimeRange[] = [
   { value: "1h", label: "Last hour", hours: 1 },
@@ -39,6 +37,7 @@ function MetricsContent() {
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>(TIME_RANGES[2]); // default 24h
   const [maxDataPoints, setMaxDataPoints] = useState<number>(50);
   const [page, setPage] = useState<number>(1);
@@ -47,31 +46,44 @@ function MetricsContent() {
   // Page load tracking for footer
   const { registerPageLoad, registerPageReady } = usePageLoad();
 
+  const progressPercent = progress && progress.total > 0
+    ? Math.round((progress.current / progress.total) * 100)
+    : 0;
+
   const fetchMetrics = useCallback(async () => {
     // Signal that page loading has started
     registerPageLoad();
     setLoading(true);
     setError(null);
+    setProgress({ current: 0, total: 0, message: "Starting..." });
 
     try {
-      const controller = new AbortController();
-      const data = await apiClient.getMetrics(
+      const stream = await apiClient.getMetricsStream(
         timeRange.hours,
         maxDataPoints || undefined,
         page,
         pageSize,
-        controller.signal,
       );
 
-      if (!isValidMetricsData(data)) {
-        throw new Error("Invalid metrics data received from API");
+      for await (const update of stream) {
+        if (update.type === "progress") {
+          setProgress({
+            current: update.current || 0,
+            total: update.total || 0,
+            message: update.message || "",
+          });
+        } else if (update.type === "complete" && update.data) {
+          setMetrics(update.data as MetricsData);
+          setProgress({ current: update.total || 0, total: update.total || 0, message: "Complete" });
+          setLoading(false);
+          registerPageReady();
+        } else if (update.type === "error") {
+          throw new Error(update.error || "Streaming error");
+        }
       }
-
-      setMetrics(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
       setMetrics(null);
-    } finally {
       setLoading(false);
       registerPageReady();
     }
@@ -90,15 +102,27 @@ function MetricsContent() {
         </p>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
-          <p className="text-destructive">Error: {error}</p>
+      {/* Progress Bar */}
+      {(loading || progress) && (
+        <div className="space-y-2">
+          <ProgressBar
+            value={loading ? progressPercent : 100}
+            indeterminate={Boolean(loading && progress && progress.total === 0)}
+            height={6}
+            className="w-full"
+          />
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{progress?.message || "Loading metrics..."}</span>
+            {progress && progress.total > 0 && (
+              <span>{progress.current} / {progress.total} ({progressPercent}%)</span>
+            )}
+          </div>
         </div>
       )}
 
-      {loading && !metrics && (
-        <div className="rounded-lg border p-4">
-          <p className="text-muted-foreground">Loading metrics...</p>
+      {error && (
+        <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
+          <p className="text-destructive">Error: {error}</p>
         </div>
       )}
 
@@ -174,26 +198,34 @@ function MetricsContent() {
             </div>
 
             {/* Unique Redactions (deduplicated by session) */}
-            <div className="rounded-lg border p-4 bg-blue-50 border-blue-200"
-                 title="Sum of max redactions per placeholder per session. For each session, take the highest count of each placeholder type across all its captures, then sum across all sessions.">
+            <div
+              className="rounded-lg border p-4 bg-blue-50 border-blue-200"
+              title="Sum of max redactions per placeholder per session. For each session, take the highest count of each placeholder type across all its captures, then sum across all sessions."
+            >
               <div className="text-sm text-muted-foreground">
                 Unique Redactions (per session)
               </div>
               <div className="text-2xl font-bold text-blue-600">
-                <span title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used, then summed across all sessions. This avoids double-counting when a session has multiple captures.">
+                <span
+                  title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used, then summed across all sessions. This avoids double-counting when a session has multiple captures."
+                >
                   {formatNumber(metrics.redactionStatsDeduped?.totalRedactions ?? 0)}
                 </span>
               </div>
             </div>
 
             {/* Total Redactions (sum across all captures) */}
-            <div className="rounded-lg border p-4 bg-red-50 border-red-200"
-                 title="Sum of all redactions across every capture. Every capture's redactions are counted individually (no deduplication).">
+            <div
+              className="rounded-lg border p-4 bg-red-50 border-red-200"
+              title="Sum of all redactions across every capture. Every capture's redactions are counted individually (no deduplication)."
+            >
               <div className="text-sm text-muted-foreground">
                 Total Redactions (all captures)
               </div>
               <div className="text-2xl font-bold text-red-600">
-                <span title="Sum of all redactions across every capture. Every capture's redactions are counted individually with no deduplication. A single session with multiple captures will have its redactions counted multiple times.">
+                <span
+                  title="Sum of all redactions across every capture. Every capture's redactions are counted individually with no deduplication. A single session with multiple captures will have its redactions counted multiple times."
+                >
                   {formatNumber(metrics.redactionStatsSum?.totalRedactions ?? 0)}
                 </span>
               </div>
@@ -229,8 +261,10 @@ function MetricsContent() {
                 {metrics.redactionStatsDeduped &&
                   Object.keys(metrics.redactionStatsDeduped.byRule).length > 0 && (
                     <div className="md:col-span-2 lg:col-span-4">
-                      <h4 className="text-sm font-medium text-blue-600 mb-2"
-                          title="Unique per session: for each session, takes the max count of this placeholder across all its captures, then sums across sessions.">
+                      <h4
+                        className="text-sm font-medium text-blue-600 mb-2"
+                        title="Unique per session: for each session, takes the max count of this placeholder across all its captures, then sums across sessions."
+                      >
                         Unique per Session
                       </h4>
                       <div className="grid gap-2 md:grid-cols-4">
@@ -245,7 +279,9 @@ function MetricsContent() {
                                 {rule.replace(/_/g, " ")}
                               </div>
                               <div className="text-lg font-bold text-blue-600">
-                                <span title="Max count of this placeholder in any single capture per session, summed across all sessions.">
+                                <span
+                                  title="Max count of this placeholder in any single capture per session, summed across all sessions."
+                                >
                                   {formatNumber(count)}
                                 </span>
                               </div>
@@ -260,8 +296,10 @@ function MetricsContent() {
                 {metrics.redactionStatsSum &&
                   Object.keys(metrics.redactionStatsSum.byRule).length > 0 && (
                     <div className="md:col-span-2 lg:col-span-4">
-                      <h4 className="text-sm font-medium text-red-600 mb-2"
-                          title="Sum across all captures: adds up every occurrence of this placeholder across every capture in every session.">
+                      <h4
+                        className="text-sm font-medium text-red-600 mb-2"
+                        title="Sum across all captures: adds up every occurrence of this placeholder across every capture in every session."
+                      >
                         Sum Across All Captures
                       </h4>
                       <div className="grid gap-2 md:grid-cols-4">
@@ -276,7 +314,9 @@ function MetricsContent() {
                                 {rule.replace(/_/g, " ")}
                               </div>
                               <div className="text-lg font-bold text-red-600">
-                                <span title="Total occurrences of this placeholder across all captures in all sessions.">
+                                <span
+                                  title="Total occurrences of this placeholder across all captures in all sessions."
+                                >
                                   {formatNumber(count)}
                                 </span>
                               </div>
@@ -354,7 +394,13 @@ function MetricsContent() {
                     &larr; Previous
                   </button>
                   <button
-                    onClick={() => setPage((p) => p + 1)}
+                    onClick={() =>
+                      setPage((p) =>
+                        metrics.pagination && p >= metrics.pagination.totalPages
+                          ? p
+                          : p + 1,
+                      )
+                    }
                     disabled={
                       metrics.pagination && page >= metrics.pagination.totalPages
                     }
@@ -367,39 +413,38 @@ function MetricsContent() {
             </div>
           )}
 
+          {/* Provider Usage */}
+          <div className="rounded-lg border p-4">
+            <h3 className="text-lg font-semibold mb-4">Provider Usage</h3>
+            {!metrics && !error && (
+              <div className="text-sm text-muted-foreground">
+                Loading provider data...
+              </div>
+            )}
+            {metrics && metrics.providers.length === 0 && (
+              <div className="text-sm text-muted-foreground">
+                No provider usage recorded.
+              </div>
+            )}
+            <div className="space-y-2">
+              {metrics?.providers.map((provider) => (
+                <div
+                  key={provider.provider}
+                  className="flex items-center justify-between rounded border p-3"
+                >
+                  <span className="font-medium">{provider.provider}</span>
+                  <div className="text-right text-sm">
+                    <div>{formatNumber(provider.requestCount)} requests</div>
+                    <div className="text-muted-foreground">
+                      Tokens not available in metadata-only mode
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
-
-      {/* Provider Usage */}
-      <div className="rounded-lg border p-4">
-        <h3 className="text-lg font-semibold mb-4">Provider Usage</h3>
-        {!metrics && !error && (
-          <div className="text-sm text-muted-foreground">
-            Loading provider data...
-          </div>
-        )}
-        {metrics && metrics.providers.length === 0 && (
-          <div className="text-sm text-muted-foreground">
-            No provider usage recorded.
-          </div>
-        )}
-        <div className="space-y-2">
-          {metrics?.providers.map((provider) => (
-            <div
-              key={provider.provider}
-              className="flex items-center justify-between rounded border p-3"
-            >
-              <span className="font-medium">{provider.provider}</span>
-              <div className="text-right text-sm">
-                <div>{formatNumber(provider.requestCount)} requests</div>
-                <div className="text-muted-foreground">
-                  Tokens not available in metadata-only mode
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -409,58 +454,5 @@ export default function MetricsPage() {
     <MainLayout>
       <MetricsContent />
     </MainLayout>
-  );
-}
-
-function isValidMetricsData(data: unknown): data is MetricsData {
-  if (!data || typeof data !== "object") return false;
-  const metrics = data as Record<string, unknown>;
-
-  return (
-    (typeof metrics.totalInputTokens === "number" ||
-      metrics.totalInputTokens === undefined) &&
-    (typeof metrics.totalOutputTokens === "number" ||
-      metrics.totalOutputTokens === undefined) &&
-    typeof metrics.totalRequestBytes === "number" &&
-    typeof metrics.totalResponseBytes === "number" &&
-    Array.isArray(metrics.providers) &&
-    metrics.providers.every(isValidProviderUsage) &&
-    Array.isArray(metrics.redactions) &&
-    metrics.redactions.every(isValidRedactionMetric) &&
-    Array.isArray(metrics.traffic) &&
-    metrics.traffic.every(isValidTrafficMetric)
-  );
-}
-
-function isValidProviderUsage(p: unknown): p is ProviderUsage {
-  if (!p || typeof p !== "object") return false;
-  const provider = p as Record<string, unknown>;
-
-  return (
-    typeof provider.provider === "string" &&
-    typeof provider.requestCount === "number" &&
-    typeof provider.totalInputTokens === "number" &&
-    typeof provider.totalOutputTokens === "number"
-  );
-}
-
-function isValidRedactionMetric(r: unknown): r is RedactionMetric {
-  if (!r || typeof r !== "object") return false;
-  const redaction = r as Record<string, unknown>;
-
-  return (
-    typeof redaction.timestamp === "string" &&
-    typeof redaction.count === "number"
-  );
-}
-
-function isValidTrafficMetric(t: unknown): t is TrafficMetric {
-  if (!t || typeof t !== "object") return false;
-  const traffic = t as Record<string, unknown>;
-
-  return (
-    typeof traffic.timestamp === "string" &&
-    typeof traffic.requestBytes === "number" &&
-    typeof traffic.responseBytes === "number"
   );
 }

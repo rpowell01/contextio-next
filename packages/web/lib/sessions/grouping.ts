@@ -10,7 +10,7 @@ import {
 import type { CaptureRedactionStats } from "@/lib/sessions/redaction-utils";
 import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 
-interface RawCaptureData extends Record<string, unknown> {
+export interface RawCaptureData extends Record<string, unknown> {
   sessionId: string | null;
   source: string | null;
   provider: string;
@@ -28,12 +28,14 @@ interface RawCaptureData extends Record<string, unknown> {
     totalRedactions: number;
     byRule: Record<string, number>;
   };
+  filename?: string;
 }
 
 /**
  * Group captures by session ID and compute summary metrics.
  * Uses pre-aggregated redaction metadata when provided to avoid rescanning captures.
  */
+
 export function groupCapturesIntoSessions(
   captures: RawCaptureData[],
   redactionMetaBySession?: Map<
