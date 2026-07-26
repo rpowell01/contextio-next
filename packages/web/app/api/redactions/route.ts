@@ -4,7 +4,7 @@ import {
 } from "@/lib/sessions/server-utils";
 import { consumeToken } from "@/lib/csrf";
 import { unstable_cache } from "next/cache";
-import { computePlaceholderCounts } from "@/lib/sessions/placeholder-map";
+import { computePlaceholderCounts, convertByRuleToByPlaceholder } from "@/lib/sessions/placeholder-map";
 
 interface RedactionSummary {
   totalRedactions: number;
@@ -56,7 +56,7 @@ const getRedactionsSummary = unstable_cache(
         // Skip title generation captures
         if (sessionId.startsWith("title-")) continue;
 
-        // Get placeholder counts from matches
+        // Get placeholder counts from matches or fallback to byRule
         const matches = (meta.matches as Array<{
           ruleId: string;
           preValue: string;
@@ -64,7 +64,18 @@ const getRedactionsSummary = unstable_cache(
           path: string;
         }> | undefined) ?? [];
 
-        const counts = computePlaceholderCounts(matches);
+        let counts: Record<string, number>;
+        if (matches.length > 0) {
+          counts = computePlaceholderCounts(matches);
+        } else if (meta.byRule && typeof meta.byRule === "object") {
+          // Fallback: convert from byRule (rule names) to byPlaceholder (placeholder names)
+          // This handles meta files created by web UI which don't have matches array
+          counts = convertByRuleToByPlaceholder(
+            meta.byRule as Record<string, number>
+          );
+        } else {
+          counts = {};
+        }
         const totalRedactions = meta.totalRedactions ?? 0;
 
         // Track max total redactions per session
@@ -160,10 +171,20 @@ async function getRedactionDetailsFromMeta(
         | undefined) ?? [];
 
     const byPlaceholder: Record<string, number> = {};
-    for (const match of matches) {
-      const rawPlaceholder = match.postValue ?? "unknown";
-      const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
-      byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + 1;
+    if (matches.length > 0) {
+      // Prefer matches array (from logger plugin) for accurate placeholder names
+      for (const match of matches) {
+        const rawPlaceholder = match.postValue ?? "unknown";
+        const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
+        byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + 1;
+      }
+    } else if (meta.byRule && typeof meta.byRule === "object") {
+      // Fallback: convert from byRule (rule names) to byPlaceholder (placeholder names)
+      // This handles meta files created by web UI which don't have matches array
+      const converted = convertByRuleToByPlaceholder(
+        meta.byRule as Record<string, number>
+      );
+      Object.assign(byPlaceholder, converted);
     }
 
     return {
@@ -176,7 +197,7 @@ async function getRedactionDetailsFromMeta(
       redactionSummary: Object.entries(byPlaceholder)
         .map(([placeholder, count]) => `[${placeholder}] (${count})`)
         .join(", "),
-      totalRedactions: (meta.totalRedactions as number) ?? matches.length,
+      totalRedactions: (meta.totalRedactions as number) ?? (matches.length || Object.values(byPlaceholder).reduce((a, b) => a + b, 0)),
       byPlaceholder,
     };
   });
