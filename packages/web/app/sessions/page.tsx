@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { usePageLoad } from "@/components/page-load-context";
+import { Button } from "@/components/ui/button";
+import { Loader2, RotateCcw } from "lucide-react";
 
 interface StreamingProgress {
   type: "progress" | "complete" | "error";
@@ -43,6 +45,16 @@ function SessionsContent() {
   const [progressCurrent, setProgressCurrent] = useState(0);
   const [progressTotal, setProgressTotal] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
+
+  // Backfill state
+  const [backfillRunning, setBackfillRunning] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{
+    success: boolean;
+    message: string;
+    processed?: number;
+    skippedExisting?: number;
+    errors?: number;
+  } | null>(null);
 
   // Page load tracking for footer
   const { registerPageLoad, registerPageReady } = usePageLoad();
@@ -112,6 +124,34 @@ function SessionsContent() {
       registerPageReady();
     }
   }, [page, pageSize, registerPageLoad, registerPageReady]);
+
+  const handleBackfill = useCallback(async () => {
+    setBackfillRunning(true);
+    setBackfillResult(null);
+
+    try {
+      const response = await fetch("/api/admin/backfill-redaction-meta?force=true", {
+        method: "POST",
+      });
+      const data = await response.json();
+      setBackfillResult({
+        success: data.success,
+        message: data.success
+          ? `Processed ${data.processed} files, skipped ${data.skippedExisting}, errors: ${data.errors}`
+          : data.error || "Backfill failed",
+        processed: data.processed,
+        skippedExisting: data.skippedExisting,
+        errors: data.errors,
+      });
+    } catch (e) {
+      setBackfillResult({
+        success: false,
+        message: e instanceof Error ? e.message : "Unknown error",
+      });
+    } finally {
+      setBackfillRunning(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchSessions();
@@ -195,12 +235,37 @@ function SessionsContent() {
   // Success state with data
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Sessions</h1>
           <p className="text-muted-foreground">Captured API request/response pairs</p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBackfill}
+            disabled={backfillRunning}
+            className="gap-1"
+          >
+            {backfillRunning && <Loader2 className="h-4 w-4 animate-spin" />}
+            {!backfillRunning && <RotateCcw className="h-4 w-4" />}
+            Regenerate Metadata
+          </Button>
+        </div>
       </div>
+
+      {backfillResult && (
+        <div
+          className={`mb-4 p-4 rounded-lg border ${
+            backfillResult.success
+              ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400"
+              : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"
+          }`}
+        >
+          {backfillResult.message}
+        </div>
+      )}
 
       {/* Sessions List Section */}
       <div className="space-y-4">
