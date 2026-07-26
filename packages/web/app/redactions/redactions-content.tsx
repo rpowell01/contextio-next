@@ -1,6 +1,5 @@
 "use client";
 
-import { MainLayout } from "@/components/main-layout";
 import Link from "next/link";
 import { useState, useEffect, useRef, useCallback } from "react";
 
@@ -391,8 +390,8 @@ export function RedactionsContent() {
   // Success state with data
   return (
     <>
-      <MainLayout>
-        <div className="space-y-6">
+      <div className="space-y-6">
+      <div className="flex items-center justify-between">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Redactions</h1>
@@ -639,9 +638,8 @@ export function RedactionsContent() {
             )}
           </div>
         </div>
-      </MainLayout>
+      </div>
 
-      {/* Diff Dialog - Two-pane view showing pre/post redaction side by side */}
       <DiffDialog
         isOpen={diffDialogOpen}
         onClose={handleCloseDiff}

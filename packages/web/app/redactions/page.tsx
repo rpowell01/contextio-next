@@ -1,6 +1,9 @@
-export const dynamic = 'force-dynamic';
+"use client";
 
+import { MainLayout } from "@/components/main-layout";
 import { RedactionsContent } from "./redactions-content";
+
+export const dynamic = 'force-dynamic';
 
 /**
  * Page wrapper that provides PageLoadProvider via MainLayout.
@@ -8,8 +11,8 @@ import { RedactionsContent } from "./redactions-content";
  */
 export default function RedactionsPage() {
   return (
-    <main>
+    <MainLayout>
       <RedactionsContent />
-    </main>
+    </MainLayout>
   );
 }
