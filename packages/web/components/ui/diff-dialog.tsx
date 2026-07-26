@@ -92,6 +92,7 @@ export function DiffDialog({
   const rightPaneDiffRef = useRef<HTMLDivElement>(null);
   const leftPaneSyntaxRef = useRef<HTMLDivElement>(null);
   const rightPaneSyntaxRef = useRef<HTMLDivElement>(null);
+  const isScrollingRef = useRef(false);
 
   // Parse redaction types from the comma-separated string like "[RULE_REDACTED] (count), [RULE2_REDACTED] (count)"
   // Supports hyphens in rule names like "API-KEY-PREFIXED_REDACTED"
@@ -194,11 +195,47 @@ export function DiffDialog({
     }
   }, [viewMode, apiToPlaceholderMap]);
 
-  const handleScroll = useCallback((_e: React.UIEvent<HTMLDivElement>, _source: "left" | "right") => {
-    // Disabled: pixel-based scroll sync doesn't work with diff insertions/deletions
-    // because line counts differ between panes. Use explicit navigation instead
-    // (click redaction type in header, or scroll independently).
-  }, []);
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>, source: "left" | "right") => {
+    if (isScrollingRef.current) return;
+    isScrollingRef.current = true;
+
+    const sourcePane = e.currentTarget;
+    const targetPane = viewMode === "diff"
+      ? (source === "left" ? rightPaneDiffRef.current : leftPaneDiffRef.current)
+      : (source === "left" ? rightPaneSyntaxRef.current : leftPaneSyntaxRef.current);
+
+    if (!targetPane) {
+      requestAnimationFrame(() => { isScrollingRef.current = false; });
+      return;
+    }
+
+    // Find the first visible line in source pane by checking data-diff-index
+    const sourceLines = sourcePane.querySelectorAll('[data-diff-index]');
+    let firstVisibleIndex = -1;
+    const sourceRect = sourcePane.getBoundingClientRect();
+
+    for (const line of sourceLines) {
+      const lineRect = line.getBoundingClientRect();
+      // Check if line is visible in the scroll viewport (at least 50% visible or top is at/above viewport top)
+      if (lineRect.top < sourceRect.bottom && lineRect.bottom > sourceRect.top) {
+        const indexAttr = line.getAttribute('data-diff-index');
+        if (indexAttr !== null) {
+          firstVisibleIndex = parseInt(indexAttr, 10);
+          break;
+        }
+      }
+    }
+
+    if (firstVisibleIndex >= 0) {
+      // Find the corresponding line in target pane and scroll to it
+      const targetLine = targetPane.querySelector(`[data-diff-index="${firstVisibleIndex}"]`);
+      if (targetLine) {
+        targetLine.scrollIntoView({ behavior: "auto", block: "start", inline: "nearest" });
+      }
+    }
+
+    requestAnimationFrame(() => { isScrollingRef.current = false; });
+  }, [viewMode]);
 
   // Highlights redaction placeholders in text.
   // For pre-redaction (isPre=true): highlights the exact original values from matches
@@ -311,12 +348,12 @@ export function DiffDialog({
   }, []);
 
   // Render a single diff line with redaction highlighting and data attributes for navigation
-  const renderLine = (item: DiffChunk, side: "left" | "right") => {
+  const renderLine = (item: DiffChunk, side: "left" | "right", diffIndex: number) => {
     const isLeft = side === "left";
     const showLine = isLeft ? item.type !== "insert" : item.type !== "delete";
 
     if (!showLine) {
-      return <div style={lineStyle} />;
+      return <div style={lineStyle} data-diff-index={diffIndex} />;
     }
 
     const lineNum = isLeft ? item.oldLineNum : item.newLineNum;
@@ -344,6 +381,7 @@ export function DiffDialog({
       <div
         className={lineClass}
         style={lineStyle}
+        data-diff-index={diffIndex}
       >
         <span className="text-muted-foreground mr-2 select-none" style={{ width: "3rem", display: "inline-block", textAlign: "right" }}>
           {lineNum ?? ""}
@@ -356,7 +394,7 @@ export function DiffDialog({
   const renderDiffPane = (diffChunks: typeof diff, side: "left" | "right") => (
     <div className="font-mono text-xs">
       {diffChunks.map((chunk, idx) => (
-        <div key={idx}>{renderLine(chunk, side)}</div>
+        <div key={idx}>{renderLine(chunk, side, idx)}</div>
       ))}
     </div>
   );
