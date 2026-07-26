@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { listCaptureFiles, loadRedactionMeta, metaFilenameFor, getCaptureDir } from "@/lib/sessions/server-utils";
 import {
   computeCaptureRedactionCounts,
@@ -23,10 +23,14 @@ function toLeanStats(counts: {
   };
 }
 
-export async function POST(): Promise<NextResponse> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const captureDir = await getCaptureDir();
     const captureFiles = await listCaptureFiles();
+
+    // Check for force flag in query params or body
+    const { searchParams } = new URL(request.url);
+    const force = searchParams.get("force") === "true";
 
     let processed = 0;
     let skippedExisting = 0;
@@ -36,11 +40,13 @@ export async function POST(): Promise<NextResponse> {
     for (const filename of captureFiles) {
       const metaFilename = metaFilenameFor(filename);
 
-      // Check if meta file already exists
-      const existingMeta = await loadRedactionMeta(metaFilename);
-      if (existingMeta) {
-        skippedExisting++;
-        continue;
+      // Check if meta file already exists (unless force)
+      if (!force) {
+        const existingMeta = await loadRedactionMeta(metaFilename);
+        if (existingMeta) {
+          skippedExisting++;
+          continue;
+        }
       }
 
       try {
