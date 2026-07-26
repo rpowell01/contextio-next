@@ -171,21 +171,61 @@ export function DiffDialog({
       ? [leftPaneDiffRef.current, rightPaneDiffRef.current]
       : [leftPaneSyntaxRef.current, rightPaneSyntaxRef.current];
 
+    const [leftPane, rightPane] = panes;
+    if (!leftPane || !rightPane) return;
+
     // Look up the placeholder type for this API type
     const placeholderType = apiToPlaceholderMap.get(apiType) || apiType;
     const kebabType = placeholderType.toLowerCase().replace(/_/g, "-");
 
-    // Scroll BOTH panes to their matching redaction (left has exact preValue, right has placeholder)
-    for (const pane of panes) {
-      if (!pane) continue;
+    // Find the first matching redaction in the RIGHT pane (post-redaction, where placeholders are)
+    const rightTarget = rightPane.querySelector(`mark[data-redaction="${kebabType}"]`);
+    if (!rightTarget) {
+      // Fallback: just find any in left pane
+      const leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
+      if (leftTarget) {
+        leftTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        leftTarget.classList.add("scroll-target-highlight");
+        setTimeout(() => leftTarget.classList.remove("scroll-target-highlight"), 2000);
+      }
+      return;
+    }
 
-      // Try to find element with data attribute on the mark (placeholder) elements
-      const target = pane.querySelector(`mark[data-redaction="${kebabType}"]`);
-      if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-        // Add a brief highlight animation
-        target.classList.add("scroll-target-highlight");
-        setTimeout(() => target.classList.remove("scroll-target-highlight"), 2000);
+    // Get the match index from the right pane
+    const matchIndex = rightTarget.getAttribute("data-match-index");
+    if (matchIndex === null) {
+      // No match index, just scroll both to their first found elements
+      rightTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      rightTarget.classList.add("scroll-target-highlight");
+      setTimeout(() => rightTarget.classList.remove("scroll-target-highlight"), 2000);
+
+      const leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
+      if (leftTarget) {
+        leftTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        leftTarget.classList.add("scroll-target-highlight");
+        setTimeout(() => leftTarget.classList.remove("scroll-target-highlight"), 2000);
+      }
+      return;
+    }
+
+    // Scroll RIGHT pane to the found element
+    rightTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    rightTarget.classList.add("scroll-target-highlight");
+    setTimeout(() => rightTarget.classList.remove("scroll-target-highlight"), 2000);
+
+    // Find and scroll LEFT pane to the element with the SAME match index
+    const leftTarget = leftPane.querySelector(`mark[data-match-index="${matchIndex}"]`);
+    if (leftTarget) {
+      leftTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      leftTarget.classList.add("scroll-target-highlight");
+      setTimeout(() => leftTarget.classList.remove("scroll-target-highlight"), 2000);
+    } else {
+      // Fallback: try to find by data-redaction in left pane
+      const leftFallback = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
+      if (leftFallback) {
+        leftFallback.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        leftFallback.classList.add("scroll-target-highlight");
+        setTimeout(() => leftFallback.classList.remove("scroll-target-highlight"), 2000);
       }
     }
   }, [viewMode, apiToPlaceholderMap]);
@@ -262,14 +302,26 @@ export function DiffDialog({
         if (patternMatches.length > 0) {
           const splitParts = safeValue.split(combinedPattern);
           const result: (string | React.ReactElement)[] = [];
+          // Track which match index we're at for precise scroll targeting
+          let matchIdx = 0;
           splitParts.forEach((segment, i) => {
             if (segment) result.push(segment);
             if (i < patternMatches.length) {
+              // Find the corresponding match in matches array to get its postValue (placeholder)
+              const matchedPreValue = patternMatches[i];
+              const correspondingMatch = matches.find(m => m.preValue === matchedPreValue);
+              const postValue = correspondingMatch?.postValue ?? "";
               result.push(
-                <mark key={`exact-${i}-${Date.now()}`} className="redaction-placeholder pre-redaction-highlight">
+                <mark
+                  key={`exact-${i}-${Date.now()}`}
+                  className="redaction-placeholder pre-redaction-highlight"
+                  data-redaction={postValue}
+                  data-match-index={matchIdx}
+                >
                   {patternMatches[i]}
                 </mark>
               );
+              matchIdx++;
             }
           });
           return <code className="font-mono text-xs">{result}</code>;
@@ -287,6 +339,7 @@ export function DiffDialog({
       ];
 
       const parts: (string | React.ReactElement)[] = [safeValue];
+      let piiMatchIdx = 0;
       for (const pattern of piiPatterns) {
         const newParts: (string | React.ReactElement)[] = [];
         for (const part of parts) {
@@ -297,10 +350,11 @@ export function DiffDialog({
               if (segment) newParts.push(segment);
               if (i < matches.length) {
                 newParts.push(
-                  <mark key={`pii-${i}-${Date.now()}`} className="redaction-placeholder pre-redaction-highlight">
+                  <mark key={`pii-${piiMatchIdx}-${Date.now()}`} className="redaction-placeholder pre-redaction-highlight" data-match-index={piiMatchIdx}>
                     {matches[i]}
                   </mark>
                 );
+                piiMatchIdx++;
               }
             });
           } else {
@@ -315,11 +369,22 @@ export function DiffDialog({
     }
 
     // For post-redaction, highlight the [RULE_REDACTED] placeholders
+    // Use matches array to add data-match-index for scroll alignment
     const partsPost = safeValue.split(placeholderPattern);
     const placeholderMatches = safeValue.match(placeholderPattern);
 
     if (!placeholderMatches || placeholderMatches.length === 0) {
       return <code className="font-mono text-xs">{value}</code>;
+    }
+
+    // Build a map from placeholder to match index for data-match-index attribute
+    const placeholderToMatchIndex = new Map<string, number>();
+    if (matches.length > 0) {
+      matches.forEach((m, idx) => {
+        if (m.postValue && !placeholderToMatchIndex.has(m.postValue)) {
+          placeholderToMatchIndex.set(m.postValue, idx);
+        }
+      });
     }
 
     return (
@@ -332,6 +397,7 @@ export function DiffDialog({
                 key={`placeholder-${i}-${placeholderMatches[i]}`}
                 className="redaction-placeholder"
                 data-redaction={placeholderMatches[i].replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
+                data-match-index={placeholderToMatchIndex.get(placeholderMatches[i]) ?? i}
               >
                 {placeholderMatches[i]}
               </mark>
