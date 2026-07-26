@@ -57,6 +57,9 @@ export function RedactionsContent() {
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'timestamp', direction: 'desc' });
   // Debounced filters for API calls - only redactionType is used (from breakdown clicks)
   const [debouncedFilters, setDebouncedFilters] = useState<Record<string, string>>({});
+  // Ref to hold current debouncedFilters for use in fetchDetails without triggering re-renders
+  const debouncedFiltersRef = useRef(debouncedFilters);
+  debouncedFiltersRef.current = debouncedFilters;
   // Selected redaction type filter from breakdown widgets
   const [selectedRedactionType, setSelectedRedactionType] = useState<string | null>(null);
   const [columnOrder, setColumnOrder] = useState<string[]>([
@@ -141,7 +144,7 @@ export function RedactionsContent() {
       setRefreshing(false);
       decrementPending();
     }
-  }, [refreshing, incrementPending, decrementPending]);
+  }, [incrementPending, decrementPending]);
 
   const fetchDetails = useCallback(async () => {
     console.log("[Redactions] fetchDetails called, page:", page, "selectedRedactionType:", selectedRedactionType);
@@ -152,7 +155,7 @@ export function RedactionsContent() {
         pageSize: String(PAGE_SIZE),
       });
       // Add filters (using debounced version)
-      Object.entries(debouncedFilters).forEach(([key, val]) => {
+      Object.entries(debouncedFiltersRef.current).forEach(([key, val]) => {
         if (val) params.set(`filter_${key}`, val);
       });
       // Add sort
@@ -177,7 +180,7 @@ export function RedactionsContent() {
     } finally {
       decrementPending();
     }
-  }, [page, debouncedFilters, sortConfig, incrementPending, decrementPending]);
+  }, [page, sortConfig, incrementPending, decrementPending]);
 
   useEffect(() => {
     fetchSummary();
