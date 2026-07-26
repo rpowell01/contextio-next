@@ -158,6 +158,13 @@ export async function loadRedactionMeta(
     receive_ms?: number;
     total_ms?: number;
   };
+  // Token metrics
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  tokensPerSecond?: number;
+  successCount?: number;
+  errorCount?: number;
+  model?: string | null;
 } | null> {
   const captureDir = await getCaptureDir();
   const { join } = await import("path");
@@ -190,6 +197,12 @@ export async function loadRedactionMeta(
         receive_ms?: number;
         total_ms?: number;
       };
+      totalInputTokens?: number;
+      totalOutputTokens?: number;
+      tokensPerSecond?: number;
+      successCount?: number;
+      errorCount?: number;
+      model?: string | null;
     } | null = null;
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -239,6 +252,12 @@ export async function loadRedactionMeta(
       requestBytes: meta.requestBytes,
       responseBytes: meta.responseBytes,
       timings: meta.timings,
+      totalInputTokens: meta.totalInputTokens,
+      totalOutputTokens: meta.totalOutputTokens,
+      tokensPerSecond: meta.tokensPerSecond,
+      successCount: meta.successCount,
+      errorCount: meta.errorCount,
+      model: meta.model,
     };
   } catch {
     return null;

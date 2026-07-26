@@ -1,7 +1,6 @@
 import type { SessionSummary, SessionMetrics } from "@/types/api";
 import {
   computeContextValues,
-  computeTokenUsage,
 } from "@/lib/sessions/utils";
 import {
   countRedactionsInResponse,
@@ -29,6 +28,13 @@ export interface RawCaptureData extends Record<string, unknown> {
     byRule: Record<string, number>;
   };
   filename?: string;
+  // Token metrics (from metadata files)
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  tokensPerSecond?: number;
+  successCount?: number;
+  errorCount?: number;
+  model?: string | null;
 }
 
 /**
@@ -89,9 +95,11 @@ export function groupCapturesIntoSessions(
       // Count context values from request body
       totalContextValues += computeContextValues(c.requestBody).count;
 
-      const usage = computeTokenUsage(c.responseBody, c.requestBody);
-      totalInputTokens += usage.input;
-      totalOutputTokens += usage.output;
+      // Use pre-computed token metrics from metadata (available in RawCaptureData)
+      // In the sessions stream API, requestBody/responseBody are undefined, but metadata
+      // files contain pre-computed token metrics (totalInputTokens, totalOutputTokens)
+      totalInputTokens += c.totalInputTokens ?? 0;
+      totalOutputTokens += c.totalOutputTokens ?? 0;
     }
 
     // Use pre-aggregated redaction metadata if available

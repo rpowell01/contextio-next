@@ -4,6 +4,7 @@ import {
   computeCaptureRedactionCounts,
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
+import { computeTokenUsage } from "@/lib/sessions/utils";
 
 async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
   const fs = await import("fs/promises");
@@ -62,6 +63,20 @@ export async function POST(): Promise<NextResponse> {
           data.originalRequestBody,
         );
 
+        // Compute token metrics
+        const tokenUsage = computeTokenUsage(
+          typeof data.responseBody === "string" ? data.responseBody : null,
+          data.requestBody,
+        );
+        const timeSec = ((data.timings as Record<string, unknown>)?.total_ms as number || 0) / 1000 || 1;
+        const tokensPerSecond = timeSec > 0 ? tokenUsage.output / timeSec : 0;
+
+        // Determine success/error
+        const responseStatus = typeof data.responseStatus === "number" ? data.responseStatus : 200;
+        const isSuccess = responseStatus >= 200 && responseStatus < 300;
+        const successCount = isSuccess ? 1 : 0;
+        const errorCount = isSuccess ? 0 : 1;
+
         const leanStats = toLeanStats(counts);
 
         await atomicWriteJson(metaPath, {
@@ -77,6 +92,12 @@ export async function POST(): Promise<NextResponse> {
             : { total_ms: 0 },
           requestBytes: typeof data.requestBytes === "number" ? data.requestBytes : 0,
           responseBytes: typeof data.responseBytes === "number" ? data.responseBytes : 0,
+          totalInputTokens: tokenUsage.input,
+          totalOutputTokens: tokenUsage.output,
+          tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+          successCount,
+          errorCount,
+          model: tokenUsage.model,
           ...leanStats,
         });
 

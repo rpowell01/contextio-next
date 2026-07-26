@@ -22,6 +22,7 @@ import {
   applyRedaction,
   normalizeRuleId,
 } from "@/lib/sessions/redaction-utils";
+import { computeTokenUsage } from "@/lib/sessions/utils";
 import type { RedactionDetails } from "@/types/api";
 import { consumeToken } from "@/lib/csrf";
 import { withAuth } from "@/lib/auth/guards";
@@ -30,6 +31,12 @@ async function readRedactionMetaSidecar(captureFilepath: string): Promise<{
   captureId: string;
   totalRedactions: number;
   byRule: Record<string, number>;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  tokensPerSecond?: number;
+  model?: string | null;
+  successCount?: number;
+  errorCount?: number;
 } | null> {
   const metaFilename = metaFilenameFor(basename(captureFilepath));
   const captureDir = await getCaptureDir();
@@ -49,6 +56,12 @@ async function readRedactionMetaSidecar(captureFilepath: string): Promise<{
       captureId: parsed.captureId,
       totalRedactions: parsed.totalRedactions,
       byRule: parsed.byRule as Record<string, number>,
+      totalInputTokens: typeof parsed.totalInputTokens === "number" ? parsed.totalInputTokens : undefined,
+      totalOutputTokens: typeof parsed.totalOutputTokens === "number" ? parsed.totalOutputTokens : undefined,
+      tokensPerSecond: typeof parsed.tokensPerSecond === "number" ? parsed.tokensPerSecond : undefined,
+      model: typeof parsed.model === "string" ? parsed.model : null,
+      successCount: typeof parsed.successCount === "number" ? parsed.successCount : undefined,
+      errorCount: typeof parsed.errorCount === "number" ? parsed.errorCount : undefined,
     };
   } catch {
     return null;
@@ -59,15 +72,40 @@ function buildRedactionMeta(
   captureId: string,
   source: CaptureRedactionStats | null,
   computed: { totalRedactions: number; byRule: Record<string, number> },
+  requestBody?: unknown,
+  responseBody?: string,
+  timings?: Record<string, unknown>,
+  responseStatus?: number,
   fallbackGeneratedAt = true,
 ) {
   const totalRedactions = source?.totalRedactions ?? computed.totalRedactions;
   const byRule = source?.byRule ?? computed.byRule;
+
+  // Compute token metrics from request/response bodies
+  const tokenUsage = computeTokenUsage(responseBody ?? null, requestBody);
+
+  // Use actual timing if available, otherwise default to 1 sec
+  const timeSec = (timings?.total_ms as number || 0) / 1000 || 1;
+  const tokensPerSecond = timeSec > 0 ? tokenUsage.output / timeSec : 0;
+
+  // Determine success/error count based on response status
+  const isSuccess = responseStatus !== undefined
+    ? responseStatus >= 200 && responseStatus < 300
+    : true; // default to success if no status
+  const successCount = isSuccess ? 1 : 0;
+  const errorCount = isSuccess ? 0 : 1;
+
   return {
     captureId,
     totalRedactions,
     byRule,
     generatedAt: fallbackGeneratedAt ? new Date().toISOString() : undefined,
+    totalInputTokens: tokenUsage.input,
+    totalOutputTokens: tokenUsage.output,
+    tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+    model: tokenUsage.model,
+    successCount,
+    errorCount,
   };
 }
 
@@ -117,6 +155,10 @@ async function handleGetCapture(
         totalRedactions: number;
         byRule: Record<string, number>;
         generatedAt?: string;
+        totalInputTokens?: number;
+        totalOutputTokens?: number;
+        tokensPerSecond?: number;
+        model?: string | null;
       };
 
       if (sidecar) {
@@ -126,6 +168,10 @@ async function handleGetCapture(
           totalRedactions: sidecar.totalRedactions,
           byRule: sidecar.byRule,
           generatedAt: undefined,
+          totalInputTokens: sidecar.totalInputTokens,
+          totalOutputTokens: sidecar.totalOutputTokens,
+          tokensPerSecond: sidecar.tokensPerSecond,
+          model: sidecar.model,
         };
       } else {
         // Fallback: derive from persisted stats in the capture file.
@@ -133,6 +179,10 @@ async function handleGetCapture(
           id.replace(/\.json$/, ""),
           persistedStatsFromCapture,
           computed,
+          data.requestBody,
+          typeof data.responseBody === "string" ? data.responseBody : undefined,
+          data.timings as Record<string, unknown> | undefined,
+          typeof data.responseStatus === "number" ? data.responseStatus : undefined,
           false,
         );
       }
@@ -231,11 +281,49 @@ async function handlePutCapture(
       data.originalRequestBody,
     );
 
+    // Read existing metadata to preserve token metrics
+    const existingMeta = await readRedactionMetaSidecar(filepath);
+
+    // Compute token metrics if not in existing metadata
+    let totalInputTokens = existingMeta?.totalInputTokens;
+    let totalOutputTokens = existingMeta?.totalOutputTokens;
+    let tokensPerSecond = existingMeta?.tokensPerSecond;
+    let model = existingMeta?.model;
+    let successCount = existingMeta?.successCount;
+    let errorCount = existingMeta?.errorCount;
+
+    if (totalInputTokens === undefined || totalOutputTokens === undefined) {
+      const tokenUsage = computeTokenUsage(
+        typeof data.responseBody === "string" ? data.responseBody : null,
+        data.requestBody,
+      );
+      totalInputTokens = tokenUsage.input;
+      totalOutputTokens = tokenUsage.output;
+      model = tokenUsage.model;
+
+      const timeSec = ((data.timings as Record<string, unknown>)?.total_ms as number || 0) / 1000 || 1;
+      tokensPerSecond = timeSec > 0 ? tokenUsage.output / timeSec : 0;
+    }
+
+    // Determine success/error from response status
+    if (successCount === undefined || errorCount === undefined) {
+      const responseStatus = typeof data.responseStatus === "number" ? data.responseStatus : 200;
+      const isSuccess = responseStatus >= 200 && responseStatus < 300;
+      successCount = isSuccess ? 1 : 0;
+      errorCount = isSuccess ? 0 : 1;
+    }
+
     const meta = {
       captureId: id.replace(/\.json$/, ""),
       totalRedactions: redaction.totalRedactions,
       byRule: redaction.byRule,
       generatedAt: new Date().toISOString(),
+      totalInputTokens,
+      totalOutputTokens,
+      tokensPerSecond: Number((tokensPerSecond ?? 0).toFixed(2)),
+      model,
+      successCount,
+      errorCount,
     };
 
     const metaPath = join(await getCaptureDir(), metaFilenameFor(id));
@@ -388,11 +476,33 @@ async function handlePostCapture(
       patched.originalRequestBody,
     );
 
+    // Compute token metrics for metadata
+    const tokenUsage = computeTokenUsage(
+      typeof patched.responseBody === "string" ? patched.responseBody : null,
+      patched.requestBody,
+    );
+
+    // Fix operator precedence: timeSec = total_ms / 1000 || 1, then tokensPerSecond = output / timeSec
+    const timeSec = ((patched.timings as Record<string, unknown>)?.total_ms as number || 0) / 1000 || 1;
+    const tokensPerSecond = timeSec > 0 ? tokenUsage.output / timeSec : 0;
+
+    // Determine success/error count based on response status
+    const responseStatus = typeof patched.responseStatus === "number" ? patched.responseStatus : 200;
+    const isSuccess = responseStatus >= 200 && responseStatus < 300;
+    const successCount = isSuccess ? 1 : 0;
+    const errorCount = isSuccess ? 0 : 1;
+
     const meta = {
       captureId: id.replace(/\.json$/, ""),
       totalRedactions: redaction.totalRedactions,
       byRule: redaction.byRule,
       generatedAt: new Date().toISOString(),
+      totalInputTokens: tokenUsage.input,
+      totalOutputTokens: tokenUsage.output,
+      tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+      model: tokenUsage.model,
+      successCount,
+      errorCount,
     };
 
     const metaPath = join(await getCaptureDir(), metaFilenameFor(id));

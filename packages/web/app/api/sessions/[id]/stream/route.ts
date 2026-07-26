@@ -103,6 +103,13 @@ async function* processSessionDetailWithProgress(
             totalRedactions: meta.totalRedactions ?? 0,
             byRule: meta.byRule ?? {},
           },
+          // Token metrics from metadata
+          totalInputTokens: meta.totalInputTokens ?? 0,
+          totalOutputTokens: meta.totalOutputTokens ?? 0,
+          tokensPerSecond: meta.tokensPerSecond ?? 0,
+          successCount: meta.successCount ?? 0,
+          errorCount: meta.errorCount ?? 0,
+          model: meta.model ?? null,
           filename,
         });
 
@@ -164,15 +171,17 @@ async function* processSessionDetailWithProgress(
     timings: c.timings,
     source: c.source ?? "unknown",
     metrics: {
-      successCount: 0,
-      errorCount: 0,
-      errorRate: 0,
+      successCount: c.successCount ?? 0,
+      errorCount: c.errorCount ?? 0,
+      errorRate: (c.successCount ?? 0) + (c.errorCount ?? 0) > 0
+        ? (c.errorCount ?? 0) / ((c.successCount ?? 0) + (c.errorCount ?? 0))
+        : 0,
       totalContextValues: 0,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-      tokensPerSecond: 0,
+      totalInputTokens: c.totalInputTokens ?? 0,
+      totalOutputTokens: c.totalOutputTokens ?? 0,
+      tokensPerSecond: c.tokensPerSecond ?? 0,
       totalRedactions: c.redactionStats?.totalRedactions ?? 0,
-      model: null,
+      model: c.model ?? null,
     },
     redactionStats: c.redactionStats
       ? {
