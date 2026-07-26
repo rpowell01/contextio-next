@@ -5,6 +5,7 @@ import {
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
 import { computeTokenUsage } from "@/lib/sessions/utils";
+import { decryptCapture } from "@contextio/logger";
 
 async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
   const fs = await import("fs/promises");
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const captureDir = await getCaptureDir();
     const captureFiles = await listCaptureFiles();
+    const encryptionKey = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
 
     // Check for force flag in query params or body
     const { searchParams } = new URL(request.url);
@@ -50,12 +52,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       try {
-        const fs = await import("fs/promises");
         const path = await import("path");
         const capturePath = path.join(captureDir, filename);
         const metaPath = path.join(captureDir, metaFilename);
-        const raw = await fs.readFile(capturePath, "utf-8");
-        const data = JSON.parse(raw) as Record<string, unknown>;
+
+        // Read and decrypt capture file
+        const data = (await decryptCapture(capturePath, encryptionKey || null)) as Record<string, unknown> | null;
+        if (!data) {
+          throw new Error("Capture file is empty or could not be decrypted");
+        }
 
         if (typeof data.requestBody === "undefined") {
           throw new Error("Capture has no requestBody field");
