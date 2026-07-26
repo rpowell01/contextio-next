@@ -175,12 +175,8 @@ export function DiffDialog({
     const placeholderType = apiToPlaceholderMap.get(apiType) || apiType;
     const kebabType = placeholderType.toLowerCase().replace(/_/g, "-");
 
-    // Search in right pane first (where placeholders actually appear)
-    // Then fall back to left pane
-    const searchOrder = [1, 0]; // right pane first, then left pane
-
-    for (const paneIndex of searchOrder) {
-      const pane = panes[paneIndex];
+    // Scroll BOTH panes to their matching redaction (left has exact preValue, right has placeholder)
+    for (const pane of panes) {
       if (!pane) continue;
 
       // Try to find element with data attribute on the mark (placeholder) elements
@@ -190,7 +186,6 @@ export function DiffDialog({
         // Add a brief highlight animation
         target.classList.add("scroll-target-highlight");
         setTimeout(() => target.classList.remove("scroll-target-highlight"), 2000);
-        break;
       }
     }
   }, [viewMode, apiToPlaceholderMap]);
