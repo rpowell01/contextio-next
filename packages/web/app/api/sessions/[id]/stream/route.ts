@@ -148,8 +148,13 @@ async function* processSessionDetailWithProgress(
   const summary = summaries[0];
   const sessionMetrics = metrics[sessionId];
 
+  // Convert metadata filename (e.g., foo.redact-meta.json) to capture filename (foo.json)
+  const metaToCaptureFilename = (metaFilename: string): string => {
+    return metaFilename.replace(/\.redact-meta\.json$/, ".json");
+  };
+
   const captures = rawCaptures.map((c) => ({
-    id: c.filename ?? "",
+    id: c.filename ? metaToCaptureFilename(c.filename) : "",
     timestamp: c.timestamp,
     targetUrl: c.targetUrl,
     requestBytes: c.requestBytes,
