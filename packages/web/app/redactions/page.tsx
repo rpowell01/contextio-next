@@ -49,6 +49,7 @@ export default function RedactionsPage() {
     provider: string;
     targetUrl: string;
     timestamp: string;
+    matches?: Array<{ ruleId: string; preValue: string; postValue: string; path: string }>;
   } | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>({ key: "timestamp", direction: "desc" });
   // Debounced filters for API calls - only redactionType is used (from breakdown clicks)
@@ -139,6 +140,7 @@ export default function RedactionsPage() {
     let postContent = "";
     let fullOriginal: string | undefined;
     let fullRedacted: string | undefined;
+    let matches: Array<{ ruleId: string; preValue: string; postValue: string; path: string }> | undefined;
 
     try {
       const res = await fetch(`/api/redactions/detail/${row.captureId}/0`);
@@ -148,6 +150,7 @@ export default function RedactionsPage() {
         postContent = detail.postRedactionValue || "";
         fullOriginal = detail.fullOriginal;
         fullRedacted = detail.fullRedacted;
+        matches = detail.matches;
       } else {
         console.warn("Failed to fetch redaction detail:", res.status);
       }
@@ -162,6 +165,7 @@ export default function RedactionsPage() {
       postContent,
       fullOriginal,
       fullRedacted,
+      matches,
       captureId: row.captureId,
       redactionType: row.redactionSummary, // Show summary in dialog title
       provider: row.requestProvider,
@@ -623,6 +627,7 @@ export default function RedactionsPage() {
         postContent={diffDialogData?.postContent || ""}
         fullOriginal={diffDialogData?.fullOriginal}
         fullRedacted={diffDialogData?.fullRedacted}
+        matches={diffDialogData?.matches}
         title="Redaction Diff"
         captureId={diffDialogData?.captureId || ""}
         redactionType={diffDialogData?.redactionType || ""}

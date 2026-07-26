@@ -25,6 +25,13 @@ interface DiffDialogProps {
   provider: string;
   targetUrl: string;
   timestamp: string;
+  // All matches for precise highlighting in the diff view
+  matches?: Array<{
+    ruleId: string;
+    preValue: string;
+    postValue: string;
+    path: string;
+  }>;
 }
 
 type ViewMode = "diff" | "syntax";
@@ -59,6 +66,7 @@ export function DiffDialog({
   provider,
   targetUrl,
   timestamp,
+  matches,
 }: DiffDialogProps) {
   // Use full body content for diff if available, otherwise use match snippets
   const diffPreContent = fullOriginal ?? preContent;
@@ -211,19 +219,50 @@ export function DiffDialog({
   }, [viewMode]);
 
   // Highlights redaction placeholders in text.
-  // For pre-redaction (isPre=true): highlights text that matches PII patterns
+  // For pre-redaction (isPre=true): highlights the exact original values from matches
   // For post-redaction (isPre=false): highlights the [RULE_REDACTED] placeholders
   const RedactionHighlight = useCallback(({
     value,
     isPre = false,
+    matches = [],
   }: {
     value: string | undefined | null;
     isPre?: boolean;
+    matches?: Array<{ preValue: string; postValue: string }>;
   }) => {
     const placeholderPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
     const safeValue = String(value || "");
 
-    if (isPre) {
+    if (isPre && matches.length > 0) {
+      // Use exact preValues from matches for precise highlighting
+      // Build a combined pattern from all preValues
+      const preValues = matches.map(m => m.preValue).filter(Boolean);
+      if (preValues.length > 0) {
+        // Escape special regex characters in each preValue
+        const escapedValues = preValues.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        // Create a pattern that matches any of the preValues
+        const combinedPattern = new RegExp(`(${escapedValues.join('|')})`, 'g');
+
+        const patternMatches = safeValue.match(combinedPattern) || [];
+
+        if (patternMatches.length > 0) {
+          const splitParts = safeValue.split(combinedPattern);
+          const result: (string | React.ReactElement)[] = [];
+          splitParts.forEach((segment, i) => {
+            if (segment) result.push(segment);
+            if (i < patternMatches.length) {
+              result.push(
+                <mark key={`exact-${i}-${Date.now()}`} className="redaction-placeholder pre-redaction-highlight">
+                  {patternMatches[i]}
+                </mark>
+              );
+            }
+          });
+          return <code className="font-mono text-xs">{result}</code>;
+        }
+      }
+
+      // Fallback to generic PII patterns if no matches provided or no exact matches found
       const piiPatterns = [
         /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, // email
         /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
@@ -263,9 +302,9 @@ export function DiffDialog({
 
     // For post-redaction, highlight the [RULE_REDACTED] placeholders
     const partsPost = safeValue.split(placeholderPattern);
-    const matches = safeValue.match(placeholderPattern);
+    const placeholderMatches = safeValue.match(placeholderPattern);
 
-    if (!matches || matches.length === 0) {
+    if (!placeholderMatches || placeholderMatches.length === 0) {
       return <code className="font-mono text-xs">{value}</code>;
     }
 
@@ -274,13 +313,13 @@ export function DiffDialog({
         {partsPost.map((part, i) => (
           <span key={i}>
             {part}
-            {i < matches.length && (
+            {i < placeholderMatches.length && (
               <mark
-                key={`placeholder-${i}-${matches[i]}`}
+                key={`placeholder-${i}-${placeholderMatches[i]}`}
                 className="redaction-placeholder"
-                data-redaction={matches[i].replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
+                data-redaction={placeholderMatches[i].replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
               >
-                {matches[i]}
+                {placeholderMatches[i]}
               </mark>
             )}
           </span>
@@ -314,9 +353,9 @@ export function DiffDialog({
     }`;
 
     // For right pane (post-redaction), use RedactionHighlight to highlight placeholders
-    // For left pane (pre-redaction), also use RedactionHighlight with isPre=true to highlight likely PII
+    // For left pane (pre-redaction), use RedactionHighlight with isPre=true and pass matches for exact highlighting
     const renderValue = isLeft
-      ? <RedactionHighlight value={item.value} isPre />
+      ? <RedactionHighlight value={item.value} isPre matches={matches} />
       : <RedactionHighlight value={item.value} />;
 
     return (
