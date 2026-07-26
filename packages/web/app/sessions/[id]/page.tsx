@@ -52,7 +52,8 @@ function CaptureSkeleton() {
   );
 }
 
-function SessionView({
+// Inner component that uses usePageLoad - must be rendered INSIDE MainLayout
+function SessionContent({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -74,7 +75,7 @@ function SessionView({
   const [filters, setFilters] = useState<CaptureFilters>(DEFAULT_FILTERS);
   const searchParams = useSearchParams();
 
-  // Page load tracking for footer
+  // Page load tracking for footer - NOW INSIDE MainLayout
   const { registerPageLoad, registerPageReady } = usePageLoad();
 
   // Read captureId from query string to support deep-linking to a capture detail
@@ -698,6 +699,19 @@ function SessionView({
           </div>
         )}
       </div>
+    </MainLayout>
+  );
+}
+
+// Wrapper component that provides MainLayout (and thus PageLoadProvider) for SessionContent
+function SessionView({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <MainLayout>
+      <SessionContent params={params} />
     </MainLayout>
   );
 }
