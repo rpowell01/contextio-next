@@ -250,7 +250,6 @@ function SessionContent({
   }, [session?.captures, filters]);
 
   return (
-    <MainLayout>
       <div className="space-y-6">
         <div>
           <Link href="/sessions" className="text-sm text-muted-foreground hover:text-foreground">
@@ -699,7 +698,6 @@ function SessionContent({
           </div>
         )}
       </div>
-    </MainLayout>
   );
 }
 
