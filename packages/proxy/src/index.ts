@@ -42,3 +42,10 @@ export {
   getSessionId,
 } from "./auth.js";
 export type { AuthSession, AuthOptions } from "./auth.js";
+
+// Rate limiter plugin
+export {
+  createRateLimiterPlugin,
+  RateLimiterPlugin,
+  type RateLimiterConfig,
+} from "./rate-limiter.js";
