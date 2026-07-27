@@ -1,0 +1,58 @@
+{"text": "Contact me at [EMAIL_REDACTED] for more information.", "entities": [{"text": "[EMAIL_REDACTED]", "start": 13, "end": 33, "label": "EMAIL"}]}
+{"text": "My phone number is [PHONE_REDACTED] and my email is [EMAIL_REDACTED].", "entities": [{"text": "[PHONE_REDACTED]", "start": 18, "end": 33, "label": "PHONE"}, {"text": "[EMAIL_REDACTED]", "start": 46, "end": 68, "label": "EMAIL"}]}
+{"text": "John Smith lives at 123 Main St, Springfield, IL 62704.", "entities": [{"text": "John Smith", "start": 0, "end": 10, "label": "PERSON"}, {"text": "123 Main St, Springfield, IL 62704", "start": 18, "end": 52, "label": "ADDRESS"}]}
+{"text": "SSN: [SSN_REDACTED] for my tax records.", "entities": [{"text": "[SSN_REDACTED]", "start": 5, "end": 16, "label": "SSN"}]}
+{"text": "My credit card is [CC_REDACTED] for the purchase.", "entities": [{"text": "[CC_REDACTED]", "start": 18, "end": 34, "label": "CREDIT_CARD"}]}
+{"text": "AWS Access Key: [AWS_KEY_REDACTED]", "entities": [{"text": "[AWS_KEY_REDACTED]", "start": 16, "end": 36, "label": "CREDENTIAL_AWS_KEY"}]}
+{"text": "GitHub token [GITHUB_TOKEN_REDACTED] is active.", "entities": [{"text": "[GITHUB_TOKEN_REDACTED]", "start": 13, "end": 49, "label": "CREDENTIAL_GITHUB_TOKEN"}]}
+{"text": "Authorization: Bearer [JWT_REDACTED]", "entities": [{"text": "[JWT_REDACTED]", "start": 22, "end": 176, "label": "JWT"}]}
+{"text": "Contact [EMAIL_REDACTED] for help.", "entities": [{"text": "[EMAIL_REDACTED]", "start": 8, "end": 27, "label": "EMAIL"}]}
+{"text": "Call Bob Wilson at [PHONE_REDACTED] tomorrow.", "entities": [{"text": "Bob Wilson", "start": 5, "end": 15, "label": "PERSON"}, {"text": "[PHONE_REDACTED]", "start": 19, "end": 34, "label": "PHONE"}]}
+{"text": "My SSN is [SSN_REDACTED] for tax purposes.", "entities": [{"text": "[SSN_REDACTED]", "start": 10, "end": 21, "label": "SSN"}]}
+{"text": "Payment with card [CC_REDACTED] processed.", "entities": [{"text": "[CC_REDACTED]", "start": 18, "end": 34, "label": "CREDIT_CARD"}]}
+{"text": "The API key [API_KEY_REDACTED] is valid.", "entities": [{"text": "[API_KEY_REDACTED]", "start": 12, "end": 50, "label": "CREDENTIAL_OPENAI_KEY"}]}
+{"text": "Server at 192.168.1.100 needs restart.", "entities": [{"text": "192.168.1.100", "start": 10, "end": 23, "label": "IPV4"}]}
+{"text": "Visit https://api.example.com/v1/users for docs.", "entities": [{"text": "https://api.example.com/v1/users", "start": 6, "end": 38, "label": "URL"}]}
+{"text": "Meeting with John Doe and Jane Smith scheduled.", "entities": [{"text": "John Doe", "start": 13, "end": 21, "label": "PERSON"}, {"text": "Jane Smith", "start": 26, "end": 36, "label": "PERSON"}]}
+{"text": "Our company Acme Corporation is hiring.", "entities": [{"text": "Acme Corporation", "start": 12, "end": 28, "label": "ORGANIZATION"}]}
+{"text": "Ship to 789 Oak Ave, Seattle, WA 98101.", "entities": [{"text": "789 Oak Ave, Seattle, WA 98101", "start": 8, "end": 40, "label": "ADDRESS"}]}
+{"text": "IBAN: [IBAN_REDACTED] for transfer.", "entities": [{"text": "[IBAN_REDACTED]", "start": 6, "end": 28, "label": "IBAN"}]}
+{"text": "Passport number X12345678 expires soon.", "entities": [{"text": "X12345678", "start": 16, "end": 25, "label": "PASSPORT"}]}
+{"text": "The JWT [JWT_REDACTED] is valid.", "entities": [{"text": "[JWT_REDACTED]", "start": 8, "end": 176, "label": "JWT"}]}
+{"text": "Date of birth: 01/15/1990 for verification.", "entities": [{"text": "01/15/1990", "start": 15, "end": 25, "label": "DATE_OF_BIRTH"}]}
+{"text": "Contact [EMAIL_REDACTED] for details.", "entities": [{"text": "[EMAIL_REDACTED]", "start": 8, "end": 26, "label": "EMAIL"}]}
+{"text": "Slack token [SLACK_TOKEN_REDACTED] is active.", "entities": [{"text": "[SLACK_TOKEN_REDACTED]", "start": 12, "end": 34, "label": "CREDENTIAL_SLACK_TOKEN"}]}
+{"text": "GCP API key [GCP_API_KEY_REDACTED] found.", "entities": [{"text": "[GCP_API_KEY_REDACTED]", "start": 12, "end": 39, "label": "CREDENTIAL_GCP_API_KEY"}]}
+{"text": "Stripe key [STRIPE_KEY_REDACTED] used.", "entities": [{"text": "[STRIPE_KEY_REDACTED]", "start": 11, "end": 47, "label": "CREDENTIAL_STRIPE_KEY"}]}
+{"text": "BSN number 123456782 for Dutch registration.", "entities": [{"text": "123456782", "start": 11, "end": 20, "label": "BSN"}]}
+{"text": "NI number AB 12 34 56 C for UK employment.", "entities": [{"text": "AB 12 34 56 C", "start": 10, "end": 22, "label": "NI_NUMBER"}]}
+{"text": "Private key [PRIVATE_KEY_REDACTED]\n used.", "entities": [{"text": "[PRIVATE_KEY_REDACTED]", "start": 12, "end": 95, "label": "PRIVATE_KEY"}]}
+{"text": "Test email [EMAIL_REDACTED] should not match [EMAIL_REDACTED].", "entities": [{"text": "[EMAIL_REDACTED]", "start": 11, "end": 27, "label": "EMAIL"}]}
+{"text": "Order reference [SSN_REDACTED] is not an SSN.", "entities": [{"text": "[SSN_REDACTED]", "start": 16, "end": 27, "label": "SSN"}]}
+{"text": "Placeholder [EMAIL_REDACTED] should not be re-redacted.", "entities": []}
+{"text": "Google Inc. announced new features at I/O conference.", "entities": [{"text": "Google Inc.", "start": 0, "end": 11, "label": "ORGANIZATION"}]}
+{"text": "Microsoft Corporation released Windows 11.", "entities": [{"text": "Microsoft Corporation", "start": 0, "end": 22, "label": "ORGANIZATION"}]}
+{"text": "Amazon Web Services provides cloud computing.", "entities": [{"text": "Amazon Web Services", "start": 0, "end": 20, "label": "ORGANIZATION"}]}
+{"text": "Meeting in New York City next week.", "entities": [{"text": "New York City", "start": 11, "end": 24, "label": "LOCATION"}]}
+{"text": "London-based startup raises Series A funding.", "entities": [{"text": "London", "start": 0, "end": 6, "label": "LOCATION"}]}
+{"text": "San Francisco HQ hosts the event.", "entities": [{"text": "San Francisco", "start": 0, "end": 13, "label": "LOCATION"}]}
+{"text": "API key: [API_KEY_REDACTED] valid until 2025.", "entities": [{"text": "[API_KEY_REDACTED]", "start": 9, "end": 47, "label": "CREDENTIAL_OPENAI_KEY"}]}
+{"text": "Customer email: [EMAIL_REDACTED] for billing.", "entities": [{"text": "[EMAIL_REDACTED]", "start": 16, "end": 31, "label": "EMAIL"}]}
+{"text": "Phone: [PHONE_REDACTED] (UK office).", "entities": [{"text": "[PHONE_REDACTED]", "start": 7, "end": 24, "label": "PHONE"}]}
+{"text": "Credit card [CC_REDACTED] declined.", "entities": [{"text": "[CC_REDACTED]", "start": 12, "end": 27, "label": "CREDIT_CARD"}]}
+{"text": "User token [GITHUB_TOKEN_REDACTED] for GitHub.", "entities": [{"text": "[GITHUB_TOKEN_REDACTED]", "start": 11, "end": 49, "label": "CREDENTIAL_GITHUB_TOKEN"}]}
+{"text": "The server at 10.0.0.1 is unreachable.", "entities": [{"text": "10.0.0.1", "start": 14, "end": 22, "label": "IPV4"}]}
+{"text": "Visit http://localhost:3000 for development.", "entities": [{"text": "http://localhost:3000", "start": 6, "end": 27, "label": "URL"}]}
+{"text": "Contact Dr. Emily Watson at [EMAIL_REDACTED].", "entities": [{"text": "Dr. Emily Watson", "start": 8, "end": 25, "label": "PERSON"}, {"text": "[EMAIL_REDACTED]", "start": 29, "end": 53, "label": "EMAIL"}]}
+{"text": "Project led by Prof. Robert Chen from MIT.", "entities": [{"text": "Prof. Robert Chen", "start": 13, "end": 31, "label": "PERSON"}, {"text": "MIT", "start": 36, "end": 39, "label": "ORGANIZATION"}]}
+{"text": "AWS secret key [AWS_SECRET_KEY_REDACTED] stored.", "entities": [{"text": "[AWS_SECRET_KEY_REDACTED]", "start": 13, "end": 47, "label": "AWS_SECRET_KEY"}]}
+{"text": "NPM token [NPM_TOKEN_REDACTED] valid.", "entities": [{"text": "[NPM_TOKEN_REDACTED]", "start": 10, "end": 42, "label": "CREDENTIAL_NPM_TOKEN"}]}
+{"text": "PyPI token [PYPI_TOKEN_REDACTED] for publishing.", "entities": [{"text": "[PYPI_TOKEN_REDACTED]", "start": 11, "end": 49, "label": "CREDENTIAL_PYPI_TOKEN"}]}
+{"text": "Vault token [VAULT_TOKEN_REDACTED] used.", "entities": [{"text": "[VAULT_TOKEN_REDACTED]", "start": 12, "end": 51, "label": "CREDENTIAL_VAULT_TOKEN"}]}
+{"text": "SendGrid key [SENDGRID_KEY_REDACTED] for email.", "entities": [{"text": "[SENDGRID_KEY_REDACTED]", "start": 13, "end": 51, "label": "CREDENTIAL_SENDGRID_TOKEN"}]}
+{"text": "NVIDIA key [NVIDIA_KEY_REDACTED] for API.", "entities": [{"text": "[NVIDIA_KEY_REDACTED]", "start": 11, "end": 35, "label": "CREDENTIAL_NVIDIA_KEY"}]}
+{"text": "OpenRouter key [OPENROUTER_KEY_REDACTED] used.", "entities": [{"text": "[OPENROUTER_KEY_REDACTED]", "start": 13, "end": 51, "label": "CREDENTIAL_OPENROUTER_KEY"}]}
+{"text": "Kilo key [KILO_KEY_REDACTED] for CLI.", "entities": [{"text": "[KILO_KEY_REDACTED]", "start": 9, "end": 47, "label": "CREDENTIAL_KILO_KEY"}]}
+{"text": "Generic secret [SECRET_REDACTED] with high entropy.", "entities": [{"text": "[SECRET_REDACTED]", "start": 15, "end": 37, "label": "SECRET"}]}
+{"text": "Low entropy value aaaaaaaaaaaaaaaaaaaaaaaaaaaa not a secret.", "entities": []}
+{"text": "UUID 550e8400-e29b-41d4-a716-446655440000 is not a person.", "entities": []}
