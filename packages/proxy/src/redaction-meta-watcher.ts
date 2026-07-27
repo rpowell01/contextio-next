@@ -22,6 +22,7 @@ import fs from "node:fs";
 import { stat, readdir, readFile, writeFile, rename, unlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { EncryptionAtRestConfig } from "@contextio/core";
+import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
 import { encrypt, decrypt } from "@contextio/logger";
 
 
@@ -150,6 +151,13 @@ export interface CaptureRedactionMetadata {
     receive_ms?: number;
     total_ms?: number;
   };
+  // Token metrics
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  tokensPerSecond?: number;
+  successCount?: number;
+  errorCount?: number;
+  model?: string | null;
 }
 
 export interface RedactionMetaWatcher {
@@ -436,30 +444,82 @@ function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedacti
       rawCapture?.timings && typeof rawCapture.timings === "object"
         ? (rawCapture.timings as Record<string, unknown>)
         : {};
-  return {
-    captureId,
-    totalRedactions: counts.totalRedactions,
-    byRule: counts.byRule,
-    generatedAt: new Date().toISOString(),
-    // Omit matches - they will be preserved from redact plugin's meta file via mergeExistingMetadata
-    // Watcher's extractRedactionMatches uses placeholder extraction which gives wrong ruleIds
-    source: (rawCapture?.source as string) ?? undefined,
-    provider: (rawCapture?.provider as string) ?? "unknown",
-    targetUrl: (rawCapture?.targetUrl as string) ?? "",
-    sessionId: (rawCapture?.sessionId as string) ?? undefined,
-    timestamp: (rawCapture?.timestamp as string) ?? undefined,
-    checksum: (rawCapture?.checksum as string) ?? undefined,
-    schemaVersion: (rawCapture?.schemaVersion as string) ?? undefined,
-    // Include byte counts and timings for sessions/metrics API performance
-    requestBytes: typeof rawCapture?.requestBytes === "number" ? rawCapture.requestBytes : undefined,
-    responseBytes: typeof rawCapture?.responseBytes === "number" ? rawCapture.responseBytes : undefined,
-    timings: {
-      send_ms: typeof rawTimings.send_ms === "number" ? rawTimings.send_ms : undefined,
-      wait_ms: typeof rawTimings.wait_ms === "number" ? rawTimings.wait_ms : undefined,
-      receive_ms: typeof rawTimings.receive_ms === "number" ? rawTimings.receive_ms : undefined,
-      total_ms: typeof rawTimings.total_ms === "number" ? rawTimings.total_ms : undefined,
-    },
-  };
+
+    // Compute token metrics from response body
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let tokensPerSecond = 0;
+    let model: string | null = null;
+    let successCount = 0;
+    let errorCount = 0;
+
+    const responseBody = typeof rawCapture?.responseBody === "string" ? rawCapture.responseBody : undefined;
+    const requestBody = rawCapture?.requestBody;
+    const responseStatus = typeof rawCapture?.responseStatus === "number" ? rawCapture.responseStatus : 0;
+    const totalMs = typeof rawTimings.total_ms === "number" ? rawTimings.total_ms : 0;
+
+    // Determine success/error count based on response status
+    const isSuccess = responseStatus >= 200 && responseStatus < 300;
+    successCount = isSuccess ? 1 : 0;
+    errorCount = isSuccess ? 0 : 1;
+
+    // Parse response for token usage (mirrors web package computeTokenUsage logic)
+    if (typeof responseBody === "string" && responseBody.length > 0) {
+      const parsed = parseResponseUsage(responseBody);
+      const fallback = estimateTokensFromText(responseBody);
+
+      if (parsed.inputTokens === 0 && parsed.outputTokens === 0) {
+        totalInputTokens = fallback;
+        totalOutputTokens = fallback;
+        model = parsed.model;
+      } else {
+        totalInputTokens = parsed.inputTokens || fallback;
+        totalOutputTokens = parsed.outputTokens || fallback;
+        model = parsed.model;
+      }
+    } else if (requestBody) {
+      // No response body - estimate from request body
+      const requestText = JSON.stringify(requestBody);
+      totalInputTokens = estimateTokensFromText(requestText);
+      totalOutputTokens = 0;
+      model = null;
+    }
+
+    // Compute tokens per second (output tokens / total time in seconds)
+    const timeSec = totalMs > 0 ? totalMs / 1000 : 0;
+    tokensPerSecond = timeSec > 0 ? totalOutputTokens / timeSec : 0;
+
+    return {
+      captureId,
+      totalRedactions: counts.totalRedactions,
+      byRule: counts.byRule,
+      generatedAt: new Date().toISOString(),
+      // Omit matches - they will be preserved from redact plugin's meta file via mergeExistingMetadata
+      // Watcher's extractRedactionMatches uses placeholder extraction which gives wrong ruleIds
+      source: (rawCapture?.source as string) ?? undefined,
+      provider: (rawCapture?.provider as string) ?? "unknown",
+      targetUrl: (rawCapture?.targetUrl as string) ?? "",
+      sessionId: (rawCapture?.sessionId as string) ?? undefined,
+      timestamp: (rawCapture?.timestamp as string) ?? undefined,
+      checksum: (rawCapture?.checksum as string) ?? undefined,
+      schemaVersion: (rawCapture?.schemaVersion as string) ?? undefined,
+      // Include byte counts and timings for sessions/metrics API performance
+      requestBytes: typeof rawCapture?.requestBytes === "number" ? rawCapture.requestBytes : undefined,
+      responseBytes: typeof rawCapture?.responseBytes === "number" ? rawCapture.responseBytes : undefined,
+      timings: {
+        send_ms: typeof rawTimings.send_ms === "number" ? rawTimings.send_ms : undefined,
+        wait_ms: typeof rawTimings.wait_ms === "number" ? rawTimings.wait_ms : undefined,
+        receive_ms: typeof rawTimings.receive_ms === "number" ? rawTimings.receive_ms : undefined,
+        total_ms: typeof rawTimings.total_ms === "number" ? rawTimings.total_ms : undefined,
+      },
+      // Token metrics
+      totalInputTokens,
+      totalOutputTokens,
+      tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+      successCount,
+      errorCount,
+      model,
+    };
   } catch (err) {
     console.error(
       `[redaction-meta-watcher] Failed to compute metadata for ${captureId}:`,
@@ -557,6 +617,25 @@ async function mergeExistingMetadata(
           enriched.timings[key] = existing.timings[key];
         }
       }
+    }
+    // Preserve token metrics from existing metadata if not in computed
+    if (enriched.totalInputTokens === undefined && typeof existing.totalInputTokens === "number") {
+      enriched.totalInputTokens = existing.totalInputTokens;
+    }
+    if (enriched.totalOutputTokens === undefined && typeof existing.totalOutputTokens === "number") {
+      enriched.totalOutputTokens = existing.totalOutputTokens;
+    }
+    if (enriched.tokensPerSecond === undefined && typeof existing.tokensPerSecond === "number") {
+      enriched.tokensPerSecond = existing.tokensPerSecond;
+    }
+    if (enriched.successCount === undefined && typeof existing.successCount === "number") {
+      enriched.successCount = existing.successCount;
+    }
+    if (enriched.errorCount === undefined && typeof existing.errorCount === "number") {
+      enriched.errorCount = existing.errorCount;
+    }
+    if (enriched.model === undefined && (typeof existing.model === "string" || existing.model === null)) {
+      enriched.model = existing.model;
     }
 
     return enriched;

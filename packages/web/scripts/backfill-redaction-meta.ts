@@ -8,6 +8,7 @@ import {
   computeCaptureRedactionCounts,
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
+import { computeTokenUsage, type TokenUsageResult } from "@/lib/sessions/utils";
 
 interface BackfillStats {
   total: number;
@@ -61,6 +62,12 @@ function processCapture(
       data.originalRequestBody,
     );
 
+    // Compute token usage from response body
+    const responseBody = typeof data.responseBody === "string" ? data.responseBody : null;
+    const tokenUsage: TokenUsageResult = responseBody
+      ? computeTokenUsage(responseBody, typeof data.provider === "string" ? data.provider : undefined)
+      : { inputTokens: 0, outputTokens: 0, tokensPerSecond: 0, model: null, successCount: 0, errorCount: 0 };
+
     const leanStats = toLeanStats(counts);
 
     atomicWriteJson(metaPath, {
@@ -77,6 +84,13 @@ function processCapture(
       requestBytes: typeof data.requestBytes === "number" ? data.requestBytes : 0,
       responseBytes: typeof data.responseBytes === "number" ? data.responseBytes : 0,
       ...leanStats,
+      // Token metrics
+      totalInputTokens: tokenUsage.inputTokens,
+      totalOutputTokens: tokenUsage.outputTokens,
+      tokensPerSecond: tokenUsage.tokensPerSecond,
+      successCount: tokenUsage.successCount,
+      errorCount: tokenUsage.errorCount,
+      model: tokenUsage.model,
     });
 
     stats.processed++;
