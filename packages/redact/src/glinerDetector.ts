@@ -17,7 +17,6 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
-import { Tokenizer } from "@huggingface/tokenizers";
 
 import type {
   Detector,
@@ -96,7 +95,7 @@ export class GlinerOnnxDetector implements Detector {
   }
 
   private session: InferenceSession | null = null;
-  private tokenizer: Awaited<ReturnType<typeof Tokenizer.from_pretrained>> | null = null;
+  private tokenizer: any = null;
   private config: GlinerOnnxConfig;
   private initialized = false;
 
@@ -116,17 +115,69 @@ export class GlinerOnnxDetector implements Detector {
 
     // Load tokenizer from model directory using Hugging Face tokenizers
     // This provides accurate offset mappings for token-to-character conversion
-    this.tokenizer = await Tokenizer.from_pretrained(this.config.modelDir);
+    // For tokenizers v0.1.x, we need to manually construct the tokenizer from the SentencePiece model
+    const tokenizers = await import("@huggingface/tokenizers");
+    const { join } = await import("node:path");
+    const fs = await import("node:fs/promises");
+
+    const modelDir = this.config.modelDir;
+
+    // Read tokenizer config to get special tokens
+    const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
+    const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
+
+    // Load the SentencePiece model
+    const spmPath = join(modelDir, "spm.model");
+    const Unigram = (tokenizers as any).Unigram;
+    const model = new Unigram(spmPath);
+
+    // Create tokenizer
+    this.tokenizer = new tokenizers.Tokenizer(model);
+
+    // Add normalizer
+    const BertNormalizer = (tokenizers as any).BertNormalizer;
+    this.tokenizer.normalizer = new BertNormalizer({
+      cleanText: true,
+      handleChineseChars: true,
+      stripAccents: false,
+      lowercase: false,
+    });
+
+    // Add pre-tokenizer (whitespace split for SentencePiece)
+    const WhitespaceSplitPreTokenizer = (tokenizers as any).WhitespaceSplitPreTokenizer;
+    this.tokenizer.preTokenizer = new WhitespaceSplitPreTokenizer();
+
+    // Add decoder
+    const MetaspaceDecoder = (tokenizers as any).MetaspaceDecoder;
+    this.tokenizer.decoder = new MetaspaceDecoder();
+
+    // Add post-processor for special tokens (bert-style)
+    const specialTokens = [
+      ["[CLS]", tokenizerConfig.cls_token ?? "[CLS]"],
+      ["[SEP]", tokenizerConfig.sep_token ?? "[SEP]"],
+      ["[PAD]", tokenizerConfig.pad_token ?? "[PAD]"],
+      ["[UNK]", tokenizerConfig.unk_token ?? "[UNK]"],
+      ["[MASK]", tokenizerConfig.mask_token ?? "[MASK]"],
+      ["<<ENT>>", "<<ENT>>"],
+      ["<<SEP>>", "<<SEP>>"],
+    ];
+    const TemplateProcessingPostProcessor = (tokenizers as any).TemplateProcessingPostProcessor;
+    this.tokenizer.postProcessor = new TemplateProcessingPostProcessor({
+      single: "[CLS] $A [SEP]",
+      pair: "[CLS] $A [SEP] $B [SEP]",
+      specialTokens: specialTokens.flatMap(([id, token]) => [token, id]),
+    });
 
     // Configure tokenizer for GLiNER
-    this.tokenizer.enable_truncation(this.config.maxLength ?? 512);
-    this.tokenizer.enable_padding({
+    this.tokenizer.enableTruncation(this.config.maxLength ?? 512);
+    this.tokenizer.enablePadding({
       length: this.config.maxLength ?? 512,
-      pad_id: this.tokenizer.get_vocab().get("[PAD]") ?? 0,
-      pad_token: "[PAD]",
+      padId: this.tokenizer.getVocabulary().get("[PAD]") ?? 0,
+      padToken: "[PAD]",
     });
 
     // Create inference session
+    const InferenceSession = (await import("onnxruntime-node")).InferenceSession;
     const modelPath = join(this.config.modelDir, "model.onnx");
     this.session = await InferenceSession.create(modelPath, {
       executionProviders: this.config.providers ?? ["cpu"],
