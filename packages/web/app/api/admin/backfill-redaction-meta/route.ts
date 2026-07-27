@@ -17,10 +17,17 @@ async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
 function toLeanStats(counts: {
   totalRedactions: number;
   byRule: Record<string, number>;
-}): { totalRedactions: number; byRule: Record<string, number> } {
+  matches: Array<{ ruleId: string; original: string; placeholder: string; path: string }>;
+}): { totalRedactions: number; byRule: Record<string, number>; matches: Array<{ ruleId: string; preValue: string; postValue: string; path: string }> } {
   return {
     totalRedactions: counts.totalRedactions,
     byRule: counts.byRule,
+    matches: counts.matches.map(m => ({
+      ruleId: m.ruleId,
+      preValue: m.original,
+      postValue: m.placeholder,
+      path: m.path,
+    })),
   };
 }
 
