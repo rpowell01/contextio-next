@@ -143,7 +143,11 @@ export default function RedactionsPage() {
     let matches: Array<{ ruleId: string; preValue: string; postValue: string; path: string }> | undefined;
 
     try {
-      const res = await fetch(`/api/redactions/detail/${row.captureId}/0`);
+      const fetchPromise = fetch(`/api/redactions/detail/${row.captureId}/0`);
+      const timeoutPromise = new Promise<Response>((_, reject) =>
+        setTimeout(() => reject(new Error("Fetch timeout")), 10000)
+      );
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
       if (res.ok) {
         const detail = await res.json();
         preContent = detail.preRedactionValue || "";
