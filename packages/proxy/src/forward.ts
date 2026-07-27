@@ -322,7 +322,7 @@ export function createProxyHandler(
     // Extract session ID and source from routing headers
     const headers = req.headers as Record<string, string | undefined>;
     // Priority: x-session-affinity (generic), x-claude-code-session-id (Anthropic/Claude Code), URL-embedded
-    const sessionId =
+    let sessionId: string | null =
       headers["x-session-affinity"] ||
       headers["x-claude-code-session-id"] ||
       urlSessionId;
@@ -565,6 +565,33 @@ export function createProxyHandler(
               if (!firstByteTime) firstByteTime = performance.now();
               respBytes += chunk.length;
               respChunks.push(chunk);
+
+              // Extract session ID from streaming response (fallback for all providers)
+              // Many LLM providers include an "id" field in their streaming responses
+              // (e.g., OpenAI: "chatcmpl-...", Anthropic: "msg_...", Kilo: "gen-...")
+              // We only use this as a fallback when no session ID was found in headers/URL
+              if (!sessionId && isStreaming) {
+                try {
+                  const text = chunk.toString("utf8");
+                  // SSE format: "data: {...}\n\n" or multiple "data: " lines
+                  const dataLines = text
+                    .split("\n")
+                    .filter((line) => line.startsWith("data: "));
+                  for (const line of dataLines) {
+                    const jsonStr = line.slice(6).trim(); // Remove "data: " prefix
+                    if (jsonStr && jsonStr !== "[DONE]") {
+                      const parsed = JSON.parse(jsonStr);
+                      if (parsed.id && typeof parsed.id === "string") {
+                        sessionId = parsed.id;
+                        break;
+                      }
+                    }
+                  }
+                } catch {
+                  // Ignore parse errors, sessionId will remain from headers/URL
+                }
+              }
+
               if (!shouldBufferResponse && !res.destroyed) {
                 // Ensure JSON objects are separated to avoid concatenation errors
                 let outBuffer: Buffer = chunk;
