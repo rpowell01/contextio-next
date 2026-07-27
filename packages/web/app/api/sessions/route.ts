@@ -12,10 +12,6 @@ import {
 } from "@/lib/sessions/server-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import { groupCapturesIntoSessions, type RawCaptureData } from "@/lib/sessions/grouping";
-import {
-  convertByRuleToByPlaceholder,
-  computePlaceholderCounts,
-} from "@/lib/sessions/placeholder-map";
 
 async function handleGet(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -264,25 +260,24 @@ async function handleGet(request: Request): Promise<Response> {
         // Skip title-* sessions (match Redactions page behavior)
         if (meta.sessionId?.startsWith("title-")) continue;
 
-        // Store redaction metadata for this session - use matches for accurate placeholders
+        // Store redaction metadata for this session - use byRule (rule names) for consistency
         // Accumulate across all captures for the same session
         if (meta.sessionId) {
-          // Prefer computing placeholders from actual matches (what's in content)
-          const byPlaceholder = meta.matches && Array.isArray(meta.matches)
-            ? computePlaceholderCounts(meta.matches as unknown as Array<{ ruleId: string; placeholder?: string; postValue?: string }>)
-            : convertByRuleToByPlaceholder((meta.byRule as Record<string, number>) ?? {});
+          const byRule = (meta.byRule as Record<string, number>) ?? {};
 
           const existing = redactionMetaBySession.get(meta.sessionId);
           if (existing) {
             // Accumulate redaction counts across all captures in this session
             existing.totalRedactions += meta.totalRedactions ?? 0;
-            for (const [rule, count] of Object.entries(byPlaceholder)) {
-              existing.byRule[rule] = (existing.byRule[rule] ?? 0) + count;
+            for (const [rule, count] of Object.entries(byRule)) {
+              if (typeof count === "number") {
+                existing.byRule[rule] = (existing.byRule[rule] ?? 0) + count;
+              }
             }
           } else {
             redactionMetaBySession.set(meta.sessionId, {
               totalRedactions: meta.totalRedactions ?? 0,
-              byRule: byPlaceholder,
+              byRule: { ...byRule },
             });
           }
         }
