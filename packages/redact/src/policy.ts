@@ -79,6 +79,21 @@ export interface PolicyJson {
   allowlist?: PolicyAllowlistJson;
   /** JSON path scoping. */
   paths?: PolicyPathsJson;
+  /** Optional detector configuration override. Allows per-policy detector mode and LLM config. */
+  detector?: {
+    /** Detection mode: rules-only, LLM-only, hybrid (rules priority), or auto. */
+    mode?: "rules" | "llm" | "hybrid" | "auto";
+    /** LLM detector model to use. Default: "gliner-small". */
+    llmModel?: "gliner-small" | "gliner-base" | "distilbert-pii" | "phi3-mini";
+    /** Path to local GLiNER ONNX model directory. Required for llm/hybrid/auto modes. */
+    modelPath?: string;
+    /** Runtime options for the detector. */
+    options?: Record<string, unknown>;
+    /** Minimum confidence threshold for LLM detections (0-1). Default: 0.5 */
+    llmThreshold?: number;
+    /** Entity labels for LLM detector. If empty, uses model's default labels. */
+    llmLabels?: string[];
+  };
 }
 
 // --- Compiled policy (ready for the engine) ---

@@ -12,6 +12,12 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./factory": {
+      "types": "./dist/factory.d.ts",
+      "import": "./dist/factory.js",
+      "require": "./dist/factory.js",
+      "default": "./dist/factory.js"
     }
   },
   "files": [

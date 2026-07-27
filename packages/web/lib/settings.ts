@@ -28,6 +28,10 @@ export interface Settings {
   oidcPublicUrl: string;
   // Display settings
   showPageLoadTime: boolean;
+  // Detector settings
+  detectorMode: "rules" | "llm" | "hybrid" | "auto";
+  detectorModelDir: string;
+  detectorThreshold: number;
 }
 
 export type SettingSource =
@@ -81,6 +85,18 @@ export const SETTING_ENV_MAP: Record<
   },
   showPageLoadTime: {
     envVar: "", // No env var override - controlled via settings UI only
+    dynamic: true,
+  },
+  detectorMode: {
+    envVar: "REDACT_DETECTOR_MODE",
+    dynamic: true,
+  },
+  detectorModelDir: {
+    envVar: "REDACT_DETECTOR_MODEL_DIR",
+    dynamic: true,
+  },
+  detectorThreshold: {
+    envVar: "REDACT_DETECTOR_THRESHOLD",
     dynamic: true,
   },
 };
@@ -215,6 +231,24 @@ export function applyEnvOverrides(settings: Settings): {
         override.oidcPublicUrl = raw;
         accepted = true;
         break;
+      case "detectorMode":
+        if (["rules", "llm", "hybrid", "auto"].includes(raw)) {
+          override.detectorMode = raw as "rules" | "llm" | "hybrid" | "auto";
+          accepted = true;
+        }
+        break;
+      case "detectorModelDir":
+        override.detectorModelDir = raw;
+        accepted = true;
+        break;
+      case "detectorThreshold": {
+        const n = parseFloat(raw);
+        if (!isNaN(n) && n >= 0 && n <= 1) {
+          override.detectorThreshold = n;
+          accepted = true;
+        }
+        break;
+      }
       default:
         break;
     }
@@ -262,6 +296,9 @@ export const DEFAULT_SETTINGS: Settings = {
   oidcEnabled: false,
   oidcPublicUrl: "",
   showPageLoadTime: false,
+  detectorMode: "rules",
+  detectorModelDir: "",
+  detectorThreshold: 0.5,
 };
 
 export function validateSettings(input: unknown): Settings {
@@ -355,6 +392,15 @@ export function validateSettings(input: unknown): Settings {
     oidcEnabled: validateBoolean("oidcEnabled"),
     oidcPublicUrl: validateString("oidcPublicUrl", 0),
     showPageLoadTime: validateBoolean("showPageLoadTime"),
+    detectorMode: validateEnum("detectorMode", ["rules", "llm", "hybrid", "auto"]) as "rules" | "llm" | "hybrid" | "auto",
+    detectorModelDir: validateString("detectorModelDir", 0),
+    detectorThreshold: (() => {
+      const v = obj.detectorThreshold;
+      if (typeof v !== "number" || v < 0 || v > 1) {
+        throw new Error(`Invalid detectorThreshold: must be a number between 0 and 1`);
+      }
+      return v;
+    })(),
   };
 }
 
@@ -461,5 +507,20 @@ export function validateSettingsLenient(input: unknown): Settings {
       typeof obj.showPageLoadTime === "boolean"
         ? obj.showPageLoadTime
         : DEFAULT_SETTINGS.showPageLoadTime,
+    detectorMode:
+      typeof obj.detectorMode === "string" &&
+      ["rules", "llm", "hybrid", "auto"].includes(obj.detectorMode)
+        ? (obj.detectorMode as "rules" | "llm" | "hybrid" | "auto")
+        : DEFAULT_SETTINGS.detectorMode,
+    detectorModelDir:
+      typeof obj.detectorModelDir === "string"
+        ? obj.detectorModelDir
+        : DEFAULT_SETTINGS.detectorModelDir,
+    detectorThreshold:
+      typeof obj.detectorThreshold === "number" &&
+      obj.detectorThreshold >= 0 &&
+      obj.detectorThreshold <= 1
+        ? obj.detectorThreshold
+        : DEFAULT_SETTINGS.detectorThreshold,
   };
 }

@@ -18,11 +18,21 @@ const PathsSchema = z.object({
   skip: z.array(z.string()).optional(),
 });
 
+const DetectorSchema = z.object({
+  mode: z.enum(["rules", "llm", "hybrid", "auto"]).optional(),
+  llmModel: z.enum(["gliner-small", "gliner-base", "distilbert-pii", "phi3-mini"]).optional(),
+  modelPath: z.string().optional(),
+  options: z.record(z.unknown()).optional(),
+  llmThreshold: z.number().min(0).max(1).optional(),
+  llmLabels: z.array(z.string()).optional(),
+});
+
 export const policySchema = z.object({
   extends: z.enum(["secrets", "pii", "strict"]),
   rules: z.array(RedactionRuleSchema).optional(),
   allowlist: AllowlistSchema.optional(),
   paths: PathsSchema.optional(),
+  detector: DetectorSchema.optional(),
 });
 
 export type PolicySchema = z.infer<typeof policySchema>;

@@ -56,6 +56,12 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Public-facing URL for the proxy (e.g., https://contextio.example.com). Used for OIDC callback URLs when behind a reverse proxy. Requires a proxy restart to apply.",
   showPageLoadTime:
     "Display page load time in the bottom-left corner. Measures time from navigation start to fully interactive page (hydration + data fetch + render complete). Changes apply immediately.",
+  detectorMode:
+    "Detection mode: 'rules' (fast, deterministic patterns), 'llm' (semantic PII detection via GLiNER), 'hybrid' (rules + LLM with priority merge), or 'auto' (automatically choose). Changes apply dynamically per request.",
+  detectorModelDir:
+    "Path to the local GLiNER ONNX model directory (required for llm/hybrid/auto modes). Contains model.onnx, vocab.txt, and tokenizer config. Changes apply dynamically.",
+  detectorThreshold:
+    "Minimum confidence threshold for LLM-based detections (0-1). Higher values reduce false positives but may miss some entities. Applied dynamically per request.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
@@ -117,6 +123,9 @@ export default function SettingsPage() {
     oidcEnabled: false,
     oidcPublicUrl: "",
     showPageLoadTime: false,
+    detectorMode: "rules",
+    detectorModelDir: "",
+    detectorThreshold: 0.5,
   });
   const [metadata, setMetadata] = useState<Record<
     keyof Settings,
@@ -583,6 +592,89 @@ export default function SettingsPage() {
             />
           </div>
         );
+      case "detectorMode":
+        return (
+          <div>
+            <Label htmlFor="detectorMode" className="block text-sm font-medium mb-2">
+              Detector Mode
+            </Label>
+            <select
+              id="detectorMode"
+              value={settings.detectorMode}
+              onChange={(e) =>
+                updateSetting("detectorMode", e.target.value as "rules" | "llm" | "hybrid" | "auto")
+              }
+              disabled={isSettingOverridden("detectorMode")}
+              className={`w-full rounded-md px-3 py-2 text-sm border ${
+                isSettingOverridden("detectorMode")
+                  ? "bg-muted cursor-not-allowed"
+                  : "focus:outline-none focus:ring-2 focus:ring-primary"
+              }`}
+            >
+              <option value="rules">Rules only (fast, deterministic patterns)</option>
+              <option value="llm">LLM only (semantic detection via GLiNER)</option>
+              <option value="hybrid">Hybrid (rules + LLM, rules take priority)</option>
+              <option value="auto">Auto (choose based on content)</option>
+            </select>
+            <SettingHelp
+              meta={getMeta("detectorMode")}
+              description={SETTING_DESCRIPTIONS.detectorMode}
+            />
+          </div>
+        );
+      case "detectorModelDir":
+        return (
+          <div>
+            <Label htmlFor="detectorModelDir" className="block text-sm font-medium mb-2">
+              GLiNER Model Directory
+            </Label>
+            <Input
+              id="detectorModelDir"
+              value={settings.detectorModelDir}
+              onChange={(e) => updateSetting("detectorModelDir", e.target.value)}
+              placeholder="/path/to/gliner-model"
+              disabled={isSettingOverridden("detectorModelDir")}
+              className={
+                isSettingOverridden("detectorModelDir") ? "bg-muted cursor-not-allowed" : ""
+              }
+            />
+            <SettingHelp
+              meta={getMeta("detectorModelDir")}
+              description={SETTING_DESCRIPTIONS.detectorModelDir}
+            />
+          </div>
+        );
+      case "detectorThreshold":
+        return (
+          <div>
+            <Label htmlFor="detectorThreshold" className="block text-sm font-medium mb-2">
+              LLM Detection Threshold (0-1)
+            </Label>
+            <Input
+              id="detectorThreshold"
+              type="number"
+              step="0.05"
+              min="0"
+              max="1"
+              value={settings.detectorThreshold}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val >= 0 && val <= 1) {
+                  updateSetting("detectorThreshold", val);
+                }
+              }}
+              placeholder="0.5"
+              disabled={isSettingOverridden("detectorThreshold")}
+              className={
+                isSettingOverridden("detectorThreshold") ? "bg-muted cursor-not-allowed" : ""
+              }
+            />
+            <SettingHelp
+              meta={getMeta("detectorThreshold")}
+              description={SETTING_DESCRIPTIONS.detectorThreshold}
+            />
+          </div>
+        );
       case "captureCleanupEnabled":
         return (
           <div className="flex items-center justify-between mb-4">
@@ -859,6 +951,14 @@ export default function SettingsPage() {
               {renderSetting("redactPreset")}
               {renderSetting("redactReversible")}
               {renderSetting("redactPolicyFile")}
+              <div className="pt-2 border-t">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Detector Settings</h4>
+                <div className="space-y-4">
+                  {renderSetting("detectorMode")}
+                  {renderSetting("detectorModelDir")}
+                  {renderSetting("detectorThreshold")}
+                </div>
+              </div>
             </div>
           </div>
           <div className="rounded-lg border p-6">

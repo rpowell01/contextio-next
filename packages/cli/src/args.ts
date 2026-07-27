@@ -29,6 +29,12 @@ export interface ProxyArgs {
 	redactPreset: string;
 	redactPolicy: string | null;
 	redactReversible: boolean;
+	/** Detector mode: rules | llm | hybrid | auto. Default: rules */
+	detectorMode: "rules" | "llm" | "hybrid" | "auto";
+	/** Path to GLiNER ONNX model directory (required for llm/hybrid/auto modes). */
+	detectorModelDir: string | null;
+	/** Minimum confidence threshold for LLM detections (0-1). Default: 0.5 */
+	detectorThreshold: number | null;
 	log: boolean;
 	noLog: boolean;
 	logDir: string | null;
@@ -47,7 +53,7 @@ export interface ProxyArgs {
 	/** OIDC session secret for signing cookies. */
 	oidcSessionSecret: string | null;
 	/** Public-facing URL for the proxy (e.g., https://contextio.example.com).
-   * Used for OIDC callback URLs when behind a reverse proxy. */
+	   * Used for OIDC callback URLs when behind a reverse proxy. */
 	publicUrl: string | null;
 	/** Command and args after "--" to wrap, or null for standalone proxy. */
 	wrap: string[] | null;
@@ -133,6 +139,9 @@ export function buildProgram(
 		.option("-P, --redact-preset <name>", "preset: secrets, pii, strict")
 		.option("-f, --redact-policy <path>", "path to a redaction policy JSON file")
 		.option("-R, --redact-reversible", "restore redacted values in responses")
+		.option("--detector-mode <mode>", "detector mode: rules, llm, hybrid, auto")
+		.option("--detector-model-dir <path>", "path to GLiNER ONNX model directory")
+		.option("--detector-threshold <number>", "LLM detection confidence threshold (0-1)")
 		.option("--no-log", "disable capture logging (on by default)")
 		.option("--log-dir <path>", "directory for capture files")
 		.option("--log-max-sessions <n>", "keep only the last N sessions (default: 0)")
@@ -171,6 +180,9 @@ export function buildProgram(
 				redactPreset: "pii",
 				redactPolicy: null,
 				redactReversible: false,
+				detectorMode: "rules",
+				detectorModelDir: null,
+				detectorThreshold: null,
 				log: true,
 				noLog: false,
 				logDir: null,
@@ -203,6 +215,34 @@ export function buildProgram(
 			}
 		}
 
+		// Validate detector mode and required options
+		const detectorMode = (opts.detectorMode || "rules") as "rules" | "llm" | "hybrid" | "auto";
+		if (!["rules", "llm", "hybrid", "auto"].includes(detectorMode)) {
+			onResult({
+				error: `Invalid detector mode: ${detectorMode}. Must be one of: rules, llm, hybrid, auto`,
+			});
+			return;
+		}
+
+		// LLM/hybrid/auto modes require a model directory
+		if (detectorMode !== "rules" && !opts.detectorModelDir) {
+			onResult({
+				error: `Detector mode "${detectorMode}" requires --detector-model-dir to be set`,
+			});
+			return;
+		}
+
+		// Validate detector threshold if provided
+		if (opts.detectorThreshold !== undefined) {
+			const threshold = parseFloat(opts.detectorThreshold);
+			if (isNaN(threshold) || threshold < 0 || threshold > 1) {
+				onResult({
+					error: `Invalid --detector-threshold: must be a number between 0 and 1`,
+				});
+				return;
+			}
+		}
+
 		const wrap = commandArgs.length > 0 ? commandArgs : null;
 
 		const redact =
@@ -225,6 +265,9 @@ export function buildProgram(
 			redactPreset: opts.redactPreset || "pii",
 			redactPolicy: opts.redactPolicy || null,
 			redactReversible: opts.redactReversible || false,
+			detectorMode,
+			detectorModelDir: opts.detectorModelDir || null,
+			detectorThreshold: opts.detectorThreshold ? parseFloat(opts.detectorThreshold) : null,
 			log,
 			noLog,
 			logDir: opts.logDir || null,

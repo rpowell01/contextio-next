@@ -231,6 +231,15 @@ function buildProxyArgs(args: ProxyArgs, port: number): string[] {
 			out.push("--redact-reversible");
 		}
 	}
+	if (args.detectorMode && args.detectorMode !== "rules") {
+		out.push("--detector-mode", args.detectorMode);
+		if (args.detectorModelDir) {
+			out.push("--detector-model-dir", args.detectorModelDir);
+		}
+		if (args.detectorThreshold !== null) {
+			out.push("--detector-threshold", String(args.detectorThreshold));
+		}
+	}
 	if (args.noLog) out.push("--no-log");
 	else if (args.logDir) out.push("--log-dir", args.logDir);
 	if (args.logMaxSessions > 0) {
@@ -496,12 +505,22 @@ function buildPlugins(args: ProxyArgs): ProxyPlugin[] {
 	const plugins: ProxyPlugin[] = [];
 
 	if (args.redact) {
+		const detectorConfig: Record<string, unknown> = {};
+		if (args.detectorModelDir) {
+			detectorConfig.modelPath = args.detectorModelDir;
+		}
+		if (args.detectorThreshold !== null) {
+			detectorConfig.llmThreshold = args.detectorThreshold;
+		}
+
 		plugins.push(
 			createRedactPlugin({
 				preset: args.redactPreset as PresetName,
 				policyFile: args.redactPolicy ?? undefined,
 				reversible: args.redactReversible,
 				verbose: args.verbose,
+				detectorMode: args.detectorMode,
+				detectorConfig: Object.keys(detectorConfig).length > 0 ? detectorConfig : undefined,
 			}),
 		);
 	}
@@ -543,6 +562,12 @@ function printStartupInfo(plugins: ProxyPlugin[], args: ProxyArgs, isWrap = fals
 			console.log(`Redact: policy ${args.redactPolicy}${mode}`);
 		} else {
 			console.log(`Redact: preset "${args.redactPreset}"${mode}`);
+		}
+		if (args.detectorMode && args.detectorMode !== "rules") {
+			const detectorInfo = `Detector mode: ${args.detectorMode}`;
+			const modelInfo = args.detectorModelDir ? ` (model: ${args.detectorModelDir})` : "";
+			const thresholdInfo = args.detectorThreshold !== null ? `, threshold: ${args.detectorThreshold}` : "";
+			console.log(detectorInfo + modelInfo + thresholdInfo);
 		}
 	}
 

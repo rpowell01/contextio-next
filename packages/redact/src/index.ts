@@ -28,8 +28,9 @@ import type {
   ResponseContext,
 } from "@contextio/core";
 
+import fs from "node:fs";
 import { ReplacementMap } from "./mapping.js";
-import type { CompiledPolicy } from "./policy.js";
+import type { CompiledPolicy, PolicyJson } from "./policy.js";
 import { compilePolicy, fromPreset, loadPolicyFile } from "./policy.js";
 import type { PresetName } from "./presets.js";
 import { buildRedactMetaPayload, createStats, redactWithPolicy, writeRedactionMeta } from "./redact.js";
@@ -231,6 +232,38 @@ function resolvePolicy(config?: RedactPluginConfig): CompiledPolicy {
   return fromPreset(config?.preset ?? "pii");
 }
 
+/** Load detector config from policy file or plugin config. */
+function resolveDetectorConfig(config?: RedactPluginConfig): RedactDetectorConfig | undefined {
+  // Start with plugin config
+  const detectorConfig = config?.detectorConfig ?? {};
+
+  // If policy file has detector settings, merge them (plugin config takes precedence)
+  if (config?.policyFile) {
+    try {
+      const raw = fs.readFileSync(config.policyFile, "utf8");
+      const cleaned = raw.replace(/^\s*\/\/.*$/gm, "").replace(/,\s*([\]}])/g, "$1");
+      const json = JSON.parse(cleaned) as PolicyJson & { detector?: RedactDetectorConfig & { modelDir?: string; threshold?: number; labels?: string[] } };
+      if (json.detector) {
+        const policyDetector = json.detector;
+        // Merge: plugin config values override policy file values
+        // Map policy file field names to RedactDetectorConfig field names
+        return {
+          mode: policyDetector.mode,
+          llmModel: policyDetector.llmModel,
+          modelPath: policyDetector.modelPath ?? policyDetector.modelDir, // Map modelDir -> modelPath
+          options: policyDetector.options,
+          llmThreshold: policyDetector.llmThreshold ?? policyDetector.threshold, // Map threshold -> llmThreshold
+          llmLabels: policyDetector.llmLabels ?? policyDetector.labels, // Map labels -> llmLabels
+          ...detectorConfig, // Plugin config takes precedence
+        } as RedactDetectorConfig;
+      }
+    } catch {
+      // Ignore policy file read/parse errors
+    }
+  }
+  return Object.keys(detectorConfig).length > 0 ? detectorConfig : undefined;
+}
+
 const DEFAULT_SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
@@ -300,8 +333,10 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
     initializing: null,
   };
 
-  const detectorMode = config?.detectorMode ?? "rules";
-  const detectorConfig = config?.detectorConfig ?? {};
+  // Resolve detector config: plugin config overrides policy file config
+  const resolvedDetectorConfig = resolveDetectorConfig(config);
+  const detectorMode = resolvedDetectorConfig?.mode ?? config?.detectorMode ?? "rules";
+  const detectorConfig = resolvedDetectorConfig ?? {};
 
   /**
    * Initialize the detector pipeline based on detectorMode and detectorConfig.
@@ -567,3 +602,4 @@ export async function getGlinerDetector() {
 }
 
 export { DetectorPipeline, createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";
+export { createRedactPluginFactory } from "./factory.js";
