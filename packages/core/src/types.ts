@@ -261,6 +261,25 @@ export interface OidcProviderConfig {
   sessionSecret: string;
 }
 
+// --- Rate limiter ---
+
+/**
+ * Rate limiter configuration for a single provider.
+ *
+ * Uses a token bucket algorithm with a sliding window:
+ * - `maxRequests`: Maximum requests allowed in the window
+ * - `windowMs`: Time window in milliseconds
+ * - `bufferCapacity`: Token bucket capacity (burst allowance)
+ */
+export interface RateLimitConfig {
+	/** Maximum requests allowed within the time window. */
+	maxRequests: number;
+	/** Time window in milliseconds. */
+	windowMs: number;
+	/** Token bucket capacity for burst handling. */
+	bufferCapacity: number;
+}
+
 // --- Proxy config ---
 
 export interface ProxyConfig {

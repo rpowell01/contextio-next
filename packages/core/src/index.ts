@@ -88,6 +88,7 @@ export type {
   Provider,
   ProxyConfig,
   ProxyPlugin,
+  RateLimitConfig,
   RequestContext,
   ResolveTargetResult,
   ResponseContext,

@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 
-import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams } from "@contextio/core";
+import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig } from "@contextio/core";
 import { DEFAULT_OIDC_SCOPE } from "@contextio/core";
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
@@ -88,6 +88,7 @@ export interface ResolvedProxyConfig {
 	loggerEncryption: EncryptionAtRestConfig;
 	oidc: OidcProviderConfig | null;
 	publicUrl: string | null;
+	rateLimiter: Record<Provider, RateLimitConfig>;
 }
 
 /**
@@ -288,6 +289,24 @@ export function resolveConfig(
 		openrouter: normalizeUpstreamUrl(upstreams.openrouter),
 	};
 
+	const defaultRateLimit: RateLimitConfig = {
+		maxRequests: 60,
+		windowMs: 60_000,
+		bufferCapacity: 10,
+	};
+
+	const rateLimiter: Record<Provider, RateLimitConfig> = {
+		openai: defaultRateLimit,
+		anthropic: defaultRateLimit,
+		chatgpt: defaultRateLimit,
+		gemini: defaultRateLimit,
+		vertex: defaultRateLimit,
+		nvidia: defaultRateLimit,
+		openrouter: defaultRateLimit,
+		kilo: defaultRateLimit,
+		unknown: defaultRateLimit,
+	};
+
 	return {
 		upstreams: normalizedUpstreams,
 		bindHost,
@@ -301,5 +320,6 @@ export function resolveConfig(
 		loggerEncryption,
 		oidc,
 		publicUrl,
+		rateLimiter,
 	};
 }

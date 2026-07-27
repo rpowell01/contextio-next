@@ -19,15 +19,19 @@ function toLeanStats(counts: {
   byRule: Record<string, number>;
   matches: Array<{ ruleId: string; original: string; placeholder: string; path: string }>;
 }): { totalRedactions: number; byRule: Record<string, number>; matches: Array<{ ruleId: string; preValue: string; postValue: string; path: string }> } {
+  // Limit matches to first 20 to keep meta files small (matches redact package behavior)
+  const MATCHES_LIMIT = 20;
+  const limitedMatches = counts.matches?.slice(0, MATCHES_LIMIT).map(m => ({
+    ruleId: m.ruleId,
+    preValue: m.original,
+    postValue: m.placeholder,
+    path: m.path,
+  })) ?? [];
+
   return {
     totalRedactions: counts.totalRedactions,
     byRule: counts.byRule,
-    matches: counts.matches.map(m => ({
-      ruleId: m.ruleId,
-      preValue: m.original,
-      postValue: m.placeholder,
-      path: m.path,
-    })),
+    matches: limitedMatches,
   };
 }
 

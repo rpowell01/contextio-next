@@ -142,10 +142,18 @@ function recordMatch(
 export function buildRedactMetaPayload(
   stats: RedactionStats,
 ): { totalRedactions: number; byRule: Readonly<Record<string, number>>; matches?: MatchEntry[] } {
+  // Limit matches stored in meta file to first 20 to keep file sizes manageable
+  // for the summary API which must read all meta files. Full match details are
+  // available on-demand from the capture file via the detail API.
+  const MATCHES_LIMIT = 20;
+  const limitedMatches = stats.matches && stats.matches.length > 0
+    ? stats.matches.slice(0, MATCHES_LIMIT)
+    : undefined;
+
   return {
     totalRedactions: stats.totalReplacements,
     byRule: { ...stats.byRule },
-    ...(stats.matches && stats.matches.length > 0 ? { matches: stats.matches } : {}),
+    ...(limitedMatches ? { matches: limitedMatches } : {}),
   };
 }
 
