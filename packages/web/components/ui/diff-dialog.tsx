@@ -72,7 +72,35 @@ function truncateLongLine(
           const idx = value.indexOf(preValue, searchStart);
           if (idx === -1) break;
           positions.push({ start: idx, end: idx + preValue.length });
-          searchStart = idx + 1;
+          // Fix: advance past the matched substring to avoid overlapping/infinite loops
+          searchStart = idx + preValue.length;
+        }
+      }
+    }
+
+    // If no exact preValue matches found (common when preValue is the entire
+    // original leaf string rather than just the matched substring), fall back
+    // to searching for common sensitive patterns that correspond to the
+    // placeholder types in postValue.
+    if (positions.length === 0) {
+      for (const match of matches) {
+        if (match.postValue) {
+          // Extract rule type from placeholder (e.g., "API_KEY" from "[API_KEY_REDACTED]")
+          const ruleMatch = match.postValue.match(/\[([A-Z][A-Z0-9_]*)_REDACTED\]/);
+          if (ruleMatch) {
+            const ruleType = ruleMatch[1];
+            // Search for patterns associated with this rule type
+            const patterns = getPatternsForRuleType(ruleType);
+            for (const pattern of patterns) {
+              let searchStart = 0;
+              while (true) {
+                const idx = value.indexOf(pattern, searchStart);
+                if (idx === -1) break;
+                positions.push({ start: idx, end: idx + pattern.length });
+                searchStart = idx + pattern.length;
+              }
+            }
+          }
         }
       }
     }
@@ -86,7 +114,7 @@ function truncateLongLine(
           const idx = value.indexOf(postValue, searchStart);
           if (idx === -1) break;
           positions.push({ start: idx, end: idx + postValue.length });
-          searchStart = idx + 1;
+          searchStart = idx + postValue.length;
         }
       }
     }
@@ -99,12 +127,21 @@ function truncateLongLine(
     }
   }
 
-  // If no redaction positions found, fallback to truncating middle
+  // If no redaction positions found, fallback strategy differs by pane
   if (positions.length === 0) {
-    // Show first CONTEXT_CHARS and last CONTEXT_CHARS with ellipsis in middle
-    const trunc = CONTEXT_CHARS;
-    let truncated = value.slice(0, trunc) + "…" + value.slice(-trunc);
-    return { value: truncated, isTruncated: true };
+    if (isPre) {
+      // For pre-redaction (left pane): show the END of the string where
+      // redactions in long API responses/bodies typically occur, rather than
+      // the beginning which is rarely where sensitive data lives.
+      const trunc = CONTEXT_CHARS * 2;
+      let truncated = "…" + value.slice(-trunc);
+      return { value: truncated, isTruncated: true };
+    } else {
+      // For post-redaction (right pane): show first and last CONTEXT_CHARS
+      const trunc = CONTEXT_CHARS;
+      let truncated = value.slice(0, trunc) + "…" + value.slice(-trunc);
+      return { value: truncated, isTruncated: true };
+    }
   }
 
   // Sort positions by start
@@ -132,6 +169,23 @@ function truncateLongLine(
   }
 
   return { value: truncated, isTruncated: true };
+}
+
+// Return common sensitive patterns for a given rule type
+function getPatternsForRuleType(ruleType: string): string[] {
+  const patterns: Record<string, string[]> = {
+    API_KEY: ["sk_", "pk_", "rk_", "ak_", "sk-", "pk-", "rk-", "ak-", "Bearer ", "token="],
+    AUTH: ["Bearer ", "Authorization", "auth", "password", "secret", "token"],
+    SECRET: ["secret", "password", "key", "token"],
+    TOKEN: ["token", "Bearer ", "access_token", "refresh_token"],
+    PASSWORD: ["password", "passwd", "pwd"],
+    SSN: [],
+    EMAIL: ["@", ".com", ".org", ".net"],
+    PHONE: ["tel:", "phone", "+1", "("],
+    CREDIT_CARD: [],
+    IP_ADDRESS: [],
+  };
+  return patterns[ruleType] ?? [];
 }
 
 function isValidJson(content: string): boolean {
