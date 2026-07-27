@@ -3,6 +3,7 @@
 # prepare-gliner-models.sh
 #
 # Download and prepare GLiNER ONNX models for ContextIO-Next hybrid redaction.
+# Uses GLiNER's built-in export_to_onnx() method (Optimum CLI doesn't work with GLiNER).
 #
 # Usage:
 #   ./scripts/prepare-gliner-models.sh [model-name] [output-dir]
@@ -54,31 +55,27 @@ check_dependencies() {
         exit 1
     fi
 
-    # Check if we can import optimum and onnxruntime
-    if python3 -c "import optimum; import onnxruntime" 2>/dev/null; then
+    # Check if we can import required packages
+    if python3 -c "import gliner; import optimum; import onnxruntime; import huggingface_hub" 2>/dev/null; then
         log_success "Dependencies OK"
-        OPTIMUM_CLI="optimum-cli"
-        if ! command -v optimum-cli &> /dev/null; then
-            OPTIMUM_CLI="python3 -m optimum.cli"
-        fi
         return
     fi
 
-    log_warn "Python packages 'optimum' and 'onnxruntime' not found."
+    log_warn "Required Python packages not found: gliner, optimum, onnxruntime, huggingface_hub"
     echo ""
     echo "Your system uses an externally-managed Python environment (PEP 668)."
     echo "Please install dependencies using one of these methods:"
     echo ""
     echo "  Option 1: pipx (recommended for CLI tools)"
-    echo "    pipx install optimum[onnx]"
+    echo "    pipx install gliner optimum[onnx] onnxruntime huggingface_hub"
     echo ""
     echo "  Option 2: Virtual environment"
     echo "    python3 -m venv venv"
     echo "    source venv/bin/activate"
-    echo "    pip install optimum[onnx] onnxruntime"
+    echo "    pip install gliner optimum[onnx] onnxruntime huggingface_hub"
     echo ""
     echo "  Option 3: With --break-system-packages (not recommended)"
-    echo "    pip install --break-system-packages optimum[onnx] onnxruntime"
+    echo "    pip install --break-system-packages gliner optimum[onnx] onnxruntime huggingface_hub"
     echo ""
     echo "Then re-run this script."
     exit 1
@@ -95,60 +92,102 @@ prepare_model() {
     # Create output directory
     mkdir -p "$model_dir"
 
-    # Export to ONNX
-    log_info "Exporting to ONNX..."
-    if ! $OPTIMUM_CLI export onnx \
-        --model "$hf_model_id" \
-        --task token-classification \
-        "$model_dir" 2>&1; then
-        log_error "Failed to export $model_key"
+    # Download model files from HuggingFace Hub
+    log_info "Downloading model files from HuggingFace..."
+    if ! python3 -c "
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id='$hf_model_id',
+    local_dir='$model_dir',
+    local_dir_use_symlinks=False,
+    allow_patterns=['*.json', '*.txt', '*.model', 'config.json', 'vocab.txt', 'tokenizer*', 'special_tokens*', '*.bin', '*.safetensors']
+)
+" 2>&1; then
+        log_error "Failed to download $model_key"
         return 1
     fi
+    log_success "Model files downloaded"
 
-    # Quantize to INT8
+    # Export to ONNX using GLiNER's built-in export_to_onnx method
+    log_info "Exporting to ONNX using GLiNER's built-in method..."
+    if ! python3 -c "
+from gliner import GLiNER
+import os
+model = GLiNER.from_pretrained('$model_dir')
+os.makedirs('$model_dir/onnx', exist_ok=True)
+model.export_to_onnx('$model_dir/onnx')
+print('ONNX export complete')
+" 2>&1; then
+        log_error "Failed to export $model_key to ONNX"
+        return 1
+    fi
+    log_success "ONNX export complete"
+
+    # Fix model_type in config (GLiNER export leaves it as null)
+    log_info "Fixing model_type in config..."
+    if ! python3 -c "
+import json
+with open('$model_dir/onnx/gliner_config.json', 'r') as f:
+    config = json.load(f)
+config['model_type'] = 'gliner'
+with open('$model_dir/onnx/gliner_config.json', 'w') as f:
+    json.dump(config, f, indent=2)
+print('Fixed model_type in config')
+" 2>&1; then
+        log_error "Failed to fix model_type for $model_key"
+        return 1
+    fi
+    log_success "Config patched (model_type = gliner)"
+
+    # Quantize to INT8 (optional but recommended)
     log_info "Quantizing to INT8..."
-    if ! $OPTIMUM_CLI quantize \
-        --onnx-model "$model_dir/model.onnx" \
-        --quantization dynamic \
-        "$model_dir/model_int8.onnx" 2>&1; then
-        log_warn "Quantization failed for $model_key (continuing with fp16)"
+    if python3 -c "import optimum" 2>/dev/null; then
+        if python3 -m optimum.cli quantize \
+            --onnx-model "$model_dir/onnx/model.onnx" \
+            --quantization dynamic \
+            "$model_dir/onnx/model_int8.onnx" 2>&1; then
+            log_success "INT8 quantization complete"
+        else
+            log_warn "Quantization failed for $model_key (continuing with FP32)"
+        fi
     else
-        log_success "INT8 quantization complete"
+        log_warn "optimum not available, skipping quantization"
     fi
 
-    # Verify required files
-    local required_files=("model.onnx" "vocab.txt" "tokenizer_config.json" "special_tokens_map.json")
+    # Verify required files exist
+    local required_files=("model.onnx" "spm.model" "tokenizer_config.json" "gliner_config.json")
     local missing=0
     for file in "${required_files[@]}"; do
-        if [[ ! -f "$model_dir/$file" ]]; then
-            log_warn "Missing required file: $model_dir/$file"
+        if [[ ! -f "$model_dir/onnx/$file" ]]; then
+            log_warn "Missing required file: $model_dir/onnx/$file"
             missing=1
         fi
     done
 
     if [[ $missing -eq 1 ]]; then
-        log_warn "Some tokenizer files may be missing. Check export output."
+        log_warn "Some required files may be missing. Check export output."
     fi
 
     # Show file sizes
-    log_info "Model files:"
-    ls -lh "$model_dir/"
+    log_info "Model files in $model_dir/onnx/:"
+    ls -lh "$model_dir/onnx/"
 
     # Create config.yaml for reference
-    cat > "$model_dir/config.yaml" <<EOF
+    cat > "$model_dir/onnx/config.yaml" <<EOF
 # Auto-generated model configuration
 model: "$model_key"
 huggingface_id: "$hf_model_id"
 exported: "$(date -Iseconds)"
 onnx_model: "model.onnx"
 int8_model: "model_int8.onnx"
-tokenizer_vocab: "vocab.txt"
+tokenizer_vocab: "spm.model"
 tokenizer_config: "tokenizer_config.json"
 special_tokens: "special_tokens_map.json"
+config: "gliner_config.json"
 license: "$(get_license "$model_key")"
 EOF
 
-    log_success "Model $model_key ready at $model_dir"
+    log_success "Model $model_key ready at $model_dir/onnx"
 }
 
 get_license() {
@@ -160,7 +199,7 @@ get_license() {
 
 # Main execution
 main() {
-    log_info "GLiNER Model Preparation Script"
+    log_info "GLiNER Model Preparation Script (using GLiNER's export_to_onnx)"
     log_info "Output directory: $OUTPUT_DIR"
 
     check_dependencies
@@ -206,8 +245,10 @@ main() {
 
     log_success "All models prepared successfully in $OUTPUT_DIR"
     log_info "Next steps:"
-    echo "  1. Set REDACT_DETECTOR_MODEL_DIR=$OUTPUT_DIR/gliner-small-v2.1"
+    echo "  1. Set REDACT_DETECTOR_MODEL_DIR=$OUTPUT_DIR/gliner-small-v2.1/onnx"
     echo "  2. Run: ctxio proxy --redact --detector-mode hybrid"
+    echo ""
+    echo "Note: The model directory is the 'onnx' subdirectory containing model.onnx, spm.model, etc."
 }
 
 main "$@"
