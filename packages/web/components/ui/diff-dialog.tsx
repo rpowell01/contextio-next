@@ -404,34 +404,49 @@ export function DiffDialog({
       if (preValues.length > 0) {
         // Escape special regex characters in each preValue
         const escapedValues = preValues.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-        // Create a pattern that matches any of the preValues
-        const combinedPattern = new RegExp(`(${escapedValues.join('|')})`, 'g');
+        // Create a pattern that matches any of the preValues (non-capturing group to avoid split including matches)
+        const combinedPattern = new RegExp(`(?:${escapedValues.join('|')})`, 'g');
 
         const patternMatches = safeValue.match(combinedPattern) || [];
 
         if (patternMatches.length > 0) {
-          const splitParts = safeValue.split(combinedPattern);
           const result: (string | React.ReactElement)[] = [];
-          splitParts.forEach((segment, i) => {
-            if (segment) result.push(segment);
-            if (i < patternMatches.length) {
-              // Find the global match index from the matches array
-              const matchedPreValue = patternMatches[i];
-              const globalMatchIndex = matches.findIndex(m => m.preValue === matchedPreValue);
-              const correspondingMatch = matches.find(m => m.preValue === matchedPreValue);
-              const postValue = correspondingMatch?.postValue ?? "";
-              result.push(
-                <mark
-                  key={`exact-${i}-${Date.now()}`}
-                  className="redaction-placeholder pre-redaction-highlight"
-                  data-redaction={postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
-                  data-match-index={globalMatchIndex >= 0 ? globalMatchIndex : i}
-                >
-                  {patternMatches[i]}
-                </mark>
-              );
+          let lastIndex = 0;
+
+          for (let i = 0; i < patternMatches.length; i++) {
+            const match = patternMatches[i];
+            // Find the position of this match in the string starting from lastIndex
+            const matchIndex = safeValue.indexOf(match, lastIndex);
+            if (matchIndex === -1) continue;
+
+            // Add text before the match
+            if (matchIndex > lastIndex) {
+              result.push(safeValue.slice(lastIndex, matchIndex));
             }
-          });
+
+            // Find the global match index from the matches array
+            const globalMatchIndex = matches.findIndex(m => m.preValue === match);
+            const correspondingMatch = matches.find(m => m.preValue === match);
+            const postValue = correspondingMatch?.postValue ?? "";
+            result.push(
+              <mark
+                key={`exact-${i}-${matchIndex}`}
+                className="redaction-placeholder pre-redaction-highlight"
+                data-redaction={postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
+                data-match-index={globalMatchIndex >= 0 ? globalMatchIndex : i}
+              >
+                {match}
+              </mark>
+            );
+
+            lastIndex = matchIndex + match.length;
+          }
+
+          // Add remaining text after last match
+          if (lastIndex < safeValue.length) {
+            result.push(safeValue.slice(lastIndex));
+          }
+
           return <code className="font-mono text-xs">{result}</code>;
         }
       }
@@ -440,7 +455,7 @@ export function DiffDialog({
       const piiPatterns = [
         /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, // email
         /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
-        /\b(SK|AK|RK|sk|ak|rk)_[A-Za-z0-9]{32,}\b/g, // API keys
+        /\b(?:SK|AK|RK|sk|ak|rk)_[A-Za-z0-9]{32,}\b/g, // API keys (non-capturing group)
         /\bBearer\s+[A-Za-z0-9._-]+\b/g, // Bearer tokens
         /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, // phone
         /\b(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)[_-]?[=:]\s*["']?[A-Za-z0-9+/=_-]{20,}["']?/gi, // key=value patterns
@@ -452,19 +467,30 @@ export function DiffDialog({
         const newParts: (string | React.ReactElement)[] = [];
         for (const part of parts) {
           if (typeof part === "string") {
-            const split = part.split(pattern);
-            const matches = part.match(pattern) || [];
-            split.forEach((segment, i) => {
-              if (segment) newParts.push(segment);
-              if (i < matches.length) {
-                newParts.push(
-                  <mark key={`pii-${piiMatchIdx}-${Date.now()}`} className="redaction-placeholder pre-redaction-highlight" data-match-index={piiMatchIdx}>
-                    {matches[i]}
-                  </mark>
-                );
-                piiMatchIdx++;
+            // Use matchAll to find all matches with their indices, then build result
+            // This avoids the split-with-capturing-group issue on the API keys pattern
+            const matches = [...part.matchAll(pattern)];
+            if (matches.length === 0) {
+              newParts.push(part);
+              continue;
+            }
+            let lastIndex = 0;
+            for (const match of matches) {
+              const matchIndex = match.index ?? 0;
+              if (matchIndex > lastIndex) {
+                newParts.push(part.slice(lastIndex, matchIndex));
               }
-            });
+              newParts.push(
+                <mark key={`pii-${piiMatchIdx}-${matchIndex}`} className="redaction-placeholder pre-redaction-highlight" data-match-index={piiMatchIdx}>
+                  {match[0]}
+                </mark>
+              );
+              piiMatchIdx++;
+              lastIndex = matchIndex + match[0].length;
+            }
+            if (lastIndex < part.length) {
+              newParts.push(part.slice(lastIndex));
+            }
           } else {
             newParts.push(part);
           }
