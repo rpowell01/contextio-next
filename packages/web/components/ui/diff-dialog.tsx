@@ -302,26 +302,24 @@ export function DiffDialog({
         if (patternMatches.length > 0) {
           const splitParts = safeValue.split(combinedPattern);
           const result: (string | React.ReactElement)[] = [];
-          // Track which match index we're at for precise scroll targeting
-          let matchIdx = 0;
           splitParts.forEach((segment, i) => {
             if (segment) result.push(segment);
             if (i < patternMatches.length) {
-              // Find the corresponding match in matches array to get its postValue (placeholder)
+              // Find the global match index from the matches array
               const matchedPreValue = patternMatches[i];
+              const globalMatchIndex = matches.findIndex(m => m.preValue === matchedPreValue);
               const correspondingMatch = matches.find(m => m.preValue === matchedPreValue);
               const postValue = correspondingMatch?.postValue ?? "";
               result.push(
                 <mark
                   key={`exact-${i}-${Date.now()}`}
                   className="redaction-placeholder pre-redaction-highlight"
-                  data-redaction={postValue}
-                  data-match-index={matchIdx}
+                  data-redaction={postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
+                  data-match-index={globalMatchIndex >= 0 ? globalMatchIndex : i}
                 >
                   {patternMatches[i]}
                 </mark>
               );
-              matchIdx++;
             }
           });
           return <code className="font-mono text-xs">{result}</code>;
@@ -377,15 +375,9 @@ export function DiffDialog({
       return <code className="font-mono text-xs">{value}</code>;
     }
 
-    // Build a map from placeholder to match index for data-match-index attribute
-    const placeholderToMatchIndex = new Map<string, number>();
-    if (matches.length > 0) {
-      matches.forEach((m, idx) => {
-        if (m.postValue && !placeholderToMatchIndex.has(m.postValue)) {
-          placeholderToMatchIndex.set(m.postValue, idx);
-        }
-      });
-    }
+    // Track occurrence index for each placeholder type for data-match-index
+    // This ensures 1st occurrence gets index 0, 2nd gets 1, etc. even for same placeholder
+    const placeholderOccurrenceCount = new Map<string, number>();
 
     return (
       <code className="font-mono text-xs">
@@ -397,7 +389,11 @@ export function DiffDialog({
                 key={`placeholder-${i}-${placeholderMatches[i]}`}
                 className="redaction-placeholder"
                 data-redaction={placeholderMatches[i].replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
-                data-match-index={placeholderToMatchIndex.get(placeholderMatches[i]) ?? i}
+                data-match-index={(() => {
+                  const count = placeholderOccurrenceCount.get(placeholderMatches[i]) || 0;
+                  placeholderOccurrenceCount.set(placeholderMatches[i], count + 1);
+                  return count;
+                })()}
               >
                 {placeholderMatches[i]}
               </mark>
