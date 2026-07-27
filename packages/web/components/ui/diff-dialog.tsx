@@ -54,6 +54,7 @@ function truncateLongLine(
   isPre: boolean,
   matches: Array<{ preValue: string; postValue: string }> | undefined
 ): { value: string; isTruncated: boolean } {
+  // Only truncate if longer than threshold
   if (value.length <= TRUNCATE_THRESHOLD) {
     return { value, isTruncated: false };
   }
@@ -75,8 +76,22 @@ function truncateLongLine(
         }
       }
     }
+  } else if (!isPre && matches && matches.length > 0) {
+    // For right pane: find postValues (placeholders)
+    for (const match of matches) {
+      if (match.postValue) {
+        let searchStart = 0;
+        const postValue = match.postValue;
+        while (true) {
+          const idx = value.indexOf(postValue, searchStart);
+          if (idx === -1) break;
+          positions.push({ start: idx, end: idx + postValue.length });
+          searchStart = idx + 1;
+        }
+      }
+    }
   } else {
-    // For right pane (or fallback): find [PLACEHOLDER] patterns
+    // Fallback: find [PLACEHOLDER] patterns in either pane
     const placeholderPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
     let match;
     while ((match = placeholderPattern.exec(value)) !== null) {
@@ -84,8 +99,12 @@ function truncateLongLine(
     }
   }
 
+  // If no redaction positions found, fallback to truncating middle
   if (positions.length === 0) {
-    return { value, isTruncated: false };
+    // Show first CONTEXT_CHARS and last CONTEXT_CHARS with ellipsis in middle
+    const trunc = CONTEXT_CHARS;
+    let truncated = value.slice(0, trunc) + "…" + value.slice(-trunc);
+    return { value: truncated, isTruncated: true };
   }
 
   // Sort positions by start
@@ -105,11 +124,11 @@ function truncateLongLine(
 
   let truncated = "";
   if (truncateStart > 0) {
-    truncated += "...";
+    truncated += "…";
   }
   truncated += value.slice(truncateStart, truncateEnd);
   if (truncateEnd < value.length) {
-    truncated += "...";
+    truncated += "…";
   }
 
   return { value: truncated, isTruncated: true };
