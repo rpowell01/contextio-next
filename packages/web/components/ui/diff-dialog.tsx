@@ -42,6 +42,79 @@ const lineStyle = {
   minHeight: "1.25rem",
 } as const;
 
+// Threshold for truncating long lines (chars)
+const TRUNCATE_THRESHOLD = 500;
+// Context to show around redactions (chars)
+const CONTEXT_CHARS = 200;
+
+// Truncate a long line to show context around redactions
+// Returns { value: truncated string, isTruncated: boolean }
+function truncateLongLine(
+  value: string,
+  isPre: boolean,
+  matches: Array<{ preValue: string; postValue: string }> | undefined
+): { value: string; isTruncated: boolean } {
+  if (value.length <= TRUNCATE_THRESHOLD) {
+    return { value, isTruncated: false };
+  }
+
+  // Find all redaction positions in the value
+  const positions: Array<{ start: number; end: number }> = [];
+
+  if (isPre && matches && matches.length > 0) {
+    // For left pane: find exact preValues
+    for (const match of matches) {
+      if (match.preValue) {
+        let searchStart = 0;
+        const preValue = match.preValue;
+        while (true) {
+          const idx = value.indexOf(preValue, searchStart);
+          if (idx === -1) break;
+          positions.push({ start: idx, end: idx + preValue.length });
+          searchStart = idx + 1;
+        }
+      }
+    }
+  } else {
+    // For right pane (or fallback): find [PLACEHOLDER] patterns
+    const placeholderPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
+    let match;
+    while ((match = placeholderPattern.exec(value)) !== null) {
+      positions.push({ start: match.index, end: match.index + match[0].length });
+    }
+  }
+
+  if (positions.length === 0) {
+    return { value, isTruncated: false };
+  }
+
+  // Sort positions by start
+  positions.sort((a, b) => a.start - b.start);
+
+  // Calculate truncation bounds
+  const firstRedactionStart = positions[0].start;
+  const lastRedactionEnd = positions[positions.length - 1].end;
+
+  const truncateStart = Math.max(0, firstRedactionStart - CONTEXT_CHARS);
+  const truncateEnd = Math.min(value.length, lastRedactionEnd + CONTEXT_CHARS);
+
+  // If the truncation window covers most of the string, don't truncate
+  if (truncateStart === 0 && truncateEnd === value.length) {
+    return { value, isTruncated: false };
+  }
+
+  let truncated = "";
+  if (truncateStart > 0) {
+    truncated += "...";
+  }
+  truncated += value.slice(truncateStart, truncateEnd);
+  if (truncateEnd < value.length) {
+    truncated += "...";
+  }
+
+  return { value: truncated, isTruncated: true };
+}
+
 function isValidJson(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
@@ -448,9 +521,12 @@ export function DiffDialog({
 
     // For right pane (post-redaction), use RedactionHighlight to highlight placeholders
     // For left pane (pre-redaction), use RedactionHighlight with isPre=true and pass matches for exact highlighting
+    // Truncate very long lines to show context around redactions
+    const rawValue = item.value ?? "";
+    const { value: displayValue } = truncateLongLine(rawValue, isLeft, matches ?? []);
     const renderValue = isLeft
-      ? <RedactionHighlight value={item.value} isPre matches={matches} />
-      : <RedactionHighlight value={item.value} />;
+      ? <RedactionHighlight value={displayValue} isPre matches={matches} />
+      : <RedactionHighlight value={displayValue} />;
 
     return (
       <div
