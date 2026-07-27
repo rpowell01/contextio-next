@@ -457,7 +457,7 @@ export function DiffDialog({
       const preValues = matches.map(m => m.preValue).filter(Boolean);
       if (preValues.length > 0) {
         // Escape special regex characters in each preValue
-        const escapedValues = preValues.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        const escapedValues = preValues.map(v => v.replace(/[.*+?^${}()|\[\]\\]/g, '\\$&'));
         // Create a pattern that matches any of the preValues (non-capturing group to avoid split including matches)
         const combinedPattern = new RegExp(`(?:${escapedValues.join('|')})`, 'g');
 
