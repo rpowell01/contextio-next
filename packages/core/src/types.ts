@@ -279,6 +279,29 @@ export interface RateLimitConfig {
 	/** Token bucket capacity for burst handling. */
 	bufferCapacity: number;
 }
+/**
+ * Retry configuration for a single provider.
+ *
+ * Uses exponential backoff with jitter:
+ * - `maxRetries`: Maximum number of retry attempts
+ * - `baseDelayMs`: Base delay in milliseconds between retries
+ * - `maxDelayMs`: Maximum delay in milliseconds between retries
+ * - `retryableStatuses`: HTTP status codes that should trigger a retry
+ * - `jitterFactor`: Factor to randomize delay (0-1) to avoid thundering herd
+ */
+export interface RetryConfig {
+	/** Maximum number of retry attempts. */
+	maxRetries: number;
+	/** Base delay in milliseconds between retries. */
+	baseDelayMs: number;
+	/** Maximum delay in milliseconds between retries. */
+	maxDelayMs: number;
+	/** HTTP status codes that should trigger a retry. */
+	retryableStatuses: number[];
+	/** Factor to randomize delay (0-1) to avoid thundering herd. */
+	jitterFactor: number;
+}
+
 
 // --- Proxy config ---
 

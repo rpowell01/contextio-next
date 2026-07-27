@@ -124,23 +124,24 @@ function runCapturePlugins(plugins: ProxyPlugin[], capture: CaptureData): void {
  * compression between localhost and client is pointless anyway.
  */
 function buildForwardHeaders(
-  reqHeaders: HeaderMap,
-  targetHost: string | null,
-  bodyLength?: number,
-): HeaderMap {
-  const forwardHeaders: HeaderMap = { ...reqHeaders };
-  delete forwardHeaders["x-target-url"];
-  delete forwardHeaders.host;
-  delete forwardHeaders["accept-encoding"];
-  if (targetHost) {
-    forwardHeaders.host = targetHost;
-  }
-  if (bodyLength != null) {
-    delete forwardHeaders["transfer-encoding"];
-    forwardHeaders["content-length"] = String(bodyLength);
-  }
-  return forwardHeaders;
-}
+   reqHeaders: HeaderMap,
+   targetHost: string | null,
+   bodyLength?: number,
+ ): HeaderMap {
+   const forwardHeaders: HeaderMap = { ...reqHeaders };
+   delete forwardHeaders["x-target-url"];
+   delete forwardHeaders.host;
+   delete forwardHeaders["accept-encoding"];
+   delete forwardHeaders["x-retry-id"];
+   if (targetHost) {
+     forwardHeaders.host = targetHost;
+   }
+   if (bodyLength != null) {
+     delete forwardHeaders["transfer-encoding"];
+     forwardHeaders["content-length"] = String(bodyLength);
+   }
+   return forwardHeaders;
+ }
 
 /**
  * Assemble a CaptureData record from the completed request/response cycle.
@@ -739,10 +740,12 @@ export function createProxyHandler(
               };
 
               if (shouldBufferResponse) {
+                const retryId = currentCtx.headers["x-retry-id"];
                 const respCtx: ResponseContext = {
                   status: proxyRes.statusCode || 0,
                   headers: {
                     ...((proxyRes.headers as HeaderMap) || {}),
+                    ...(retryId ? { "x-retry-id": retryId } : {}),
                   },
                   body: respBody,
                   isStreaming: false,
@@ -750,6 +753,21 @@ export function createProxyHandler(
                 };
                 runResponsePlugins(plugins, respCtx)
                   .then((finalCtx) => {
+                    // Retry signal from retry plugin (status 599)
+                    if (finalCtx.status === 599) {
+                      // Re-issue the upstream request with the same request context
+                      try {
+                        doForward(currentCtx);
+                      } catch (err) {
+                        console.error("Retry request setup error:", err);
+                        finishResponse(
+                          JSON.stringify({ error: "Proxy error" }),
+                          { "content-type": "application/json" },
+                          502
+                        );
+                      }
+                      return;
+                    }
                     finishResponse(
                       finalCtx.body,
                       finalCtx.headers,
@@ -792,19 +810,23 @@ export function createProxyHandler(
       };
 
       // Run request plugins, then forward
+      let currentCtx: RequestContext = reqCtx;
       if (hasRequestPlugins) {
         runRequestPlugins(plugins, reqCtx)
-          .then(doForward)
+          .then((processedCtx) => {
+            currentCtx = processedCtx;
+            doForward(currentCtx);
+          })
           .catch((err: unknown) => {
             console.error(
               "Request plugin pipeline error:",
               err instanceof Error ? err.message : String(err),
             );
             // Forward the original request on pipeline failure
-            doForward(reqCtx);
+            doForward(currentCtx);
           });
       } else {
-        doForward(reqCtx);
+        doForward(currentCtx);
       }
     });
   };

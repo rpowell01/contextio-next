@@ -49,3 +49,10 @@ export {
   RateLimiterPlugin,
   type RateLimiterConfig,
 } from "./rate-limiter.js";
+
+// Retry plugin
+export {
+  createRetryPlugin,
+  RetryPlugin,
+  type RetryConfig,
+} from "./retry-plugin.js";
