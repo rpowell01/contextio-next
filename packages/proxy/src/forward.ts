@@ -558,7 +558,11 @@ export function createProxyHandler(
 
             if (!shouldBufferResponse) {
               // Stream directly to client
-              res.writeHead(proxyRes.statusCode!, proxyRes.headers);
+              const headers = {
+                ...proxyRes.headers,
+                ...(captureId ? { "x-contextio-capture-id": captureId } : {}),
+              };
+              res.writeHead(proxyRes.statusCode!, headers);
             }
 
             proxyRes.on("data", (chunk: Buffer) => {
@@ -773,6 +777,7 @@ export function createProxyHandler(
                   headers: {
                     ...((proxyRes.headers as HeaderMap) || {}),
                     ...(retryId ? { "x-retry-id": retryId } : {}),
+                    ...(captureId ? { "x-contextio-capture-id": captureId } : {}),
                   },
                   body: respBody,
                   isStreaming: false,
