@@ -164,11 +164,6 @@ COPY --from=build /app/packages/web/public/default-policy.json /app/default-poli
 # Copy GLiNER model from model-builder stage (ONNX export is in onnx/ subdirectory)
 COPY --from=model-builder /models/gliner-small-v2.1/onnx /app/models/gliner-small-v2.1
 
-# Default detector config
-ENV REDACT_DETECTOR_MODEL_DIR=/app/models/gliner-small-v2.1
-ENV REDACT_DETECTOR_MODE=hybrid
-ENV REDACT_DETECTOR_THRESHOLD=0.5
-
 # Create plugin files at build time (they don't change at runtime)
 # Use defaults that work without env vars being set
 RUN echo 'import { createLoggerPlugin } from "@contextio/logger";' > /app/logger-plugin.js && \
