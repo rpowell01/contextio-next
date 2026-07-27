@@ -478,6 +478,7 @@ button:focus {
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 4px;
+  display: inline-block;
 }
 
 [data-theme="dark"] .redaction-placeholder,

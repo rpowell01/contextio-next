@@ -165,6 +165,36 @@ export function DiffDialog({
     }));
   }, [rawRedactionTypes, apiToPlaceholderMap]);
 
+  // Helper to scroll a pane to center a target element both vertically and horizontally
+  const scrollToTarget = useCallback((pane: HTMLDivElement, target: HTMLElement) => {
+    if (!pane || !target) return;
+
+    // Get bounding rects
+    const paneRect = pane.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+
+    // Vertical: use scrollIntoView for smooth block scrolling
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // Horizontal: manually calculate scrollLeft to center the target
+    // targetRect.left is relative to viewport, paneRect.left is viewport-relative
+    // We need: pane.scrollLeft + (targetRect.left - paneRect.left) - (paneRect.width - targetRect.width) / 2
+    const targetCenterOffset = targetRect.left - paneRect.left;
+    const paneCenterOffset = paneRect.width / 2;
+    const targetCenterInPane = targetCenterOffset + targetRect.width / 2;
+    const desiredScrollLeft = pane.scrollLeft + targetCenterInPane - paneCenterOffset;
+
+    // Apply with smooth animation
+    pane.scrollTo({
+      left: desiredScrollLeft,
+      behavior: "smooth",
+    });
+
+    // Highlight animation
+    target.classList.add("scroll-target-highlight");
+    setTimeout(() => target.classList.remove("scroll-target-highlight"), 2000);
+  }, []);
+
   // Scroll to a specific redaction type in both panes
   const scrollToRedactionType = useCallback((apiType: string) => {
     const panes = viewMode === "diff"
@@ -184,9 +214,7 @@ export function DiffDialog({
       // Fallback: just find any in left pane
       const leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
       if (leftTarget) {
-        leftTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-        leftTarget.classList.add("scroll-target-highlight");
-        setTimeout(() => leftTarget.classList.remove("scroll-target-highlight"), 2000);
+        scrollToTarget(leftPane, leftTarget as HTMLElement);
       }
       return;
     }
@@ -195,40 +223,30 @@ export function DiffDialog({
     const matchIndex = rightTarget.getAttribute("data-match-index");
     if (matchIndex === null) {
       // No match index, just scroll both to their first found elements
-      rightTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-      rightTarget.classList.add("scroll-target-highlight");
-      setTimeout(() => rightTarget.classList.remove("scroll-target-highlight"), 2000);
+      scrollToTarget(rightPane, rightTarget as HTMLElement);
 
       const leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
       if (leftTarget) {
-        leftTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-        leftTarget.classList.add("scroll-target-highlight");
-        setTimeout(() => leftTarget.classList.remove("scroll-target-highlight"), 2000);
+        scrollToTarget(leftPane, leftTarget as HTMLElement);
       }
       return;
     }
 
     // Scroll RIGHT pane to the found element
-    rightTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-    rightTarget.classList.add("scroll-target-highlight");
-    setTimeout(() => rightTarget.classList.remove("scroll-target-highlight"), 2000);
+    scrollToTarget(rightPane, rightTarget as HTMLElement);
 
     // Find and scroll LEFT pane to the element with the SAME match index
     const leftTarget = leftPane.querySelector(`mark[data-match-index="${matchIndex}"]`);
     if (leftTarget) {
-      leftTarget.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-      leftTarget.classList.add("scroll-target-highlight");
-      setTimeout(() => leftTarget.classList.remove("scroll-target-highlight"), 2000);
+      scrollToTarget(leftPane, leftTarget as HTMLElement);
     } else {
       // Fallback: try to find by data-redaction in left pane
       const leftFallback = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
       if (leftFallback) {
-        leftFallback.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-        leftFallback.classList.add("scroll-target-highlight");
-        setTimeout(() => leftFallback.classList.remove("scroll-target-highlight"), 2000);
+        scrollToTarget(leftPane, leftFallback as HTMLElement);
       }
     }
-  }, [viewMode, apiToPlaceholderMap]);
+  }, [viewMode, apiToPlaceholderMap, scrollToTarget]);
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>, source: "left" | "right") => {
     if (isScrollingRef.current) return;
