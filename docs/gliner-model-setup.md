@@ -42,6 +42,14 @@ ctxio proxy --redact --detector-mode hybrid
 # Install Optimum CLI with ONNX support
 pip install optimum[onnx] onnxruntime
 
+# On systems with externally-managed Python (Debian/Ubuntu 23.04+, Fedora 38+):
+# Use pipx, virtual environment, or --break-system-packages:
+pipx install optimum[onnx]
+# OR
+python3 -m venv venv && source venv/bin/activate && pip install optimum[onnx] onnxruntime
+# OR (not recommended)
+pip install --break-system-packages optimum[onnx] onnxruntime
+
 # Verify installation
 optimum-cli export onnx --help
 ```

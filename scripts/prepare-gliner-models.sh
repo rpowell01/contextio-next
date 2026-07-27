@@ -54,19 +54,34 @@ check_dependencies() {
         exit 1
     fi
 
-    if ! python3 -c "import optimum; import onnxruntime" 2>/dev/null; then
-        log_warn "optimum or onnxruntime not installed. Installing..."
-        pip install optimum[onnx] onnxruntime[cpu] --quiet
-    fi
-
-    if ! command -v optimum-cli &> /dev/null; then
-        log_warn "optimum-cli not in PATH. Using python -m optimum.cli instead."
-        OPTIMUM_CLI="python3 -m optimum.cli"
-    else
+    # Check if we can import optimum and onnxruntime
+    if python3 -c "import optimum; import onnxruntime" 2>/dev/null; then
+        log_success "Dependencies OK"
         OPTIMUM_CLI="optimum-cli"
+        if ! command -v optimum-cli &> /dev/null; then
+            OPTIMUM_CLI="python3 -m optimum.cli"
+        fi
+        return
     fi
 
-    log_success "Dependencies OK"
+    log_warn "Python packages 'optimum' and 'onnxruntime' not found."
+    echo ""
+    echo "Your system uses an externally-managed Python environment (PEP 668)."
+    echo "Please install dependencies using one of these methods:"
+    echo ""
+    echo "  Option 1: pipx (recommended for CLI tools)"
+    echo "    pipx install optimum[onnx]"
+    echo ""
+    echo "  Option 2: Virtual environment"
+    echo "    python3 -m venv venv"
+    echo "    source venv/bin/activate"
+    echo "    pip install optimum[onnx] onnxruntime"
+    echo ""
+    echo "  Option 3: With --break-system-packages (not recommended)"
+    echo "    pip install --break-system-packages optimum[onnx] onnxruntime"
+    echo ""
+    echo "Then re-run this script."
+    exit 1
 }
 
 # Prepare a single model
