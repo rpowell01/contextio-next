@@ -123,17 +123,12 @@ export class RetryPlugin implements ProxyPlugin {
 
   private readonly globalConfig: RetryConfigInternal;
   private readonly providerConfigs: Partial<Record<Provider, Partial<CoreRetryConfig>>> | undefined;
-  // Map of captureId (or requestId fallback) to { originalHeaders, originalBodyBuffer, originalBodyJson, timestamp, retryCount, captureId, requestId, provider }
-  private readonly requestStore = new Map<string, {
-    originalHeaders: HeaderMap;
-    originalBodyBuffer: Buffer;
-    originalBodyJson: JsonValue | null;
-    timestamp: number;
-    retryCount: number;
-    captureId: string | undefined;
-    requestId: string;
-    provider: Provider | string;
-  }>();
+  private readonly maxEntries: number;
+  private readonly cleanupIntervalMs: number;
+  private readonly entryTtlMs: number;
+
+  // Map of captureId (or requestId fallback) to RequestStoreEntry
+  private readonly requestStore = new Map<string, RequestStoreEntry>();
 
   // Streaming state per session: tracks errors and retry info for streaming responses
   private readonly streamState = new Map<string, {
@@ -299,16 +294,15 @@ export class RetryPlugin implements ProxyPlugin {
 
     // Also clean up old stream state
     for (const [sessionId, state] of this.streamState) {
-      if (now - state.timestamp > maxAge) {
+      if (now - state.timestamp > this.entryTtlMs) {
         this.streamState.delete(sessionId);
         cleaned++;
       }
     }
 
     if (cleaned > 0) {
-      // console.debug(`[retry] Cleaned up ${cleaned} old request(s)/stream(s)`);
+      // console.debug(`[retry] Cleaned up ${cleaned} stale request(s)`);
     }
-    return entry;
   }
 
   /**
@@ -334,6 +328,21 @@ export class RetryPlugin implements ProxyPlugin {
     // Delete and re-add to move to end (most recently used)
     this.requestStore.delete(key);
     this.requestStore.set(key, entry);
+  }
+
+  /**
+   * Get an entry from the store and update its LRU position.
+   * Moves the entry to the end of the Map (most recently used).
+   */
+  private getEntry(key: string): RequestStoreEntry | undefined {
+    const entry = this.requestStore.get(key);
+    if (entry) {
+      entry.lastAccessed = Date.now();
+      // Move to end for LRU (delete + re-add)
+      this.requestStore.delete(key);
+      this.requestStore.set(key, entry);
+    }
+    return entry;
   }
 
   /**
@@ -796,7 +805,7 @@ export class RetryPlugin implements ProxyPlugin {
     const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
     const requestEntry = this.requestStore.get(storageKey);
     if (requestEntry) {
-      requestEntry.timestamp = Date.now();
+      requestEntry.lastAccessed = Date.now();
     }
     
     // Normalize line endings (handles CRLF and standalone CR)
