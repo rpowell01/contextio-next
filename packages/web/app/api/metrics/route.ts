@@ -271,10 +271,21 @@ export async function GET(request: Request): Promise<Response> {
         const parsed = parseCaptureMeta(meta);
 
         captures.push({
-          ...parsed,
+          traffic: parsed.traffic,
+          providerUsage: parsed.providerUsage,
+          redaction: parsed.redaction,
           totalRedactions: meta.totalRedactions ?? 0,
+          byRule: meta.byRule,
           provider: meta.provider ?? "unknown",
           sessionId: meta.sessionId ?? null,
+        } as {
+          traffic: TrafficMetric | null;
+          providerUsage: ProviderUsage | null;
+          redaction: RedactionMetric | null;
+          totalRedactions: number;
+          byRule?: Record<string, number>;
+          provider: string;
+          sessionId: string | null;
         });
       } catch (error) {
         console.error(`Error processing metadata ${filename}:`, error);
