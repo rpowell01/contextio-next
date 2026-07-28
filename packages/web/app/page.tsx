@@ -112,14 +112,14 @@ export default function HomePage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-lg border p-6 hover:bg-accent transition-colors flex items-center justify-center">
+          <div className="rounded-lg border p-6 hover:bg-accent transition-colors flex items-center justify-center min-h-[120px]">
             <Image
               src="/contextio-next-brand.png"
               alt="ContextIO-Next brand logo"
-              width={80}
-              height={80}
-              className="flex-shrink-0"
-              sizes="80px"
+              width={200}
+              height={200}
+              className="w-full h-full max-w-[200px] max-h-[200px] object-contain"
+              sizes="(max-width: 768px) 50vw, 25vw"
             />
           </div>
 

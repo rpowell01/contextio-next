@@ -58,13 +58,13 @@ export default function RedactionsPage() {
   const [selectedRedactionType, setSelectedRedactionType] = useState<string | null>(null);
   const [columnOrder, setColumnOrder] = useState<string[]>([
     "timestamp",
+    "totalRedactions",
     "redactionsByType",
     "requestSource",
     "requestProvider",
     "requestTarget",
     "sessionId",
     "captureId",
-    "totalRedactions",
   ]);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
@@ -564,7 +564,8 @@ export default function RedactionsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {details.map((row, index) => {
+                  {/* Filter to only show rows with positive redactions */}
+                  {details.filter(row => row.totalRedactions > 0).map((row, index) => {
                     const rowKey = `${row.captureId}-${index}`;
                     return (
                       <tr key={rowKey} className="border-b hover:bg-accent/50">
@@ -583,7 +584,7 @@ export default function RedactionsPage() {
                       </tr>
                     );
                   })}
-                  {(!details || details.length === 0) && (
+                  {(!details || details.filter(row => row.totalRedactions > 0).length === 0) && (
                     <tr>
                       <td colSpan={columnOrder.length} className="py-12 text-center text-muted-foreground">
                         No redaction details found
