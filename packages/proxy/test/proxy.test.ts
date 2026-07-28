@@ -357,9 +357,9 @@ describe("proxy plugins", () => {
       name: "modifier",
       onRequest(ctx) {
         pluginCalled = true;
-        if (ctx.body) {
+        if (ctx.body && typeof ctx.body === 'object') {
           // Create a new object to ensure reference is different
-          ctx.body = { ...ctx.body, modified: true };
+          ctx.body = { ...(ctx.body as Record<string, any>), modified: true };
         }
         return ctx;
       },
@@ -796,7 +796,7 @@ describe("streaming responses", () => {
       onStreamChunk(chunk, _sessionId) {
         chunkModified = true;
         // Replace "Hello" with "Hi"
-        return chunk.toString().replace("Hello", "Hi");
+        return Buffer.from(chunk.toString().replace("Hello", "Hi"));
       },
     };
 

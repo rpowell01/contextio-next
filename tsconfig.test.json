@@ -5,5 +5,10 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["test", "packages/web/lib/diff.ts", "packages/web/lib/diff.test.ts"]
+  "include": [
+    "test",
+    "packages/web/lib/diff.ts",
+    "packages/web/lib/diff.test.ts",
+    "packages/proxy/test/*.test.ts"
+  ]
 }

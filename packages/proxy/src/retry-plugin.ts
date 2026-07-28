@@ -66,13 +66,15 @@ export class RetryPlugin implements ProxyPlugin {
   name = "retry";
 
   private readonly config: Required<RetryConfig>;
-  // Map of requestId to { originalHeaders, originalBodyBuffer, originalBodyJson, timestamp, retryCount }
+  // Map of captureId (or requestId fallback) to { originalHeaders, originalBodyBuffer, originalBodyJson, timestamp, retryCount, captureId, requestId }
   private readonly requestStore = new Map<string, {
     originalHeaders: HeaderMap;
     originalBodyBuffer: Buffer;
     originalBodyJson: JsonValue | null;
     timestamp: number;
     retryCount: number;
+    captureId: string | undefined;
+    requestId: string;
   }>();
   // Cleanup timer for removing old entries
   private cleanupTimer: NodeJS.Timeout | null = null;
@@ -141,9 +143,9 @@ export class RetryPlugin implements ProxyPlugin {
     const maxAge = 10 * 60 * 1000; // 10 minutes
     let cleaned = 0;
 
-    for (const [requestId, entry] of this.requestStore) {
+    for (const [key, entry] of this.requestStore) {
       if (now - entry.timestamp > maxAge) {
-        this.requestStore.delete(requestId);
+        this.requestStore.delete(key);
         cleaned++;
       }
     }
@@ -239,20 +241,28 @@ export class RetryPlugin implements ProxyPlugin {
       isRetry = false;
     }
 
+    // Use captureId as the primary tracking key if available
+    const captureId = ctx.captureId;
+    const storageKey = captureId ?? requestId;
+
     // If this is the first attempt, store the original request data
     if (!isRetry) {
       // Store original headers (we'll need to retry with these)
       const originalHeaders: HeaderMap = { ...ctx.headers };
       // Store original body data
-      this.requestStore.set(requestId, {
+      this.requestStore.set(storageKey, {
         originalHeaders,
         originalBodyBuffer: ctx.rawBody,
         originalBodyJson: ctx.body,
         timestamp: Date.now(),
         retryCount: 0,
+        captureId,
+        requestId,
       });
     }
-    // If it's a retry, we already have the data stored from the first attempt
+    // Note: Retry requests bypass the plugin pipeline (forward.ts calls doForward directly),
+    // so onRequest is never invoked for retries. The entry is already stored under captureId
+    // from the first attempt, and onResponse finds it via the x-contextio-capture-id header.
 
     // Add the retry ID to headers so we can track it through the flow
     // We need to create a new headers object since HeaderMap might be read-only
@@ -274,7 +284,17 @@ export class RetryPlugin implements ProxyPlugin {
       return ctx;
     }
 
-    // Extract request ID from headers
+    // Extract captureId from headers (primary tracking key)
+    const captureIdHeader = ctx.headers["x-contextio-capture-id"];
+    let captureId: string | null = null;
+
+    if (captureIdHeader && typeof captureIdHeader === 'string') {
+      captureId = captureIdHeader;
+    } else if (Array.isArray(captureIdHeader) && captureIdHeader.length > 0) {
+      captureId = captureIdHeader[0];
+    }
+
+    // Also extract requestId as fallback
     const retryIdHeader = ctx.headers["x-retry-id"];
     let requestId: string | null = null;
 
@@ -284,13 +304,16 @@ export class RetryPlugin implements ProxyPlugin {
       requestId = retryIdHeader[0];
     }
 
+    // Use captureId as primary key, fallback to requestId
+    const storageKey = captureId ?? requestId;
+
     // If we can't track this request, pass through without modification
-    if (!requestId) {
+    if (!storageKey) {
       return ctx;
     }
 
     // Get the stored request data
-    const entry = this.requestStore.get(requestId);
+    const entry = this.requestStore.get(storageKey);
     if (!entry) {
       // No data found - this shouldn't happen if we stored it in onRequest
       // But if it does, just pass through
@@ -300,14 +323,14 @@ export class RetryPlugin implements ProxyPlugin {
     // Check if status code indicates success (less than 400)
     if (ctx.status < 400) {
       // Successful response - clean up and return
-      this.requestStore.delete(requestId);
+      this.requestStore.delete(storageKey);
       return ctx;
     }
 
     // Check if status code is retryable
     if (!this.isRetryableStatus(ctx.status)) {
       // Not retryable - clean up and return response
-      this.requestStore.delete(requestId);
+      this.requestStore.delete(storageKey);
       return ctx;
     }
 
@@ -317,7 +340,7 @@ export class RetryPlugin implements ProxyPlugin {
     // Check if we've exceeded max retries
     if (retryCount >= this.config.maxRetries) {
       // Max retries exceeded - clean up and return response
-      this.requestStore.delete(requestId);
+      this.requestStore.delete(storageKey);
       return ctx;
     }
 
@@ -355,9 +378,14 @@ export class RetryPlugin implements ProxyPlugin {
     // We include the request ID in the headers so we can match it in forward.ts
     const responseHeaders: HeaderMap = {
       ...ctx.headers,
-      "x-retry-id": requestId, // Echo back the request ID for matching
+      "x-retry-id": entry.requestId, // Echo back the original request ID for matching
     };
     
+    // Also propagate captureId if we have it
+    if (entry.captureId) {
+      responseHeaders["x-contextio-capture-id"] = entry.captureId;
+    }
+
     return {
       status: 599, // Special retry signal
       headers: responseHeaders,
@@ -390,33 +418,37 @@ export class RetryPlugin implements ProxyPlugin {
 
   /**
    * Get the original request body buffer for testing/inspection.
+   * Can look up by captureId or requestId.
    */
-  getRequestBodyForTesting(requestId: string): Buffer | undefined {
-    const entry = this.requestStore.get(requestId);
+  getRequestBodyForTesting(key: string): Buffer | undefined {
+    const entry = this.requestStore.get(key);
     return entry?.originalBodyBuffer;
   }
 
   /**
    * Get the original request body JSON for testing/inspection.
+   * Can look up by captureId or requestId.
    */
-  getRequestBodyJsonForTesting(requestId: string): JsonValue | null | undefined {
-    const entry = this.requestStore.get(requestId);
+  getRequestBodyJsonForTesting(key: string): JsonValue | null | undefined {
+    const entry = this.requestStore.get(key);
     return entry?.originalBodyJson;
   }
 
   /**
    * Get the original request headers for testing/inspection.
+   * Can look up by captureId or requestId.
    */
-  getRequestHeadersForTesting(requestId: string): HeaderMap | undefined {
-    const entry = this.requestStore.get(requestId);
+  getRequestHeadersForTesting(key: string): HeaderMap | undefined {
+    const entry = this.requestStore.get(key);
     return entry?.originalHeaders;
   }
 
   /**
    * Get retry count for testing/inspection.
+   * Can look up by captureId or requestId.
    */
-  getRetryCountForTesting(requestId: string): number {
-    const entry = this.requestStore.get(requestId);
+  getRetryCountForTesting(key: string): number {
+    const entry = this.requestStore.get(key);
     return entry?.retryCount ?? 0;
   }
 
@@ -462,10 +494,10 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
   // Attach internal methods for testing/graceful access to state
   // @ts-ignore
   (proxy as any)._internal = {
-    getRequestBody: (requestId: string) => plugin.getRequestBodyForTesting(requestId),
-    getRequestBodyJson: (requestId: string) => plugin.getRequestBodyJsonForTesting(requestId),
-    getRequestHeaders: (requestId: string) => plugin.getRequestHeadersForTesting(requestId),
-    getRetryCount: (requestId: string) => plugin.getRetryCountForTesting(requestId),
+    getRequestBody: (key: string) => plugin.getRequestBodyForTesting(key),
+    getRequestBodyJson: (key: string) => plugin.getRequestBodyJsonForTesting(key),
+    getRequestHeaders: (key: string) => plugin.getRequestHeadersForTesting(key),
+    getRetryCount: (key: string) => plugin.getRetryCountForTesting(key),
     clear: () => plugin.clearForTesting(),
   };
   

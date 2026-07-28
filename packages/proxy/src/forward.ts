@@ -792,8 +792,8 @@ export function createProxyHandler(
                       // Re-issue the upstream request with the ORIGINAL request body
                       // (from retry plugin's buffer) to ensure retries send the exact same request
                       try {
-                        // Extract retry ID from headers
-                        const retryIdHeader = currentCtx.headers["x-retry-id"];
+                        // Extract retry ID from headers (present in finalCtx.headers from retry plugin's response)
+                        const retryIdHeader = finalCtx.headers["x-retry-id"];
                         let retryId: string | null = null;
                         if (retryIdHeader && typeof retryIdHeader === "string") {
                           retryId = retryIdHeader;
@@ -801,19 +801,34 @@ export function createProxyHandler(
                           retryId = retryIdHeader[0];
                         }
 
+                        // Also extract captureId from headers (used as primary key in retry plugin)
+                        // Note: captureId is in finalCtx.headers (ResponseContext from onResponse), not currentCtx.headers (RequestContext)
+                        const captureIdHeader = finalCtx.headers["x-contextio-capture-id"];
+                        let captureId: string | null = null;
+                        if (captureIdHeader && typeof captureIdHeader === "string") {
+                          captureId = captureIdHeader;
+                        } else if (Array.isArray(captureIdHeader) && captureIdHeader.length > 0) {
+                          captureId = captureIdHeader[0];
+                        }
+
                         // Find the retry plugin to get the original request body
                         let retryCtx = currentCtx;
-                        if (retryId) {
+                        if (retryId || captureId) {
                           const retryPlugin = plugins.find((p) => p.name === "retry");
                           if (retryPlugin && (retryPlugin as any)._internal?.getRequestBody) {
-                            const originalBodyBuffer = (retryPlugin as any)._internal.getRequestBody(retryId);
-                            const originalBodyJson = (retryPlugin as any)._internal.getRequestBodyJson?.(retryId);
+                            // Try lookup by retryId first (backward compatibility), then by captureId
+                            const originalBodyBuffer = (retryPlugin as any)._internal.getRequestBody(retryId || "") ?? 
+                              (captureId ? (retryPlugin as any)._internal.getRequestBody(captureId) : undefined);
+                            const originalBodyJson = (retryPlugin as any)._internal.getRequestBodyJson?.(retryId || "") ??
+                              (captureId ? (retryPlugin as any)._internal.getRequestBodyJson?.(captureId) : undefined);
                             if (originalBodyBuffer) {
                               // Create new context with original body for retry
+                              // Also ensure captureId is propagated so retry request has it in ctx.captureId
                               retryCtx = {
                                 ...currentCtx,
                                 rawBody: originalBodyBuffer,
                                 body: originalBodyJson ?? currentCtx.body,
+                                captureId: captureId ?? currentCtx.captureId,
                               };
                             }
                           }
