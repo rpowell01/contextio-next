@@ -59,16 +59,12 @@ export function LogsViewer({ containerId = "contextio-next" }: LogsViewerProps) 
   const [error, setError] = useState<string | null>(null);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    loadLogs();
-  }, [filter.levels, filter.search]);
-
-  useEffect(() => {
-    if (autoScroll && logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [logs, autoScroll]);
+  // Sort logs oldest to newest (by timestamp)
+  const sortedLogs = useMemo(() => {
+    return [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  }, [logs]);
 
   const loadLogs = useCallback(async () => {
     setIsLoading(true);
@@ -82,6 +78,29 @@ export function LogsViewer({ containerId = "contextio-next" }: LogsViewerProps) 
       setIsLoading(false);
     }
   }, [containerId, filter]);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
+  // Auto-refresh logs every 30 seconds
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      loadLogs();
+    }, 30000);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [loadLogs]);
+
+  useEffect(() => {
+    if (autoScroll && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [sortedLogs, autoScroll]);
 
   const handleLevelToggle = (level: LogLevel) => {
     setFilter((prev) => ({
@@ -122,7 +141,7 @@ export function LogsViewer({ containerId = "contextio-next" }: LogsViewerProps) 
     }
   };
 
-  const filteredLogs = useMemo(() => logs.filter((log) => {
+  const filteredLogs = useMemo(() => sortedLogs.filter((log) => {
     if (!filter.levels.includes(log.level)) return false;
     if (filter.search) {
       const searchLower = filter.search.toLowerCase();
@@ -132,7 +151,7 @@ export function LogsViewer({ containerId = "contextio-next" }: LogsViewerProps) 
       );
     }
     return true;
-  }), [logs, filter.levels, filter.search]);
+  }), [sortedLogs, filter.levels, filter.search]);
 
 
   return (

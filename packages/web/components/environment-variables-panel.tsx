@@ -50,14 +50,11 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
     abortControllerRef.current = new AbortController();
 
     fetchEnvVars(abortControllerRef.current.signal);
-    const interval = setInterval(() => {
+    return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      abortControllerRef.current = new AbortController();
-      fetchEnvVars(abortControllerRef.current.signal);
-    }, 30000);
-    return () => clearInterval(interval);
+    };
   }, [containerId]);
 
   // Cleanup debounce timeout on unmount

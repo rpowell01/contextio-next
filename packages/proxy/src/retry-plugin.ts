@@ -32,6 +32,26 @@ export interface RetryConfig extends Partial<CoreRetryConfig> {
    * @default true
    */
   enabled?: boolean;
+
+  /**
+   * Maximum number of entries to keep in the request store.
+   * When exceeded, least recently used entries are evicted.
+   * @default 10000
+   */
+  maxEntries?: number;
+
+  /**
+   * Interval in milliseconds for periodic cleanup of stale entries.
+   * @default 60000 (1 minute)
+   */
+  cleanupIntervalMs?: number;
+
+  /**
+   * Time-to-live in milliseconds for entries in the request store.
+   * Entries older than this are removed during cleanup.
+   * @default 600000 (10 minutes)
+   */
+  entryTtlMs?: number;
 }
 
 /**
@@ -42,6 +62,9 @@ const DEFAULT_BASE_DELAY_MS = 500;
 const DEFAULT_MAX_DELAY_MS = 30_000; // 30 seconds
 const DEFAULT_RETRYABLE_STATUSES: number[] = [429, 500, 502, 503, 504];
 const DEFAULT_JITTER_FACTOR = 0.1;
+const DEFAULT_MAX_ENTRIES = 10_000;
+const DEFAULT_CLEANUP_INTERVAL_MS = 60_000; // 1 minute
+const DEFAULT_ENTRY_TTL_MS = 600_000; // 10 minutes
 
 /**
  * Merge global config with provider-specific overrides.
@@ -77,6 +100,20 @@ function resolveConfigForProvider(
 }
 
 /**
+ * Internal request store entry type.
+ */
+interface RequestStoreEntry {
+  originalHeaders: HeaderMap;
+  originalBodyBuffer: Buffer;
+  originalBodyJson: JsonValue | null;
+  retryCount: number;
+  captureId: string | undefined;
+  requestId: string;
+  provider: Provider | string;
+  lastAccessed?: number;
+}
+
+/**
  * Retry plugin class implementing exponential backoff with jitter.
  * Buffers request headers and body to enable actual retries.
  * Supports per-provider configuration overrides.
@@ -86,22 +123,16 @@ export class RetryPlugin implements ProxyPlugin {
 
   private readonly globalConfig: RetryConfigInternal;
   private readonly providerConfigs: Partial<Record<Provider, Partial<CoreRetryConfig>>> | undefined;
-  // Map of captureId (or requestId fallback) to { originalHeaders, originalBodyBuffer, originalBodyJson, timestamp, retryCount, captureId, requestId, provider }
-  private readonly requestStore = new Map<string, {
-    originalHeaders: HeaderMap;
-    originalBodyBuffer: Buffer;
-    originalBodyJson: JsonValue | null;
-    timestamp: number;
-    retryCount: number;
-    captureId: string | undefined;
-    requestId: string;
-    provider: Provider | string;
-  }>();
+  private readonly maxEntries: number;
+  private readonly cleanupIntervalMs: number;
+  private readonly entryTtlMs: number;
+  // Map of captureId (or requestId fallback) to RequestStoreEntry
+  private readonly requestStore = new Map<string, RequestStoreEntry>();
   // Cleanup timer for removing old entries
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(config: RetryConfig = {}) {
-    const { providers, enabled, ...globalConfig } = config;
+    const { providers, enabled, maxEntries, cleanupIntervalMs, entryTtlMs, ...globalConfig } = config;
 
     const maxRetries = globalConfig.maxRetries ?? DEFAULT_MAX_RETRIES;
     const baseDelayMs = globalConfig.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
@@ -120,6 +151,15 @@ export class RetryPlugin implements ProxyPlugin {
     }
     if (jitterFactor < 0 || jitterFactor > 1) {
       throw new Error("jitterFactor must be between 0 and 1");
+    }
+    if (maxEntries !== undefined && maxEntries <= 0) {
+      throw new Error("maxEntries must be positive");
+    }
+    if (cleanupIntervalMs !== undefined && cleanupIntervalMs <= 0) {
+      throw new Error("cleanupIntervalMs must be positive");
+    }
+    if (entryTtlMs !== undefined && entryTtlMs <= 0) {
+      throw new Error("entryTtlMs must be positive");
     }
 
     // Validate provider-specific configs
@@ -151,6 +191,9 @@ export class RetryPlugin implements ProxyPlugin {
       enabled: enabled ?? true,
     };
     this.providerConfigs = providers;
+    this.maxEntries = maxEntries ?? DEFAULT_MAX_ENTRIES;
+    this.cleanupIntervalMs = cleanupIntervalMs ?? DEFAULT_CLEANUP_INTERVAL_MS;
+    this.entryTtlMs = entryTtlMs ?? DEFAULT_ENTRY_TTL_MS;
 
     this.startCleanupTimer();
   }
@@ -170,8 +213,8 @@ export class RetryPlugin implements ProxyPlugin {
     if (this.cleanupTimer) return;
 
     this.cleanupTimer = setInterval(() => {
-      this.cleanupOldEntries();
-    }, 60_000); // Clean up every minute
+      this.cleanupStaleEntries();
+    }, this.cleanupIntervalMs);
 
     this.cleanupTimer.unref?.();
   }
@@ -187,24 +230,91 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
-   * Clean up old entries to prevent memory growth.
-   * Removes entries older than 10 minutes.
+   * Shutdown the plugin and clean up resources.
    */
-  private cleanupOldEntries(): void {
+  shutdown(): void {
+    this.stopCleanupTimer();
+    this.requestStore.clear();
+  }
+
+  /**
+   * Clean up stale entries and enforce maxEntries limit.
+   * Combines TTL expiry and LRU eviction in a single pass.
+   * Uses Map insertion order for O(1) LRU tracking (delete + set moves to end).
+   */
+  private cleanupStaleEntries(): void {
     const now = Date.now();
-    const maxAge = 10 * 60 * 1000; // 10 minutes
     let cleaned = 0;
 
+    // First pass: remove entries older than TTL
     for (const [key, entry] of this.requestStore) {
-      if (now - entry.timestamp > maxAge) {
+      const lastAccessed = entry.lastAccessed ?? 0;
+      if (now - lastAccessed > this.entryTtlMs) {
+        this.requestStore.delete(key);
+        cleaned++;
+      }
+    }
+
+    // Second pass: enforce maxEntries using Map insertion order (LRU)
+    // Entries at the beginning of the Map are the least recently used
+    if (this.requestStore.size > this.maxEntries) {
+      const toRemove = this.requestStore.size - this.maxEntries;
+      const keysToRemove: string[] = [];
+      
+      for (const key of this.requestStore.keys()) {
+        if (keysToRemove.length >= toRemove) break;
+        keysToRemove.push(key);
+      }
+      
+      for (const key of keysToRemove) {
         this.requestStore.delete(key);
         cleaned++;
       }
     }
 
     if (cleaned > 0) {
-      // console.debug(`[retry] Cleaned up ${cleaned} old request(s)`);
+      // console.debug(`[retry] Cleaned up ${cleaned} stale request(s)`);
     }
+  }
+
+  /**
+   * Get an entry from the store and update its LRU position.
+   * Moves the entry to the end of the Map (most recently used).
+   */
+  private getEntry(key: string): RequestStoreEntry | undefined {
+    const entry = this.requestStore.get(key);
+    if (entry) {
+      entry.lastAccessed = Date.now();
+      // Move to end for LRU (delete + re-add)
+      this.requestStore.delete(key);
+      this.requestStore.set(key, entry);
+    }
+    return entry;
+  }
+
+  /**
+   * Set an entry in the store, enforcing maxEntries limit only for new keys.
+   * Updates LRU position by deleting and re-adding.
+   */
+  private setEntry(key: string, entry: RequestStoreEntry): void {
+    const isNewKey = !this.requestStore.has(key);
+    
+    if (isNewKey) {
+      // Only enforce maxEntries when adding a new key
+      // The periodic cleanup handles eviction for existing keys
+      if (this.requestStore.size >= this.maxEntries) {
+        // Evict LRU entry (first in Map) to make room
+        const firstKey = this.requestStore.keys().next().value;
+        if (firstKey !== undefined) {
+          this.requestStore.delete(firstKey);
+        }
+      }
+    }
+    
+    entry.lastAccessed = Date.now();
+    // Delete and re-add to move to end (most recently used)
+    this.requestStore.delete(key);
+    this.requestStore.set(key, entry);
   }
 
   /**
@@ -302,11 +412,10 @@ export class RetryPlugin implements ProxyPlugin {
       // Store original headers (we'll need to retry with these)
       const originalHeaders: HeaderMap = { ...ctx.headers };
       // Store original body data along with provider info
-      this.requestStore.set(storageKey, {
+      this.setEntry(storageKey, {
         originalHeaders,
         originalBodyBuffer: ctx.rawBody,
         originalBodyJson: ctx.body,
-        timestamp: Date.now(),
         retryCount: 0,
         captureId,
         requestId,
@@ -361,7 +470,7 @@ export class RetryPlugin implements ProxyPlugin {
     }
 
     // Get the stored request data
-    const entry = this.requestStore.get(storageKey);
+    const entry = this.getEntry(storageKey);
     if (!entry) {
       // No data found - this shouldn't happen if we stored it in onRequest
       // But if it does, just pass through
@@ -419,10 +528,11 @@ export class RetryPlugin implements ProxyPlugin {
       // Else, keep the calculated delayMs from exponential backoff
     }
 
-    // Increment retry count for next attempt
-    entry.retryCount = retryCount + 1;
-    // Update timestamp to keep the entry fresh
-    entry.timestamp = Date.now();
+    // Update entry with incremented retry count
+    this.setEntry(storageKey, {
+      ...entry,
+      retryCount: retryCount + 1,
+    });
 
     // Apply delay before signaling retry
     if (delayMs > 0) {
@@ -555,6 +665,7 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getRequestHeaders: (key: string) => plugin.getRequestHeadersForTesting(key),
     getRetryCount: (key: string) => plugin.getRetryCountForTesting(key),
     clear: () => plugin.clearForTesting(),
+    shutdown: () => plugin.shutdown(),
   };
   
   return proxy;

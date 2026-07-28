@@ -58,6 +58,7 @@ export default function RedactionsPage() {
   const [selectedRedactionType, setSelectedRedactionType] = useState<string | null>(null);
   const [columnOrder, setColumnOrder] = useState<string[]>([
     "timestamp",
+    "redactionsByType",
     "requestSource",
     "requestProvider",
     "requestTarget",
@@ -321,6 +322,20 @@ export default function RedactionsPage() {
 
   const renderCell = (key: string, row: RedactionCaptureRow) => {
     switch (key) {
+      case "redactionsByType":
+        return (
+          <span
+            className="text-primary underline cursor-pointer hover:text-primary/80"
+            onClick={(e) => { e.stopPropagation(); handleOpenDiff(e as React.MouseEvent, row); }}
+            title={row.redactionSummary}
+          >
+            {row.redactionSummary.split(", ").map((item, idx) => (
+              <span key={idx} className="block whitespace-nowrap">
+                {item}
+              </span>
+            ))}
+          </span>
+        );
       case "requestSource":
         return <span className="text-muted-foreground">{row.requestSource ?? "—"}</span>;
       case "requestProvider":
@@ -518,6 +533,7 @@ export default function RedactionsPage() {
                         captureId: "Capture ID",
                         timestamp: "Date/Time",
                         totalRedactions: "Total Redactions",
+                        redactionsByType: "Redactions by Type",
                       };
                       const isLast = idx === columnOrder.length - 1;
                       return (
@@ -545,7 +561,6 @@ export default function RedactionsPage() {
                         </th>
                       );
                     })}
-                    <th className="text-left py-3 px-4">Redactions by Type</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -565,25 +580,12 @@ export default function RedactionsPage() {
                             {renderCell(key, row)}
                           </td>
                         ))}
-                        <td className="py-3 px-4 max-w-xs whitespace-normal break-words">
-                          <span
-                            className="text-primary underline cursor-pointer hover:text-primary/80"
-                            onClick={(e) => handleOpenDiff(e, row)}
-                            title={row.redactionSummary}
-                          >
-                            {row.redactionSummary.split(", ").map((item, idx) => (
-                              <span key={idx} className="block whitespace-nowrap">
-                                {item}
-                              </span>
-                            ))}
-                          </span>
-                        </td>
                       </tr>
                     );
                   })}
                   {(!details || details.length === 0) && (
                     <tr>
-                      <td colSpan={columnOrder.length + 1} className="py-12 text-center text-muted-foreground">
+                      <td colSpan={columnOrder.length} className="py-12 text-center text-muted-foreground">
                         No redaction details found
                       </td>
                     </tr>
