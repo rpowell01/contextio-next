@@ -52,6 +52,8 @@ export default function RedactionsPage() {
     matches?: Array<{ ruleId: string; preValue: string; postValue: string; path: string }>;
   } | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>({ key: "timestamp", direction: "desc" });
+  // Filter to only show rows with positive redactions (enabled by default)
+  const [hideZeroRedactions, setHideZeroRedactions] = useState(true);
   // Debounced filters for API calls - only redactionType is used (from breakdown clicks)
   const [debouncedFilters, setDebouncedFilters] = useState<Record<string, string>>({});
   // Selected redaction type filter from breakdown widgets
@@ -505,12 +507,23 @@ export default function RedactionsPage() {
                   {totalCount} total captures &bull; Page {page} of {totalPages || 1}
                 </p>
               </div>
-              {_loadingDetails && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Spinner size={14} />
-                  <span>Loading details...</span>
-                </div>
-              )}
+              <div className="flex items-center gap-4">
+                {_loadingDetails && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Spinner size={14} />
+                    <span>Loading details...</span>
+                  </div>
+                )}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={hideZeroRedactions}
+                    onChange={(e) => setHideZeroRedactions(e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-muted-foreground">Hide rows with 0 total redactions</span>
+                </label>
+              </div>
             </div>
             <div className="relative overflow-x-auto">
               {_loadingDetails && (
@@ -564,8 +577,10 @@ export default function RedactionsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Filter to only show rows with positive redactions */}
-                  {details.filter(row => row.totalRedactions > 0).map((row, index) => {
+                  {/* Filter to only show rows with positive redactions when checkbox is checked */}
+                  {details
+                    .filter((row) => (hideZeroRedactions ? row.totalRedactions > 0 : true))
+                    .map((row, index) => {
                     const rowKey = `${row.captureId}-${index}`;
                     return (
                       <tr key={rowKey} className="border-b hover:bg-accent/50">
@@ -584,7 +599,7 @@ export default function RedactionsPage() {
                       </tr>
                     );
                   })}
-                  {(!details || details.filter(row => row.totalRedactions > 0).length === 0) && (
+                  {(!details || details.filter((row) => (hideZeroRedactions ? row.totalRedactions > 0 : true)).length === 0) && (
                     <tr>
                       <td colSpan={columnOrder.length} className="py-12 text-center text-muted-foreground">
                         No redaction details found

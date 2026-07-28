@@ -123,11 +123,36 @@ export class RetryPlugin implements ProxyPlugin {
 
   private readonly globalConfig: RetryConfigInternal;
   private readonly providerConfigs: Partial<Record<Provider, Partial<CoreRetryConfig>>> | undefined;
-  private readonly maxEntries: number;
-  private readonly cleanupIntervalMs: number;
-  private readonly entryTtlMs: number;
-  // Map of captureId (or requestId fallback) to RequestStoreEntry
-  private readonly requestStore = new Map<string, RequestStoreEntry>();
+  // Map of captureId (or requestId fallback) to { originalHeaders, originalBodyBuffer, originalBodyJson, timestamp, retryCount, captureId, requestId, provider }
+  private readonly requestStore = new Map<string, {
+    originalHeaders: HeaderMap;
+    originalBodyBuffer: Buffer;
+    originalBodyJson: JsonValue | null;
+    timestamp: number;
+    retryCount: number;
+    captureId: string | undefined;
+    requestId: string;
+    provider: Provider | string;
+  }>();
+
+  // Streaming state per session: tracks errors and retry info for streaming responses
+  private readonly streamState = new Map<string, {
+    errorDetected: boolean;
+    errorStatus: number | null;
+    errorMessage: string | null;
+    captureId: string | undefined;
+    requestId: string;
+    provider: Provider | string;
+    timestamp: number;
+    // Buffer for partial SSE field content split across chunks
+    partialField: "data" | "event" | "id" | "retry" | null;
+    partialContent: string;
+    // SSE parsing state for multi-line data fields across chunk boundaries
+    inDataField: boolean;
+    dataBuffer: string;
+    hasErrorEvent: boolean;
+  }>();
+
   // Cleanup timer for removing old entries
   private cleanupTimer: NodeJS.Timeout | null = null;
 
@@ -272,22 +297,16 @@ export class RetryPlugin implements ProxyPlugin {
       }
     }
 
-    if (cleaned > 0) {
-      // console.debug(`[retry] Cleaned up ${cleaned} stale request(s)`);
+    // Also clean up old stream state
+    for (const [sessionId, state] of this.streamState) {
+      if (now - state.timestamp > maxAge) {
+        this.streamState.delete(sessionId);
+        cleaned++;
+      }
     }
-  }
 
-  /**
-   * Get an entry from the store and update its LRU position.
-   * Moves the entry to the end of the Map (most recently used).
-   */
-  private getEntry(key: string): RequestStoreEntry | undefined {
-    const entry = this.requestStore.get(key);
-    if (entry) {
-      entry.lastAccessed = Date.now();
-      // Move to end for LRU (delete + re-add)
-      this.requestStore.delete(key);
-      this.requestStore.set(key, entry);
+    if (cleaned > 0) {
+      // console.debug(`[retry] Cleaned up ${cleaned} old request(s)/stream(s)`);
     }
     return entry;
   }
@@ -327,6 +346,144 @@ export class RetryPlugin implements ProxyPlugin {
       .toString()
       .padStart(6, "0");
     return `retry-${timestamp}-${random}`;
+  }
+
+  /**
+   * SSE parsing state for incremental chunk processing.
+   */
+  private initSseParseState() {
+    return {
+      inDataField: false,
+      dataBuffer: "",
+      hasErrorEvent: false,
+      errorDetected: false,
+      errorStatus: null as number | null,
+      errorMessage: null as string | null,
+    };
+  }
+
+  /**
+   * Process a single SSE line, updating parse state and detecting errors.
+   */
+  private processSseLine(trimmed: string, state: { inDataField: boolean; dataBuffer: string; hasErrorEvent: boolean; errorDetected: boolean; errorStatus: number | null; errorMessage: string | null }): void {
+    if (trimmed.startsWith("event:")) {
+      // End any pending data field
+      if (state.inDataField && state.dataBuffer.length > 0) {
+        const result = this.checkDataForError(state.dataBuffer);
+        if (result.isError) {
+          state.errorDetected = true;
+          state.errorStatus = result.status;
+          state.errorMessage = result.message;
+        }
+        state.dataBuffer = "";
+      }
+      state.inDataField = false;
+
+      const eventType = trimmed.slice(6).trim();
+      if (eventType === "error") {
+        state.hasErrorEvent = true;
+      }
+      return;
+    }
+
+    if (trimmed.startsWith("data:")) {
+      state.inDataField = true;
+      const dataContent = trimmed.slice(5).trim();
+      if (state.dataBuffer.length > 0) state.dataBuffer += "\n";
+      state.dataBuffer += dataContent;
+      return;
+    }
+
+    // Empty line - end of data field (per SSE spec, only empty lines terminate events)
+    if (state.inDataField && state.dataBuffer.length > 0 && trimmed === "") {
+      const result = this.checkDataForError(state.dataBuffer);
+      if (result.isError) {
+        state.errorDetected = true;
+        state.errorStatus = result.status;
+        state.errorMessage = result.message;
+      }
+      state.dataBuffer = "";
+      state.inDataField = false;
+    }
+    // Other SSE fields (id:, retry:, etc.) don't terminate the data field
+  }
+
+  /**
+   * Parse SSE (Server-Sent Events) chunk to detect error events.
+   * Works on boundary-agnostic text - does not require \n\n separators.
+   * Returns { isError: boolean, status: number | null, message: string | null }
+   */
+  private parseSseForError(chunk: Buffer): { isError: boolean; status: number | null; message: string | null } {
+    const text = chunk.toString("utf8");
+    // Normalize line endings (handles CRLF and standalone CR)
+    const normalizedText = text.replace(/\r\n|\r/g, "\n");
+    const lines = normalizedText.split("\n");
+    const state = this.initSseParseState();
+
+    for (const line of lines) {
+      this.processSseLine(line.trim(), state);
+    }
+
+    // Check any remaining buffered data
+    if (state.inDataField && state.dataBuffer.length > 0) {
+      const result = this.checkDataForError(state.dataBuffer);
+      if (result.isError) {
+        return { isError: true, status: result.status, message: result.message };
+      }
+    }
+
+    // If we had an explicit error event but no error in data, return generic error
+    if (state.hasErrorEvent) {
+      return { isError: true, status: null, message: "SSE error event detected" };
+    }
+
+    return { isError: state.errorDetected, status: state.errorStatus, message: state.errorMessage };
+  }
+
+  /**
+   * Check a data field string for error patterns.
+   * Handles multi-line data per SSE spec.
+   */
+  private checkDataForError(dataStr: string): { isError: boolean; status: number | null; message: string | null } {
+    if (!dataStr || dataStr === "[DONE]") return { isError: false, status: null, message: null };
+    
+    try {
+      const parsed = JSON.parse(dataStr);
+      
+      // Check for explicit error event in data (Anthropic style: { type: "error", error: {...} })
+      if (parsed.type === "error" && parsed.error) {
+        const err = parsed.error;
+        const status = err.status ?? err.code ?? parsed.status ?? parsed.code ?? null;
+        const message = err.message ?? JSON.stringify(err);
+        return { isError: true, status: typeof status === 'number' ? status : null, message };
+      }
+      
+      // Check for error object (OpenAI style: { error: {...} })
+      if (parsed.error) {
+        const err = parsed.error;
+        const status = err.status ?? err.code ?? parsed.status ?? parsed.code ?? null;
+        const message = err.message ?? (parsed.type === "error" ? err.type : JSON.stringify(err));
+        return { isError: true, status: typeof status === 'number' ? status : null, message };
+      }
+      
+      // Check for top-level status/code (generic error format)
+      const topStatus = parsed.status ?? parsed.code ?? null;
+      if (topStatus !== null && typeof topStatus === 'number' && topStatus >= 400) {
+        const message = parsed.message ?? parsed.error?.message ?? JSON.stringify(parsed);
+        return { isError: true, status: topStatus, message };
+      }
+    } catch {
+      // Not valid JSON, not an error we can parse
+    }
+    
+    return { isError: false, status: null, message: null };
+  }
+
+  /**
+   * Get the storage key for a request (captureId or requestId).
+   */
+  private getStorageKey(captureId: string | undefined, requestId: string): string {
+    return captureId ?? requestId;
   }
 
   /**
@@ -421,6 +578,25 @@ export class RetryPlugin implements ProxyPlugin {
         requestId,
         provider: ctx.provider,
       });
+
+      // Also initialize streaming state if we have a sessionId (for streaming responses)
+      // The sessionId is used to track streaming state across chunks
+      if (ctx.sessionId) {
+        this.streamState.set(ctx.sessionId, {
+          errorDetected: false,
+          errorStatus: null,
+          errorMessage: null,
+          captureId,
+          requestId,
+          provider: ctx.provider,
+          timestamp: Date.now(),
+          partialField: null,
+          partialContent: "",
+          inDataField: false,
+          dataBuffer: "",
+          hasErrorEvent: false,
+        });
+      }
     }
     // Note: Retry requests bypass the plugin pipeline (forward.ts calls doForward directly),
     // so onRequest is never invoked for retries. The entry is already stored under captureId
@@ -480,22 +656,37 @@ export class RetryPlugin implements ProxyPlugin {
     // Get provider-specific configuration
     const config = this.getConfigForProvider(entry.provider);
 
-    // Skip if plugin is disabled for this provider
+// Skip if plugin is disabled for this provider
     if (!config.enabled) {
+      // Clean up request store entry since we won't retry
+      this.requestStore.delete(storageKey);
+      // Also clean up streamState for non-streaming responses (streaming handled in onStreamEnd)
+      if (!ctx.isStreaming && ctx.sessionId) {
+        this.streamState.delete(ctx.sessionId);
+      }
       return ctx;
     }
 
     // Check if status code indicates success (less than 400)
-    if (ctx.status < 400) {
-      // Successful response - clean up and return
+    if (ctx.status < 400 && !ctx.isStreaming) {
+      // Successful non-streaming response - clean up request store and stream state
       this.requestStore.delete(storageKey);
+      if (ctx.sessionId) {
+        this.streamState.delete(ctx.sessionId);
+      }
       return ctx;
     }
 
     // Check if status code is retryable
     if (!this.isRetryableStatus(ctx.status, config)) {
-      // Not retryable - clean up and return response
-      this.requestStore.delete(storageKey);
+      // Not retryable - clean up request store
+      // Only clean up for non-streaming responses (streaming handled in onStreamEnd)
+      if (!ctx.isStreaming) {
+        this.requestStore.delete(storageKey);
+        if (ctx.sessionId) {
+          this.streamState.delete(ctx.sessionId);
+        }
+      }
       return ctx;
     }
 
@@ -504,8 +695,14 @@ export class RetryPlugin implements ProxyPlugin {
     
     // Check if we've exceeded max retries
     if (retryCount >= config.maxRetries) {
-      // Max retries exceeded - clean up and return response
-      this.requestStore.delete(storageKey);
+      // Max retries exceeded - clean up request store
+      // Only clean up for non-streaming responses (streaming handled in onStreamEnd)
+      if (!ctx.isStreaming) {
+        this.requestStore.delete(storageKey);
+        if (ctx.sessionId) {
+          this.streamState.delete(ctx.sessionId);
+        }
+      }
       return ctx;
     }
 
@@ -569,16 +766,247 @@ export class RetryPlugin implements ProxyPlugin {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  /**
+   * Handle streaming response chunk.
+   * Detects SSE error events by scanning for data:/event: lines.
+   * Works with forward.ts JSON boundary splitting.
+   */
   onStreamChunk(chunk: Buffer, sessionId: string | null): Buffer {
-    // For streaming responses, we pass through chunks unchanged
-    // Implementing retry logic for streaming is complex and would require
-    // buffering the entire stream, which may not be appropriate for all use cases.
-    // For now, we maintain the existing behavior of not interfering with streams.
+    // If no sessionId, we can't track streaming state - pass through
+    if (!sessionId) {
+      return chunk;
+    }
+
+    let streamState = this.streamState.get(sessionId);
+    if (!streamState) {
+      // No stream state available for this session; pass through
+      // (streamState is initialized in onRequest for all requests with sessionId)
+      return chunk;
+    }
+
+    // Combine any partial field content from previous chunk with new chunk
+    // If there's a partial field, prepend its prefix (data: , event: , etc.)
+    const prefix = streamState.partialField ? streamState.partialField + ": " : "";
+    const text = prefix + streamState.partialContent + chunk.toString("utf8");
+    
+    // Refresh timestamp to prevent premature cleanup by cleanupOldEntries
+    streamState.timestamp = Date.now();
+    
+    // Also refresh requestStore entry timestamp for long-running streams
+    const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
+    const requestEntry = this.requestStore.get(storageKey);
+    if (requestEntry) {
+      requestEntry.timestamp = Date.now();
+    }
+    
+    // Normalize line endings (handles CRLF and standalone CR)
+    const normalizedText = text.replace(/\r\n|\r/g, "\n");
+    
+    // Split into lines and process SSE format
+    const lines = normalizedText.split("\n");
+    
+    // The last element might be incomplete - save it for next chunk
+    // We need to check if the last line is a field prefix (data:, event:, etc.)
+    // If so, we save the field type and content separately
+    const lastLine = lines.pop() || "";
+    const lastLineTrimmed = lastLine.trim();
+    
+    // Check if the last line looks like an SSE field start
+    let partialField: "data" | "event" | "id" | "retry" | null = null;
+    let partialContent = "";
+    if (lastLineTrimmed.startsWith("data: ")) {
+      partialField = "data";
+      partialContent = lastLineTrimmed.slice(6).trim();
+    } else if (lastLineTrimmed.startsWith("data:")) {
+      partialField = "data";
+      partialContent = lastLineTrimmed.slice(5).trim();
+    } else if (lastLineTrimmed.startsWith("event: ")) {
+      partialField = "event";
+      partialContent = lastLineTrimmed.slice(7).trim();
+    } else if (lastLineTrimmed.startsWith("event:")) {
+      partialField = "event";
+      partialContent = lastLineTrimmed.slice(6).trim();
+    } else if (lastLineTrimmed.startsWith("id: ")) {
+      partialField = "id";
+      partialContent = lastLineTrimmed.slice(4).trim();
+    } else if (lastLineTrimmed.startsWith("id:")) {
+      partialField = "id";
+      partialContent = lastLineTrimmed.slice(3).trim();
+    } else if (lastLineTrimmed.startsWith("retry: ")) {
+      partialField = "retry";
+      partialContent = lastLineTrimmed.slice(7).trim();
+    } else if (lastLineTrimmed.startsWith("retry:")) {
+      partialField = "retry";
+      partialContent = lastLineTrimmed.slice(6).trim();
+    } else if (lastLine.length > 0) {
+      // Non-empty line that doesn't match field patterns - could be continuation
+      // If we were in a data field, continue it
+      if (streamState.inDataField) {
+        partialField = "data";
+        // Only add newline separator if dataBuffer is non-empty
+        partialContent = streamState.dataBuffer 
+          ? streamState.dataBuffer + "\n" + lastLine.trim()
+          : lastLine.trim();
+        streamState.inDataField = false;
+        streamState.dataBuffer = "";
+      } else {
+        // Unknown partial - just store as generic content
+        partialField = "data";
+        partialContent = lastLine;
+      }
+    }
+    
+    streamState.partialField = partialField;
+    streamState.partialContent = partialContent;
+    
+    // Use streamState's persistent SSE parsing state for multi-line data fields across chunks
+    // (inDataField and dataBuffer are always initialized in onRequest)
+    
+    // Use streamState's persistent SSE parsing state
+    const sseState = {
+      inDataField: streamState.inDataField,
+      dataBuffer: streamState.dataBuffer,
+      hasErrorEvent: false,
+      errorDetected: false,
+      errorStatus: null as number | null,
+      errorMessage: null as string | null,
+    };
+    
+    // Process each complete line for SSE event/error detection
+    for (const line of lines) {
+      const trimmed = line.trim();
+      this.processSseLine(trimmed, sseState);
+    }
+    
+    // Persist SSE parsing state back to streamState for next chunk
+    streamState.inDataField = sseState.inDataField;
+    streamState.dataBuffer = sseState.dataBuffer;
+    streamState.hasErrorEvent = streamState.hasErrorEvent || sseState.hasErrorEvent;
+    
+    // Merge SSE parse results into streamState, preserving existing specific errors
+    if (sseState.errorDetected || sseState.hasErrorEvent) {
+      // Only update if we don't already have a more specific error
+      if (!streamState.errorDetected) {
+        streamState.errorDetected = true;
+        if (sseState.errorDetected) {
+          streamState.errorStatus = sseState.errorStatus;
+          streamState.errorMessage = sseState.errorMessage;
+        } else if (sseState.hasErrorEvent) {
+          // Generic SSE error event without specific error data
+          streamState.errorStatus = null;
+          streamState.errorMessage = "SSE error event detected";
+        }
+      } else if (sseState.errorDetected && streamState.errorStatus === null) {
+        // Upgrade from generic to specific error if we have one
+        streamState.errorStatus = sseState.errorStatus;
+        streamState.errorMessage = sseState.errorMessage;
+      }
+    }
+    
+    // Pass through the chunk to the client
     return chunk;
   }
 
+  /**
+   * Clean up both streamState and requestStore for a stream.
+   */
+  private cleanupStreamState(streamState: { captureId: string | undefined; requestId: string }, sessionId: string): void {
+    this.streamState.delete(sessionId);
+    const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
+    this.requestStore.delete(storageKey);
+  }
+
+  /**
+   * Handle streaming response end.
+   * Detects SSE errors in the final chunk and cleans up state.
+   * Note: The proxy architecture doesn't support transparent streaming retries.
+   * SSE error detection is provided for monitoring/observability purposes.
+   */
   onStreamEnd(sessionId: string | null): Buffer | null {
-    // Stream end - no special processing needed for retry logic
+    if (!sessionId) {
+      return null;
+    }
+
+    const streamState = this.streamState.get(sessionId);
+    if (!streamState) {
+      // No stream state to clean up
+      return null;
+    }
+
+    // Flush any partial field content from the final chunk
+    if (streamState.partialField && streamState.partialContent.length > 0) {
+      // Reconstruct the final line and check for errors
+      let finalLine = "";
+      if (streamState.partialField === "data") {
+        finalLine = "data: " + streamState.partialContent;
+      } else if (streamState.partialField === "event") {
+        finalLine = "event: " + streamState.partialContent;
+      } else if (streamState.partialField === "id") {
+        finalLine = "id: " + streamState.partialContent;
+      } else if (streamState.partialField === "retry") {
+        finalLine = "retry: " + streamState.partialContent;
+      }
+      
+      if (finalLine) {
+        const errorInfo = this.parseSseForError(Buffer.from(finalLine, "utf8"));
+        if (errorInfo.isError) {
+          // Only update if we don't have a more specific error (non-null status)
+          // or if no error was previously detected
+          const shouldUpdate = !streamState.errorDetected || 
+            (errorInfo.status !== null && streamState.errorStatus === null);
+          if (shouldUpdate) {
+            streamState.errorDetected = true;
+            streamState.errorStatus = errorInfo.status;
+            streamState.errorMessage = errorInfo.message;
+          }
+        }
+      }
+      // Clear the partial content
+      streamState.partialField = null;
+      streamState.partialContent = "";
+    }
+
+    // Also flush any pending data buffer from persistent SSE parsing state
+    if (streamState.inDataField && streamState.dataBuffer.length > 0) {
+      const errorInfo = this.checkDataForError(streamState.dataBuffer);
+      if (errorInfo.isError) {
+        // Only update if we don't have a more specific error (non-null status)
+        // or if no error was previously detected
+        const shouldUpdate = !streamState.errorDetected || 
+          (errorInfo.status !== null && streamState.errorStatus === null);
+        if (shouldUpdate) {
+          streamState.errorDetected = true;
+          streamState.errorStatus = errorInfo.status;
+          streamState.errorMessage = errorInfo.message;
+        }
+      }
+      streamState.dataBuffer = "";
+      streamState.inDataField = false;
+    }
+
+    // Also check for hasErrorEvent that was set during onStreamChunk
+    if (streamState.hasErrorEvent && !streamState.errorDetected) {
+      streamState.errorDetected = true;
+      streamState.errorStatus = null;
+      streamState.errorMessage = "SSE error event detected";
+    }
+
+    // For observability, log the detected error state before cleanup
+    // (In production, this could be emitted to metrics/logs)
+    if (streamState.errorDetected) {
+      console.debug(`[retry] Streaming error detected for session ${sessionId}:`, {
+        status: streamState.errorStatus,
+        message: streamState.errorMessage,
+        hasErrorEvent: streamState.hasErrorEvent,
+      });
+    }
+
+    // Clean up stream state and request store
+    // Note: The proxy architecture doesn't support transparent streaming retries.
+    // SSE error detection is provided for monitoring/observability purposes.
+    this.cleanupStreamState(streamState, sessionId);
+    
+    // Return null - no extra data to flush
     return null;
   }
 
@@ -619,10 +1047,31 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Get streaming error state for testing/inspection.
+   * Returns the detected error info for a streaming session, if any.
+   * Can look up by sessionId.
+   */
+  getStreamErrorForTesting(sessionId: string): { errorDetected: boolean; errorStatus: number | null; errorMessage: string | null; hasErrorEvent: boolean } | undefined {
+    const entry = this.streamState.get(sessionId);
+    if (!entry) return undefined;
+    return {
+      errorDetected: entry.errorDetected,
+      errorStatus: entry.errorStatus,
+      errorMessage: entry.errorMessage,
+      hasErrorEvent: entry.hasErrorEvent,
+    };
+  }
+
+  /**
    * Clear all buffered state (for testing).
    */
   clearForTesting(): void {
     this.requestStore.clear();
+    this.streamState.clear();
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
   }
 }
 
@@ -664,6 +1113,7 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getRequestBodyJson: (key: string) => plugin.getRequestBodyJsonForTesting(key),
     getRequestHeaders: (key: string) => plugin.getRequestHeadersForTesting(key),
     getRetryCount: (key: string) => plugin.getRetryCountForTesting(key),
+    getStreamError: (sessionId: string) => plugin.getStreamErrorForTesting(sessionId),
     clear: () => plugin.clearForTesting(),
     shutdown: () => plugin.shutdown(),
   };
