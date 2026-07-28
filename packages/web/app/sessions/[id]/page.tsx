@@ -5,10 +5,24 @@ import { formatDateTime } from "@/lib/utils";
 import type { SessionDetail, CaptureDetail } from "@/types/api";
 import Link from "next/link";
 import { apiClient } from "@/lib/api";
-import { useState, useEffect, useMemo, Suspense } from "react";
+import type { CaptureMetadataSidecar } from "@/lib/api";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  Suspense,
+} from "react";
 import { useSearchParams } from "next/navigation";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { usePageLoad } from "@/components/page-load-context";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Copy } from "lucide-react";
 
 function renderJson(data: unknown): string {
   if (typeof data === "string") {
@@ -72,6 +86,11 @@ function SessionContent({
   >(null);
   const [captureDetailLoading, setCaptureDetailLoading] = useState(false);
   const [captureDetailError, setCaptureDetailError] = useState<string | null>(null);
+  const [captureMetadata, setCaptureMetadata] = useState<CaptureMetadataSidecar | null>(null);
+  const [captureMetadataError, setCaptureMetadataError] = useState<string | null>(null);
+  const [captureMetadataOpen, setCaptureMetadataOpen] = useState(false);
+  const [captureMetadataLoading, setCaptureMetadataLoading] = useState(false);
+  const [copyMetadataSuccess, setCopyMetadataSuccess] = useState(false);
   const [filters, setFilters] = useState<CaptureFilters>(DEFAULT_FILTERS);
   const searchParams = useSearchParams();
 
@@ -209,6 +228,35 @@ function SessionContent({
     fetchCaptureDetail();
   }, [selectedCaptureId]);
 
+  const fetchCaptureMetadata = async () => {
+    if (!selectedCaptureId) return;
+    setCaptureMetadataLoading(true);
+    setCaptureMetadataError(null);
+    setCaptureMetadata(null);
+    try {
+      const data = await apiClient.getCaptureMetadata(selectedCaptureId);
+      setCaptureMetadata(data);
+    } catch (e) {
+      console.error("Failed to fetch metadata:", e);
+      setCaptureMetadataError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setCaptureMetadataLoading(false);
+    }
+  };
+
+  const handleMetadataOpen = () => {
+    setCaptureMetadataOpen(true);
+    fetchCaptureMetadata();
+  };
+
+  const handleMetadataClose = () => {
+    setCaptureMetadataOpen(false);
+    setCaptureMetadata(null);
+    setCaptureMetadataError(null);
+    setCaptureMetadataLoading(false);
+    setCopyMetadataSuccess(false);
+  };
+
   const handleFilterChange = (key: keyof CaptureFilters, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
@@ -280,13 +328,20 @@ function SessionContent({
 
         {(captureDetailLoading || captureDetail) ? (
           <div className="space-y-6">
-            <div>
-              <Link href={`/sessions/${id ?? ""}`} className="text-sm text-muted-foreground hover:text-foreground">
-                ← Back to session
-              </Link>
-              <h2 className="text-3xl font-bold tracking-tight mt-2">
-                Capture: {selectedCaptureId ? `#${selectedCaptureId}` : "Loading..."}
-              </h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <Link href={`/sessions/${id ?? ""}`} className="text-sm text-muted-foreground hover:text-foreground">
+                  ← Back to session
+                </Link>
+                <h2 className="text-3xl font-bold tracking-tight mt-2">
+                  Capture: {selectedCaptureId ? `#${selectedCaptureId}` : "Loading..."}
+                </h2>
+              </div>
+              {selectedCaptureId && (
+                <Button variant="outline" size="sm" onClick={handleMetadataOpen} disabled={captureMetadataLoading}>
+                  View Metadata
+                </Button>
+              )}
             </div>
 
             {captureDetailLoading && (
@@ -362,6 +417,51 @@ function SessionContent({
             )}
           </div>
         ) : null}
+
+        {/* Metadata Dialog */}
+        <Dialog open={captureMetadataOpen} onOpenChange={handleMetadataClose}>
+          <DialogContent className="max-w-4xl max-h-[80vh]">
+            <DialogHeader>
+              <DialogTitle>Capture Metadata</DialogTitle>
+            </DialogHeader>
+            <div className="p-4">
+              {captureMetadataLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <ProgressBar indeterminate className="w-1/2" />
+                </div>
+              ) : captureMetadataError ? (
+                <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
+                  <p className="text-destructive">Error: {captureMetadataError}</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Please try again or contact support if the problem persists.
+                  </p>
+                </div>
+              ) : captureMetadata ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(captureMetadata, null, 2));
+                        setCopyMetadataSuccess(true);
+                        setTimeout(() => setCopyMetadataSuccess(false), 2000);
+                      }}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      {copyMetadataSuccess ? "Copied!" : "Copy JSON"}
+                    </Button>
+                  </div>
+                  <pre className="rounded bg-muted p-4 text-xs overflow-x-auto max-h-[60vh] whitespace-pre-wrap break-words">
+                    {JSON.stringify(captureMetadata, null, 2)}
+                  </pre>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No metadata available</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {!loading && !captureDetailLoading && selectedCaptureId === null && error && (
           <div className="rounded-lg border border-destructive bg-destructive/10 p-4">

@@ -51,6 +51,39 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
   backoffFactor: 2,
 };
 
+// Type for the metadata sidecar content
+export interface CaptureMetadataSidecar {
+  captureId?: string;
+  totalRedactions: number;
+  byRule: Record<string, number>;
+  sessionId?: string | null;
+  provider?: string;
+  targetUrl?: string;
+  timestamp?: string;
+  generatedAt?: string;
+  source?: string | null;
+  matches?: Array<{
+    ruleId: string;
+    preValue: string;
+    postValue: string;
+    path: string;
+  }>;
+  requestBytes?: number;
+  responseBytes?: number;
+  timings?: {
+    send_ms?: number;
+    wait_ms?: number;
+    receive_ms?: number;
+    total_ms?: number;
+  };
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  tokensPerSecond?: number;
+  successCount?: number;
+  errorCount?: number;
+  model?: string | null;
+};
+
 /**
  * Determines if an error is transient and should be retried.
  */
@@ -496,7 +529,11 @@ class APIClient {
   return this.request(`/api/captures/${id}`);
 }
 
-async redactCapture(
+  async getCaptureMetadata(id: string): Promise<CaptureMetadataSidecar> {
+    return this.request(`/api/captures/${id}/metadata`);
+  }
+
+  async redactCapture(
   id: string,
   rules: Array<{ id: string; pattern: string; replacement: string }> = []
 ): Promise<Capture & { requestBody: Record<string, unknown>; responseBody: string | null; redaction?: RedactionDetails }> {

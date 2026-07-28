@@ -165,6 +165,7 @@ export async function loadRedactionMeta(
   successCount?: number;
   errorCount?: number;
   model?: string | null;
+  captureId?: string | null;
 } | null> {
   const captureDir = await getCaptureDir();
   const { join } = await import("path");
@@ -203,6 +204,7 @@ export async function loadRedactionMeta(
       successCount?: number;
       errorCount?: number;
       model?: string | null;
+      captureId?: string | null;
     } | null = null;
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -258,6 +260,7 @@ export async function loadRedactionMeta(
       successCount: meta.successCount,
       errorCount: meta.errorCount,
       model: meta.model,
+      captureId: typeof meta.captureId === "string" ? meta.captureId : null,
     };
   } catch {
     return null;
