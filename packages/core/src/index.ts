@@ -90,6 +90,7 @@ export type {
   ProxyPlugin,
   RateLimitConfig,
   RetryConfig,
+  RetryConfigWithProviders,
   RequestContext,
   ResolveTargetResult,
   ResponseContext,

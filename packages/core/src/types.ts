@@ -302,6 +302,18 @@ export interface RetryConfig {
 	jitterFactor: number;
 }
 
+/**
+ * Retry configuration with optional per-provider overrides.
+ *
+ * The `providers` map allows configuring different retry behavior for each
+ * LLM provider (e.g., Anthropic may need different settings than OpenAI).
+ * Provider-specific config is merged with global defaults at runtime.
+ */
+export interface RetryConfigWithProviders extends RetryConfig {
+	/** Per-provider retry configuration overrides. */
+	providers?: Partial<Record<Provider, Partial<RetryConfig>>>;
+}
+
 
 // --- Proxy config ---
 

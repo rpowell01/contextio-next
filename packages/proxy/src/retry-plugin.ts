@@ -6,41 +6,26 @@
  * and signaling retries through special response codes.
  */
 
-import type { ProxyPlugin, RequestContext, ResponseContext, HeaderMap, JsonValue } from "@contextio/core";
+import type { ProxyPlugin, RequestContext, ResponseContext, HeaderMap, JsonValue, Provider, RetryConfig as CoreRetryConfig } from "@contextio/core";
+
+/**
+ * Internal retry config with enabled flag.
+ * The core RetryConfig doesn't include 'enabled', but the plugin does.
+ */
+interface RetryConfigInternal extends CoreRetryConfig {
+  enabled: boolean;
+}
 
 /**
  * Configuration for the retry plugin.
+ * Supports global defaults with optional per-provider overrides.
  */
-export interface RetryConfig {
+export interface RetryConfig extends Partial<CoreRetryConfig> {
   /**
-   * Maximum number of retry attempts.
-   * @default 3
+   * Per-provider retry configuration overrides.
+   * Provider-specific config is merged with global defaults at runtime.
    */
-  maxRetries?: number;
-
-  /**
-   * Base delay in milliseconds for exponential backoff.
-   * @default 500
-   */
-  baseDelayMs?: number;
-
-  /**
-   * Maximum delay in milliseconds between retries.
-   * @default 30000 (30 seconds)
-   */
-  maxDelayMs?: number;
-
-  /**
-   * HTTP status codes that should trigger a retry.
-   * @default [429, 500, 502, 503, 504]
-   */
-  retryableStatuses?: number[];
-
-  /**
-   * Jitter factor to add randomness to delay (0-1).
-   * @default 0.1
-   */
-  jitterFactor?: number;
+  providers?: Partial<Record<Provider, Partial<CoreRetryConfig>>>;
 
   /**
    * Whether to enable the retry plugin.
@@ -59,14 +44,49 @@ const DEFAULT_RETRYABLE_STATUSES: number[] = [429, 500, 502, 503, 504];
 const DEFAULT_JITTER_FACTOR = 0.1;
 
 /**
+ * Merge global config with provider-specific overrides.
+ * Returns a complete RetryConfigInternal for the given provider.
+ */
+function resolveConfigForProvider(
+  globalConfig: RetryConfigInternal,
+  providerConfigs: Partial<Record<Provider, Partial<CoreRetryConfig>>> | undefined,
+  provider: string
+): RetryConfigInternal {
+  if (!providerConfigs) {
+    return globalConfig;
+  }
+  // Type-safe lookup: only match known Provider values
+  const providerKey = provider as Provider;
+  // Use hasOwnProperty to avoid prototype pollution and ensure valid Provider enum value
+  if (!Object.prototype.hasOwnProperty.call(providerConfigs, providerKey)) {
+    return globalConfig;
+  }
+  const providerConfig = providerConfigs[providerKey];
+  if (!providerConfig) {
+    return globalConfig;
+  }
+  return {
+    maxRetries: providerConfig.maxRetries ?? globalConfig.maxRetries,
+    baseDelayMs: providerConfig.baseDelayMs ?? globalConfig.baseDelayMs,
+    maxDelayMs: providerConfig.maxDelayMs ?? globalConfig.maxDelayMs,
+    retryableStatuses: providerConfig.retryableStatuses ?? globalConfig.retryableStatuses,
+    jitterFactor: providerConfig.jitterFactor ?? globalConfig.jitterFactor,
+    // Provider config doesn't include 'enabled', fall back to global
+    enabled: globalConfig.enabled,
+  };
+}
+
+/**
  * Retry plugin class implementing exponential backoff with jitter.
  * Buffers request headers and body to enable actual retries.
+ * Supports per-provider configuration overrides.
  */
 export class RetryPlugin implements ProxyPlugin {
   name = "retry";
 
-  private readonly config: Required<RetryConfig>;
-  // Map of captureId (or requestId fallback) to { originalHeaders, originalBodyBuffer, originalBodyJson, timestamp, retryCount, captureId, requestId }
+  private readonly globalConfig: RetryConfigInternal;
+  private readonly providerConfigs: Partial<Record<Provider, Partial<CoreRetryConfig>>> | undefined;
+  // Map of captureId (or requestId fallback) to { originalHeaders, originalBodyBuffer, originalBodyJson, timestamp, retryCount, captureId, requestId, provider }
   private readonly requestStore = new Map<string, {
     originalHeaders: HeaderMap;
     originalBodyBuffer: Buffer;
@@ -75,16 +95,19 @@ export class RetryPlugin implements ProxyPlugin {
     retryCount: number;
     captureId: string | undefined;
     requestId: string;
+    provider: Provider | string;
   }>();
   // Cleanup timer for removing old entries
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(config: RetryConfig = {}) {
-    const maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES;
-    const baseDelayMs = config.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
-    const maxDelayMs = config.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
-    const retryableStatuses = config.retryableStatuses ?? DEFAULT_RETRYABLE_STATUSES;
-    const jitterFactor = config.jitterFactor ?? DEFAULT_JITTER_FACTOR;
+    const { providers, enabled, ...globalConfig } = config;
+
+    const maxRetries = globalConfig.maxRetries ?? DEFAULT_MAX_RETRIES;
+    const baseDelayMs = globalConfig.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+    const maxDelayMs = globalConfig.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
+    const retryableStatuses = globalConfig.retryableStatuses ?? DEFAULT_RETRYABLE_STATUSES;
+    const jitterFactor = globalConfig.jitterFactor ?? DEFAULT_JITTER_FACTOR;
 
     if (maxRetries < 0) {
       throw new Error("maxRetries must be non-negative");
@@ -99,16 +122,45 @@ export class RetryPlugin implements ProxyPlugin {
       throw new Error("jitterFactor must be between 0 and 1");
     }
 
-    this.config = {
+    // Validate provider-specific configs
+    if (providers) {
+      for (const [providerKey, providerConfig] of Object.entries(providers)) {
+        if (!providerConfig) continue;
+        if (providerConfig.maxRetries !== undefined && providerConfig.maxRetries < 0) {
+          throw new Error(`maxRetries for provider "${providerKey}" must be non-negative`);
+        }
+        if (providerConfig.baseDelayMs !== undefined && providerConfig.baseDelayMs <= 0) {
+          throw new Error(`baseDelayMs for provider "${providerKey}" must be positive`);
+        }
+        if (providerConfig.maxDelayMs !== undefined && providerConfig.maxDelayMs <= 0) {
+          throw new Error(`maxDelayMs for provider "${providerKey}" must be positive`);
+        }
+        if (providerConfig.jitterFactor !== undefined && 
+            (providerConfig.jitterFactor < 0 || providerConfig.jitterFactor > 1)) {
+          throw new Error(`jitterFactor for provider "${providerKey}" must be between 0 and 1`);
+        }
+      }
+    }
+
+    this.globalConfig = {
       maxRetries,
       baseDelayMs,
       maxDelayMs,
       retryableStatuses,
       jitterFactor,
-      enabled: config.enabled ?? true,
+      enabled: enabled ?? true,
     };
+    this.providerConfigs = providers;
 
     this.startCleanupTimer();
+  }
+
+  /**
+   * Get the effective retry config for a specific provider.
+   * Merges global defaults with provider-specific overrides.
+   */
+  private getConfigForProvider(provider: string): RetryConfigInternal {
+    return resolveConfigForProvider(this.globalConfig, this.providerConfigs, provider);
   }
 
   /**
@@ -192,19 +244,19 @@ export class RetryPlugin implements ProxyPlugin {
   /**
    * Calculate delay with exponential backoff and jitter.
    */
-  private calculateDelay(attempt: number): number {
+  private calculateDelay(attempt: number, config: Required<CoreRetryConfig>): number {
     // Exponential backoff: baseDelay * (2 ^ attempt)
-    const baseDelay = this.config.baseDelayMs * Math.pow(2, attempt);
+    const baseDelay = config.baseDelayMs * Math.pow(2, attempt);
     
     // Apply jitter: ± jitterFactor * baseDelay
-    const jitterAmount = baseDelay * this.config.jitterFactor;
+    const jitterAmount = baseDelay * config.jitterFactor;
     const jitter = Math.random() * 2 * jitterAmount - jitterAmount;
     
     let delay = baseDelay + jitter;
     
     // Ensure delay is within bounds
     delay = Math.max(0, delay);
-    delay = Math.min(delay, this.config.maxDelayMs);
+    delay = Math.min(delay, config.maxDelayMs);
     
     return Math.floor(delay);
   }
@@ -212,15 +264,15 @@ export class RetryPlugin implements ProxyPlugin {
   /**
    * Check if a status code is retryable based on configuration.
    */
-  private isRetryableStatus(status: number): boolean {
-    return this.config.retryableStatuses.includes(status);
+  private isRetryableStatus(status: number, config: Required<CoreRetryConfig>): boolean {
+    return config.retryableStatuses.includes(status);
   }
 
   async onRequest(ctx: RequestContext): Promise<RequestContext> {
     // Request phase - buffer request data and add retry ID header
     
-    // Skip if plugin is disabled
-    if (!this.config.enabled) {
+    // Skip if plugin is disabled globally
+    if (!this.globalConfig.enabled) {
       return ctx;
     }
 
@@ -249,7 +301,7 @@ export class RetryPlugin implements ProxyPlugin {
     if (!isRetry) {
       // Store original headers (we'll need to retry with these)
       const originalHeaders: HeaderMap = { ...ctx.headers };
-      // Store original body data
+      // Store original body data along with provider info
       this.requestStore.set(storageKey, {
         originalHeaders,
         originalBodyBuffer: ctx.rawBody,
@@ -258,6 +310,7 @@ export class RetryPlugin implements ProxyPlugin {
         retryCount: 0,
         captureId,
         requestId,
+        provider: ctx.provider,
       });
     }
     // Note: Retry requests bypass the plugin pipeline (forward.ts calls doForward directly),
@@ -279,11 +332,6 @@ export class RetryPlugin implements ProxyPlugin {
   async onResponse(ctx: ResponseContext): Promise<ResponseContext> {
     // Response phase - handle retries for non-streaming responses
     
-    // Skip if plugin is disabled
-    if (!this.config.enabled) {
-      return ctx;
-    }
-
     // Extract captureId from headers (primary tracking key)
     const captureIdHeader = ctx.headers["x-contextio-capture-id"];
     let captureId: string | null = null;
@@ -320,6 +368,14 @@ export class RetryPlugin implements ProxyPlugin {
       return ctx;
     }
 
+    // Get provider-specific configuration
+    const config = this.getConfigForProvider(entry.provider);
+
+    // Skip if plugin is disabled for this provider
+    if (!config.enabled) {
+      return ctx;
+    }
+
     // Check if status code indicates success (less than 400)
     if (ctx.status < 400) {
       // Successful response - clean up and return
@@ -328,7 +384,7 @@ export class RetryPlugin implements ProxyPlugin {
     }
 
     // Check if status code is retryable
-    if (!this.isRetryableStatus(ctx.status)) {
+    if (!this.isRetryableStatus(ctx.status, config)) {
       // Not retryable - clean up and return response
       this.requestStore.delete(storageKey);
       return ctx;
@@ -338,14 +394,14 @@ export class RetryPlugin implements ProxyPlugin {
     const retryCount = entry.retryCount;
     
     // Check if we've exceeded max retries
-    if (retryCount >= this.config.maxRetries) {
+    if (retryCount >= config.maxRetries) {
       // Max retries exceeded - clean up and return response
       this.requestStore.delete(storageKey);
       return ctx;
     }
 
     // Calculate delay based on retry count and status code
-    let delayMs = this.calculateDelay(retryCount);
+    let delayMs = this.calculateDelay(retryCount, config);
     
     // For 429 status, check for Retry-After header
     if (ctx.status === 429) {

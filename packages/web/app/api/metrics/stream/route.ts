@@ -109,6 +109,14 @@ async function* processMetricsWithProgress(
         totalRedactionsSum: 0,
         redactionByPlaceholderDeduped: {},
         redactionByPlaceholderSum: {},
+        redactionStatsDeduped: {
+          totalRedactions: 0,
+          byRule: {},
+        },
+        redactionStatsSum: {
+          totalRedactions: 0,
+          byRule: {},
+        },
         pagination: { page, pageSize, totalPages: 0, totalItems: 0 },
       },
     };
@@ -270,6 +278,15 @@ async function* processMetricsWithProgress(
       totalRedactionsSum,
       redactionByPlaceholderDeduped: redactionByPlaceholderDedupedFinal,
       redactionByPlaceholderSum,
+      // Add wrapper objects to match regular /api/metrics response format
+      redactionStatsDeduped: {
+        totalRedactions: totalRedactionsDeduped,
+        byRule: redactionByPlaceholderDedupedFinal,
+      },
+      redactionStatsSum: {
+        totalRedactions: totalRedactionsSum,
+        byRule: redactionByPlaceholderSum,
+      },
       pagination: { page, pageSize, totalPages, totalItems: totalTrafficPoints },
     },
   };
