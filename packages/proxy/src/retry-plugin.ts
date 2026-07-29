@@ -114,6 +114,35 @@ interface RequestStoreEntry {
 }
 
 /**
+ * Internal type for tracking streaming response state across chunks.
+ * Includes SSE parsing state, error detection, and pending retry information.
+ */
+interface StreamState {
+  errorDetected: boolean;
+  errorStatus: number | null;
+  errorMessage: string | null;
+  captureId: string | undefined;
+  requestId: string;
+  provider: Provider | string;
+  timestamp: number;
+  // Buffer for partial SSE field content split across chunks
+  partialField: "data" | "event" | "id" | "retry" | null;
+  partialContent: string;
+  // SSE parsing state for multi-line data fields across chunk boundaries
+  inDataField: boolean;
+  dataBuffer: string;
+  hasErrorEvent: boolean;
+  // Pending retry signal for streaming responses
+  pendingRetry?: {
+    retryId: string;
+    captureId: string | undefined;
+    originalBodyBuffer: Buffer;
+    originalBodyJson: JsonValue | null;
+    delayMs: number;
+  };
+}
+
+/**
  * Retry plugin class implementing exponential backoff with jitter.
  * Buffers request headers and body to enable actual retries.
  * Supports per-provider configuration overrides.
@@ -131,30 +160,7 @@ export class RetryPlugin implements ProxyPlugin {
   private readonly requestStore = new Map<string, RequestStoreEntry>();
 
   // Streaming state per session: tracks errors and retry info for streaming responses
-  private readonly streamState = new Map<string, {
-    errorDetected: boolean;
-    errorStatus: number | null;
-    errorMessage: string | null;
-    captureId: string | undefined;
-    requestId: string;
-    provider: Provider | string;
-    timestamp: number;
-    // Buffer for partial SSE field content split across chunks
-    partialField: "data" | "event" | "id" | "retry" | null;
-    partialContent: string;
-    // SSE parsing state for multi-line data fields across chunk boundaries
-    inDataField: boolean;
-    dataBuffer: string;
-    hasErrorEvent: boolean;
-    // Pending retry signal for streaming responses
-    pendingRetry?: {
-      retryId: string;
-      captureId: string | undefined;
-      originalBodyBuffer: Buffer;
-      originalBodyJson: JsonValue | null;
-      delayMs: number;
-    };
-  }>();
+  private readonly streamState = new Map<string, StreamState>();
 
   // Cleanup timer for removing old entries
   private cleanupTimer: NodeJS.Timeout | null = null;
@@ -927,7 +933,7 @@ export class RetryPlugin implements ProxyPlugin {
   /**
    * Clean up both streamState and requestStore for a stream.
    */
-  private cleanupStreamState(streamState: { captureId: string | undefined; requestId: string }, sessionId: string): void {
+  private cleanupStreamState(streamState: StreamState, sessionId: string): void {
     this.streamState.delete(sessionId);
     const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
     this.requestStore.delete(storageKey);

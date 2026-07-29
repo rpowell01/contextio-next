@@ -502,12 +502,22 @@ export function createProxyHandler(
         // If a plugin modified the body, re-serialize as plain JSON.
         // Otherwise forward the original bytes (possibly still compressed)
         // to avoid needlessly re-encoding what the upstream already sent.
+        //
+        // For retries, ctx.rawBody carries the original request body buffer.
+        // If provided and different from the outer bodyBuffer, use it directly
+        // since it represents the exact bytes that should be retried.
         let forwardBuffer: Buffer;
         let bodyWasModified = false;
-        if (ctx.body && ctx.body !== bodyJson) {
+        const isRetryWithOriginalBody = ctx.rawBody !== undefined && ctx.rawBody !== bodyBuffer;
+        if (isRetryWithOriginalBody) {
+          // Retry path: use the original body buffer passed via ctx.rawBody
+          forwardBuffer = ctx.rawBody;
+        } else if (ctx.body && ctx.body !== bodyJson) {
+          // Normal path: plugin modified the body, re-serialize
           forwardBuffer = Buffer.from(JSON.stringify(ctx.body), "utf8");
           bodyWasModified = true;
         } else {
+          // Normal path: no modification, use outer bodyBuffer
           forwardBuffer = bodyBuffer;
         }
 
