@@ -1,6 +1,10 @@
 # =============================================================================
 # Build stage: Prepare GLiNER model using Python (Debian-based for onnxruntime)
 # =============================================================================
+# Placeholder ARG to catch Coolify-injected build args before the first FROM
+# Coolify prepends ARGs to the Dockerfile, so this prevents them from breaking the model-builder stage
+ARG COOLIFY_ARGS_PLACEHOLDER
+
 FROM python:3.11-slim AS model-builder
 WORKDIR /models
 
