@@ -12,84 +12,85 @@ import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams
 import { DEFAULT_OIDC_SCOPE } from "@contextio/core";
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
- * double-prefix API paths. Empty values pass through intact. */
+ * double-prefix API paths. Empty values pass through intact.
+ */
 function normalizeUpstreamUrl(url: string): string {
-	if (!url || typeof url !== "string") {
-		return url;
-	}
-	return url.replace(/\/v1$/, "");
+  if (!url || typeof url !== "string") {
+    return url;
+  }
+  return url.replace(/\/v1$/, "");
 }
 
 /** Web UI settings interface for capture cleanup and OIDC settings. */
 interface WebUISettings {
-	captureCleanupEnabled?: boolean;
-	captureCleanupIntervalHours?: number;
-	captureCleanupMaxAgeDays?: number;
-	// OIDC settings (non-sensitive, can be configured via UI)
-	oidcEnabled?: boolean;
-	oidcPublicUrl?: string;
+  captureCleanupEnabled?: boolean;
+  captureCleanupIntervalHours?: number;
+  captureCleanupMaxAgeDays?: number;
+  // OIDC settings (non-sensitive, can be configured via UI)
+  oidcEnabled?: boolean;
+  oidcPublicUrl?: string;
 }
 
 /** Read web UI settings from the JSON file. */
 function readWebUISettings(): WebUISettings {
-	const settingsPath = "/app/custom-policy/settings.json";
-	try {
-		const data = fs.readFileSync(settingsPath, "utf8");
-		const parsed = JSON.parse(data);
-		const result = {
-			captureCleanupEnabled: parsed.captureCleanupEnabled,
-			captureCleanupIntervalHours: parsed.captureCleanupIntervalHours,
-			captureCleanupMaxAgeDays: parsed.captureCleanupMaxAgeDays,
-			oidcEnabled: parsed.oidcEnabled,
-			oidcPublicUrl: parsed.oidcPublicUrl,
-		};
-		console.log(`[config] read settings.json: ${JSON.stringify(result)}`);
-		return result;
-	} catch (err) {
-		console.log(`[config] failed to read settings.json at ${settingsPath}: ${err instanceof Error ? err.message : String(err)}`);
-		return {};
-	}
+  const settingsPath = "/app/custom-policy/settings.json";
+  try {
+    const data = fs.readFileSync(settingsPath, "utf8");
+    const parsed = JSON.parse(data);
+    const result = {
+      captureCleanupEnabled: parsed.captureCleanupEnabled,
+      captureCleanupIntervalHours: parsed.captureCleanupIntervalHours,
+      captureCleanupMaxAgeDays: parsed.captureCleanupMaxAgeDays,
+      oidcEnabled: parsed.oidcEnabled,
+      oidcPublicUrl: parsed.oidcPublicUrl,
+    };
+    console.log(`[config] read settings.json: ${JSON.stringify(result)}`);
+    return result;
+  } catch (err) {
+    console.log(`[config] failed to read settings.json at ${settingsPath}: ${err instanceof Error ? err.message : String(err)}`);
+    return {};
+  }
 }
 
 /** Fallback to web UI settings for capture cleanup config. */
 function getCaptureCleanupMaxAgeMs(): number {
-	const raw = process.env.LOGGER_CAPTURE_MAX_AGE ?? readWebUISettings().captureCleanupMaxAgeDays?.toString();
-	const parsed = raw ? Number.parseInt(raw, 10) : 0;
-	return Number.isFinite(parsed) ? parsed * 24 * 60 * 60 * 1000 : 0;
+  const raw = process.env.LOGGER_CAPTURE_MAX_AGE ?? readWebUISettings().captureCleanupMaxAgeDays?.toString();
+  const parsed = raw ? Number.parseInt(raw, 10) : 0;
+  return Number.isFinite(parsed) ? parsed * 24 * 60 * 60 * 1000 : 0;
 }
 
 function getCaptureCleanupIntervalMs(): number {
-	const raw = process.env.LOGGER_CAPTURE_CLEANUP_INTERVAL ?? readWebUISettings().captureCleanupIntervalHours?.toString() ?? "24";
-	const parsed = Number.parseInt(raw, 10);
-	return Number.isFinite(parsed) && parsed > 0
-		? parsed * 60 * 60 * 1000
-		: 24 * 60 * 60 * 1000;
+  const raw = process.env.LOGGER_CAPTURE_CLEANUP_INTERVAL ?? readWebUISettings().captureCleanupIntervalHours?.toString() ?? "24";
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed * 60 * 60 * 1000
+    : 24 * 60 * 60 * 1000;
 }
 
 function getCaptureCleanupEnabled(maxAgeMs: number): boolean {
-	const envEnabled = process.env.LOGGER_CAPTURE_CLEANUP_ENABLED;
-	if (envEnabled !== undefined) return envEnabled === "true";
-	const settingsEnabled = readWebUISettings().captureCleanupEnabled;
-	if (settingsEnabled !== undefined) return settingsEnabled;
-	return maxAgeMs > 0;
+  const envEnabled = process.env.LOGGER_CAPTURE_CLEANUP_ENABLED;
+  if (envEnabled !== undefined) return envEnabled === "true";
+  const settingsEnabled = readWebUISettings().captureCleanupEnabled;
+  if (settingsEnabled !== undefined) return settingsEnabled;
+  return maxAgeMs > 0;
 }
 
 /** Fully resolved config with all defaults applied. */
 export interface ResolvedProxyConfig {
-	upstreams: Upstreams;
-	bindHost: string;
-	port: number;
-	allowTargetOverride: boolean;
-	strictUrlForwarding: boolean;
-	loggerCaptureDir: string;
-	loggerCaptureMaxAgeMs: number;
-	loggerCaptureCleanupIntervalMs: number;
-	loggerCaptureCleanupEnabled: boolean;
-	loggerEncryption: EncryptionAtRestConfig;
-	oidc: OidcProviderConfig | null;
-	publicUrl: string | null;
-	rateLimiter: Record<Provider, RateLimitConfig>;
-	retry: Record<Provider, RetryConfig>;
+  upstreams: Upstreams;
+  bindHost: string;
+  port: number;
+  allowTargetOverride: boolean;
+  strictUrlForwarding: boolean;
+  loggerCaptureDir: string;
+  loggerCaptureMaxAgeMs: number;
+  loggerCaptureCleanupIntervalMs: number;
+  loggerCaptureCleanupEnabled: boolean;
+  loggerEncryption: EncryptionAtRestConfig;
+  oidc: OidcProviderConfig | null;
+  publicUrl: string | null;
+  rateLimiter: Record<Provider, RateLimitConfig>;
+  retry: Record<Provider, RetryConfig>;
 }
 
 /**
@@ -103,66 +104,66 @@ export interface ResolvedProxyConfig {
  * Secrets (issuer, client_id, client_secret, session_secret) MUST come from env vars.
  */
 export function resolveOidcConfig(
-	overrides?: ProxyConfig,
+  overrides?: ProxyConfig,
 ): OidcProviderConfig | null {
-	const settings = readWebUISettings();
+  const settings = readWebUISettings();
 
-	const enabled = overrides?.oidc?.issuer
-		|| process.env.CONTEXTIO_OIDC_ENABLED === "true"
-		|| settings.oidcEnabled === true
-		|| (process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET);
+  const enabled = overrides?.oidc?.issuer
+    || process.env.CONTEXTIO_OIDC_ENABLED === "true"
+    || settings.oidcEnabled === true
+    || (process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET);
 
-	console.log(`[config] OIDC resolve: enabled=${enabled}`);
-		console.log(`[config]   env.CONTEXTIO_OIDC_ENABLED=${process.env.CONTEXTIO_OIDC_ENABLED}`);
-		console.log(`[config]   settings.oidcEnabled=${settings.oidcEnabled}`);
-		console.log(`[config]   hasLegacyCreds=${!!(process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET)}`);
-		console.log(`[config]   env.CONTEXTIO_OIDC_ISSUER=${process.env.CONTEXTIO_OIDC_ISSUER ? 'SET' : 'NOT SET'}`);
-		console.log(`[config]   env.CONTEXTIO_OIDC_CLIENT_ID=${process.env.CONTEXTIO_OIDC_CLIENT_ID ? 'SET' : 'NOT SET'}`);
-		console.log(`[config]   env.CONTEXTIO_OIDC_PUBLIC_URL=${process.env.CONTEXTIO_OIDC_PUBLIC_URL || 'NOT SET'}`);
-		console.log(`[config]   settings.oidcPublicUrl=${settings.oidcPublicUrl || 'NOT SET'}`);
+  console.log(`[config] OIDC resolve: enabled=${enabled}`);
+  console.log(`[config] env.CONTEXTIO_OIDC_ENABLED=${process.env.CONTEXTIO_OIDC_ENABLED}`);
+  console.log(`[config] settings.oidcEnabled=${settings.oidcEnabled}`);
+  console.log(`[config] hasLegacyCreds=${!!(process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_SESSION_SECRET)}`);
+  console.log(`[config] env.CONTEXTIO_OIDC_ISSUER=${process.env.CONTEXTIO_OIDC_ISSUER ? 'SET' : 'NOT SET'}`);
+  console.log(`[config] env.CONTEXTIO_OIDC_CLIENT_ID=${process.env.CONTEXTIO_OIDC_CLIENT_ID ? 'SET' : 'NOT SET'}`);
+  console.log(`[config] env.CONTEXTIO_OIDC_PUBLIC_URL=${process.env.CONTEXTIO_OIDC_PUBLIC_URL || 'NOT SET'}`);
+  console.log(`[config] settings.oidcPublicUrl=${settings.oidcPublicUrl || 'NOT SET'}`);
 
-	if (!enabled) {
-		return null;
-	}
+  if (!enabled) {
+    return null;
+  }
 
-	const issuer = overrides?.oidc?.issuer || process.env.CONTEXTIO_OIDC_ISSUER || process.env.OIDC_ISSUER;
-	const clientId = overrides?.oidc?.clientId || process.env.CONTEXTIO_OIDC_CLIENT_ID || process.env.OIDC_CLIENT_ID;
-	const clientSecret = overrides?.oidc?.clientSecret || process.env.CONTEXTIO_OIDC_CLIENT_SECRET || process.env.OIDC_CLIENT_SECRET;
-	const sessionSecret = overrides?.oidc?.sessionSecret || process.env.CONTEXTIO_OIDC_SESSION_SECRET || process.env.OIDC_SESSION_SECRET;
-	const scope = overrides?.oidc?.scope
-		|| process.env.CONTEXTIO_OIDC_SCOPE?.split(/\s+/).filter(Boolean)
-		|| process.env.OIDC_SCOPE?.split(/\s+/).filter(Boolean)
-		|| [...DEFAULT_OIDC_SCOPE];
+  const issuer = overrides?.oidc?.issuer || process.env.CONTEXTIO_OIDC_ISSUER || process.env.OIDC_ISSUER;
+  const clientId = overrides?.oidc?.clientId || process.env.CONTEXTIO_OIDC_CLIENT_ID || process.env.OIDC_CLIENT_ID;
+  const clientSecret = overrides?.oidc?.clientSecret || process.env.CONTEXTIO_OIDC_CLIENT_SECRET || process.env.OIDC_CLIENT_SECRET;
+  const sessionSecret = overrides?.oidc?.sessionSecret || process.env.CONTEXTIO_OIDC_SESSION_SECRET || process.env.OIDC_SESSION_SECRET;
+  const scope = overrides?.oidc?.scope
+    || process.env.CONTEXTIO_OIDC_SCOPE?.split(/\s+/).filter(Boolean)
+    || process.env.OIDC_SCOPE?.split(/\s+/).filter(Boolean)
+    || [...DEFAULT_OIDC_SCOPE];
 
-	if (!issuer) {
-		throw new Error("OIDC enabled but CONTEXTIO_OIDC_ISSUER is not set");
-	}
-	if (!clientId) {
-		throw new Error("OIDC enabled but CONTEXTIO_OIDC_CLIENT_ID is not set");
-	}
-	if (!clientSecret) {
-		throw new Error("OIDC enabled but CONTEXTIO_OIDC_CLIENT_SECRET is not set");
-	}
-	if (!sessionSecret) {
-		throw new Error("OIDC enabled but CONTEXTIO_OIDC_SESSION_SECRET is not set");
-	}
-	if (sessionSecret.length < 32) {
-		throw new Error("OIDC session secret must be at least 32 characters");
-	}
-	if (!issuer.startsWith("https://")) {
-		throw new Error("OIDC issuer must use HTTPS");
-	}
+  if (!issuer) {
+    throw new Error("OIDC enabled but CONTEXTIO_OIDC_ISSUER is not set");
+  }
+  if (!clientId) {
+    throw new Error("OIDC enabled but CONTEXTIO_OIDC_CLIENT_ID is not set");
+  }
+  if (!clientSecret) {
+    throw new Error("OIDC enabled but CONTEXTIO_OIDC_CLIENT_SECRET is not set");
+  }
+  if (!sessionSecret) {
+    throw new Error("OIDC enabled but CONTEXTIO_OIDC_SESSION_SECRET is not set");
+  }
+  if (sessionSecret.length < 32) {
+    throw new Error("OIDC session secret must be at least 32 characters");
+  }
+  if (!issuer.startsWith("https://")) {
+    throw new Error("OIDC issuer must use HTTPS");
+  }
 
-	console.log(`[config] OIDC configured: issuer=${issuer}, clientId=${clientId}, scope=${scope.join(" ")}`);
+  console.log(`[config] OIDC configured: issuer=${issuer}, clientId=${clientId}, scope=${scope.join(" ")}`);
 
-	return {
-		issuer,
-		clientId,
-		clientSecret,
-		callbackUrl: "", // Filled in by auth handler from baseUrl
-		scope,
-		sessionSecret,
-	};
+  return {
+    issuer,
+    clientId,
+    clientSecret,
+    callbackUrl: "", // Filled in by auth handler from baseUrl
+    scope,
+    sessionSecret,
+  };
 }
 
 /**
@@ -172,15 +173,15 @@ export function resolveOidcConfig(
  * - `LOGGER_CAPTURE_DIR` overrides the capture directory
  * - `LOGGER_CAPTURE_MAX_AGE` enable time-based retention when > 0
  * - `LOGGER_CAPTURE_CLEANUP_INTERVAL` controls cleanup interval (milliseconds,
- * default: 3600000)
+ *   default: 3600000)
  * - `LOGGER_CAPTURE_CLEANUP_ENABLED` allows disabling cleanup while keeping
- * the config values in place
+ *   the config values in place
  *
  * Encryption:
  * - `CONTEXTIO_LOGGER_ENCRYPTION_ENABLED` toggles at-rest encryption (default
- * false)
+ *   false)
  * - `CONTEXTIO_LOGGER_ENCRYPTION_KEY` provides the key material when encryption
- * is enabled without an explicit override.
+ *   is enabled without an explicit override.
  *
  * OIDC authentication:
  * - `CONTEXTIO_OIDC_ENABLED` - explicitly enable OIDC (e.g., "true")
@@ -192,156 +193,289 @@ export function resolveOidcConfig(
  * - `CONTEXTIO_OIDC_PUBLIC_URL` - Public-facing URL (e.g., https://contextio.example.com)
  *   Used for OIDC callback URLs when behind a reverse proxy
  *
+ * Rate limiting:
+ * - `CONTEXTIO_RATE_LIMIT_<PROVIDER>_MAX_REQUESTS` - Max requests per window (default: 60)
+ * - `CONTEXTIO_RATE_LIMIT_<PROVIDER>_WINDOW_MS` - Time window in milliseconds (default: 60000)
+ * - `CONTEXTIO_RATE_LIMIT_<PROVIDER>_BUFFER` - Token bucket capacity for bursts (default: 10)
+ * Valid providers: openai, anthropic, chatgpt, gemini, vertex, nvidia, openrouter, kilo, unknown
+ *
+ * Retry:
+ * - `CONTEXTIO_RETRY_<PROVIDER>_MAX_RETRIES` - Max retry attempts (default: 3)
+ * - `CONTEXTIO_RETRY_<PROVIDER>_BASE_DELAY_MS` - Initial delay in ms (default: 1000)
+ * - `CONTEXTIO_RETRY_<PROVIDER>_MAX_DELAY_MS` - Max delay cap in ms (default: 30000)
+ * - `CONTEXTIO_RETRY_<PROVIDER>_RETRYABLE_STATUSES` - Comma-separated HTTP codes (default: 429,500,502,503,504)
+ * - `CONTEXTIO_RETRY_<PROVIDER>_JITTER_FACTOR` - Jitter factor 0-1 (default: 0.2)
+ *
  * Legacy (deprecated) env vars:
  * - `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_SESSION_SECRET`, `OIDC_SCOPE`
  *   All must be set together to enable OIDC without CONTEXTIO_OIDC_ENABLED.
  * - `CONTEXTIO_PUBLIC_URL` - Deprecated alias for CONTEXTIO_OIDC_PUBLIC_URL
  */
 export function resolveConfig(
-	overrides?: ProxyConfig,
+  overrides?: ProxyConfig,
 ): ResolvedProxyConfig {
-	const defaultUpstreams: Upstreams = {
-		openai: process.env.UPSTREAM_OPENAI_URL || "https://api.openai.com",
-		anthropic:
-			process.env.UPSTREAM_ANTHROPIC_URL || "https://api.anthropic.com",
-		chatgpt: process.env.UPSTREAM_CHATGPT_URL || "https://chatgpt.com",
-		gemini:
-			process.env.UPSTREAM_GEMINI_URL ||
-			"https://generativelanguage.googleapis.com",
-		geminiCodeAssist:
-			process.env.UPSTREAM_GEMINI_CODE_ASSIST_URL ||
-			"https://cloudcode-pa.googleapis.com",
-		vertex:
-			process.env.UPSTREAM_VERTEX_URL ||
-			"https://us-central1-aiplatform.googleapis.com",
-		nvidia: process.env.UPSTREAM_NVIDIA_URL || "https://integrate.api.nvidia.com",
-		kilo:
-			process.env.UPSTREAM_KILO_URL ||
-			"https://api.kilo.ai/api/gateway",
-		openrouter: process.env.UPSTREAM_OPENROUTER_URL || "https://openrouter.ai/api",
-	};
+  const defaultUpstreams: Upstreams = {
+    openai: process.env.UPSTREAM_OPENAI_URL || "https://api.openai.com",
+    anthropic:
+      process.env.UPSTREAM_ANTHROPIC_URL || "https://api.anthropic.com",
+    chatgpt: process.env.UPSTREAM_CHATGPT_URL || "https://chatgpt.com",
+    gemini:
+      process.env.UPSTREAM_GEMINI_URL ||
+      "https://generativelanguage.googleapis.com",
+    geminiCodeAssist:
+      process.env.UPSTREAM_GEMINI_CODE_ASSIST_URL ||
+      "https://cloudcode-pa.googleapis.com",
+    vertex:
+      process.env.UPSTREAM_VERTEX_URL ||
+      "https://us-central1-aiplatform.googleapis.com",
+    nvidia: process.env.UPSTREAM_NVIDIA_URL || "https://integrate.api.nvidia.com",
+    kilo:
+      process.env.UPSTREAM_KILO_URL ||
+      "https://api.kilo.ai/api/gateway",
+    openrouter: process.env.UPSTREAM_OPENROUTER_URL || "https://openrouter.ai/api",
+  };
 
-	const bindHost =
-		overrides?.bindHost ||
-		process.env.CONTEXT_PROXY_BIND_HOST ||
-		"127.0.0.1";
+  const bindHost =
+    overrides?.bindHost ||
+    process.env.CONTEXT_PROXY_BIND_HOST ||
+    "127.0.0.1";
 
-	const port =
-		overrides?.port ?? parseInt(process.env.CONTEXT_PROXY_PORT || "4040", 10);
+  const port =
+    overrides?.port ??
+    parseInt(process.env.CONTEXT_PROXY_PORT || "4040", 10);
 
-	const allowTargetOverride =
-		overrides?.allowTargetOverride ??
-		process.env.CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE === "1";
+  const allowTargetOverride =
+    overrides?.allowTargetOverride ??
+    process.env.CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE === "1";
 
-	const strictUrlForwarding =
-		overrides?.strictUrlForwarding ??
-		process.env.STRICT_URL_FORWARDING === "true";
+  const strictUrlForwarding =
+    overrides?.strictUrlForwarding ??
+    process.env.STRICT_URL_FORWARDING === "true";
 
-	const loggerCaptureDir =
-		overrides?.loggerCaptureDir ||
-		process.env.LOGGER_CAPTURE_DIR ||
-		`${process.env.HOME || process.env.USERPROFILE || "~"}/.contextio/captures`;
+  const loggerCaptureDir =
+    overrides?.loggerCaptureDir ||
+    process.env.LOGGER_CAPTURE_DIR ||
+    `${process.env.HOME || process.env.USERPROFILE || "~"}/.contextio/captures`;
 
-	const loggerCaptureMaxAgeMs = overrides?.loggerCaptureMaxAgeMs ?? getCaptureCleanupMaxAgeMs();
+  const loggerCaptureMaxAgeMs = overrides?.loggerCaptureMaxAgeMs ?? getCaptureCleanupMaxAgeMs();
 
-	const loggerCaptureCleanupIntervalMs = overrides?.loggerCaptureCleanupIntervalMs ?? getCaptureCleanupIntervalMs();
+  const loggerCaptureCleanupIntervalMs = overrides?.loggerCaptureCleanupIntervalMs ?? getCaptureCleanupIntervalMs();
 
-	const loggerCaptureCleanupEnabled = overrides?.loggerCaptureCleanupEnabled ?? getCaptureCleanupEnabled(loggerCaptureMaxAgeMs);
+  const loggerCaptureCleanupEnabled = overrides?.loggerCaptureCleanupEnabled ?? getCaptureCleanupEnabled(loggerCaptureMaxAgeMs);
 
-	console.log(`[config] capture cleanup: enabled=${loggerCaptureCleanupEnabled}, maxAgeDays=${loggerCaptureMaxAgeMs / (24 * 60 * 60 * 1000)}, intervalHours=${loggerCaptureCleanupIntervalMs / (60 * 60 * 1000)}`);
+  console.log(`[config] capture cleanup: enabled=${loggerCaptureCleanupEnabled}, maxAgeDays=${loggerCaptureMaxAgeMs / (24 * 60 * 60 * 1000)}, intervalHours=${loggerCaptureCleanupIntervalMs / (60 * 60 * 1000)}`);
 
-	const loggerEncryption: EncryptionAtRestConfig = {
-		enabled:
-			overrides?.loggerEncryption?.enabled ??
-			process.env.CONTEXTIO_LOGGER_ENCRYPTION_ENABLED === "true",
-		keyProvider: overrides?.loggerEncryption?.keyProvider ?? "env",
-		staticKey: overrides?.loggerEncryption?.staticKey,
-		keyEnvVar:
-			overrides?.loggerEncryption?.keyEnvVar ??
-			"CONTEXTIO_LOGGER_ENCRYPTION_KEY",
-		keyLength: overrides?.loggerEncryption?.keyLength ?? 32,
-	};
+  const loggerEncryption: EncryptionAtRestConfig = {
+    enabled:
+      overrides?.loggerEncryption?.enabled ??
+      process.env.CONTEXTIO_LOGGER_ENCRYPTION_ENABLED === "true",
+    keyProvider: overrides?.loggerEncryption?.keyProvider ?? "env",
+    staticKey: overrides?.loggerEncryption?.staticKey,
+    keyEnvVar:
+      overrides?.loggerEncryption?.keyEnvVar ??
+      "CONTEXTIO_LOGGER_ENCRYPTION_KEY",
+    keyLength: overrides?.loggerEncryption?.keyLength ?? 32,
+  };
 
-	const oidc = resolveOidcConfig(overrides);
+  const oidc = resolveOidcConfig(overrides);
 
-	const publicUrl =
-		overrides?.publicUrl ||
-		process.env.CONTEXTIO_OIDC_PUBLIC_URL ||
-		process.env.CONTEXTIO_PUBLIC_URL || // deprecated alias
-		readWebUISettings().oidcPublicUrl ||
-		null;
+  const publicUrl =
+    overrides?.publicUrl ||
+    process.env.CONTEXTIO_OIDC_PUBLIC_URL ||
+    process.env.CONTEXTIO_PUBLIC_URL || // deprecated alias
+    readWebUISettings().oidcPublicUrl ||
+    null;
 
-	console.log(`[config] publicUrl resolved: overrides.publicUrl=${overrides?.publicUrl}, env.CONTEXTIO_OIDC_PUBLIC_URL=${process.env.CONTEXTIO_OIDC_PUBLIC_URL}, settings.oidcPublicUrl=${readWebUISettings().oidcPublicUrl}, final=${publicUrl}`);
+  console.log(
+    `[config] publicUrl resolved: overrides.publicUrl=${overrides?.publicUrl}, env.CONTEXTIO_OIDC_PUBLIC_URL=${process.env.CONTEXTIO_OIDC_PUBLIC_URL}, settings.oidcPublicUrl=${readWebUISettings().oidcPublicUrl}, final=${publicUrl}`,
+  );
 
-	const upstreams: Upstreams = {
-		...defaultUpstreams,
-		...overrides?.upstreams,
-	};
+  const upstreams: Upstreams = {
+    ...defaultUpstreams,
+    ...overrides?.upstreams,
+  };
 
-	const normalizedUpstreams: Upstreams = {
-		openai: normalizeUpstreamUrl(upstreams.openai),
-		anthropic: normalizeUpstreamUrl(upstreams.anthropic),
-		chatgpt: normalizeUpstreamUrl(upstreams.chatgpt),
-		gemini: normalizeUpstreamUrl(upstreams.gemini),
-		geminiCodeAssist: normalizeUpstreamUrl(upstreams.geminiCodeAssist),
-		vertex: normalizeUpstreamUrl(upstreams.vertex),
-		nvidia: normalizeUpstreamUrl(upstreams.nvidia),
-		kilo: normalizeUpstreamUrl(upstreams.kilo),
-		openrouter: normalizeUpstreamUrl(upstreams.openrouter),
-	};
+  const normalizedUpstreams: Upstreams = {
+    openai: normalizeUpstreamUrl(upstreams.openai),
+    anthropic: normalizeUpstreamUrl(upstreams.anthropic),
+    chatgpt: normalizeUpstreamUrl(upstreams.chatgpt),
+    gemini: normalizeUpstreamUrl(upstreams.gemini),
+    geminiCodeAssist: normalizeUpstreamUrl(upstreams.geminiCodeAssist),
+    vertex: normalizeUpstreamUrl(upstreams.vertex),
+    nvidia: normalizeUpstreamUrl(upstreams.nvidia),
+    kilo: normalizeUpstreamUrl(upstreams.kilo),
+    openrouter: normalizeUpstreamUrl(upstreams.openrouter),
+  };
 
-	const defaultRateLimit: RateLimitConfig = {
-		maxRequests: 60,
-		windowMs: 60_000,
-		bufferCapacity: 10,
-	};
+  const defaultRateLimit: RateLimitConfig = {
+    maxRequests: 60,
+    windowMs: 60_000,
+    bufferCapacity: 10,
+  };
 
-	const rateLimiter: Record<Provider, RateLimitConfig> = {
-		openai: defaultRateLimit,
-		anthropic: defaultRateLimit,
-		chatgpt: defaultRateLimit,
-		gemini: defaultRateLimit,
-		vertex: defaultRateLimit,
-		nvidia: defaultRateLimit,
-		openrouter: defaultRateLimit,
-		kilo: defaultRateLimit,
-		unknown: defaultRateLimit,
-	};
+  const MIN_MAX_REQUESTS = 1;
+  const MAX_MAX_REQUESTS = 10000;
+  const MIN_WINDOW_MS = 100;
+  const MAX_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+  const MIN_BUFFER_CAPACITY = 0;
+  const MAX_BUFFER_CAPACITY = 10000;
 
-	const defaultRetry: RetryConfig = {
-		maxRetries: 3,
-		baseDelayMs: 500,
-		maxDelayMs: 60000,
-		retryableStatuses: [429, 500, 502, 503, 504],
-		jitterFactor: 0.1,
-	};
+  function parseRateLimitEnv(
+    provider: Provider,
+    defaults: RateLimitConfig,
+  ): RateLimitConfig {
+    const prefix = `CONTEXTIO_RATE_LIMIT_${provider.toUpperCase()}`;
+    const maxRequestsRaw = process.env[`${prefix}_MAX_REQUESTS`] ?? defaults.maxRequests;
+    const windowMsRaw = process.env[`${prefix}_WINDOW_MS`] ?? defaults.windowMs;
+    const bufferCapacityRaw = process.env[`${prefix}_BUFFER`] ?? defaults.bufferCapacity;
 
-	const retry: Record<Provider, RetryConfig> = {
-		openai: defaultRetry,
-		anthropic: defaultRetry,
-		chatgpt: defaultRetry,
-		gemini: defaultRetry,
-		vertex: defaultRetry,
-		nvidia: defaultRetry,
-		openrouter: defaultRetry,
-		kilo: defaultRetry,
-		unknown: defaultRetry,
-	};
+    const maxRequests = Number.parseInt(String(maxRequestsRaw), 10);
+    const windowMs = Number.parseInt(String(windowMsRaw), 10);
+    const bufferCapacity = Number.parseInt(String(bufferCapacityRaw), 10);
 
-	return {
-		upstreams: normalizedUpstreams,
-		bindHost,
-		port,
-		allowTargetOverride,
-		strictUrlForwarding,
-		loggerCaptureDir,
-		loggerCaptureMaxAgeMs,
-		loggerCaptureCleanupIntervalMs,
-		loggerCaptureCleanupEnabled,
-		loggerEncryption,
-		oidc,
-		publicUrl,
-		rateLimiter,
-		retry: retry,
-	};
+    validateRateLimitConfig({ maxRequests, windowMs, bufferCapacity });
+
+    return { maxRequests, windowMs, bufferCapacity };
+  }
+
+  function validateRateLimitConfig(config: RateLimitConfig): void {
+    if (!Number.isFinite(config.maxRequests) || config.maxRequests < MIN_MAX_REQUESTS || config.maxRequests > MAX_MAX_REQUESTS) {
+      throw new Error(
+        `Rate limiter maxRequests must be a finite number between ${MIN_MAX_REQUESTS} and ${MAX_MAX_REQUESTS} (got: ${config.maxRequests})`,
+      );
+    }
+    if (!Number.isFinite(config.windowMs) || config.windowMs < MIN_WINDOW_MS || config.windowMs > MAX_WINDOW_MS) {
+      throw new Error(
+        `Rate limiter windowMs must be a finite number between ${MIN_WINDOW_MS} and ${MAX_WINDOW_MS} (got: ${config.windowMs})`,
+      );
+    }
+    if (!Number.isFinite(config.bufferCapacity) || config.bufferCapacity < MIN_BUFFER_CAPACITY || config.bufferCapacity > MAX_BUFFER_CAPACITY) {
+      throw new Error(
+        `Rate limiter bufferCapacity must be a finite number between ${MIN_BUFFER_CAPACITY} and ${MAX_BUFFER_CAPACITY} (got: ${config.bufferCapacity})`,
+      );
+    }
+  }
+
+  const rateLimiter: Record<Provider, RateLimitConfig> = {
+    openai: parseRateLimitEnv("openai", defaultRateLimit),
+    anthropic: parseRateLimitEnv("anthropic", defaultRateLimit),
+    chatgpt: parseRateLimitEnv("chatgpt", defaultRateLimit),
+    gemini: parseRateLimitEnv("gemini", defaultRateLimit),
+    vertex: parseRateLimitEnv("vertex", defaultRateLimit),
+    nvidia: parseRateLimitEnv("nvidia", defaultRateLimit),
+    openrouter: parseRateLimitEnv("openrouter", defaultRateLimit),
+    kilo: parseRateLimitEnv("kilo", defaultRateLimit),
+    unknown: parseRateLimitEnv("unknown", defaultRateLimit),
+  };
+
+  const defaultRetry: RetryConfig = {
+    maxRetries: 3,
+    baseDelayMs: 1000,
+    maxDelayMs: 30000,
+    retryableStatuses: [429, 500, 502, 503, 504],
+    jitterFactor: 0.2,
+  };
+
+  function resolveRetryForProvider(provider: Provider): RetryConfig {
+    const prefix = `CONTEXTIO_RETRY_${provider.toUpperCase()}`;
+
+    const maxRetries = (() => {
+      const raw = process.env[`${prefix}_MAX_RETRIES`];
+      if (raw === undefined) return defaultRetry.maxRetries;
+      const parsed = Number.parseInt(raw, 10);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        throw new Error(`Invalid ${prefix}_MAX_RETRIES="${raw}": must be a non-negative integer`);
+      }
+      return parsed;
+    })();
+
+    const baseDelayMs = (() => {
+      const raw = process.env[`${prefix}_BASE_DELAY_MS`];
+      if (raw === undefined) return defaultRetry.baseDelayMs;
+      const parsed = Number.parseInt(raw, 10);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        throw new Error(`Invalid ${prefix}_BASE_DELAY_MS="${raw}": must be a non-negative integer`);
+      }
+      return parsed;
+    })();
+
+    const maxDelayMs = (() => {
+      const raw = process.env[`${prefix}_MAX_DELAY_MS`];
+      if (raw === undefined) return defaultRetry.maxDelayMs;
+      const parsed = Number.parseInt(raw, 10);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        throw new Error(`Invalid ${prefix}_MAX_DELAY_MS="${raw}": must be a non-negative integer`);
+      }
+      return parsed;
+    })();
+
+    if (baseDelayMs > maxDelayMs) {
+      throw new Error(`Retry ${prefix} invalid: baseDelayMs (${baseDelayMs}) must be <= maxDelayMs (${maxDelayMs})`);
+    }
+
+    const retryableStatuses = (() => {
+      const raw = process.env[`${prefix}_RETRYABLE_STATUSES`];
+      if (raw === undefined) return defaultRetry.retryableStatuses;
+      const trimmed = raw.trim();
+      if (trimmed === "") return defaultRetry.retryableStatuses;
+      const parsed = trimmed
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => Number.parseInt(s, 10));
+      for (const val of parsed) {
+        if (!Number.isFinite(val) || val < 100 || val > 599) {
+          throw new Error(`Invalid ${prefix}_RETRYABLE_STATUSES="${raw}": statuses must be valid HTTP codes (100-599)`);
+        }
+      }
+      return parsed;
+    })();
+
+    const jitterFactor = (() => {
+      const raw = process.env[`${prefix}_JITTER_FACTOR`];
+      if (raw === undefined) return defaultRetry.jitterFactor;
+      const parsed = Number.parseFloat(raw);
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+        throw new Error(`Invalid ${prefix}_JITTER_FACTOR="${raw}": must be between 0 and 1`);
+      }
+      return parsed;
+    })();
+
+    return {
+      maxRetries,
+      baseDelayMs,
+      maxDelayMs,
+      retryableStatuses,
+      jitterFactor,
+    };
+  }
+
+  const retry: Record<Provider, RetryConfig> = {
+    openai: resolveRetryForProvider("openai"),
+    anthropic: resolveRetryForProvider("anthropic"),
+    chatgpt: resolveRetryForProvider("chatgpt"),
+    gemini: resolveRetryForProvider("gemini"),
+    vertex: resolveRetryForProvider("vertex"),
+    nvidia: resolveRetryForProvider("nvidia"),
+    openrouter: resolveRetryForProvider("openrouter"),
+    kilo: resolveRetryForProvider("kilo"),
+    unknown: resolveRetryForProvider("unknown"),
+  };
+
+  return {
+    upstreams: normalizedUpstreams,
+    bindHost,
+    port,
+    allowTargetOverride,
+    strictUrlForwarding,
+    loggerCaptureDir,
+    loggerCaptureMaxAgeMs,
+    loggerCaptureCleanupIntervalMs,
+    loggerCaptureCleanupEnabled,
+    loggerEncryption,
+    oidc,
+    publicUrl,
+    rateLimiter,
+    retry,
+  };
 }

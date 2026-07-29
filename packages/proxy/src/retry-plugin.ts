@@ -146,6 +146,14 @@ export class RetryPlugin implements ProxyPlugin {
     inDataField: boolean;
     dataBuffer: string;
     hasErrorEvent: boolean;
+    // Pending retry signal for streaming responses
+    pendingRetry?: {
+      retryId: string;
+      captureId: string | undefined;
+      originalBodyBuffer: Buffer;
+      originalBodyJson: JsonValue | null;
+      delayMs: number;
+    };
   }>();
 
   // Cleanup timer for removing old entries
@@ -1000,8 +1008,7 @@ export class RetryPlugin implements ProxyPlugin {
       streamState.errorMessage = "SSE error event detected";
     }
 
-    // For observability, log the detected error state before cleanup
-    // (In production, this could be emitted to metrics/logs)
+    // For observability, log the detected error state
     if (streamState.errorDetected) {
       console.debug(`[retry] Streaming error detected for session ${sessionId}:`, {
         status: streamState.errorStatus,
@@ -1010,9 +1017,45 @@ export class RetryPlugin implements ProxyPlugin {
       });
     }
 
-    // Clean up stream state and request store
-    // Note: The proxy architecture doesn't support transparent streaming retries.
-    // SSE error detection is provided for monitoring/observability purposes.
+    // If an error was detected, check if we should retry
+    if (streamState.errorDetected) {
+      const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
+      const entry = this.requestStore.get(storageKey);
+      if (entry) {
+        const config = this.getConfigForProvider(entry.provider);
+        if (entry.retryCount < config.maxRetries) {
+          // Calculate delay for this retry
+          let delayMs = this.calculateDelay(entry.retryCount, config);
+          
+          // For 429 status, check for Retry-After header (not available in streaming, but keep for consistency)
+          if (streamState.errorStatus === 429) {
+            // In streaming, we don't have Retry-After headers from the SSE stream itself
+            // Use calculated backoff
+          }
+          
+          // Increment retry count in request store
+          this.setEntry(storageKey, {
+            ...entry,
+            retryCount: entry.retryCount + 1,
+          });
+          
+          // Store pending retry info for forward.ts to consume
+          streamState.pendingRetry = {
+            retryId: entry.requestId,
+            captureId: entry.captureId,
+            originalBodyBuffer: entry.originalBodyBuffer,
+            originalBodyJson: entry.originalBodyJson,
+            delayMs,
+          };
+          
+          // Don't clean up state yet - forward.ts will consume the pending retry
+          // and we clean up after the retry is handled
+          return null;
+        }
+      }
+    }
+
+    // No retry needed - clean up stream state and request store
     this.cleanupStreamState(streamState, sessionId);
     
     // Return null - no extra data to flush
@@ -1072,6 +1115,58 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Get and consume a pending stream retry for a session.
+   * Returns the retry info if available, null otherwise.
+   * The pending retry is cleared after this call.
+   */
+  getAndConsumePendingStreamRetry(sessionId: string | null): {
+    retryId: string;
+    captureId: string | undefined;
+    originalBodyBuffer: Buffer;
+    originalBodyJson: JsonValue | null;
+    delayMs: number;
+  } | null {
+    if (!sessionId) return null;
+    
+    const streamState = this.streamState.get(sessionId);
+    if (!streamState || !streamState.pendingRetry) {
+      return null;
+    }
+    
+    const pendingRetry = streamState.pendingRetry;
+    // Clear the pending retry
+    streamState.pendingRetry = undefined;
+    
+    // Reset stream state error fields for the retry response
+    // (Don't delete streamState - retries bypass onRequest, so we need it to persist)
+    streamState.errorDetected = false;
+    streamState.errorStatus = null;
+    streamState.errorMessage = null;
+    streamState.hasErrorEvent = false;
+    streamState.partialField = null;
+    streamState.partialContent = "";
+    streamState.inDataField = false;
+    streamState.dataBuffer = "";
+    
+    // Refresh requestStore entry timestamp to prevent premature eviction during retry delay
+    const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
+    const entry = this.requestStore.get(storageKey);
+    if (entry) {
+      entry.lastAccessed = Date.now();
+    }
+    
+    // Note: requestStore is NOT cleared here - it's kept for the retry attempt
+    
+    return {
+      retryId: pendingRetry.retryId,
+      captureId: pendingRetry.captureId,
+      originalBodyBuffer: pendingRetry.originalBodyBuffer,
+      originalBodyJson: pendingRetry.originalBodyJson,
+      delayMs: pendingRetry.delayMs,
+    };
+  }
+
+  /**
    * Clear all buffered state (for testing).
    */
   clearForTesting(): void {
@@ -1123,6 +1218,7 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getRequestHeaders: (key: string) => plugin.getRequestHeadersForTesting(key),
     getRetryCount: (key: string) => plugin.getRetryCountForTesting(key),
     getStreamError: (sessionId: string) => plugin.getStreamErrorForTesting(sessionId),
+    getAndConsumePendingStreamRetry: (sessionId: string | null) => plugin.getAndConsumePendingStreamRetry(sessionId),
     clear: () => plugin.clearForTesting(),
     shutdown: () => plugin.shutdown(),
   };

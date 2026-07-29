@@ -553,10 +553,18 @@ export function createProxyHandler(
             // Buffer data to handle partial JSON objects across chunk boundaries
             let jsonBuffer = "";
 
-            // Buffer the full response only when response plugins are active
-            // AND the response is not streaming. Streaming responses must be
-            // forwarded chunk by chunk; buffering them would break SSE clients.
-            const shouldBufferResponse = hasResponsePlugins && !isStreaming;
+            // Check if retry plugin is active
+            const hasRetryPlugin = plugins.some((p) => p.name === "retry");
+
+            // Buffer the full response when:
+            // - response plugins are active AND response is not streaming (existing behavior), OR
+            // - retry plugin is active AND response is streaming (new: enable streaming retries)
+            const shouldBufferResponse = (hasResponsePlugins && !isStreaming) || (hasRetryPlugin && isStreaming);
+
+            // When buffering streaming for retry, we still need to run onStreamChunk for error detection
+            // but we don't write to client until we know no retry is needed
+            const shouldBufferStreamForRetry = hasRetryPlugin && isStreaming;
+            const streamBufferChunks: Buffer[] = [];
 
             if (!shouldBufferResponse) {
               // Stream directly to client
@@ -599,6 +607,7 @@ export function createProxyHandler(
               }
 
               if (!shouldBufferResponse && !res.destroyed) {
+                // Normal streaming: process stream plugins and write directly to client
                 // Ensure JSON objects are separated to avoid concatenation errors
                 let outBuffer: Buffer = chunk;
                 if (hasStreamPlugins && isStreaming) {
@@ -622,11 +631,11 @@ export function createProxyHandler(
                             buf,
                             sessionId,
                           );
-  if (ret instanceof SharedArrayBuffer) {
-  ret = Buffer.from(
-    Buffer.from(ret as ArrayBufferLike),
-  );
-}
+                          if (ret instanceof SharedArrayBuffer) {
+                            ret = Buffer.from(
+                              Buffer.from(ret as ArrayBufferLike),
+                            );
+                          }
                           if (ret instanceof Buffer) {
                             buf = ret;
                           }
@@ -677,6 +686,75 @@ export function createProxyHandler(
                   }
                 }
                 res.write(outBuffer);
+              } else if (shouldBufferStreamForRetry) {
+                // We're buffering streaming response for retry - still run stream plugins
+                // for error detection, but buffer the processed chunks instead of writing to client
+                if (hasStreamPlugins && isStreaming) {
+                  // Convert to string for safe splitting
+                  const text = chunk.toString("utf8");
+                  // Prepend any leftover partial JSON from previous chunks
+                  const fullText = jsonBuffer ? jsonBuffer + text : text;
+                  jsonBuffer = "";
+                  // Split where a JSON object ends and another begins without a delimiter
+                  const parts = fullText.split(/(?<=})\s*(?={)/);
+                  const processedParts: Buffer[] = [];
+                  for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    let buf = Buffer.from(part, "utf8");
+                    // Run plugins on each part individually
+                    if (hasStreamPlugins) {
+                      for (const plugin of plugins) {
+                        if (!plugin.onStreamChunk) continue;
+                        try {
+                          let ret: unknown = plugin.onStreamChunk(
+                            buf,
+                            sessionId,
+                          );
+                          if (ret instanceof SharedArrayBuffer) {
+                            ret = Buffer.from(
+                              Buffer.from(ret as ArrayBufferLike),
+                            );
+                          }
+                          if (ret instanceof Buffer) {
+                            buf = ret;
+                          }
+                        } catch (err: unknown) {
+                          console.error(
+                            `Plugin "${plugin.name}" onStreamChunk error:`,
+                            err instanceof Error ? err.message : String(err),
+                          );
+                        }
+                      }
+                    }
+                    // Only process complete JSON objects; save incomplete trailing part
+                    const isLastPart = i === parts.length - 1;
+                    const looksComplete = part.trim().endsWith("}");
+                    if (isLastPart && !looksComplete) {
+                      // Save incomplete trailing part for next chunk
+                      jsonBuffer = part;
+                    } else {
+                      const trimmed = part.trim();
+                      const startsObject = trimmed.startsWith("{");
+                      const endsObject = trimmed.endsWith("}");
+                      if (startsObject && endsObject) {
+                        try {
+                          JSON.parse(trimmed);
+                        } catch {
+                          console.error(
+                            "Malformed JSON in SSE stream, skipping invalid part",
+                          );
+                          continue;
+                        }
+                      }
+                      processedParts.push(buf);
+                    }
+                  }
+                  const outBuffer = Buffer.concat(processedParts);
+                  streamBufferChunks.push(outBuffer);
+                } else {
+                  // No stream plugins, just buffer the raw chunk
+                  streamBufferChunks.push(chunk);
+                }
               }
             });
 
@@ -691,7 +769,11 @@ export function createProxyHandler(
                   try {
                     const flushed = plugin.onStreamEnd(sessionId);
                     if (flushed && flushed.length > 0) {
-                      res.write(flushed);
+                      if (shouldBufferStreamForRetry) {
+                        streamBufferChunks.push(flushed);
+                      } else {
+                        res.write(flushed);
+                      }
                     }
                   } catch (err: unknown) {
                     console.error(
@@ -699,6 +781,53 @@ export function createProxyHandler(
                       err instanceof Error ? err.message : String(err),
                     );
                   }
+                }
+              }
+
+              // Check for streaming retry signal from retry plugin
+              // This allows retrying SSE responses that ended with an error event
+              if (shouldBufferStreamForRetry && !res.destroyed) {
+                const retryPlugin = plugins.find((p) => p.name === "retry");
+                const pendingRetry =
+                  retryPlugin &&
+                  typeof (retryPlugin as any)._internal?.getAndConsumePendingStreamRetry === "function"
+                    ? (retryPlugin as any)._internal.getAndConsumePendingStreamRetry(sessionId)
+                    : null;
+                if (pendingRetry) {
+                  // Don't end the response yet - just re-issue the request
+                  // The new response will replace the current one
+                  // Apply retry delay before re-issuing request
+                  const delayMs = pendingRetry.delayMs;
+                  if (delayMs > 0) {
+                    setTimeout(() => {
+                      if (!res.destroyed) {
+                        try {
+                          doForward({
+                            ...currentCtx,
+                            rawBody: pendingRetry.originalBodyBuffer,
+                            body: pendingRetry.originalBodyJson ?? currentCtx.body,
+                            captureId: pendingRetry.captureId ?? currentCtx.captureId,
+                          });
+                        } catch (err) {
+                          console.error("Streaming retry doForward error:", err);
+                        }
+                      }
+                    }, delayMs);
+                  } else {
+                    if (!res.destroyed) {
+                      try {
+                        doForward({
+                          ...currentCtx,
+                          rawBody: pendingRetry.originalBodyBuffer,
+                          body: pendingRetry.originalBodyJson ?? currentCtx.body,
+                          captureId: pendingRetry.captureId ?? currentCtx.captureId,
+                        });
+} catch (err) {
+                        console.error("Streaming retry doForward error:", err);
+                      }
+                    }
+                  }
+                  return;
                 }
               }
 
@@ -772,7 +901,66 @@ export function createProxyHandler(
                 }
               };
 
-              if (shouldBufferResponse) {
+              // Handle response based on buffering mode
+              if (shouldBufferStreamForRetry) {
+                // Streaming response was buffered for retry, but no retry was needed
+                // Write buffered chunks to client and run capture
+                if (!res.headersSent && !res.destroyed) {
+                  const outHeaders: HeaderMap = { ...(proxyRes.headers as HeaderMap), ...(captureId ? { "x-contextio-capture-id": captureId } : {}) };
+                  const outBuf = Buffer.concat(streamBufferChunks);
+                  outHeaders["content-length"] = String(outBuf.length);
+                  delete outHeaders["transfer-encoding"];
+                  res.writeHead(proxyRes.statusCode || 0, outHeaders);
+                  res.end(outBuf);
+                }
+                const streamBody = Buffer.concat(streamBufferChunks).toString("utf8");
+                // Build capture and run capture plugins
+                if (hasCapturePlugins) {
+                  const timings: CaptureData["timings"] = {
+                    send_ms: Math.round(
+                      Math.max(
+                        0,
+                        (requestSentTime || firstByteTime) - startTime,
+                      ),
+                    ),
+                    wait_ms: Math.round(
+                      Math.max(
+                        0,
+                        firstByteTime - (requestSentTime || startTime),
+                      ),
+                    ),
+                    receive_ms: Math.round(endTime - firstByteTime),
+                    total_ms: Math.round(endTime - startTime),
+                  };
+
+// Skip capture for title-generation requests (internal UI feature)
+  if (sessionId?.startsWith("title-")) {
+    if (opts.logTraffic) {
+      console.log("[DEBUG] Skipping capture for title-generation request");
+    }
+  } else {
+    const capture = buildCaptureData({
+      sessionId,
+      req,
+      cleanPath,
+      source,
+      provider,
+      apiFormat,
+      targetUrl,
+      ctx,
+      originalBody: bodyJson,
+      reqBytes,
+      proxyRes,
+      finalBody: streamBody,
+      isStreaming: !!isStreaming,
+      respBytes,
+      timings,
+    });
+
+    runCapturePlugins(plugins, capture);
+  }
+                }
+              } else if (shouldBufferResponse) {
                 const retryId = currentCtx.headers["x-retry-id"];
                 const respCtx: ResponseContext = {
                   status: proxyRes.statusCode || 0,
@@ -817,7 +1005,7 @@ export function createProxyHandler(
                           const retryPlugin = plugins.find((p) => p.name === "retry");
                           if (retryPlugin && (retryPlugin as any)._internal?.getRequestBody) {
                             // Try lookup by retryId first (backward compatibility), then by captureId
-                            const originalBodyBuffer = (retryPlugin as any)._internal.getRequestBody(retryId || "") ?? 
+                            const originalBodyBuffer = (retryPlugin as any)._internal.getRequestBody(retryId || "") ??
                               (captureId ? (retryPlugin as any)._internal.getRequestBody(captureId) : undefined);
                             const originalBodyJson = (retryPlugin as any)._internal.getRequestBodyJson?.(retryId || "") ??
                               (captureId ? (retryPlugin as any)._internal.getRequestBodyJson?.(captureId) : undefined);
