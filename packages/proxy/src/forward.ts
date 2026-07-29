@@ -113,6 +113,77 @@ function runCapturePlugins(plugins: ProxyPlugin[], capture: CaptureData): void {
   }
 }
 
+/**
+ * Process a stream chunk through onStreamChunk plugins.
+ *
+ * Handles JSON splitting for SSE streams, runs plugins on each complete
+ * JSON object, and buffers incomplete trailing parts for the next chunk.
+ */
+function processStreamChunk(
+  chunk: Buffer,
+  sessionId: string | null,
+  plugins: ProxyPlugin[],
+  hasStreamPlugins: boolean,
+  jsonBuffer: string,
+): { processedParts: Buffer[]; remainingBuffer: string } {
+  const text = chunk.toString("utf8");
+  const fullText = jsonBuffer ? jsonBuffer + text : text;
+  const parts = fullText.split(/(?<=})\s*(?={)/);
+  const processedParts: Buffer[] = [];
+  let remainingBuffer = "";
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    let buf = Buffer.from(part, "utf8");
+
+    // Run plugins on each part individually
+    if (hasStreamPlugins) {
+      for (const plugin of plugins) {
+        if (!plugin.onStreamChunk) continue;
+        try {
+          let ret: unknown = plugin.onStreamChunk(buf, sessionId);
+          if (ret instanceof SharedArrayBuffer) {
+            ret = Buffer.from(Buffer.from(ret as ArrayBufferLike));
+          }
+          if (ret instanceof Buffer) {
+            buf = ret;
+          }
+        } catch (err: unknown) {
+          console.error(
+            `Plugin "${plugin.name}" onStreamChunk error:`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+
+    // Only process complete JSON objects; save incomplete trailing part
+    const isLastPart = i === parts.length - 1;
+    const looksComplete = part.trim().endsWith("}");
+    if (isLastPart && !looksComplete) {
+      // Save incomplete trailing part for next chunk
+      remainingBuffer = part;
+    } else {
+      const trimmed = part.trim();
+      const startsObject = trimmed.startsWith("{");
+      const endsObject = trimmed.endsWith("}");
+      if (startsObject && endsObject) {
+        try {
+          JSON.parse(trimmed);
+        } catch {
+          console.error(
+            "Malformed JSON in SSE stream, skipping invalid part",
+          );
+          continue;
+        }
+      }
+      processedParts.push(buf);
+    }
+  }
+
+  return { processedParts, remainingBuffer: remainingBuffer };
+}
+
 // --- Header / lifecycle helpers ---
 
 /**
@@ -621,66 +692,16 @@ export function createProxyHandler(
                 // Ensure JSON objects are separated to avoid concatenation errors
                 let outBuffer: Buffer = chunk;
                 if (hasStreamPlugins && isStreaming) {
-                  // Convert to string for safe splitting
-                  const text = outBuffer.toString("utf8");
-                  // Prepend any leftover partial JSON from previous chunks
-                  const fullText = jsonBuffer ? jsonBuffer + text : text;
-                  jsonBuffer = "";
-                  // Split where a JSON object ends and another begins without a delimiter
-                  const parts = fullText.split(/(?<=})\s*(?={)/);
-                  const processedParts: Buffer[] = [];
-                  for (let i = 0; i < parts.length; i++) {
-                    const part = parts[i];
-                    let buf = Buffer.from(part, "utf8");
-                    // Run plugins on each part individually
-                    if (hasStreamPlugins) {
-                      for (const plugin of plugins) {
-                        if (!plugin.onStreamChunk) continue;
-                        try {
-                          let ret: unknown = plugin.onStreamChunk(
-                            buf,
-                            sessionId,
-                          );
-                          if (ret instanceof SharedArrayBuffer) {
-                            ret = Buffer.from(
-                              Buffer.from(ret as ArrayBufferLike),
-                            );
-                          }
-                          if (ret instanceof Buffer) {
-                            buf = ret;
-                          }
-                        } catch (err: unknown) {
-                          console.error(
-                            `Plugin "${plugin.name}" onStreamChunk error:`,
-                            err instanceof Error ? err.message : String(err),
-                          );
-                        }
-                      }
-                    }
-                    // Only process complete JSON objects; save incomplete trailing part
-                    const isLastPart = i === parts.length - 1;
-                    const looksComplete = part.trim().endsWith("}");
-                    if (isLastPart && !looksComplete) {
-                      // Save incomplete trailing part for next chunk
-                      jsonBuffer = part;
-                    } else {
-                      const trimmed = part.trim();
-                      const startsObject = trimmed.startsWith("{");
-                      const endsObject = trimmed.endsWith("}");
-                      if (startsObject && endsObject) {
-                        try {
-                          JSON.parse(trimmed);
-                        } catch {
-                          console.error(
-                            "Malformed JSON in SSE stream, skipping invalid part",
-                          );
-                          continue;
-                        }
-                      }
-                      processedParts.push(buf);
-                    }
-                  }
-                  outBuffer = Buffer.concat(processedParts);
+                  // Use helper to process chunk through stream plugins
+                  const result = processStreamChunk(
+                    chunk,
+                    sessionId,
+                    plugins,
+                    hasStreamPlugins,
+                    jsonBuffer,
+                  );
+                  outBuffer = Buffer.concat(result.processedParts);
+                  jsonBuffer = result.remainingBuffer;
                 } else if (hasStreamPlugins) {
                   // Non-streaming plugins still operate on whole chunk
                   for (const plugin of plugins) {
@@ -700,67 +721,17 @@ export function createProxyHandler(
                 // We're buffering streaming response for retry - still run stream plugins
                 // for error detection, but buffer the processed chunks instead of writing to client
                 if (hasStreamPlugins && isStreaming) {
-                  // Convert to string for safe splitting
-                  const text = chunk.toString("utf8");
-                  // Prepend any leftover partial JSON from previous chunks
-                  const fullText = jsonBuffer ? jsonBuffer + text : text;
-                  jsonBuffer = "";
-                  // Split where a JSON object ends and another begins without a delimiter
-                  const parts = fullText.split(/(?<=})\s*(?={)/);
-                  const processedParts: Buffer[] = [];
-                  for (let i = 0; i < parts.length; i++) {
-                    const part = parts[i];
-                    let buf = Buffer.from(part, "utf8");
-                    // Run plugins on each part individually
-                    if (hasStreamPlugins) {
-                      for (const plugin of plugins) {
-                        if (!plugin.onStreamChunk) continue;
-                        try {
-                          let ret: unknown = plugin.onStreamChunk(
-                            buf,
-                            sessionId,
-                          );
-                          if (ret instanceof SharedArrayBuffer) {
-                            ret = Buffer.from(
-                              Buffer.from(ret as ArrayBufferLike),
-                            );
-                          }
-                          if (ret instanceof Buffer) {
-                            buf = ret;
-                          }
-                        } catch (err: unknown) {
-                          console.error(
-                            `Plugin "${plugin.name}" onStreamChunk error:`,
-                            err instanceof Error ? err.message : String(err),
-                          );
-                        }
-                      }
-                    }
-                    // Only process complete JSON objects; save incomplete trailing part
-                    const isLastPart = i === parts.length - 1;
-                    const looksComplete = part.trim().endsWith("}");
-                    if (isLastPart && !looksComplete) {
-                      // Save incomplete trailing part for next chunk
-                      jsonBuffer = part;
-                    } else {
-                      const trimmed = part.trim();
-                      const startsObject = trimmed.startsWith("{");
-                      const endsObject = trimmed.endsWith("}");
-                      if (startsObject && endsObject) {
-                        try {
-                          JSON.parse(trimmed);
-                        } catch {
-                          console.error(
-                            "Malformed JSON in SSE stream, skipping invalid part",
-                          );
-                          continue;
-                        }
-                      }
-                      processedParts.push(buf);
-                    }
-                  }
-                  const outBuffer = Buffer.concat(processedParts);
+                  // Use helper to process chunk through stream plugins
+                  const result = processStreamChunk(
+                    chunk,
+                    sessionId,
+                    plugins,
+                    hasStreamPlugins,
+                    jsonBuffer,
+                  );
+                  const outBuffer = Buffer.concat(result.processedParts);
                   streamBufferChunks.push(outBuffer);
+                  jsonBuffer = result.remainingBuffer;
                 } else {
                   // No stream plugins, just buffer the raw chunk
                   streamBufferChunks.push(chunk);

@@ -929,9 +929,9 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
-   * Clean up both streamState and requestStore for a stream.
+   * Clean up both streamState and requestStore for a session.
    */
-  private cleanupStreamState(streamState: StreamState, sessionId: string): void {
+  private cleanupAllState(streamState: StreamState, sessionId: string): void {
     this.streamState.delete(sessionId);
     const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
     this.requestStore.delete(storageKey);
@@ -1060,7 +1060,7 @@ export class RetryPlugin implements ProxyPlugin {
     }
 
     // No retry needed - clean up stream state and request store
-    this.cleanupStreamState(streamState, sessionId);
+    this.cleanupAllState(streamState, sessionId);
     
     // Return null - no extra data to flush
     return null;
