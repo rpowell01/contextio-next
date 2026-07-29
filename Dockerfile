@@ -128,6 +128,9 @@ ENV LOG_TRAFFIC=false
 ENV DEBUG_ROUTING=false
 ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
+# Next.js cache directory for ISR (Incremental Static Regeneration)
+# Set to a location writable by the node user (UID 1000)
+ENV NEXT_CACHE_DIR=/app/captures/.next/cache
 
 LABEL org.opencontainers.image.title="contextio-next"
 LABEL org.opencontainers.image.description="LLM API proxy with redaction, logging, and web UI. Zero external dependencies."
@@ -212,9 +215,12 @@ RUN echo 'import { createRedactPlugin } from "@contextio/redact";' > /app/redact
 
 # Create directories at build time with proper permissions
 # This avoids permission issues when volumes are mounted by external tools like Coolify
-RUN mkdir -p /app/captures /app/custom-policy /home/node/.contextio-next && \
+# Also create .next/cache for Next.js ISR (Incremental Static Regeneration) caching
+# Place cache alongside captures directory for consistent permissions
+RUN mkdir -p /app/captures /app/custom-policy /home/node/.contextio-next /app/captures/.next/cache && \
     chmod 700 /app/captures /app/custom-policy /home/node/.contextio-next && \
-    ls -la /app/captures /app/custom-policy /home/node/.contextio-next
+    chmod 755 /app/captures/.next/cache && \
+    ls -la /app/captures /app/custom-policy /home/node/.contextio-next /app/captures/.next/cache
 
 # Single entry point: combined proxy + web UI on port 4040
 RUN echo '#!/bin/sh' > /app/start.sh && \
@@ -243,13 +249,17 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'cat "$POLICY_FILE"' >> /app/start.sh && \
     echo 'mkdir -p "$CAPTURE_DIR"' >> /app/start.sh && \
     echo 'chmod 700 "$CAPTURE_DIR" 2>/dev/null || true' >> /app/start.sh && \
+    echo '# Ensure Next.js cache directory exists and is writable' >> /app/start.sh && \
+    echo 'NEXT_CACHE="${NEXT_CACHE_DIR:-/app/captures/.next/cache}"' >> /app/start.sh && \
+    echo 'mkdir -p "$NEXT_CACHE"' >> /app/start.sh && \
+    echo 'chmod 755 "$NEXT_CACHE" 2>/dev/null || true' >> /app/start.sh && \
     echo 'echo "Starting ContextIO-Next (Proxy + Web UI) on port 4040..."' >> /app/start.sh && \
     echo 'node dist/combined-entry.js' >> /app/start.sh && \
     chmod +x /app/start.sh
 
 # Fix permissions for node user (after all files are created)
 # Only change ownership of files we control, not mounted volumes
-RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /app/default-policy.json /app/captures /app/custom-policy /home/node/.contextio-next && \
+RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /app/default-policy.json /app/captures /app/custom-policy /home/node/.contextio-next /app/captures/.next/cache && \
     chmod +x /app/start.sh
 
 USER node

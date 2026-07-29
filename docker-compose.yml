@@ -26,6 +26,8 @@ services:
       CONTEXT_PROXY_PLUGINS: /app/redact-plugin.js,/app/logger-plugin.js
       # Web UI configuration
       NEXT_PUBLIC_SITE_URL: http://localhost:4041
+      # Next.js cache directory for ISR (Incremental Static Regeneration)
+      NEXT_CACHE_DIR: /app/captures/.next/cache
       # CSRF protection (set via Coolify environment variables)
       CSRF_SECRET: ${CSRF_SECRET}
     restart: unless-stopped
