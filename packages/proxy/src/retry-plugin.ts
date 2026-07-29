@@ -884,8 +884,6 @@ export class RetryPlugin implements ProxyPlugin {
     
     // Use streamState's persistent SSE parsing state for multi-line data fields across chunks
     // (inDataField and dataBuffer are always initialized in onRequest)
-    
-    // Use streamState's persistent SSE parsing state
     const sseState = {
       inDataField: streamState.inDataField,
       dataBuffer: streamState.dataBuffer,

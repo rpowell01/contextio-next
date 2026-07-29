@@ -848,12 +848,12 @@ export function createProxyHandler(
               // or after response plugins have run (buffered path). It writes
               // headers+body to the client, then fires capture plugins.
               const finishResponse = (
-                finalBody: string,
+                finalBody: string | Buffer,
                 finalHeaders: HeaderMap,
                 finalStatus: number,
               ): void => {
-                if (shouldBufferResponse && !res.headersSent) {
-                  const outBuf = Buffer.from(finalBody, "utf8");
+                if (shouldBufferResponse && !res.headersSent && !res.destroyed) {
+                  const outBuf = Buffer.isBuffer(finalBody) ? finalBody : Buffer.from(finalBody, "utf8");
                   const outHeaders = { ...finalHeaders };
                   outHeaders["content-length"] = String(outBuf.length);
                   delete outHeaders["transfer-encoding"];
@@ -900,7 +900,7 @@ export function createProxyHandler(
       originalBody: bodyJson,
       reqBytes,
       proxyRes,
-      finalBody,
+      finalBody: Buffer.isBuffer(finalBody) ? finalBody.toString("utf8") : finalBody,
       isStreaming: !!isStreaming,
       respBytes,
       timings,
@@ -914,62 +914,13 @@ export function createProxyHandler(
               // Handle response based on buffering mode
               if (shouldBufferStreamForRetry) {
                 // Streaming response was buffered for retry, but no retry was needed
-                // Write buffered chunks to client and run capture
-                if (!res.headersSent && !res.destroyed) {
-                  const outHeaders: HeaderMap = { ...(proxyRes.headers as HeaderMap), ...(captureId ? { "x-contextio-capture-id": captureId } : {}) };
-                  const outBuf = Buffer.concat(streamBufferChunks);
-                  outHeaders["content-length"] = String(outBuf.length);
-                  delete outHeaders["transfer-encoding"];
-                  res.writeHead(proxyRes.statusCode || 0, outHeaders);
-                  res.end(outBuf);
-                }
-                const streamBody = Buffer.concat(streamBufferChunks).toString("utf8");
-                // Build capture and run capture plugins
-                if (hasCapturePlugins) {
-                  const timings: CaptureData["timings"] = {
-                    send_ms: Math.round(
-                      Math.max(
-                        0,
-                        (requestSentTime || firstByteTime) - startTime,
-                      ),
-                    ),
-                    wait_ms: Math.round(
-                      Math.max(
-                        0,
-                        firstByteTime - (requestSentTime || startTime),
-                      ),
-                    ),
-                    receive_ms: Math.round(endTime - firstByteTime),
-                    total_ms: Math.round(endTime - startTime),
-                  };
-
-// Skip capture for title-generation requests (internal UI feature)
-  if (sessionId?.startsWith("title-")) {
-    if (opts.logTraffic) {
-      console.log("[DEBUG] Skipping capture for title-generation request");
-    }
-  } else {
-    const capture = buildCaptureData({
-      sessionId,
-      req,
-      cleanPath,
-      source,
-      provider,
-      apiFormat,
-      targetUrl,
-      ctx,
-      originalBody: bodyJson,
-      reqBytes,
-      proxyRes,
-      finalBody: streamBody,
-      isStreaming: !!isStreaming,
-      respBytes,
-      timings,
-    });
-
-    runCapturePlugins(plugins, capture);
-  }
-                }
+                // Delegate to finishResponse to write headers/body and run capture
+                const streamBody = Buffer.concat(streamBufferChunks);
+                const streamHeaders: HeaderMap = {
+                  ...(proxyRes.headers as HeaderMap),
+                  ...(captureId ? { "x-contextio-capture-id": captureId } : {}),
+                };
+                finishResponse(streamBody, streamHeaders, proxyRes.statusCode || 0);
               } else if (shouldBufferResponse) {
                 const retryId = currentCtx.headers["x-retry-id"];
                 const respCtx: ResponseContext = {
