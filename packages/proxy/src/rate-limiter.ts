@@ -9,17 +9,25 @@ import type { ProxyPlugin, RequestContext } from "@contextio/core";
 
 /**
  * Configuration for the rate limiter plugin.
+ *
+ * Supports two formats for backward compatibility:
+ * 1. Flat format (legacy): { maxRequests, windowMs, bufferCapacity, ... }
+ * 2. Nested format (new): { defaults: { maxRequests, windowMs, bufferCapacity }, ... }
+ *
+ * The flat format is deprecated but still supported.
  */
 export interface RateLimiterConfig {
   /**
    * Maximum number of requests allowed per window.
    * @default 60
+   * @deprecated Use defaults.maxRequests instead
    */
   maxRequests?: number;
 
   /**
    * Time window in milliseconds for the rate limit.
    * @default 60000 (1 minute)
+   * @deprecated Use defaults.windowMs instead
    */
   windowMs?: number;
 
@@ -27,8 +35,22 @@ export interface RateLimiterConfig {
    * Additional burst capacity beyond maxRequests.
    * Allows short bursts of traffic above the steady-state rate.
    * @default 10
+   * @deprecated Use defaults.bufferCapacity instead
    */
   bufferCapacity?: number;
+
+  /**
+   * Default rate limit configuration.
+   * Use this instead of the deprecated top-level fields.
+   */
+  defaults?: {
+    /** Maximum number of requests allowed per window. @default 60 */
+    maxRequests?: number;
+    /** Time window in milliseconds for the rate limit. @default 60000 (1 minute) */
+    windowMs?: number;
+    /** Additional burst capacity beyond maxRequests. @default 10 */
+    bufferCapacity?: number;
+  };
 
   /**
    * Maximum number of unique session/provider buckets to track.
@@ -104,21 +126,39 @@ function defaultKeyGenerator(ctx: RequestContext): string {
 }
 
 /**
+ * Internal resolved configuration (all values required, no optional fields).
+ */
+interface ResolvedRateLimiterConfig {
+  maxRequests: number;
+  windowMs: number;
+  bufferCapacity: number;
+  maxEntries: number;
+  cleanupIntervalMs: number;
+  entryTtlMs: number;
+  enabled: boolean;
+  keyGenerator: (ctx: RequestContext) => string;
+  onRateLimited: (ctx: RequestContext, retryAfterMs: number) => void;
+}
+
+/**
  * Rate limiter plugin class implementing the token bucket algorithm.
  */
 export class RateLimiterPlugin implements ProxyPlugin {
   name = "rate-limiter";
 
-  private readonly config: Required<RateLimiterConfig>;
+  private readonly config: ResolvedRateLimiterConfig;
   private readonly buckets = new Map<string, BucketState>();
   private readonly refillRate: number;
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(config: RateLimiterConfig = {}) {
-    // Validate configuration
-    const maxRequests = config.maxRequests ?? DEFAULT_MAX_REQUESTS;
-    const windowMs = config.windowMs ?? DEFAULT_WINDOW_MS;
-    const bufferCapacity = config.bufferCapacity ?? DEFAULT_BUFFER_CAPACITY;
+    // Support both flat (legacy) and nested formats for backward compatibility
+    // Flat: { maxRequests, windowMs, bufferCapacity, ... }
+    // Nested: { defaults: { maxRequests, windowMs, bufferCapacity }, ... }
+    const defaults = config.defaults ?? {};
+    const maxRequests = config.maxRequests ?? defaults.maxRequests ?? DEFAULT_MAX_REQUESTS;
+    const windowMs = config.windowMs ?? defaults.windowMs ?? DEFAULT_WINDOW_MS;
+    const bufferCapacity = config.bufferCapacity ?? defaults.bufferCapacity ?? DEFAULT_BUFFER_CAPACITY;
     const maxEntries = config.maxEntries ?? DEFAULT_MAX_ENTRIES;
     const cleanupIntervalMs = config.cleanupIntervalMs ?? DEFAULT_CLEANUP_INTERVAL_MS;
     const entryTtlMs = config.entryTtlMs ?? DEFAULT_ENTRY_TTL_MS;
