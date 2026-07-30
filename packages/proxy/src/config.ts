@@ -29,6 +29,14 @@ interface WebUISettings {
   // OIDC settings (non-sensitive, can be configured via UI)
   oidcEnabled?: boolean;
   oidcPublicUrl?: string;
+  // Rate limiter settings per provider
+  rateLimiter?: {
+    [provider: string]: {
+      maxRequests?: number;
+      windowMs?: number;
+      bufferCapacity?: number;
+    };
+  };
 }
 
 /** Read web UI settings from the JSON file. */
@@ -43,6 +51,7 @@ function readWebUISettings(): WebUISettings {
       captureCleanupMaxAgeDays: parsed.captureCleanupMaxAgeDays,
       oidcEnabled: parsed.oidcEnabled,
       oidcPublicUrl: parsed.oidcPublicUrl,
+      rateLimiter: parsed.rateLimiter,
     };
     console.log(`[config] read settings.json: ${JSON.stringify(result)}`);
     return result;
@@ -325,9 +334,17 @@ export function resolveConfig(
     defaults: RateLimitConfig,
   ): RateLimitConfig {
     const prefix = `CONTEXTIO_RATE_LIMIT_${provider.toUpperCase()}`;
-    const maxRequestsRaw = process.env[`${prefix}_MAX_REQUESTS`] ?? defaults.maxRequests;
-    const windowMsRaw = process.env[`${prefix}_WINDOW_MS`] ?? defaults.windowMs;
-    const bufferCapacityRaw = process.env[`${prefix}_BUFFER`] ?? defaults.bufferCapacity;
+    const settingsRateLimit = readWebUISettings().rateLimiter?.[provider];
+    
+    const maxRequestsRaw = process.env[`${prefix}_MAX_REQUESTS`] 
+      ?? settingsRateLimit?.maxRequests?.toString() 
+      ?? defaults.maxRequests;
+    const windowMsRaw = process.env[`${prefix}_WINDOW_MS`] 
+      ?? settingsRateLimit?.windowMs?.toString() 
+      ?? defaults.windowMs;
+    const bufferCapacityRaw = process.env[`${prefix}_BUFFER`] 
+      ?? settingsRateLimit?.bufferCapacity?.toString() 
+      ?? defaults.bufferCapacity;
 
     const maxRequests = Number.parseInt(String(maxRequestsRaw), 10);
     const windowMs = Number.parseInt(String(windowMsRaw), 10);

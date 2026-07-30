@@ -2,7 +2,7 @@
 
 import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
-import type { Settings, SettingMeta } from "@/lib/settings";
+import type { Settings, SettingMeta, Provider, RateLimitConfig } from "@/lib/settings";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "@/components/theme-provider";
 
@@ -62,6 +62,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Path to the local GLiNER ONNX model directory (required for llm/hybrid/auto modes). Contains model.onnx, vocab.txt, and tokenizer config. Changes apply dynamically.",
   detectorThreshold:
     "Minimum confidence threshold for LLM-based detections (0-1). Higher values reduce false positives but may miss some entities. Applied dynamically per request.",
+  rateLimiter:
+    "Rate limiting configuration per provider. Controls max requests, time window, and burst capacity. Requires a proxy restart to apply.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
@@ -126,6 +128,17 @@ export default function SettingsPage() {
     detectorMode: "rules",
     detectorModelDir: "",
     detectorThreshold: 0.5,
+    rateLimiter: {
+      anthropic: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      openai: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      chatgpt: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      gemini: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      vertex: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    },
   });
   const [metadata, setMetadata] = useState<Record<
     keyof Settings,
@@ -265,6 +278,23 @@ export default function SettingsPage() {
       return;
     }
     setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const updateRateLimiter = (
+    provider: Provider,
+    field: keyof RateLimitConfig,
+    value: number,
+  ) => {
+    setSettings((prev) => ({
+      ...prev,
+      rateLimiter: {
+        ...prev.rateLimiter,
+        [provider]: {
+          ...prev.rateLimiter?.[provider],
+          [field]: value,
+        },
+      },
+    }));
   };
 
   const handleCleanupAll = async () => {
@@ -776,6 +806,96 @@ export default function SettingsPage() {
             />
           </div>
         );
+      case "rateLimiter": {
+        const providers: Provider[] = [
+          "anthropic",
+          "openai",
+          "chatgpt",
+          "gemini",
+          "vertex",
+          "nvidia",
+          "openrouter",
+          "kilo",
+          "unknown",
+        ];
+        return (
+          <div className="space-y-4">
+            <h3 className="font-semibold mb-2">Rate Limiter Configuration</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Configure rate limits per provider. Controls max requests, time window, and burst capacity.
+            </p>
+            <SettingHelp
+              meta={getMeta("rateLimiter")}
+              description={SETTING_DESCRIPTIONS.rateLimiter}
+            />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border rounded">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Provider</th>
+                    <th className="px-3 py-2 text-left font-medium">Max Requests</th>
+                    <th className="px-3 py-2 text-left font-medium">Window (ms)</th>
+                    <th className="px-3 py-2 text-left font-medium">Buffer Capacity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {providers.map((provider) => {
+                    const config = settings.rateLimiter?.[provider];
+                    const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1);
+                    return (
+                      <tr key={provider} className="border-t">
+                        <td className="px-3 py-2 font-medium">{providerLabel}</td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number"
+                            min="1"
+                            max="10000"
+                            value={config?.maxRequests ?? 60}
+                            onChange={(e) =>
+                              updateRateLimiter(provider, "maxRequests", parseInt(e.target.value) || 1)
+                            }
+                            disabled={isSettingOverridden("rateLimiter")}
+                            className="w-20"
+                            aria-label={`${providerLabel} max requests`}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number"
+                            min="100"
+                            max="86400000"
+                            value={config?.windowMs ?? 60000}
+                            onChange={(e) =>
+                              updateRateLimiter(provider, "windowMs", parseInt(e.target.value) || 60000)
+                            }
+                            disabled={isSettingOverridden("rateLimiter")}
+                            className="w-24"
+                            aria-label={`${providerLabel} window milliseconds`}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="10000"
+                            value={config?.bufferCapacity ?? 10}
+                            onChange={(e) =>
+                              updateRateLimiter(provider, "bufferCapacity", parseInt(e.target.value) || 0)
+                            }
+                            disabled={isSettingOverridden("rateLimiter")}
+                            className="w-16"
+                            aria-label={`${providerLabel} buffer capacity`}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
       default:
         return null;
     }
@@ -967,6 +1087,12 @@ export default function SettingsPage() {
               {renderSetting("encryptionAtRest")}
               {renderSetting("oidcEnabled")}
               {renderSetting("oidcPublicUrl")}
+            </div>
+          </div>
+          <div className="rounded-lg border p-6">
+            <h3 className="font-semibold mb-4">Rate Limiter</h3>
+            <div className="space-y-4">
+              {renderSetting("rateLimiter")}
             </div>
           </div>
           <div className="rounded-lg border p-6">

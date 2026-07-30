@@ -1,3 +1,23 @@
+export type Provider =
+  | "anthropic"
+  | "openai"
+  | "chatgpt"
+  | "gemini"
+  | "vertex"
+  | "nvidia"
+  | "openrouter"
+  | "kilo"
+  | "unknown";
+
+export interface RateLimitConfig {
+  /** Maximum requests allowed within the time window. */
+  maxRequests: number;
+  /** Time window in milliseconds. */
+  windowMs: number;
+  /** Token bucket capacity for burst handling. */
+  bufferCapacity: number;
+}
+
 export interface Settings {
   logDir: string;
   maxSessions: number;
@@ -32,6 +52,8 @@ export interface Settings {
   detectorMode: "rules" | "llm" | "hybrid" | "auto";
   detectorModelDir: string;
   detectorThreshold: number;
+  // Rate limiter settings per provider
+  rateLimiter: Record<Provider, RateLimitConfig>;
 }
 
 export type SettingSource =
@@ -98,6 +120,10 @@ export const SETTING_ENV_MAP: Record<
   detectorThreshold: {
     envVar: "REDACT_DETECTOR_THRESHOLD",
     dynamic: true,
+  },
+  rateLimiter: {
+    envVar: "", // No direct env var - configured via settings file/UI with per-provider keys
+    dynamic: false,
   },
 };
 
@@ -299,6 +325,17 @@ export const DEFAULT_SETTINGS: Settings = {
   detectorMode: "rules",
   detectorModelDir: "",
   detectorThreshold: 0.5,
+  rateLimiter: {
+    anthropic: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    openai: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    chatgpt: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    gemini: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    vertex: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+  },
 };
 
 export function validateSettings(input: unknown): Settings {
@@ -400,6 +437,27 @@ export function validateSettings(input: unknown): Settings {
         throw new Error(`Invalid detectorThreshold: must be a number between 0 and 1`);
       }
       return v;
+    })(),
+    rateLimiter: (() => {
+      const rl = obj.rateLimiter;
+      if (typeof rl !== "object" || rl === null) {
+        return DEFAULT_SETTINGS.rateLimiter;
+      }
+      const rlObj = rl as Record<string, unknown>;
+      const result = {} as Record<Provider, RateLimitConfig>;
+      for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "vertex", "nvidia", "openrouter", "kilo", "unknown"] as Provider[]) {
+        const p = rlObj[provider];
+        if (typeof p === "object" && p !== null) {
+          const pObj = p as { maxRequests?: unknown; windowMs?: unknown; bufferCapacity?: unknown };
+          const maxRequests = Number.isInteger(pObj.maxRequests) && pObj.maxRequests as number >= 1 && (pObj.maxRequests as number) <= 10000 ? pObj.maxRequests as number : 60;
+          const windowMs = Number.isInteger(pObj.windowMs) && pObj.windowMs as number >= 100 && (pObj.windowMs as number) <= 24 * 60 * 60 * 1000 ? pObj.windowMs as number : 60000;
+          const bufferCapacity = Number.isInteger(pObj.bufferCapacity) && pObj.bufferCapacity as number >= 0 && (pObj.bufferCapacity as number) <= 10000 ? pObj.bufferCapacity as number : 10;
+          result[provider] = { maxRequests, windowMs, bufferCapacity };
+        } else {
+          result[provider] = { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 };
+        }
+      }
+      return result;
     })(),
   };
 }
@@ -522,5 +580,26 @@ export function validateSettingsLenient(input: unknown): Settings {
       obj.detectorThreshold <= 1
         ? obj.detectorThreshold
         : DEFAULT_SETTINGS.detectorThreshold,
+    rateLimiter: (() => {
+      const rl = obj.rateLimiter;
+      if (typeof rl !== "object" || rl === null) {
+        return DEFAULT_SETTINGS.rateLimiter;
+      }
+      const rlObj = rl as Record<string, unknown>;
+      const result = {} as Record<Provider, RateLimitConfig>;
+      for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "vertex", "nvidia", "openrouter", "kilo", "unknown"] as Provider[]) {
+        const p = rlObj[provider];
+        if (typeof p === "object" && p !== null) {
+          const pObj = p as { maxRequests?: unknown; windowMs?: unknown; bufferCapacity?: unknown };
+          const maxRequests = Number.isInteger(pObj.maxRequests) && pObj.maxRequests as number >= 1 && (pObj.maxRequests as number) <= 10000 ? pObj.maxRequests as number : 60;
+          const windowMs = Number.isInteger(pObj.windowMs) && pObj.windowMs as number >= 100 && (pObj.windowMs as number) <= 24 * 60 * 60 * 1000 ? pObj.windowMs as number : 60000;
+          const bufferCapacity = Number.isInteger(pObj.bufferCapacity) && pObj.bufferCapacity as number >= 0 && (pObj.bufferCapacity as number) <= 10000 ? pObj.bufferCapacity as number : 10;
+          result[provider] = { maxRequests, windowMs, bufferCapacity };
+        } else {
+          result[provider] = DEFAULT_SETTINGS.rateLimiter[provider];
+        }
+      }
+      return result;
+    })(),
   };
 }

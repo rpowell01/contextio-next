@@ -803,7 +803,7 @@ export function createProxyHandler(
                           body: pendingRetry.originalBodyJson ?? currentCtx.body,
                           captureId: pendingRetry.captureId ?? currentCtx.captureId,
                         });
-} catch (err) {
+                    } catch (err) {
                         console.error("Streaming retry doForward error:", err);
                       }
                     }
@@ -853,32 +853,31 @@ export function createProxyHandler(
                     total_ms: Math.round(endTime - startTime),
                   };
 
-// Skip capture for title-generation requests (internal UI feature)
-  if (sessionId?.startsWith("title-")) {
-    if (opts.logTraffic) {
-      console.log("[DEBUG] Skipping capture for title-generation request");
-    }
-  } else {
-    const capture = buildCaptureData({
-      sessionId,
-      req,
-      cleanPath,
-      source,
-      provider,
-      apiFormat,
-      targetUrl,
-      ctx,
-      originalBody: bodyJson,
-      reqBytes,
-      proxyRes,
-      finalBody: Buffer.isBuffer(finalBody) ? finalBody.toString("utf8") : finalBody,
-      isStreaming: !!isStreaming,
-      respBytes,
-      timings,
-    });
-
-    runCapturePlugins(plugins, capture);
-  }
+                  // Skip capture for title-generation requests (internal UI feature)
+                  if (sessionId?.startsWith("title-")) {
+                    if (opts.logTraffic) {
+                      console.log("[DEBUG] Skipping capture for title-generation request");
+                    }
+                  } else {
+                    const capture = buildCaptureData({
+                      sessionId,
+                      req,
+                      cleanPath,
+                      source,
+                      provider,
+                      apiFormat,
+                      targetUrl,
+                      ctx,
+                      originalBody: bodyJson,
+                      reqBytes,
+                      proxyRes,
+                      finalBody: Buffer.isBuffer(finalBody) ? finalBody.toString("utf8") : finalBody,
+                      isStreaming: !!isStreaming,
+                      respBytes,
+                      timings,
+                    });
+                                      runCapturePlugins(plugins, capture);
+                  }
                 }
               };
 
