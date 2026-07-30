@@ -473,10 +473,67 @@ export class RateLimiterPlugin implements ProxyPlugin {
   }
 
   /**
+   * Get rate limiter configuration summary.
+   */
+  getConfigSummary(): {
+    maxRequests: number;
+    windowMs: number;
+    bufferCapacity: number;
+    maxEntries: number;
+    enabled: boolean;
+  } {
+    return {
+      maxRequests: this.config.maxRequests,
+      windowMs: this.config.windowMs,
+      bufferCapacity: this.config.bufferCapacity,
+      maxEntries: this.config.maxEntries,
+      enabled: this.config.enabled,
+    };
+  }
+
+  /**
    * Get all bucket keys (for testing/inspection).
    */
   getAllKeys(): string[] {
     return Array.from(this.buckets.keys());
+  }
+
+  /**
+   * Get all bucket states for metrics/monitoring.
+   * Returns a serializable representation of all buckets.
+   */
+  getAllBucketStates(): Array<{
+    key: string;
+    tokens: number;
+    maxTokens: number;
+    bufferCapacity: number;
+    queueLength: number;
+    lastAccessed: number;
+    lastRefill: number;
+  }> {
+    const states: Array<{
+      key: string;
+      tokens: number;
+      maxTokens: number;
+      bufferCapacity: number;
+      queueLength: number;
+      lastAccessed: number;
+      lastRefill: number;
+    }> = [];
+
+    for (const [key, bucket] of this.buckets.entries()) {
+      states.push({
+        key,
+        tokens: bucket.tokens,
+        maxTokens: this.config.maxRequests + this.config.bufferCapacity,
+        bufferCapacity: this.config.bufferCapacity,
+        queueLength: bucket.queue.length,
+        lastAccessed: bucket.lastAccessed,
+        lastRefill: bucket.lastRefill,
+      });
+    }
+
+    return states;
   }
 
   /**
@@ -530,6 +587,8 @@ export function createRateLimiterPlugin(config: RateLimiterConfig = {}): ProxyPl
   (plugin as any)._internal = {
     getBucketState: (key: string) => limiter.getBucketState(key),
     getAllKeys: () => limiter.getAllKeys(),
+    getAllBucketStates: () => limiter.getAllBucketStates(),
+    getConfigSummary: () => limiter.getConfigSummary(),
     clear: () => limiter.clear(),
     shutdown: () => limiter.shutdown(),
   };

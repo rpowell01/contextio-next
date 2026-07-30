@@ -43,6 +43,7 @@ All your stuff passes through this thing, so the proxy has zero external depende
 - [Redaction](#redaction)
 - [Logging](#logging)
 - [Web UI](#web-ui)
+- [Rate Limiting](#rate-limiting)
 - [Development](#development)
 - [License](#license)
 
@@ -683,6 +684,160 @@ docker run -d -p 4040:4040 \
 ```
 
 Then open `http://localhost:4040`.
+
+---
+
+## Rate Limiting
+
+ContextIO-Next includes a built-in **rate limiter** that protects upstream LLM APIs from excessive traffic. It uses a **token bucket algorithm** with optional burst buffering, applied **per session** and **per provider**.
+
+### How It Works
+
+- **Token bucket**: Each `(sessionId, provider)` pair gets its own bucket with `maxRequests` tokens refilling over `windowMs` milliseconds.
+- **Burst buffer**: `bufferCapacity` extra tokens allow short bursts above the steady-state rate.
+- **Queueing**: When tokens are exhausted, requests are queued (up to `bufferCapacity`) and processed as tokens refill.
+- **429 response**: When the queue is full, the proxy returns **HTTP 429** with a `Retry-After` header (seconds, per RFC 7231) and a `rateLimitInfo` JSON body.
+- **Memory bounds**: Tracks up to `maxEntries` buckets (default 10,000) with LRU eviction and TTL-based cleanup.
+
+### Configuration via Environment Variables
+
+Set limits per provider using `CONTEXTIO_RATE_LIMIT_<PROVIDER>_<SETTING>`:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CONTEXTIO_RATE_LIMIT_<PROVIDER>_MAX_REQUESTS` | Max requests per window | `60` |
+| `CONTEXTIO_RATE_LIMIT_<PROVIDER>_WINDOW_MS` | Time window in milliseconds | `60000` (1 min) |
+| `CONTEXTIO_RATE_LIMIT_<PROVIDER>_BUFFER` | Burst buffer capacity | `10` |
+
+Valid providers: `openai`, `anthropic`, `chatgpt`, `gemini`, `vertex`, `nvidia`, `openrouter`, `kilo`, `unknown`.
+
+**Example** — Allow 100 requests/minute for Anthropic with a 20-request burst buffer:
+
+```bash
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_MAX_REQUESTS=100 \
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_WINDOW_MS=60000 \
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_BUFFER=20 \
+ctxio proxy -- claude
+```
+
+### Configuration via Web UI
+
+The web UI (Settings page) writes to `/app/custom-policy/settings.json` inside the container. Environment variables take precedence over UI settings.
+
+**settings.json structure**:
+```json
+{
+  "rateLimiter": {
+    "anthropic": { "maxRequests": 100, "windowMs": 60000, "bufferCapacity": 20 },
+    "openai":    { "maxRequests": 60,  "windowMs": 60000, "bufferCapacity": 10 }
+  }
+}
+```
+
+### 429 Response Format
+
+When rate limited, the proxy returns:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+Content-Type: application/json
+
+{
+  "error": "Rate limit exceeded",
+  "rateLimitInfo": {
+    "limit": 60,
+    "remaining": 0,
+    "reset": 1700000000,
+    "retryAfter": 1234
+  }
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `limit` | Configured `maxRequests` for the window |
+| `remaining` | Tokens left (always `0` on 429) |
+| `reset` | Unix timestamp (seconds) when the window resets |
+| `retryAfter` | **Milliseconds** until a token is available (from JSON body) |
+
+**Note**: The `Retry-After` header uses **seconds** (per HTTP RFC 7231). The `rateLimitInfo.retryAfter` in the JSON body uses milliseconds for finer precision.
+
+### Example Configurations
+
+**Conservative (strict per-minute limits)**:
+```bash
+CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS=30
+CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS=60000
+CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER=5
+
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_MAX_REQUESTS=30
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_WINDOW_MS=60000
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_BUFFER=5
+```
+
+**Generous (burst-friendly for interactive coding)**:
+```bash
+CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS=200
+CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS=60000
+CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER=50
+
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_MAX_REQUESTS=200
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_WINDOW_MS=60000
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_BUFFER=50
+```
+
+**Per-hour budget (batch workloads)**:
+```bash
+CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS=1000
+CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS=3600000
+CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER=100
+```
+
+**Disable for a provider**:
+
+```bash
+# Option 1: Use the programmatic API
+createRateLimiterPlugin({ enabled: false });
+
+# Option 2: Set very high limits (max allowed is 10000)
+CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS=10000
+CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS=100
+CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER=0
+```
+
+### Programmatic Usage
+
+```typescript
+import { createProxy, createRateLimiterPlugin } from '@contextio/proxy';
+
+const rateLimiter = createRateLimiterPlugin({
+  defaults: {
+    maxRequests: 100,
+    windowMs: 60_000,
+    bufferCapacity: 20,
+  },
+  // Optional: per-provider overrides
+  // (merged with env var config at runtime)
+});
+
+const proxy = createProxy({
+  port: 4040,
+  plugins: [rateLimiter],
+});
+
+await proxy.start();
+```
+
+### Advanced Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `maxEntries` | number | `10000` | Max unique `(session, provider)` buckets |
+| `cleanupIntervalMs` | number | `300000` | Stale bucket cleanup interval (5 min) |
+| `entryTtlMs` | number | `600000` | Inactive bucket TTL (10 min) |
+| `keyGenerator` | function | `sessionId:provider` | Custom bucket key function |
+| `onRateLimited` | function | noop | Callback when 429 is returned |
 
 ---
 

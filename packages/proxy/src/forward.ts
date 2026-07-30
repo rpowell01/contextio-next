@@ -49,6 +49,8 @@ export interface ForwardOptions {
  * Run onRequest hooks as a pipeline: each plugin receives the output of
  * the previous one. If a plugin throws, the error is logged and the
  * pipeline continues with the last successful context (fail-open).
+ * Exception: Rate limit errors (statusCode 429) are re-thrown to allow
+ * the proxy to return a proper 429 response.
  */
 async function runRequestPlugins(
   plugins: ProxyPlugin[],
@@ -60,6 +62,10 @@ async function runRequestPlugins(
     try {
       current = await plugin.onRequest(current);
     } catch (err: unknown) {
+      // Re-throw rate limit errors (429) so the proxy can handle them properly
+      if (err instanceof Error && (err as any).statusCode === 429) {
+        throw err;
+      }
       console.error(
         `Plugin "${plugin.name}" onRequest error:`,
         err instanceof Error ? err.message : String(err),
@@ -1004,6 +1010,11 @@ export function createProxyHandler(
         proxyReq.end();
       };
 
+      // Helper to check if an error is a rate limit error with statusCode
+      function isRateLimitError(err: unknown): err is Error & { statusCode: number; retryAfter?: number; rateLimitInfo?: any } {
+        return err instanceof Error && (err as any).statusCode === 429;
+      }
+
       // Run request plugins, then forward
       let currentCtx: RequestContext = reqCtx;
       if (hasRequestPlugins) {
@@ -1013,6 +1024,31 @@ export function createProxyHandler(
             doForward(currentCtx);
           })
           .catch((err: unknown) => {
+            // Check if this is a rate limit error - if so, return the error response instead of forwarding
+            if (isRateLimitError(err)) {
+              console.debug(`[proxy] Rate limited by plugin: ${err.message}`);
+              if (!res.headersSent) {
+                const retryAfterMs = err.retryAfter || 0;
+                const rateLimitInfo = err.rateLimitInfo || {
+                  limit: 0,
+                  remaining: 0,
+                  reset: Math.ceil((Date.now() + retryAfterMs) / 1000),
+                  retryAfter: retryAfterMs,
+                };
+                res.writeHead(err.statusCode, {
+                  "Content-Type": "application/json",
+                  "Retry-After": String(Math.ceil(retryAfterMs / 1000) || 1),
+                });
+                res.end(JSON.stringify({
+                  error: {
+                    message: err.message || "Rate limit exceeded",
+                    type: "rate_limit_exceeded",
+                    rateLimitInfo,
+                  },
+                }));
+              }
+              return;
+            }
             console.error(
               "Request plugin pipeline error:",
               err instanceof Error ? err.message : String(err),

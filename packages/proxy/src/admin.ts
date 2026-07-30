@@ -30,6 +30,36 @@ export interface ProxyEnvVar {
   source: "process" | "default" | "blacklisted";
 }
 
+// --- Rate Limiter Metrics ---
+
+export interface RateLimiterBucketState {
+  key: string;
+  tokens: number;
+  maxTokens: number;
+  bufferCapacity: number;
+  queueLength: number;
+  lastAccessed: number;
+  lastRefill: number;
+  provider?: string;
+  sessionId?: string;
+}
+
+export interface RateLimiterConfigSummary {
+  maxRequests: number;
+  windowMs: number;
+  bufferCapacity: number;
+  maxEntries: number;
+  enabled: boolean;
+}
+
+export interface RateLimiterMetrics {
+  config: RateLimiterConfigSummary;
+  buckets: RateLimiterBucketState[];
+  totalBuckets: number;
+  totalQueued: number;
+  timestamp: string;
+}
+
 // Log entry for the admin API
 export interface LogEntry {
   id: string;
@@ -288,6 +318,63 @@ case "env": {
           clearLogs();
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ success: true, message: "Logs cleared" }));
+          break;
+        }
+
+        case "rate-limiter": {
+          if (req.method !== "GET") {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed" }));
+            return;
+          }
+
+          // Find the rate limiter plugin
+          const rateLimiterPlugin = plugins.find((p) => p.name === "rate-limiter");
+          if (!rateLimiterPlugin) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Rate limiter plugin not found" }));
+            return;
+          }
+
+          // Get bucket state from the plugin (using internal method)
+          const getBucketState = (rateLimiterPlugin as any).getBucketState?.bind(rateLimiterPlugin);
+          const getConfig = (rateLimiterPlugin as any).getConfig?.bind(rateLimiterPlugin);
+
+          if (!getBucketState || !getConfig) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Rate limiter does not expose metrics methods" }));
+            return;
+          }
+
+          const config = getConfig();
+          const buckets = getBucketState();
+
+          const metrics: RateLimiterMetrics = {
+            config: {
+              maxRequests: config.maxRequests,
+              windowMs: config.windowMs,
+              bufferCapacity: config.bufferCapacity,
+              maxEntries: config.maxEntries,
+              enabled: config.enabled,
+            },
+            buckets: buckets.map((b: any) => ({
+              key: b.key,
+              tokens: b.tokens,
+              maxTokens: config.maxRequests,
+              bufferCapacity: config.bufferCapacity,
+              queueLength: b.queue?.length ?? 0,
+              lastAccessed: b.lastAccessed,
+              lastRefill: b.lastRefill,
+              provider: b.provider,
+              sessionId: b.sessionId,
+            })),
+            totalBuckets: buckets.length,
+            totalQueued: buckets.reduce((sum: number, b: any) => sum + (b.queue?.length ?? 0), 0),
+            timestamp: new Date().toISOString(),
+          };
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(metrics));
           break;
         }
 

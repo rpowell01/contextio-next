@@ -1,4 +1,4 @@
-import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData } from "@/types/api";
+import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, RateLimiterMetrics } from "@/types/api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
 // API routes are served by the same web server that serves the frontend
@@ -590,6 +590,11 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     return data.logs;
   }
 
+  async getRateLimiterMetrics(signal?: AbortSignal): Promise<RateLimiterMetrics> {
+    const baseUrl = getProxyAdminBaseUrl();
+    return this.requestWithBase(baseUrl, "/admin/rate-limiter", { signal });
+  }
+
   async getMetrics(hours: number = 24, maxPoints?: number, page?: number, pageSize?: number, signal?: AbortSignal): Promise<MetricsData> {
     const params = new URLSearchParams();
     params.set("hours", String(hours));
@@ -753,14 +758,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
         throw new Error("Request aborted");
       }
       throw error;
-    }
-  }
-
-  async clearProxyLogs(): Promise<{ success: boolean }> {
-    const baseUrl = getProxyAdminBaseUrl();
-    return this.requestWithBase(baseUrl, "/admin/clear-logs", {
-      method: "POST",
-    });
+}
   }
 
   /**
@@ -874,6 +872,13 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     }
 
     throw lastError || new Error("Request failed after retries");
+  }
+
+  async clearProxyLogs(): Promise<{ success: boolean }> {
+    const baseUrl = getProxyAdminBaseUrl();
+    return this.requestWithBase(baseUrl, "/admin/clear-logs", {
+      method: "POST",
+    });
   }
 }
 

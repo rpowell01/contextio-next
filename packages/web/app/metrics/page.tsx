@@ -6,9 +6,11 @@ import { apiClient } from "@/lib/api";
 import type {
   MetricsData,
   TimeRange,
+  RateLimiterMetrics,
 } from "@/types/api";
 import { TrafficChart } from "@/components/traffic-chart";
-import { useEffect, useState, useCallback } from "react";
+import { RateLimiterChart } from "@/components/rate-limiter-chart";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { usePageLoad } from "@/components/page-load-context";
 import { ProgressBar } from "@/components/ui/progress-bar";
 
@@ -35,6 +37,7 @@ const MAX_DATA_POINTS_OPTIONS = [
  */
 function MetricsContent() {
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
+  const [rateLimiterMetrics, setRateLimiterMetrics] = useState<RateLimiterMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
@@ -42,9 +45,14 @@ function MetricsContent() {
   const [maxDataPoints, setMaxDataPoints] = useState<number>(50);
   const [page, setPage] = useState<number>(1);
   const [pageSize] = useState<number>(50);
+  const [pollingEnabled, setPollingEnabled] = useState(true);
 
   // Page load tracking for footer
   const { registerPageLoad, registerPageReady } = usePageLoad();
+
+  // Refs for polling
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
 
   const progressPercent = progress && progress.total > 0
     ? Math.round((progress.current / progress.total) * 100)
@@ -66,6 +74,8 @@ function MetricsContent() {
       );
 
       for await (const update of stream) {
+        if (!isMountedRef.current) break;
+        
         if (update.type === "progress") {
           setProgress({
             current: update.current || 0,
@@ -89,9 +99,54 @@ function MetricsContent() {
     }
   }, [timeRange, maxDataPoints, page, pageSize, registerPageLoad, registerPageReady]);
 
+  // Fetch rate limiter metrics
+  const fetchRateLimiterMetrics = useCallback(async () => {
+    if (!isMountedRef.current) return;
+    try {
+      const data = await apiClient.getRateLimiterMetrics();
+      if (isMountedRef.current) {
+        setRateLimiterMetrics(data);
+      }
+    } catch (e) {
+      // Silently fail - rate limiter might not be enabled
+      console.debug("Rate limiter metrics fetch failed:", e);
+    }
+  }, []);
+
+  // Poll for rate limiter metrics
+  useEffect(() => {
+    if (!pollingEnabled) return;
+
+    // Initial fetch
+    fetchRateLimiterMetrics();
+
+    // Set up polling interval (5 seconds)
+    pollingIntervalRef.current = setInterval(() => {
+      fetchRateLimiterMetrics();
+    }, 5000);
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [fetchRateLimiterMetrics, pollingEnabled]);
+
   useEffect(() => {
     fetchMetrics();
   }, [fetchMetrics]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -361,6 +416,112 @@ function MetricsContent() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Rate Limiter Metrics */}
+          <div className="rounded-lg border p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Rate Limiter Status</h3>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-muted-foreground">
+                  Auto-refresh (5s)
+                </label>
+                <input
+                  type="checkbox"
+                  checked={pollingEnabled}
+                  onChange={(e) => setPollingEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+              </div>
+            </div>
+            {rateLimiterMetrics && (
+              <div className="space-y-4">
+                {/* Config Summary */}
+                <div className="grid gap-4 md:grid-cols-5">
+                  <div className="rounded-lg border p-4">
+                    <div className="text-sm text-muted-foreground">Max Requests</div>
+                    <div className="text-2xl font-bold">{formatNumber(rateLimiterMetrics.config.maxRequests)}</div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-sm text-muted-foreground">Window (ms)</div>
+                    <div className="text-2xl font-bold">{formatNumber(rateLimiterMetrics.config.windowMs)}</div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-sm text-muted-foreground">Buffer Capacity</div>
+                    <div className="text-2xl font-bold">{formatNumber(rateLimiterMetrics.config.bufferCapacity)}</div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-sm text-muted-foreground">Active Buckets</div>
+                    <div className="text-2xl font-bold">{formatNumber(rateLimiterMetrics.totalBuckets)}</div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-sm text-muted-foreground">Queued Requests</div>
+                    <div className="text-2xl font-bold text-orange-600">{formatNumber(rateLimiterMetrics.totalQueued)}</div>
+                  </div>
+                </div>
+
+                {/* Chart */}
+                <div className="rounded-lg border p-4">
+                  <h4 className="text-md font-medium mb-3">Token Bucket States</h4>
+                  <RateLimiterChart
+                    buckets={rateLimiterMetrics.buckets}
+                    loading={false}
+                  />
+                </div>
+
+                {/* Bucket Details Table */}
+                {rateLimiterMetrics.buckets.length > 0 && (
+                  <div className="rounded-lg border p-4">
+                    <h4 className="text-md font-medium mb-3">Bucket Details</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left p-2 font-medium">Key</th>
+                            <th className="text-right p-2 font-medium">Tokens</th>
+                            <th className="text-right p-2 font-medium">Max</th>
+                            <th className="text-right p-2 font-medium">Buffer</th>
+                            <th className="text-right p-2 font-medium">Queue</th>
+                            <th className="text-left p-2 font-medium">Provider</th>
+                            <th className="text-left p-2 font-medium">Session</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rateLimiterMetrics.buckets
+                            .sort((a, b) => a.tokens - b.tokens)
+                            .map((bucket) => (
+                              <tr key={bucket.key} className="border-b last:border-0">
+                                <td className="p-2 font-mono text-xs truncate max-w-xs" title={bucket.key}>
+                                  {bucket.key}
+                                </td>
+                                <td className="p-2 text-right">
+                                  <span className={bucket.tokens < 5 ? "text-destructive font-medium" : ""}>
+                                    {formatNumber(bucket.tokens)}
+                                  </span>
+                                </td>
+                                <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.maxTokens)}</td>
+                                <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.bufferCapacity)}</td>
+                                <td className="p-2 text-right">
+                                  <span className={bucket.queueLength > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>
+                                    {formatNumber(bucket.queueLength)}
+                                  </span>
+                                </td>
+                                <td className="p-2 text-muted-foreground">{bucket.provider ?? "unknown"}</td>
+                                <td className="p-2 text-muted-foreground">{bucket.sessionId ?? "unknown"}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {!rateLimiterMetrics && (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">Loading rate limiter metrics...</p>
+              </div>
+            )}
           </div>
         </div>
       )}
