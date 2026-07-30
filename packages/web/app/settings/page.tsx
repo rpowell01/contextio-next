@@ -842,11 +842,16 @@ export default function SettingsPage() {
                   {providers.map((provider) => {
                     const config = settings.rateLimiter?.[provider];
                     const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1);
+                    const rowId = `ratelimit-${provider}`;
                     return (
                       <tr key={provider} className="border-t">
                         <td className="px-3 py-2 font-medium">{providerLabel}</td>
                         <td className="px-3 py-2">
+                          <Label htmlFor={`${rowId}-max`} className="sr-only">
+                            {providerLabel} max requests
+                          </Label>
                           <Input
+                            id={`${rowId}-max`}
                             type="number"
                             min="1"
                             max="10000"
@@ -856,11 +861,14 @@ export default function SettingsPage() {
                             }
                             disabled={isSettingOverridden("rateLimiter")}
                             className="w-20"
-                            aria-label={`${providerLabel} max requests`}
                           />
                         </td>
                         <td className="px-3 py-2">
+                          <Label htmlFor={`${rowId}-window`} className="sr-only">
+                            {providerLabel} window milliseconds
+                          </Label>
                           <Input
+                            id={`${rowId}-window`}
                             type="number"
                             min="100"
                             max="86400000"
@@ -870,11 +878,14 @@ export default function SettingsPage() {
                             }
                             disabled={isSettingOverridden("rateLimiter")}
                             className="w-24"
-                            aria-label={`${providerLabel} window milliseconds`}
                           />
                         </td>
                         <td className="px-3 py-2">
+                          <Label htmlFor={`${rowId}-buffer`} className="sr-only">
+                            {providerLabel} buffer capacity
+                          </Label>
                           <Input
+                            id={`${rowId}-buffer`}
                             type="number"
                             min="0"
                             max="10000"
@@ -884,7 +895,6 @@ export default function SettingsPage() {
                             }
                             disabled={isSettingOverridden("rateLimiter")}
                             className="w-16"
-                            aria-label={`${providerLabel} buffer capacity`}
                           />
                         </td>
                       </tr>
