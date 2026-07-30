@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { formatNumber } from "@/lib/utils";
 import type { RateLimiterBucketState } from "@/types/api";
 import {
@@ -20,6 +20,7 @@ import { Copy, Loader2 } from "lucide-react";
 interface RateLimiterChartProps {
   buckets: RateLimiterBucketState[];
   loading?: boolean;
+  maxDataPoints?: number;
 }
 
 interface ChartDataPoint {
@@ -35,32 +36,32 @@ interface ChartDataPoint {
 
 /**
  * Downsample data to a maximum number of points by grouping adjacent points
- * and taking the max value in each group (to preserve peaks).
+ * and taking the min value in each group (to preserve most constrained buckets).
  */
 function downsampleData(data: ChartDataPoint[], maxPoints: number): ChartDataPoint[] {
-  if (data.length <= maxPoints) return data;
+  // If maxPoints <= 0, return all data (unlimited)
+  if (maxPoints <= 0 || data.length <= maxPoints) return data;
 
   const step = Math.ceil(data.length / maxPoints);
   const result: ChartDataPoint[] = [];
 
   for (let i = 0; i < data.length; i += step) {
     const chunk = data.slice(i, i + step);
-    // Use the bucket with max tokens to preserve worst-case
-    const maxItem = chunk.reduce((max, item) => (item.tokens > max.tokens ? item : max), chunk[0]);
-    result.push(maxItem);
+    // Use the bucket with min tokens to preserve most constrained (worst-case)
+    const minItem = chunk.reduce((min, item) => (item.tokens < min.tokens ? item : min), chunk[0]);
+    result.push(minItem);
   }
 
   return result;
 }
 
-export function RateLimiterChart({ buckets, loading = false }: RateLimiterChartProps) {
+export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 }: RateLimiterChartProps) {
   const [copied, setCopied] = useState(false);
-  const maxDataPoints = 50;
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chartData = useMemo(() => {
     const raw = buckets.map((bucket) => {
-      // Extract provider and sessionId from key if present (format: "sessionId:provider")
-      const [sessionId, provider] = bucket.key.split(":");
+      // Use provider and sessionId from API response (already parsed by backend)
       return {
         key: bucket.key,
         displayKey: bucket.key.length > 30 ? bucket.key.slice(0, 27) + "..." : bucket.key,
@@ -68,21 +69,21 @@ export function RateLimiterChart({ buckets, loading = false }: RateLimiterChartP
         maxTokens: bucket.maxTokens,
         bufferCapacity: bucket.bufferCapacity,
         queueLength: bucket.queueLength,
-        provider: bucket.provider ?? provider ?? "unknown",
-        sessionId: bucket.sessionId ?? sessionId ?? "unknown",
+        provider: bucket.provider ?? "unknown",
+        sessionId: bucket.sessionId ?? "unknown",
       };
     });
 
-    // Sort by tokens ascending (most constrained first)
-    raw.sort((a, b) => a.tokens - b.tokens);
+    // Sort by tokens ascending (most constrained first) - create a copy to avoid mutation
+    const sorted = [...raw].sort((a, b) => a.tokens - b.tokens);
 
-    return downsampleData(raw, maxDataPoints);
-  }, [buckets]);
+    return downsampleData(sorted, maxDataPoints);
+  }, [buckets, maxDataPoints]);
 
   const copyToClipboard = async () => {
     try {
-      const dataToCopy = chartData.map(({ displayKey, tokens, maxTokens, bufferCapacity, queueLength, provider, sessionId }) => ({
-        key: displayKey,
+      const dataToCopy = chartData.map(({ key, tokens, maxTokens, bufferCapacity, queueLength, provider, sessionId }) => ({
+        key,
         tokens,
         maxTokens,
         bufferCapacity,
@@ -92,11 +93,23 @@ export function RateLimiterChart({ buckets, loading = false }: RateLimiterChartP
       }));
       await navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       // Silently fail
     }
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const isDownsampled = chartData.length < buckets.length;
 
@@ -117,8 +130,9 @@ export function RateLimiterChart({ buckets, loading = false }: RateLimiterChartP
     );
   }
 
-  // Calculate max token value for Y axis (use maxTokens which already includes buffer)
-  const maxTokenValue = Math.max(...chartData.map((d) => d.maxTokens));
+  // Calculate max token value for Y axis (maxTokens already includes buffer capacity)
+  // Ensure minimum of 1 to prevent Recharts domain edge case [0, 0]
+  const maxTokenValue = Math.max(1, Math.max(...chartData.map((d) => d.maxTokens)));
 
   return (
     <div className="w-full">
@@ -134,7 +148,7 @@ export function RateLimiterChart({ buckets, loading = false }: RateLimiterChartP
         </button>
         {isDownsampled && (
           <span className="text-xs text-muted-foreground">
-            Showing {chartData.length} of {buckets.length} buckets (peaked-sampled)
+            Showing {chartData.length} of {buckets.length} buckets (min-sampled)
           </span>
         )}
       </div>
@@ -144,13 +158,13 @@ export function RateLimiterChart({ buckets, loading = false }: RateLimiterChartP
         className="sr-only"
       >
         Horizontal bar chart displaying token bucket states per session/provider.
-        Blue bars show available tokens, green bars show buffer capacity,
-        red bars show queued requests. All bars are stacked. Red reference line
-        indicates the total token capacity (max requests + buffer).
-        Hover bars for exact values and session/provider details.
+        Blue bars show available tokens. Red dashed reference line indicates the
+        total capacity (max requests + buffer). Hover bars for exact values and
+        session/provider details.
       </div>
 
-      <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 30 + 100)}>
+      <div className="max-h-[600px] overflow-y-auto">
+        <ResponsiveContainer width="100%" height={Math.min(600, Math.max(300, chartData.length * 30 + 100))}>
         <BarChart
           data={chartData}
           aria-labelledby="rate-limiter-chart-description"
@@ -182,7 +196,7 @@ export function RateLimiterChart({ buckets, loading = false }: RateLimiterChartP
             width={200}
             label={{
               value: "Session:Provider",
-              position: "outsideBottom",
+              position: "outsideLeft",
               offset: 30,
               style: { textAnchor: "middle", fill: "#333" },
             }}
@@ -214,24 +228,6 @@ export function RateLimiterChart({ buckets, loading = false }: RateLimiterChartP
             wrapperStyle={{ fontSize: 12, fontWeight: 500 }}
           />
           
-          {/* Buffer capacity reference line - shows total capacity */}
-          <ReferenceLine
-            x={maxTokenValue}
-            stroke="#ef4444"
-            strokeWidth={2}
-            strokeDasharray="5 5"
-            label={
-              <Label
-                value="Total Capacity"
-                position="center"
-                fill="#ef4444"
-                fontSize={11}
-                fontWeight={600}
-                offset={10}
-              />
-            }
-          />
-          
           {/* Available tokens (blue) */}
           <Bar
             dataKey="tokens"
@@ -243,38 +239,28 @@ export function RateLimiterChart({ buckets, loading = false }: RateLimiterChartP
             opacity={0.85}
             radius={[0, 4, 4, 0]}
             aria-label="Available tokens"
-            stackId="a"
           />
           
-          {/* Buffer capacity (green) - stacked on top of available tokens */}
-          <Bar
-            dataKey="bufferCapacity"
-            name="Buffer Capacity"
-            fill="#10b981"
-            stroke="#059669"
-            strokeDasharray="8 2"
-            strokeWidth={1}
-            opacity={0.85}
-            radius={[0, 4, 4, 0]}
-            aria-label="Buffer capacity"
-            stackId="a"
-          />
-          
-          {/* Queue length indicator (red) - stacked on top */}
-          <Bar
-            dataKey="queueLength"
-            name="Queued Requests"
-            fill="#ef4444"
-            stroke="#dc2626"
-            strokeDasharray="2 2"
-            strokeWidth={1}
-            opacity={0.7}
-            radius={[0, 4, 4, 0]}
-            aria-label="Queued requests"
-            stackId="a"
+          {/* Total capacity reference line */}
+          <ReferenceLine
+            x={maxTokenValue}
+            stroke="#ef4444"
+            strokeWidth={2}
+            strokeDasharray="5 5"
+            label={
+              <Label
+                value="Total Capacity (Max + Buffer)"
+                position="center"
+                fill="#ef4444"
+                fontSize={11}
+                fontWeight={600}
+                offset={10}
+              />
+            }
           />
         </BarChart>
       </ResponsiveContainer>
     </div>
+  </div>
   );
 }

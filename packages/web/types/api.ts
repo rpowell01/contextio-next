@@ -652,16 +652,12 @@ export interface RateLimiterBucketState {
   key: string;
   /** Current available tokens in the bucket */
   tokens: number;
-  /** Maximum tokens (maxRequests) */
+  /** Maximum tokens (maxRequests + bufferCapacity) - total capacity */
   maxTokens: number;
   /** Buffer capacity (burst allowance) */
   bufferCapacity: number;
   /** Number of requests waiting in queue */
   queueLength: number;
-  /** Last access timestamp (Unix ms) */
-  lastAccessed: number;
-  /** Last refill timestamp (Unix ms) */
-  lastRefill: number;
   /** Provider name extracted from key */
   provider?: string;
   /** Session ID extracted from key */
@@ -698,4 +694,6 @@ export interface RateLimiterMetrics {
   totalQueued: number;
   /** Timestamp when metrics were collected */
   timestamp: string;
+  /** Optional status code from the API */
+  code?: string;
 }

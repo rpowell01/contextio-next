@@ -30,6 +30,36 @@ export interface ProxyEnvVar {
   source: "process" | "default" | "blacklisted";
 }
 
+// --- Rate Limiter Internal Types ---
+
+export interface RateLimiterInternal {
+  getAllBucketStates: () => Array<{
+    key: string;
+    tokens: number;
+    maxTokens: number;
+    bufferCapacity: number;
+    queueLength: number;
+    lastAccessed: number;
+    lastRefill: number;
+  }>;
+  getConfigSummary: () => {
+    maxRequests: number;
+    windowMs: number;
+    bufferCapacity: number;
+    maxEntries: number;
+    enabled: boolean;
+  };
+}
+
+function isRateLimiterPlugin(plugin: ProxyPlugin): plugin is ProxyPlugin & { _internal: RateLimiterInternal } {
+  return (
+    plugin.name === "rate-limiter" &&
+    "_internal" in plugin &&
+    typeof (plugin as { _internal?: RateLimiterInternal })._internal?.getAllBucketStates === "function" &&
+    typeof (plugin as { _internal?: RateLimiterInternal })._internal?.getConfigSummary === "function"
+  );
+}
+
 // --- Rate Limiter Metrics ---
 
 export interface RateLimiterBucketState {
@@ -38,8 +68,6 @@ export interface RateLimiterBucketState {
   maxTokens: number;
   bufferCapacity: number;
   queueLength: number;
-  lastAccessed: number;
-  lastRefill: number;
   provider?: string;
   sessionId?: string;
 }
@@ -58,6 +86,7 @@ export interface RateLimiterMetrics {
   totalBuckets: number;
   totalQueued: number;
   timestamp: string;
+  code?: string;
 }
 
 // Log entry for the admin API
@@ -332,22 +361,43 @@ case "env": {
           const rateLimiterPlugin = plugins.find((p) => p.name === "rate-limiter");
           if (!rateLimiterPlugin) {
             res.writeHead(404, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Rate limiter plugin not found" }));
+            res.end(JSON.stringify({ error: "Rate limiter plugin not found", code: "RATE_LIMITER_NOT_FOUND" }));
             return;
           }
 
-          // Get bucket state from the plugin (using internal method)
-          const getBucketState = (rateLimiterPlugin as any).getBucketState?.bind(rateLimiterPlugin);
-          const getConfig = (rateLimiterPlugin as any).getConfig?.bind(rateLimiterPlugin);
-
-          if (!getBucketState || !getConfig) {
+          // Get bucket state from the plugin (using typed internal methods)
+          if (!isRateLimiterPlugin(rateLimiterPlugin)) {
             res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Rate limiter does not expose metrics methods" }));
+            res.end(JSON.stringify({ error: "Rate limiter does not expose metrics methods", code: "RATE_LIMITER_INTERNAL_ERROR" }));
             return;
           }
 
-          const config = getConfig();
-          const buckets = getBucketState();
+          const getAllBucketStates = rateLimiterPlugin._internal.getAllBucketStates.bind(rateLimiterPlugin);
+          const getConfigSummary = rateLimiterPlugin._internal.getConfigSummary.bind(rateLimiterPlugin);
+
+          const config = getConfigSummary();
+          
+          // Check if rate limiter is enabled
+          if (!config.enabled) {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              config: {
+                maxRequests: config.maxRequests,
+                windowMs: config.windowMs,
+                bufferCapacity: config.bufferCapacity,
+                maxEntries: config.maxEntries,
+                enabled: config.enabled,
+              },
+              buckets: [],
+              totalBuckets: 0,
+              totalQueued: 0,
+              timestamp: new Date().toISOString(),
+              code: "RATE_LIMITER_DISABLED"
+            }));
+            return;
+          }
+
+          const buckets = getAllBucketStates();
 
           const metrics: RateLimiterMetrics = {
             config: {
@@ -357,20 +407,29 @@ case "env": {
               maxEntries: config.maxEntries,
               enabled: config.enabled,
             },
-            buckets: buckets.map((b: any) => ({
-              key: b.key,
-              tokens: b.tokens,
-              maxTokens: config.maxRequests,
-              bufferCapacity: config.bufferCapacity,
-              queueLength: b.queue?.length ?? 0,
-              lastAccessed: b.lastAccessed,
-              lastRefill: b.lastRefill,
-              provider: b.provider,
-              sessionId: b.sessionId,
-            })),
+            buckets: buckets.map((b: { key: string; tokens: number; maxTokens: number; bufferCapacity: number; queueLength: number; lastAccessed: number; lastRefill: number }) => {
+              // Parse provider and sessionId from key (format: "sessionId:provider")
+              // Split from the right to handle sessionIds that might contain colons
+              // Use >= 0 to correctly handle keys starting with ':' (empty sessionId)
+              const lastColonIndex = b.key.lastIndexOf(":");
+              const rawSessionId = lastColonIndex >= 0 ? b.key.slice(0, lastColonIndex) : b.key;
+              const provider = lastColonIndex >= 0 ? b.key.slice(lastColonIndex + 1) : "unknown";
+              // Normalize empty sessionId to "unknown" for UI consistency
+              const sessionId = rawSessionId || "unknown";
+              return {
+                key: b.key,
+                tokens: b.tokens,
+                maxTokens: b.maxTokens,
+                bufferCapacity: b.bufferCapacity,
+                queueLength: b.queueLength,
+                provider: provider || "unknown",
+                sessionId,
+              };
+            }),
             totalBuckets: buckets.length,
-            totalQueued: buckets.reduce((sum: number, b: any) => sum + (b.queue?.length ?? 0), 0),
+            totalQueued: buckets.reduce((sum: number, b: { queueLength: number }) => sum + b.queueLength, 0),
             timestamp: new Date().toISOString(),
+            code: "OK",
           };
 
           res.writeHead(200, { "Content-Type": "application/json" });

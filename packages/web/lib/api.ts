@@ -130,8 +130,9 @@ class APIClient {
   /**
    * Combines multiple AbortSignals into a single signal.
    * Aborts when any of the provided signals abort.
+   * Returns the combined signal and a cleanup function.
    */
-  private combineSignals(signals: AbortSignal[]): AbortSignal {
+  private combineSignals(signals: AbortSignal[]): { signal: AbortSignal; cleanup: () => void } {
     const controller = new AbortController();
 
     const abortHandler = () => {
@@ -142,6 +143,7 @@ class APIClient {
       signals.forEach(signal => {
         signal.removeEventListener("abort", abortHandler);
       });
+      controller.signal.removeEventListener("abort", cleanup);
     };
 
     signals.forEach(signal => {
@@ -151,7 +153,7 @@ class APIClient {
     // Clean up listeners when our controller is aborted
     controller.signal.addEventListener("abort", cleanup);
 
-    return controller.signal;
+    return { signal: controller.signal, cleanup };
   }
 
   private async request<T>(endpoint: string, options?: RequestInit, retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG): Promise<T> {
@@ -167,13 +169,14 @@ class APIClient {
 
       // Combine provided signal with timeout controller signal
       const providedSignal = options?.signal;
-      const signal = providedSignal
+      const { signal, cleanup } = providedSignal
         ? this.combineSignals([providedSignal, controller.signal])
-        : controller.signal;
+        : { signal: controller.signal, cleanup: () => {} };
 
       // Check if already aborted before making request
       if (signal.aborted) {
         clearTimeout(timeoutId);
+        cleanup();
         throw new Error("Request aborted");
       }
 
@@ -191,6 +194,7 @@ class APIClient {
         this.updateCsrfToken(response);
 
         clearTimeout(timeoutId);
+        cleanup();
 
         if (!response.ok) {
           let errorMessage = response.statusText;
@@ -234,6 +238,7 @@ class APIClient {
         return data;
       } catch (error) {
         clearTimeout(timeoutId);
+        cleanup();
 
         if (error instanceof Error) {
           if (error.name === "AbortError") {
@@ -410,9 +415,9 @@ class APIClient {
     const controller = new AbortController();
 
     // Combine provided signal with controller signal
-    const combinedSignal = signal
+    const { signal: combinedSignal, cleanup: cleanupSignal } = signal
       ? this.combineSignals([signal, controller.signal])
-      : controller.signal;
+      : { signal: controller.signal, cleanup: () => {} };
 
     const responsePromise = fetch(`${getApiBaseUrl()}/api/logs?${params.toString()}`, {
       signal: combinedSignal,
@@ -458,9 +463,11 @@ class APIClient {
           }
         }
       } finally {
-        reader.releaseLock();
-      }
+          reader.releaseLock();
+          cleanupSignal();
+        }
     } catch (error) {
+      cleanupSignal();
       if (error instanceof Error && error.name === "AbortError") {
         throw new Error("Request aborted");
       }
@@ -703,9 +710,9 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     const controller = new AbortController();
 
     // Combine provided signal with controller signal
-    const combinedSignal = signal
+    const { signal: combinedSignal, cleanup: cleanupSignal } = signal
       ? this.combineSignals([signal, controller.signal])
-      : controller.signal;
+      : { signal: controller.signal, cleanup: () => {} };
 
     const responsePromise = fetch(`${baseUrl}/admin/logs?${params.toString()}`, {
       signal: combinedSignal,
@@ -752,8 +759,10 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
         }
       } finally {
         reader.releaseLock();
+        cleanupSignal();
       }
     } catch (error) {
+      cleanupSignal();
       if (error instanceof Error && error.name === "AbortError") {
         throw new Error("Request aborted");
       }
@@ -772,20 +781,30 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
   ): Promise<T> {
     let lastError: Error | undefined;
     let retryDelay = retryConfig.initialDelay;
+    let cleanup: (() => void) | null = null;
 
     for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
+      // Clean up previous iteration's signal listeners
+      if (cleanup) {
+        cleanup();
+        cleanup = null;
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
       // Combine provided signal with timeout controller signal
       const providedSignal = options?.signal;
-      const signal = providedSignal
+      const combined = providedSignal
         ? this.combineSignals([providedSignal, controller.signal])
-        : controller.signal;
+        : { signal: controller.signal, cleanup: () => {} };
+      const { signal, cleanup: newCleanup } = combined;
+      cleanup = newCleanup;
 
       // Check if already aborted before making request
       if (signal.aborted) {
         clearTimeout(timeoutId);
+        cleanup();
         throw new Error("Request aborted");
       }
 
@@ -818,6 +837,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
           if (attempt < retryConfig.maxRetries && isTransientError(error, response.status)) {
             // Check signal before sleeping
             if (signal.aborted) {
+              cleanup();
               throw new Error("Request aborted");
             }
             // Add jitter to prevent thundering herd
@@ -825,8 +845,10 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
             await sleep(retryDelay + jitter);
             retryDelay = Math.min(retryDelay * retryConfig.backoffFactor, retryConfig.maxDelay);
             lastError = error;
+            cleanup();
             continue;
           }
+          cleanup();
           throw error;
         }
 
@@ -846,6 +868,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
         return data;
       } catch (error) {
         clearTimeout(timeoutId);
+        cleanup();
 
         if (error instanceof Error) {
           if (error.name === "AbortError") {
@@ -863,6 +886,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
             await sleep(retryDelay + jitter);
             retryDelay = Math.min(retryDelay * retryConfig.backoffFactor, retryConfig.maxDelay);
             lastError = error;
+            cleanup();
             continue;
           }
           throw error;
