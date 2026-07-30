@@ -113,8 +113,8 @@ function MetricsContent() {
   }, [timeRange, maxDataPoints, page, pageSize, registerPageLoad, registerPageReady]);
 
   // Fetch rate limiter metrics
-  const fetchRateLimiterMetrics = useCallback(async (signal?: AbortSignal, requestId?: number) => {
-    if (!isMountedRef.current) return;
+  const fetchRateLimiterMetrics = useCallback(async (signal?: AbortSignal, requestId?: number): Promise<boolean> => {
+    if (!isMountedRef.current) return false;
     setRateLimiterLoading(true);
     try {
       const data = await apiClient.getRateLimiterMetrics(signal);
@@ -123,10 +123,11 @@ function MetricsContent() {
         setRateLimiterMetrics(data);
         setRateLimiterError(null);
       }
+      return true;
     } catch (e) {
       // Ignore aborted requests - the API throws "Request aborted" error
       if (e instanceof Error && e.message === "Request aborted") {
-        return;
+        return false;
       }
       // On any other error, clear metrics to avoid stale data
       if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
@@ -134,6 +135,15 @@ function MetricsContent() {
         setRateLimiterMetrics(null);
         setRateLimiterError(`Failed to fetch metrics: ${errorMessage}`);
       }
+      // Re-throw connection errors so polling can stop
+      if (e instanceof Error && (
+        (e.name === "TypeError" && e.message === "Failed to fetch") ||
+        e.message.includes("NetworkError") ||
+        e.message.includes("ERR_CONNECTION_REFUSED")
+      )) {
+        throw e;
+      }
+      return false;
     } finally {
       if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
         setRateLimiterLoading(false);
@@ -161,7 +171,19 @@ function MetricsContent() {
       // Create new abort controller for this request
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
-      await fetchRateLimiterMetrics(abortController.signal, requestId);
+      try {
+        await fetchRateLimiterMetrics(abortController.signal, requestId);
+      } catch (e) {
+        // Connection error - stop polling to avoid infinite failed requests
+        if (e instanceof Error && (
+          (e.name === "TypeError" && e.message === "Failed to fetch") ||
+          e.message.includes("NetworkError") ||
+          e.message.includes("ERR_CONNECTION_REFUSED")
+        )) {
+          console.error("[metrics] Rate limiter polling stopped due to connection error:", e.message);
+          return;
+        }
+      }
       // Schedule next poll after current one completes
       if (!cancelled) {
         pollingIntervalRef.current = setTimeout(runPoll, 5000);
