@@ -340,7 +340,7 @@ function MetricsContent() {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left p-2 font-medium">Key</th>
-                        <th className="text-right p-2 font-medium">Total Current Requests / Window</th>
+                        <th className="text-right p-2 font-medium">Requests Used / Window</th>
                         <th className="text-right p-2 font-medium">Requests Remaining</th>
                         <th className="text-right p-2 font-medium">Max Requests</th>
                         <th className="text-right p-2 font-medium">Buffer Capacity</th>
@@ -356,7 +356,7 @@ function MetricsContent() {
                             <td className="p-2 font-mono text-xs truncate max-w-xs" title={bucket.key}>
                               {bucket.key}
                             </td>
-                            <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.maxTokens)}</td>
+                            <td className="p-2 text-right text-muted-foreground">{formatNumber(Math.max(0, bucket.maxTokens - bucket.tokens))}</td>
                             <td className="p-2 text-right">
                               <span className={bucket.tokens < 5 ? "text-destructive font-medium" : ""}>
                                 {formatNumber(bucket.tokens)}
