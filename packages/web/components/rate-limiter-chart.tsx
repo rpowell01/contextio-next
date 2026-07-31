@@ -181,25 +181,11 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
           <Copy className="h-4 w-4" />
           {copied ? "Copied" : "Copy"}
         </button>
-        <div className="flex items-center gap-4 text-xs">
-          <span className="flex items-center gap-1" title={`${criticalCount} critical`}>
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#ef4444" }} />
-            {criticalCount}
+        {isDownsampled && (
+          <span className="text-muted-foreground text-xs">
+            Showing {chartData.length} of {buckets.length} buckets (min-sampled)
           </span>
-          <span className="flex items-center gap-1" title={`${warningCount} warning`}>
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
-            {warningCount}
-          </span>
-          <span className="flex items-center gap-1" title={`${queuedCount} queued`}>
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#8b5cf6" }} />
-            {queuedCount}
-          </span>
-          {isDownsampled && (
-            <span className="text-muted-foreground">
-              Showing {chartData.length} of {buckets.length} buckets (min-sampled)
-            </span>
-          )}
-        </div>
+        )}
       </div>
 
       <div id="rate-limiter-chart-description" className="sr-only">
@@ -313,24 +299,6 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               radius={[0, 4, 4, 0]}
             />
             
-            {/* Global max requests reference line */}
-            <ReferenceLine
-              x={globalMaxTokens}
-              stroke="#6b7280"
-              strokeWidth={1.5}
-              strokeDasharray="5 5"
-              label={
-                <Label
-                  value="Global Max"
-                  position="center"
-                  fill="#6b7280"
-                  fontSize={10}
-                  fontWeight={600}
-                  offset={10}
-                />
-              }
-            />
-            
             {/* Provider-specific reference lines */}
             {providers.map((p, idx) => (
               <>
@@ -383,31 +351,6 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
             ))}
           </BarChart>
         </ResponsiveContainer>
-      </div>
-
-      {/* Legend / Status Guide */}
-      <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1 font-medium">Status:</span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#22c55e" }} />
-          Healthy ({'<'}70% used)
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
-          Warning (70-90% used)
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#ef4444" }} />
-          Critical ({'>'}90% used)
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#8b5cf6" }} />
-          Queued
-        </span>
-        <span className="flex items-center gap-1 ml-auto">
-          <span className="w-6 h-1.5" style={{ background: "linear-gradient(90deg, transparent 50%, #8b5cf633 50%)", backgroundSize: "4px 100%" }} />
-          Buffer
-        </span>
       </div>
     </div>
   );
