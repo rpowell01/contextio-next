@@ -104,6 +104,19 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
     return downsampleData(sorted, maxDataPoints);
   }, [buckets, maxDataPoints]);
 
+  // Group by provider for provider-specific reference lines
+  const providers = useMemo(() => {
+    const providerMap = new Map<string, { maxTokens: number; count: number }>();
+    chartData.forEach(d => {
+      const provider = d.provider ?? "unknown";
+      const existing = providerMap.get(provider);
+      if (!existing || d.maxTokens > existing.maxTokens) {
+        providerMap.set(provider, { maxTokens: d.maxTokens, count: (existing?.count || 0) + 1 });
+      }
+    });
+    return Array.from(providerMap.entries()).map(([name, data]) => ({ name, ...data }));
+  }, [chartData]);
+
   const copyToClipboard = async () => {
     try {
       const dataToCopy = chartData.map(({ key, tokens, maxTokens, bufferCapacity, queueLength, provider, sessionId, utilizationPercent, status }) => ({
@@ -151,7 +164,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
     );
   }
 
-  const maxTokenValue = Math.max(1, Math.max(...chartData.map((d) => d.maxTokens)));
+  const globalMaxTokens = Math.max(1, Math.max(...chartData.map((d) => d.maxTokens)));
   const queuedCount = chartData.filter(d => d.queueLength > 0).length;
   const criticalCount = chartData.filter(d => d.status === "critical").length;
   const warningCount = chartData.filter(d => d.status === "warning").length;
@@ -218,7 +231,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               tickLine={{ stroke: "#999" }}
               axisLine={{ stroke: "#999" }}
               tickFormatter={(value) => formatNumber(value)}
-              domain={[0, maxTokenValue * 1.15]}
+              domain={[0, globalMaxTokens * 1.15]}
             />
             
             {/* Y Axis - Bucket keys */}
@@ -300,15 +313,15 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               radius={[0, 4, 4, 0]}
             />
             
-            {/* Max requests reference line (maxTokens includes buffer in the API) */}
+            {/* Global max requests reference line */}
             <ReferenceLine
-              x={maxTokenValue}
+              x={globalMaxTokens}
               stroke="#6b7280"
               strokeWidth={1.5}
               strokeDasharray="5 5"
               label={
                 <Label
-                  value="Max Requests"
+                  value="Global Max"
                   position="center"
                   fill="#6b7280"
                   fontSize={10}
@@ -318,39 +331,56 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               }
             />
             
-            {/* 70% used warning line */}
-            <ReferenceLine
-              x={maxTokenValue * 0.3}
-              stroke="#f59e0b"
-              strokeWidth={1}
-              strokeDasharray="3 3"
-              label={
-                <Label
-                  value="70% Used"
-                  position="center"
-                  fill="#f59e0b"
-                  fontSize={9}
-                  offset={10}
+            {/* Provider-specific reference lines */}
+            {providers.map((p, idx) => (
+              <>
+                <ReferenceLine
+                  x={p.maxTokens}
+                  stroke="#3b82f6"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                  label={
+                    <Label
+                      value={`${p.name}: ${p.maxTokens}`}
+                      position="center"
+                      fill="#3b82f6"
+                      fontSize={9}
+                      offset={10 + idx * 15}
+                    />
+                  }
                 />
-              }
-            />
-            
-            {/* 90% used critical line */}
-            <ReferenceLine
-              x={maxTokenValue * 0.1}
-              stroke="#ef4444"
-              strokeWidth={1}
-              strokeDasharray="3 3"
-              label={
-                <Label
-                  value="90% Used"
-                  position="center"
-                  fill="#ef4444"
-                  fontSize={9}
-                  offset={10}
+                <ReferenceLine
+                  x={p.maxTokens * 0.3}
+                  stroke="#f59e0b"
+                  strokeWidth={0.8}
+                  strokeDasharray="3 3"
+                  label={
+                    <Label
+                      value={`${p.name}: 70%`}
+                      position="center"
+                      fill="#f59e0b"
+                      fontSize={8}
+                      offset={10 + idx * 15}
+                    />
+                  }
                 />
-              }
-            />
+                <ReferenceLine
+                  x={p.maxTokens * 0.1}
+                  stroke="#ef4444"
+                  strokeWidth={0.8}
+                  strokeDasharray="3 3"
+                  label={
+                    <Label
+                      value={`${p.name}: 90%`}
+                      position="center"
+                      fill="#ef4444"
+                      fontSize={8}
+                      offset={10 + idx * 15}
+                    />
+                  }
+                />
+              </>
+            ))}
           </BarChart>
         </ResponsiveContainer>
       </div>
