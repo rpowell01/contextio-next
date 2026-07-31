@@ -81,23 +81,6 @@ function MetricsContent() {
     [rateLimiterMetrics?.buckets],
   );
 
-  // Memoized provider totals - aggregate used requests per provider
-  const providerTotals = useMemo(
-    () => {
-      const totals: Record<string, { used: number; maxTokens: number; bufferCapacity: number }> = {};
-      rateLimiterMetrics?.buckets?.forEach((bucket) => {
-        const provider = bucket.provider ?? "unknown";
-        const used = bucket.maxTokens - bucket.tokens;
-        if (!totals[provider]) {
-          totals[provider] = { used: 0, maxTokens: bucket.maxTokens, bufferCapacity: bucket.bufferCapacity };
-        }
-        totals[provider].used += used;
-      });
-      return totals;
-    },
-    [rateLimiterMetrics?.buckets],
-  );
-
   // Page load tracking for footer
   const { registerPageLoad, registerPageReady } = usePageLoad();
 
@@ -357,7 +340,6 @@ function MetricsContent() {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left p-2 font-medium">Key</th>
-                        <th className="text-right p-2 font-medium">Total Used for Provider</th>
                         <th className="text-right p-2 font-medium">Requests Used / Window</th>
                         <th className="text-right p-2 font-medium">Requests Remaining</th>
                         <th className="text-right p-2 font-medium">Max Requests</th>
@@ -374,8 +356,7 @@ function MetricsContent() {
                             <td className="p-2 font-mono text-xs truncate max-w-xs" title={bucket.key}>
                               {bucket.key}
                             </td>
-                            <td className="p-2 text-right text-muted-foreground">{formatNumber(providerTotals[bucket.provider ?? "unknown"]?.used ?? 0)}</td>
-                            <td className="p-2 text-right text-muted-foreground">{formatNumber(Math.max(0, bucket.maxTokens - bucket.tokens))}</td>
+                            <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.requestsInWindow ?? 0)}</td>
                             <td className="p-2 text-right">
                               <span className={bucket.tokens < 5 ? "text-destructive font-medium" : ""}>
                                 {formatNumber(bucket.tokens)}

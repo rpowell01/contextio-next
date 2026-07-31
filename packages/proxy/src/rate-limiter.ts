@@ -128,6 +128,10 @@ export interface RateLimiterConfig {
 interface BucketState {
   tokens: number;
   lastRefill: number;
+  // Track requests made in the current window for accurate metrics
+  requestsInWindow: number;
+  // Window boundary tracking
+  windowStart: number;
   queue: Array<{
     resolve: (value: RequestContext) => void;
     reject: (error: Error) => void;
@@ -396,6 +400,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
       bucket = {
         tokens: pConfig.maxRequests + pConfig.bufferCapacity,
         lastRefill: now,
+        requestsInWindow: 0,
+        windowStart: now,
         queue: [],
         lastAccessed: now,
         refillTimer: null,
@@ -437,6 +443,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
 
   /**
    * Refill tokens based on elapsed time since last refill.
+   * Also resets requestsInWindow counter when window boundary is crossed.
    */
   private refillTokens(bucket: BucketState, now: number, key: string): void {
     const elapsed = now - bucket.lastRefill;
@@ -444,6 +451,13 @@ export class RateLimiterPlugin implements ProxyPlugin {
 
     const provider = this.getProviderFromKey(key);
     const pConfig = this.getProviderConfig(provider);
+
+    // Check if we've crossed a window boundary (elapsed >= windowMs)
+    // If so, reset the requestsInWindow counter and update windowStart
+    if (now - bucket.windowStart >= pConfig.windowMs) {
+      bucket.requestsInWindow = 0;
+      bucket.windowStart = now;
+    }
 
     const tokensToAdd = elapsed * pConfig.refillRate;
     bucket.tokens = Math.min(
@@ -456,10 +470,12 @@ export class RateLimiterPlugin implements ProxyPlugin {
   /**
    * Try to consume a token from the bucket.
    * Returns true if successful, false if no tokens available.
+   * Increments requestsInWindow counter on successful consumption.
    */
   private tryConsumeToken(bucket: BucketState): boolean {
     if (bucket.tokens >= 1 - TOKEN_EPSILON) {
       bucket.tokens -= 1;
+      bucket.requestsInWindow += 1;
       return true;
     }
     return false;
@@ -631,6 +647,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
     queueLength: number;
     lastAccessed: number;
     lastRefill: number;
+    requestsInWindow: number;
   }> {
     const states: Array<{
       key: string;
@@ -640,6 +657,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
       queueLength: number;
       lastAccessed: number;
       lastRefill: number;
+      requestsInWindow: number;
     }> = [];
 
     for (const [key, bucket] of this.buckets.entries()) {
@@ -654,6 +672,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
         queueLength: bucket.queue.length,
         lastAccessed: bucket.lastAccessed,
         lastRefill: bucket.lastRefill,
+        requestsInWindow: bucket.requestsInWindow,
       });
     }
 

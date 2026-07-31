@@ -354,6 +354,8 @@ export interface RateLimiterBucketState {
   bufferCapacity: number;
   /** Number of requests waiting in queue */
   queueLength: number;
+  /** Number of requests made in the current window (resets at window boundary) */
+  requestsInWindow: number;
   /** Provider name extracted from key */
   provider?: string;
   /** Session ID extracted from key */
