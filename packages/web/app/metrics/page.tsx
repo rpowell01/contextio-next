@@ -135,6 +135,10 @@ function MetricsContent() {
               return data; // Data changed
             }
           }
+          // Also check nvidiaWorkerRetryCount
+          if (prev.nvidiaWorkerRetryCount !== data.nvidiaWorkerRetryCount) {
+            return data;
+          }
           return prev; // Data unchanged, keep previous state
         });
         setRateLimiterError(null);
@@ -286,9 +290,19 @@ function MetricsContent() {
         )}
         {rateLimiterMetrics && rateLimiterMetrics.config.enabled && (
           <div className="space-y-4">
+            {/* NVIDIA Worker Retry Counter */}
+            {(rateLimiterMetrics.nvidiaWorkerRetryCount !== undefined && rateLimiterMetrics.nvidiaWorkerRetryCount > 0) && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-amber-800">NVIDIA Worker Retries:</span>
+                  <span className="font-mono text-lg font-bold text-amber-700">{rateLimiterMetrics.nvidiaWorkerRetryCount}</span>
+                  <span className="text-sm text-amber-600">("continue" retries for ResourceExhausted limit reached)</span>
+                </div>
+              </div>
+            )}
             {/* Chart */}
             <div className="rounded-lg border p-4">
-              <h4 className="text-md font-medium mb-3">Token Bucket States</h4>
+              <h4 className="text-md font-medium mb-3">Request Bucket States</h4>
               <RateLimiterChart
                 buckets={rateLimiterMetrics.buckets}
                 loading={rateLimiterLoading}
@@ -305,9 +319,9 @@ function MetricsContent() {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left p-2 font-medium">Key</th>
-                        <th className="text-right p-2 font-medium">Tokens</th>
-                        <th className="text-right p-2 font-medium">Max</th>
-                        <th className="text-right p-2 font-medium">Buffer</th>
+                        <th className="text-right p-2 font-medium">Requests Remaining</th>
+                        <th className="text-right p-2 font-medium">Max Requests</th>
+                        <th className="text-right p-2 font-medium">Buffer Capacity</th>
                         <th className="text-right p-2 font-medium">Queue</th>
                         <th className="text-left p-2 font-medium">Provider</th>
                         <th className="text-left p-2 font-medium">Session</th>

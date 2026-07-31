@@ -87,6 +87,7 @@ export interface RateLimiterMetrics {
   totalQueued: number;
   timestamp: string;
   code?: string;
+  nvidiaWorkerRetryCount?: number;
 }
 
 // Log entry for the admin API
@@ -365,6 +366,13 @@ case "env": {
             return;
           }
 
+          // Find the retry plugin for NVIDIA worker retry count
+          const retryPlugin = plugins.find((p) => p.name === "retry");
+          let nvidiaWorkerRetryCount = 0;
+          if (retryPlugin && (retryPlugin as any)._internal?.getNvidiaWorkerRetryCount) {
+            nvidiaWorkerRetryCount = (retryPlugin as any)._internal.getNvidiaWorkerRetryCount();
+          }
+
           // Get bucket state from the plugin (using typed internal methods)
           if (!isRateLimiterPlugin(rateLimiterPlugin)) {
             res.writeHead(500, { "Content-Type": "application/json" });
@@ -392,7 +400,8 @@ case "env": {
               totalBuckets: 0,
               totalQueued: 0,
               timestamp: new Date().toISOString(),
-              code: "RATE_LIMITER_DISABLED"
+              code: "RATE_LIMITER_DISABLED",
+              nvidiaWorkerRetryCount,
             }));
             return;
           }
@@ -430,6 +439,7 @@ case "env": {
             totalQueued: buckets.reduce((sum: number, b: { queueLength: number }) => sum + b.queueLength, 0),
             timestamp: new Date().toISOString(),
             code: "OK",
+            nvidiaWorkerRetryCount,
           };
 
           res.writeHead(200, { "Content-Type": "application/json" });

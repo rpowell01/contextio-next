@@ -165,6 +165,9 @@ export class RetryPlugin implements ProxyPlugin {
   // Cleanup timer for removing old entries
   private cleanupTimer: NodeJS.Timeout | null = null;
 
+  // Counter for NVIDIA worker retries (ResourceExhausted with "Worker local total request limit reached")
+  private nvidiaWorkerRetryCount = 0;
+
   constructor(config: RetryConfig = {}) {
     const { providers, enabled, maxEntries, cleanupIntervalMs, entryTtlMs, ...globalConfig } = config;
 
@@ -878,7 +881,9 @@ export class RetryPlugin implements ProxyPlugin {
           // @ts-ignore - adding modified body for NVIDIA retry
           modifiedBodyForRetry: modifiedBodyBuffer,
         });
-        console.debug(`[retry] NVIDIA ResourceExhausted: created modified request body with "continue" message`);
+        // Increment NVIDIA worker retry counter
+        this.nvidiaWorkerRetryCount++;
+        console.debug(`[retry] NVIDIA ResourceExhausted: created modified request body with "continue" message (total retries: ${this.nvidiaWorkerRetryCount})`);
       }
     }
 
@@ -1259,6 +1264,13 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Get the total count of NVIDIA worker retries (ResourceExhausted with "Worker local total request limit reached").
+   */
+  getNvidiaWorkerRetryCount(): number {
+    return this.nvidiaWorkerRetryCount;
+  }
+
+  /**
    * Get streaming error state for testing/inspection.
    * Returns the detected error info for a streaming session, if any.
    * Can look up by sessionId.
@@ -1382,6 +1394,7 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getRequestHeaders: (key: string) => plugin.getRequestHeadersForTesting(key),
     getRetryCount: (key: string) => plugin.getRetryCountForTesting(key),
     getModifiedBodyForRetry: (key: string) => plugin.getModifiedBodyForRetry(key),
+    getNvidiaWorkerRetryCount: () => plugin.getNvidiaWorkerRetryCount(),
     getStreamError: (sessionId: string) => plugin.getStreamErrorForTesting(sessionId),
     getAndConsumePendingStreamRetry: (sessionId: string | null) => plugin.getAndConsumePendingStreamRetry(sessionId),
     clear: () => plugin.clearForTesting(),

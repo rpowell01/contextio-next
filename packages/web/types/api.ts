@@ -696,4 +696,6 @@ export interface RateLimiterMetrics {
   timestamp: string;
   /** Optional status code from the API */
   code?: string;
+  /** Number of NVIDIA worker retries (ResourceExhausted with "Worker local total request limit reached") */
+  nvidiaWorkerRetryCount?: number;
 }
