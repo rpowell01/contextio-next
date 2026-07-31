@@ -168,7 +168,8 @@ function MetricsContent() {
                 prevBucket.maxTokens !== newBucket.maxTokens ||
                 prevBucket.queueLength !== newBucket.queueLength ||
                 prevBucket.provider !== newBucket.provider ||
-                prevBucket.sessionId !== newBucket.sessionId) {
+                prevBucket.sessionId !== newBucket.sessionId ||
+                (prevBucket.requestsInWindow ?? 0) !== (newBucket.requestsInWindow ?? 0)) {
               return data; // Bucket data changed
             }
           }

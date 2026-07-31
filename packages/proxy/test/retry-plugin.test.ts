@@ -116,8 +116,8 @@ describe("retry plugin - unit tests", () => {
   beforeEach(() => {
     plugin = createRetryPlugin({
       maxRetries: 3,
-      baseDelayMs: 100, // Fast for tests
-      maxDelayMs: 1000,
+      baseDelayMs: 10, // Fast for tests
+      maxDelayMs: 100,
       retryableStatuses: [429, 500, 502, 503, 504],
       jitterFactor: 0, // Disable jitter for predictable tests
       enabled: true,
@@ -180,7 +180,7 @@ describe("retry plugin - unit tests", () => {
         status: 429,
         headers: {
           "content-type": "application/json",
-          "retry-after": "2", // 2 seconds
+          "retry-after": "1", // 1 second
         },
         sessionId: "test-session-123",
         captureId: ctx.captureId, // Pass captureId from request context
@@ -193,8 +193,8 @@ describe("retry plugin - unit tests", () => {
       // Should signal retry with status 599
       assert.equal(result.status, 599, "Should return 599 to signal retry");
       
-      // Should wait approximately 2 seconds (with small tolerance)
-      assert.ok(elapsed >= 1900 && elapsed <= 2500, `Should wait ~2s, got ${elapsed}ms`);
+      // Should wait approximately 1s (with tight tolerance)
+      assert.ok(elapsed >= 900 && elapsed <= 1200, `Should wait ~1s, got ${elapsed}ms`);
       
       // Should preserve retry ID and capture ID
       assert.equal(result.headers["x-retry-id"], requestCtx.headers["x-retry-id"]);
@@ -248,8 +248,8 @@ describe("retry plugin - unit tests", () => {
       const elapsed = Date.now() - startTime;
       
       assert.equal(result.status, 599);
-      // First retry: baseDelayMs * 2^0 = 100ms (no jitter)
-      assert.ok(elapsed >= 90 && elapsed <= 200, `Should use exponential backoff ~100ms, got ${elapsed}ms`);
+      // First retry: baseDelayMs * 2^0 = 10ms (no jitter)
+      assert.ok(elapsed >= 5 && elapsed <= 30, `Should use exponential backoff ~10ms, got ${elapsed}ms`);
     });
   });
 
@@ -270,8 +270,8 @@ describe("retry plugin - unit tests", () => {
       const elapsed = Date.now() - startTime;
       
       assert.equal(result.status, 599);
-      // First retry: 100ms * 2^0 = 100ms
-      assert.ok(elapsed >= 90 && elapsed <= 200);
+      // First retry: 10ms * 2^0 = 10ms
+      assert.ok(elapsed >= 5 && elapsed <= 30);
       assert.equal((plugin as any)._internal.getRetryCount(ctx.captureId!), 1);
     });
 
@@ -324,27 +324,27 @@ describe("retry plugin - unit tests", () => {
       const ctx = createMockRequestContext();
       await plugin.onRequest!(ctx);
       
-      // First retry (attempt 0): 100ms
+      // First retry (attempt 0): 10ms
       let responseCtx = createMockResponseContext({ status: 500, sessionId: "test-session-123", captureId: ctx.captureId });
       let startTime = Date.now();
       await plugin.onResponse!(responseCtx);
       let elapsed1 = Date.now() - startTime;
       
-      // Second retry (attempt 1): 200ms
+      // Second retry (attempt 1): 20ms
       responseCtx = createMockResponseContext({ status: 500, sessionId: "test-session-123", captureId: ctx.captureId });
       startTime = Date.now();
       await plugin.onResponse!(responseCtx);
       let elapsed2 = Date.now() - startTime;
       
-      // Third retry (attempt 2): 400ms
+      // Third retry (attempt 2): 40ms
       responseCtx = createMockResponseContext({ status: 500, sessionId: "test-session-123", captureId: ctx.captureId });
       startTime = Date.now();
       await plugin.onResponse!(responseCtx);
       let elapsed3 = Date.now() - startTime;
       
-      assert.ok(elapsed1 >= 90 && elapsed1 <= 200, `First retry ~100ms, got ${elapsed1}ms`);
-      assert.ok(elapsed2 >= 180 && elapsed2 <= 300, `Second retry ~200ms, got ${elapsed2}ms`);
-      assert.ok(elapsed3 >= 350 && elapsed3 <= 500, `Third retry ~400ms, got ${elapsed3}ms`);
+      assert.ok(elapsed1 >= 5 && elapsed1 <= 30, `First retry ~10ms, got ${elapsed1}ms`);
+      assert.ok(elapsed2 >= 10 && elapsed2 <= 50, `Second retry ~20ms, got ${elapsed2}ms`);
+      assert.ok(elapsed3 >= 20 && elapsed3 <= 80, `Third retry ~40ms, got ${elapsed3}ms`);
       
       assert.equal((plugin as any)._internal.getRetryCount(ctx.captureId!), 3);
     });
@@ -353,18 +353,18 @@ describe("retry plugin - unit tests", () => {
       // Create plugin with small maxDelayMs
       const cappedPlugin = createRetryPlugin({
         maxRetries: 5,
-        baseDelayMs: 100,
-        maxDelayMs: 250, // Cap at 250ms
+        baseDelayMs: 10,
+        maxDelayMs: 50, // Cap at 50ms
         jitterFactor: 0,
       });
       
       const ctx = createMockRequestContext();
       await cappedPlugin.onRequest!(ctx);
       
-      // Retry 0: 100ms
-      // Retry 1: 200ms
-      // Retry 2: 400ms -> capped at 250ms
-      // Retry 3: 800ms -> capped at 250ms
+      // Retry 0: 10ms
+      // Retry 1: 20ms
+      // Retry 2: 40ms -> capped at 50ms
+      // Retry 3: 80ms -> capped at 50ms
       
       for (let i = 0; i < 4; i++) {
         const responseCtx = createMockResponseContext({ status: 500, sessionId: "test-session-123", captureId: ctx.captureId });
@@ -373,7 +373,7 @@ describe("retry plugin - unit tests", () => {
         const elapsed = Date.now() - startTime;
         
         if (i >= 2) {
-          assert.ok(elapsed >= 230 && elapsed <= 350, `Retry ${i} should be capped at 250ms, got ${elapsed}ms`);
+          assert.ok(elapsed >= 30 && elapsed <= 70, `Retry ${i} should be capped at 50ms, got ${elapsed}ms`);
         }
       }
       
@@ -398,7 +398,7 @@ describe("retry plugin - unit tests", () => {
       const elapsed = Date.now() - startTime;
       
       assert.equal(result.status, 400, "Should pass through 400 unchanged");
-      assert.ok(elapsed < 50, "Should not wait for non-retryable status");
+      assert.ok(elapsed < 20, "Should not wait for non-retryable status");
       assert.equal((plugin as any)._internal.getRetryCount(ctx.captureId!), 0);
     });
 
@@ -721,22 +721,22 @@ describe("retry plugin - unit tests", () => {
     it("uses provider-specific config when configured", async () => {
       const providerPlugin = createRetryPlugin({
         maxRetries: 1,
-        baseDelayMs: 100,
-        maxDelayMs: 1000,
+        baseDelayMs: 10,
+        maxDelayMs: 100,
         jitterFactor: 0,
         providers: {
           anthropic: {
             maxRetries: 5,
-            baseDelayMs: 500,
+            baseDelayMs: 50,
           },
           openai: {
             maxRetries: 2,
-            baseDelayMs: 200,
+            baseDelayMs: 20,
           },
         },
       });
       
-      // Test anthropic config (5 retries, 500ms base)
+      // Test anthropic config (5 retries, 50ms base)
       const anthropicCtx = createMockRequestContext({ provider: "anthropic", captureId: "capture-anthropic-123" });
       await providerPlugin.onRequest!(anthropicCtx);
       
@@ -752,7 +752,7 @@ describe("retry plugin - unit tests", () => {
         }
       }
       
-      // Test openai config (2 retries, 200ms base)
+      // Test openai config (2 retries, 20ms base)
       const openaiCtx = createMockRequestContext({ 
         provider: "openai", 
         captureId: "capture-openai-123" 
@@ -794,7 +794,7 @@ describe("retry plugin - unit tests", () => {
     it("falls back to global config for unknown providers", async () => {
       const providerPlugin = createRetryPlugin({
         maxRetries: 2,
-        baseDelayMs: 100,
+        baseDelayMs: 10,
         providers: {
           anthropic: { maxRetries: 5 },
         },
