@@ -209,7 +209,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
             <XAxis
               type="number"
               label={{
-                value: "Tokens Available / Total Capacity",
+                value: "Requests Remaining / Max Requests",
                 position: "outsideBottom",
                 offset: 80,
                 style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
@@ -243,7 +243,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
                 if (payload && payload.length > 0 && payload[0].payload) {
                   const p = payload[0].payload;
                   const used = p.maxTokens - p.tokens;
-                  return `${p.provider} | Session: ${p.sessionId} | ${used}/${p.maxTokens} used (${p.utilizationPercent}%)`;
+                  return `${p.provider} | Session: ${p.sessionId} | ${used}/${p.maxTokens} requests used (${p.utilizationPercent}%)`;
                 }
                 return `Bucket: ${label}`;
               }}
@@ -263,10 +263,10 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
             />
             
-            {/* Used tokens (colored by status) */}
+            {/* Remaining requests (colored by status) */}
             <Bar
               dataKey="tokens"
-              name="Available"
+              name="Remaining"
               stackId="tokens"
               fill="#3b82f6"
               stroke="#1d4ed8"
@@ -274,17 +274,17 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               strokeWidth={1}
               opacity={0.85}
               radius={[0, 4, 4, 0]}
-              aria-label="Available tokens"
+              aria-label="Remaining requests"
             >
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} />
               ))}
             </Bar>
             
-            {/* Used tokens (remainder to fill to maxTokens) */}
+            {/* Used requests (remainder to fill to maxTokens) */}
             <Bar
               dataKey="maxTokens"
-              name="Capacity"
+              name="Max Requests"
               stackId="tokens"
               fill="transparent"
               stroke="transparent"
@@ -300,7 +300,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               radius={[0, 4, 4, 0]}
             />
             
-            {/* Total capacity reference line (maxTokens includes buffer in the API) */}
+            {/* Max requests reference line (maxTokens includes buffer in the API) */}
             <ReferenceLine
               x={maxTokenValue}
               stroke="#6b7280"
@@ -308,7 +308,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               strokeDasharray="5 5"
               label={
                 <Label
-                  value="Total Capacity"
+                  value="Max Requests"
                   position="center"
                   fill="#6b7280"
                   fontSize={10}
@@ -318,7 +318,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               }
             />
             
-            {/* 70% utilization warning line */}
+            {/* 70% used warning line */}
             <ReferenceLine
               x={maxTokenValue * 0.3}
               stroke="#f59e0b"
@@ -326,7 +326,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               strokeDasharray="3 3"
               label={
                 <Label
-                  value="70% Utilization"
+                  value="70% Used"
                   position="center"
                   fill="#f59e0b"
                   fontSize={9}
@@ -335,7 +335,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               }
             />
             
-            {/* 90% utilization critical line */}
+            {/* 90% used critical line */}
             <ReferenceLine
               x={maxTokenValue * 0.1}
               stroke="#ef4444"
@@ -343,7 +343,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               strokeDasharray="3 3"
               label={
                 <Label
-                  value="90% Utilization"
+                  value="90% Used"
                   position="center"
                   fill="#ef4444"
                   fontSize={9}
@@ -360,15 +360,15 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
         <span className="flex items-center gap-1 font-medium">Status:</span>
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#22c55e" }} />
-          Healthy ({'<'}70%)
+          Healthy ({'<'}70% used)
         </span>
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
-          Warning (70-90%)
+          Warning (70-90% used)
         </span>
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#ef4444" }} />
-          Critical ({'>'}90%)
+          Critical ({'>'}90% used)
         </span>
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#8b5cf6" }} />
