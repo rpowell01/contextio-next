@@ -119,7 +119,22 @@ function MetricsContent() {
       const data = await apiClient.getRateLimiterMetrics(signal);
       // Only update if this request is still the latest one
       if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
-        setRateLimiterMetrics(data);
+        // Only update state if data actually changed to avoid unnecessary re-renders
+        setRateLimiterMetrics(prev => {
+          // Compare buckets array - check length and each bucket's tokens, maxTokens, queueLength
+          if (!prev || !prev.buckets) return data;
+          const prevBuckets = prev.buckets;
+          const newBuckets = data.buckets;
+          if (prevBuckets.length !== newBuckets.length) return data;
+          for (let i = 0; i < prevBuckets.length; i++) {
+            if (prevBuckets[i].tokens !== newBuckets[i].tokens ||
+                prevBuckets[i].maxTokens !== newBuckets[i].maxTokens ||
+                prevBuckets[i].queueLength !== newBuckets[i].queueLength) {
+              return data; // Data changed
+            }
+          }
+          return prev; // Data unchanged, keep previous state
+        });
         setRateLimiterError(null);
       }
       return true;
