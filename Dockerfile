@@ -127,7 +127,7 @@ ENV CSRF_SECRET=${CSRF_SECRET}
 ENV NODE_ENV=production
 ENV CONTEXT_PROXY_BIND_HOST=0.0.0.0
 ENV CONTEXT_PROXY_PORT=4040
-ENV CONTEXT_PROXY_PLUGINS=/app/redact-plugin.js,/app/logger-plugin.js
+ENV CONTEXT_PROXY_PLUGINS=/app/redact-plugin.js,/app/logger-plugin.js,/app/rate-limiter-plugin.js
 ENV LOG_TRAFFIC=false
 ENV DEBUG_ROUTING=false
 ENV LOGGER_CAPTURE_DIR=/app/captures
@@ -224,6 +224,17 @@ RUN echo 'import { createRedactPlugin } from "@contextio/redact";' > /app/redact
     echo 'const config = policyFile ? { policyFile, reversible, captureDir } : { preset, reversible, captureDir };' >> /app/redact-plugin.js && \
     echo 'export default () => createRedactPlugin(config);' >> /app/redact-plugin.js
 
+RUN echo 'import { createRateLimiterPlugin } from "@contextio/proxy";' > /app/rate-limiter-plugin.js && \
+    echo 'const maxRequests = process.env.RATE_LIMITER_MAX_REQUESTS ? parseInt(process.env.RATE_LIMITER_MAX_REQUESTS, 10) : 60;' >> /app/rate-limiter-plugin.js && \
+    echo 'const windowMs = process.env.RATE_LIMITER_WINDOW_MS ? parseInt(process.env.RATE_LIMITER_WINDOW_MS, 10) : 60000;' >> /app/rate-limiter-plugin.js && \
+    echo 'const bufferCapacity = process.env.RATE_LIMITER_BUFFER_CAPACITY ? parseInt(process.env.RATE_LIMITER_BUFFER_CAPACITY, 10) : 10;' >> /app/rate-limiter-plugin.js && \
+    echo 'const enabled = process.env.RATE_LIMITER_ENABLED !== "false";' >> /app/rate-limiter-plugin.js && \
+    echo 'console.log("Rate limiter plugin: maxRequests =", maxRequests);' >> /app/rate-limiter-plugin.js && \
+    echo 'console.log("Rate limiter plugin: windowMs =", windowMs);' >> /app/rate-limiter-plugin.js && \
+    echo 'console.log("Rate limiter plugin: bufferCapacity =", bufferCapacity);' >> /app/rate-limiter-plugin.js && \
+    echo 'console.log("Rate limiter plugin: enabled =", enabled);' >> /app/rate-limiter-plugin.js && \
+    echo 'export default () => createRateLimiterPlugin({ defaults: { maxRequests, windowMs, bufferCapacity }, enabled });' >> /app/rate-limiter-plugin.js
+
 # Create directories at build time with proper permissions
 # This avoids permission issues when volumes are mounted by external tools like Coolify
 # Create both Next.js cache locations:
@@ -271,7 +282,7 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
 
 # Fix permissions for node user (after all files are created)
 # Only change ownership of files we control, not mounted volumes
-RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /app/default-policy.json /app/captures /app/custom-policy /home/node/.contextio-next /app/captures/.next/cache /app/packages/web/.next/cache && \
+RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/rate-limiter-plugin.js /app/start.sh /app/default-policy.json /app/captures /app/custom-policy /home/node/.contextio-next /app/captures/.next/cache /app/packages/web/.next/cache && \
     chmod +x /app/start.sh
 
 USER node

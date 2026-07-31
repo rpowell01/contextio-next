@@ -23,7 +23,7 @@ services:
       REDACT_PRESET: pii
       REDACT_CAPTURE_DIR: /app/captures
       # Plugin configuration
-      CONTEXT_PROXY_PLUGINS: /app/redact-plugin.js,/app/logger-plugin.js
+      CONTEXT_PROXY_PLUGINS: /app/redact-plugin.js,/app/logger-plugin.js,/app/rate-limiter-plugin.js
       # Web UI configuration
       NEXT_PUBLIC_SITE_URL: http://localhost:4041
       # Next.js cache directory for ISR (Incremental Static Regeneration)

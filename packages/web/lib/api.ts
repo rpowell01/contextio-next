@@ -25,14 +25,16 @@ function getApiBaseUrl(): string {
 }
 
 // Get the base URL for proxy admin API requests
-// In Docker: proxy runs on port 4040, accessible from web container
+// In Docker/combined server: proxy admin API is on the same origin as the web UI
 // In development: proxy may run on a different port or host
 function getProxyAdminBaseUrl(): string {
-  // For browser: we need absolute URL to proxy (CORS must be enabled on proxy)
-  // For server-side: we can use the configured proxy admin URL
+  // If explicitly configured, use it (handles dev mode with separate proxy)
+  if (PROXY_ADMIN_URL !== "http://localhost:4040") return PROXY_ADMIN_URL;
+  // For browser requests in combined server: use relative URLs (same origin)
   if (typeof window !== "undefined") {
-    return PROXY_ADMIN_URL;
+    return "";
   }
+  // For server-side requests: use absolute URL to localhost
   return PROXY_ADMIN_URL;
 }
 const DEFAULT_TIMEOUT = 300000; // 5 minutes
@@ -598,8 +600,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
   }
 
   async getRateLimiterMetrics(signal?: AbortSignal): Promise<RateLimiterMetrics> {
-    const baseUrl = getProxyAdminBaseUrl();
-    return this.requestWithBase(baseUrl, "/admin/rate-limiter", { signal });
+    return this.request("/api/admin/rate-limiter", { signal });
   }
 
   async getMetrics(hours: number = 24, maxPoints?: number, page?: number, pageSize?: number, signal?: AbortSignal): Promise<MetricsData> {
