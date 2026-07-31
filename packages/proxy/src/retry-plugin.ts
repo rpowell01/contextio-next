@@ -1184,7 +1184,9 @@ export class RetryPlugin implements ProxyPlugin {
             const nvidiaCheck = this.checkNvidiaResourceExhausted(streamState.errorMessage);
             if (nvidiaCheck.isError) {
               isNvidiaStreamingError = true;
-              console.debug(`[retry] NVIDIA ResourceExhausted detected in streaming: ${nvidiaCheck.message}`);
+              // Increment NVIDIA worker retry counter (same as non-streaming path)
+              this.nvidiaWorkerRetryCount++;
+              console.debug(`[retry] NVIDIA ResourceExhausted detected in streaming: ${nvidiaCheck.message} (total retries: ${this.nvidiaWorkerRetryCount})`);
             }
           }
           

@@ -86,7 +86,7 @@ function MetricsContent() {
 
   // Refs for polling
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const rateLimiterAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const requestIdRef = useRef(0);
 
@@ -214,14 +214,14 @@ function MetricsContent() {
     const runPoll = async () => {
       if (cancelled) return;
       // Abort any in-flight request from previous poll
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      if (rateLimiterAbortControllerRef.current) {
+        rateLimiterAbortControllerRef.current.abort();
       }
       // Increment request ID to track this request
       const requestId = ++requestIdRef.current;
       // Create new abort controller for this request
       const abortController = new AbortController();
-      abortControllerRef.current = abortController;
+      rateLimiterAbortControllerRef.current = abortController;
       try {
         await fetchRateLimiterMetrics(abortController.signal, requestId, isFirstPoll);
       } catch (e) {
@@ -246,9 +246,9 @@ function MetricsContent() {
         clearTimeout(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
       }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
+      if (rateLimiterAbortControllerRef.current) {
+        rateLimiterAbortControllerRef.current.abort();
+        rateLimiterAbortControllerRef.current = null;
       }
     };
   }, [fetchRateLimiterMetrics]);

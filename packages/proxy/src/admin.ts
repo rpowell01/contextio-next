@@ -402,11 +402,14 @@ case "env": {
 
               if (lastColonIndex >= 0) {
                 // Legacy or session-provider format: "sessionId:provider"
-                provider = b.key.slice(lastColonIndex + 1) || "unknown";
-                sessionId = b.key.slice(0, lastColonIndex) || "unknown";
+                // Empty sessionId (key starts with ':') should be preserved as empty string
+                const providerPart = b.key.slice(lastColonIndex + 1);
+                const sessionIdPart = b.key.slice(0, lastColonIndex);
+                provider = providerPart.length > 0 ? providerPart : "unknown";
+                sessionId = sessionIdPart; // Preserve empty string for empty sessionId
               } else {
                 // Default provider-only format: "provider" (no session isolation)
-                provider = b.key || "unknown";
+                provider = b.key.length > 0 ? b.key : "unknown";
                 sessionId = "all"; // Indicates shared across all sessions
               }
 

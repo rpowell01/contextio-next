@@ -783,43 +783,51 @@ export function createProxyHandler(
                 if (pendingRetry) {
                   // Use modified body for NVIDIA retries if available, otherwise use original
                   const bodyBuffer = pendingRetry.modifiedBodyBuffer ?? pendingRetry.originalBodyBuffer;
-                  const bodyJson = bodyBuffer === pendingRetry.modifiedBodyBuffer
-                    ? (bodyBuffer ? JSON.parse(bodyBuffer.toString("utf8")) : null)
-                    : pendingRetry.originalBodyJson;
-                  
+                  let bodyJson = pendingRetry.originalBodyJson;
+                  if (bodyBuffer === pendingRetry.modifiedBodyBuffer && bodyBuffer) {
+                    try {
+                      bodyJson = JSON.parse(bodyBuffer.toString("utf8"));
+                    } catch (parseErr) {
+                      console.error("Failed to parse modified body for streaming retry, using original:", parseErr);
+                      bodyJson = pendingRetry.originalBodyJson;
+                    }
+                  }
+
                   // Don't end the response yet - just re-issue the request
                   // The new response will replace the current one
                   // Apply retry delay before re-issuing request
                   const delayMs = pendingRetry.delayMs;
-                  if (delayMs > 0) {
-                    setTimeout(() => {
-                      if (!res.destroyed) {
-                        try {
-                          doForward({
-                            ...currentCtx,
-                            rawBody: bodyBuffer,
-                            body: bodyJson ?? currentCtx.body,
-                            captureId: pendingRetry.captureId ?? currentCtx.captureId,
-                          });
-                        } catch (err) {
-                          console.error("Streaming retry doForward error:", err);
-                        }
+                  const attemptRetry = () => {
+                    if (res.destroyed) {
+                      // Client disconnected during delay - clean up and end response
+                      console.debug("[forward] Client disconnected during streaming retry delay, ending response");
+                      if (!res.headersSent) {
+                        res.writeHead(504, { "Content-Type": "application/json" });
                       }
-                    }, delayMs);
-                  } else {
-                    if (!res.destroyed) {
-                      try {
-                        doForward({
-                          ...currentCtx,
-                          rawBody: bodyBuffer,
-                          body: bodyJson ?? currentCtx.body,
-                          captureId: pendingRetry.captureId ?? currentCtx.captureId,
-                        });
-                      } catch (err) {
-                          console.error("Streaming retry doForward error:", err);
-                        }
-                      }
+                      res.end(JSON.stringify({ error: { message: "Gateway timeout", type: "gateway_timeout" } }));
+                      return;
                     }
+                    try {
+                      doForward({
+                        ...currentCtx,
+                        rawBody: bodyBuffer,
+                        body: bodyJson ?? currentCtx.body,
+                        captureId: pendingRetry.captureId ?? currentCtx.captureId,
+                      });
+                    } catch (err) {
+                      console.error("Streaming retry doForward error:", err);
+                      // If doForward throws synchronously, end the response
+                      if (!res.headersSent) {
+                        res.writeHead(500, { "Content-Type": "application/json" });
+                      }
+                      res.end(JSON.stringify({ error: { message: "Internal server error", type: "internal_error" } }));
+                    }
+                  };
+                  if (delayMs > 0) {
+                    setTimeout(attemptRetry, delayMs);
+                  } else {
+                    attemptRetry();
+                  }
                   return;
                 }
               }
