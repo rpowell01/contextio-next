@@ -14,6 +14,7 @@ import {
   Tooltip,
   ReferenceLine,
   Label,
+  Cell,
 } from "recharts";
 import { Copy, Loader2 } from "lucide-react";
 
@@ -32,6 +33,8 @@ interface ChartDataPoint {
   queueLength: number;
   provider?: string;
   sessionId?: string;
+  utilizationPercent: number;
+  status: "healthy" | "warning" | "critical" | "queued";
 }
 
 /**
@@ -39,7 +42,6 @@ interface ChartDataPoint {
  * and taking the min value in each group (to preserve most constrained buckets).
  */
 function downsampleData(data: ChartDataPoint[], maxPoints: number): ChartDataPoint[] {
-  // If maxPoints <= 0, return all data (unlimited)
   if (maxPoints <= 0 || data.length <= maxPoints) return data;
 
   const step = Math.ceil(data.length / maxPoints);
@@ -47,12 +49,28 @@ function downsampleData(data: ChartDataPoint[], maxPoints: number): ChartDataPoi
 
   for (let i = 0; i < data.length; i += step) {
     const chunk = data.slice(i, i + step);
-    // Use the bucket with min tokens to preserve most constrained (worst-case)
     const minItem = chunk.reduce((min, item) => (item.tokens < min.tokens ? item : min), chunk[0]);
     result.push(minItem);
   }
 
   return result;
+}
+
+function getStatus(tokens: number, maxTokens: number, queueLength: number): ChartDataPoint["status"] {
+  if (queueLength > 0) return "queued";
+  const utilization = 1 - tokens / maxTokens;
+  if (utilization >= 0.9) return "critical";
+  if (utilization >= 0.7) return "warning";
+  return "healthy";
+}
+
+function getStatusColor(status: ChartDataPoint["status"]): string {
+  switch (status) {
+    case "critical": return "#ef4444";
+    case "warning": return "#f59e0b";
+    case "queued": return "#8b5cf6";
+    default: return "#22c55e";
+  }
 }
 
 export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 }: RateLimiterChartProps) {
@@ -61,28 +79,34 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
 
   const chartData = useMemo(() => {
     const raw = buckets.map((bucket) => {
-      // Use provider and sessionId from API response (already parsed by backend)
+      const maxTokens = bucket.maxTokens;
+      const utilizationPercent = maxTokens > 0 ? Math.round((1 - bucket.tokens / maxTokens) * 100) : 0;
       return {
         key: bucket.key,
-        displayKey: bucket.key.length > 30 ? bucket.key.slice(0, 27) + "..." : bucket.key,
+        displayKey: bucket.key.length > 35 ? bucket.key.slice(0, 32) + "..." : bucket.key,
         tokens: bucket.tokens,
-        maxTokens: bucket.maxTokens,
+        maxTokens,
         bufferCapacity: bucket.bufferCapacity,
         queueLength: bucket.queueLength,
         provider: bucket.provider ?? "unknown",
         sessionId: bucket.sessionId ?? "unknown",
+        utilizationPercent,
+        status: getStatus(bucket.tokens, maxTokens, bucket.queueLength),
       };
     });
 
-    // Sort by tokens ascending (most constrained first) - create a copy to avoid mutation
-    const sorted = [...raw].sort((a, b) => a.tokens - b.tokens);
+    // Sort by utilization (most constrained first), then by queue length
+    const sorted = [...raw].sort((a, b) => {
+      if (a.queueLength !== b.queueLength) return b.queueLength - a.queueLength;
+      return b.utilizationPercent - a.utilizationPercent;
+    });
 
     return downsampleData(sorted, maxDataPoints);
   }, [buckets, maxDataPoints]);
 
   const copyToClipboard = async () => {
     try {
-      const dataToCopy = chartData.map(({ key, tokens, maxTokens, bufferCapacity, queueLength, provider, sessionId }) => ({
+      const dataToCopy = chartData.map(({ key, tokens, maxTokens, bufferCapacity, queueLength, provider, sessionId, utilizationPercent, status }) => ({
         key,
         tokens,
         maxTokens,
@@ -90,24 +114,21 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
         queueLength,
         provider,
         sessionId,
+        utilizationPercent,
+        status,
       }));
       await navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
       setCopied(true);
-      if (copyTimeoutRef.current) {
-        clearTimeout(copyTimeoutRef.current);
-      }
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
       copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       // Silently fail
     }
   };
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (copyTimeoutRef.current) {
-        clearTimeout(copyTimeoutRef.current);
-      }
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     };
   }, []);
 
@@ -130,13 +151,14 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
     );
   }
 
-  // Calculate max token value for Y axis (maxTokens already includes buffer capacity)
-  // Ensure minimum of 1 to prevent Recharts domain edge case [0, 0]
   const maxTokenValue = Math.max(1, Math.max(...chartData.map((d) => d.maxTokens)));
+  const queuedCount = chartData.filter(d => d.queueLength > 0).length;
+  const criticalCount = chartData.filter(d => d.status === "critical").length;
+  const warningCount = chartData.filter(d => d.status === "warning").length;
 
   return (
     <div className="w-full">
-      <div className="flex justify-between items-center mb-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <button
           onClick={copyToClipboard}
           className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-muted"
@@ -146,121 +168,217 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
           <Copy className="h-4 w-4" />
           {copied ? "Copied" : "Copy"}
         </button>
-        {isDownsampled && (
-          <span className="text-xs text-muted-foreground">
-            Showing {chartData.length} of {buckets.length} buckets (min-sampled)
+        <div className="flex items-center gap-4 text-xs">
+          <span className="flex items-center gap-1" title={`${criticalCount} critical`}>
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#ef4444" }} />
+            {criticalCount}
           </span>
-        )}
+          <span className="flex items-center gap-1" title={`${warningCount} warning`}>
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
+            {warningCount}
+          </span>
+          <span className="flex items-center gap-1" title={`${queuedCount} queued`}>
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#8b5cf6" }} />
+            {queuedCount}
+          </span>
+          {isDownsampled && (
+            <span className="text-muted-foreground">
+              Showing {chartData.length} of {buckets.length} buckets (min-sampled)
+            </span>
+          )}
+        </div>
       </div>
 
-      <div
-        id="rate-limiter-chart-description"
-        className="sr-only"
-      >
+      <div id="rate-limiter-chart-description" className="sr-only">
         Horizontal bar chart displaying token bucket states per session/provider.
-        Blue bars show available tokens. Red dashed reference line indicates the
-        total capacity (max requests + buffer). Hover bars for exact values and
-        session/provider details.
+        Bars colored by utilization: green (healthy), amber (warning), red (critical), violet (queued).
+        Hover bars for exact values and session/provider details.
       </div>
 
       <div className="max-h-[600px] overflow-y-auto">
         <ResponsiveContainer width="100%" height={Math.min(600, Math.max(300, chartData.length * 30 + 100))}>
-        <BarChart
-          data={chartData}
-          aria-labelledby="rate-limiter-chart-description"
-          role="img"
-          layout="vertical"
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
-          
-          {/* X Axis - Token values */}
-          <XAxis
-            type="number"
-            label={{
-              value: "Tokens",
-              position: "outsideBottom",
-              offset: 80,
-              style: { textAnchor: "middle", fill: "#333" },
-            }}
-            tick={{ fill: "#333", fontSize: 12 }}
-            tickLine={{ stroke: "#666" }}
-            axisLine={{ stroke: "#666" }}
-            tickFormatter={(value) => formatNumber(value)}
-            domain={[0, maxTokenValue * 1.1]}
-          />
-          
-          {/* Y Axis - Bucket keys */}
-          <YAxis
-            dataKey="displayKey"
-            type="category"
-            width={200}
-            label={{
-              value: "Session:Provider",
-              position: "outsideLeft",
-              offset: 30,
-              style: { textAnchor: "middle", fill: "#333" },
-            }}
-            tick={{ fill: "#333", fontSize: 11 }}
-            tickLine={{ stroke: "#666" }}
-            axisLine={{ stroke: "#666" }}
-          />
-          
-          <Tooltip
-            formatter={(value: number, name: string) => [formatNumber(value), name]}
-            labelFormatter={(label, payload) => {
-              if (payload && payload.length > 0 && payload[0].payload) {
-                const p = payload[0].payload;
-                return `${p.provider} | Session: ${p.sessionId} | Key: ${p.key}`;
+          <BarChart
+            data={chartData}
+            aria-labelledby="rate-limiter-chart-description"
+            role="img"
+            layout="vertical"
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            
+            {/* X Axis - Token values */}
+            <XAxis
+              type="number"
+              label={{
+                value: "Tokens Available / Total Capacity",
+                position: "outsideBottom",
+                offset: 80,
+                style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+              }}
+              tick={{ fill: "#666", fontSize: 11 }}
+              tickLine={{ stroke: "#999" }}
+              axisLine={{ stroke: "#999" }}
+              tickFormatter={(value) => formatNumber(value)}
+              domain={[0, maxTokenValue * 1.15]}
+            />
+            
+            {/* Y Axis - Bucket keys */}
+            <YAxis
+              dataKey="displayKey"
+              type="category"
+              width={220}
+              label={{
+                value: "Session : Provider",
+                position: "outsideLeft",
+                offset: 30,
+                style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+              }}
+              tick={{ fill: "#333", fontSize: 10 }}
+              tickLine={{ stroke: "#999" }}
+              axisLine={{ stroke: "#999" }}
+            />
+            
+            <Tooltip
+              formatter={(value: number, name: string) => [formatNumber(value), name]}
+              labelFormatter={(label, payload) => {
+                if (payload && payload.length > 0 && payload[0].payload) {
+                  const p = payload[0].payload;
+                  const used = p.maxTokens - p.tokens;
+                  return `${p.provider} | Session: ${p.sessionId} | ${used}/${p.maxTokens} used (${p.utilizationPercent}%)`;
+                }
+                return `Bucket: ${label}`;
+              }}
+              contentStyle={{
+                backgroundColor: "rgba(255, 255, 255, 0.98)",
+                border: "1px solid #ddd",
+                borderRadius: "8px",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              }}
+              cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+            />
+            
+            <Legend
+              verticalAlign="top"
+              align="center"
+              iconSize={12}
+              wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
+            />
+            
+            {/* Used tokens (colored by status) */}
+            <Bar
+              dataKey="tokens"
+              name="Available"
+              stackId="tokens"
+              fill="#3b82f6"
+              stroke="#1d4ed8"
+              strokeDasharray="4 4"
+              strokeWidth={1}
+              opacity={0.85}
+              radius={[0, 4, 4, 0]}
+              aria-label="Available tokens"
+            >
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} />
+              ))}
+            </Bar>
+            
+            {/* Used tokens (remainder to fill to maxTokens) */}
+            <Bar
+              dataKey="maxTokens"
+              name="Capacity"
+              stackId="tokens"
+              fill="transparent"
+              stroke="transparent"
+            />
+            
+            {/* Buffer capacity indicator */}
+            <Bar
+              dataKey="bufferCapacity"
+              name="Buffer"
+              stackId="buffer"
+              fill="#8b5cf6"
+              opacity={0.3}
+              radius={[0, 4, 4, 0]}
+            />
+            
+            {/* Total capacity reference line (maxTokens includes buffer in the API) */}
+            <ReferenceLine
+              x={maxTokenValue}
+              stroke="#6b7280"
+              strokeWidth={1.5}
+              strokeDasharray="5 5"
+              label={
+                <Label
+                  value="Total Capacity"
+                  position="center"
+                  fill="#6b7280"
+                  fontSize={10}
+                  fontWeight={600}
+                  offset={10}
+                />
               }
-              return `Bucket: ${label}`;
-            }}
-            contentStyle={{
-              backgroundColor: "rgba(255, 255, 255, 0.95)",
-              border: "1px solid #ccc",
-            }}
-            cursor={{ fill: "rgba(0, 0, 0, 0.1)" }}
-          />
-          
-          <Legend
-            verticalAlign="top"
-            align="center"
-            iconSize={12}
-            wrapperStyle={{ fontSize: 12, fontWeight: 500 }}
-          />
-          
-          {/* Available tokens (blue) */}
-          <Bar
-            dataKey="tokens"
-            name="Available Tokens"
-            fill="#3b82f6"
-            stroke="#1d4ed8"
-            strokeDasharray="4 4"
-            strokeWidth={1}
-            opacity={0.85}
-            radius={[0, 4, 4, 0]}
-            aria-label="Available tokens"
-          />
-          
-          {/* Total capacity reference line */}
-          <ReferenceLine
-            x={maxTokenValue}
-            stroke="#ef4444"
-            strokeWidth={2}
-            strokeDasharray="5 5"
-            label={
-              <Label
-                value="Total Capacity (Max + Buffer)"
-                position="center"
-                fill="#ef4444"
-                fontSize={11}
-                fontWeight={600}
-                offset={10}
-              />
-            }
-          />
-        </BarChart>
-      </ResponsiveContainer>
+            />
+            
+            {/* 70% utilization warning line */}
+            <ReferenceLine
+              x={maxTokenValue * 0.3}
+              stroke="#f59e0b"
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              label={
+                <Label
+                  value="70% Utilization"
+                  position="center"
+                  fill="#f59e0b"
+                  fontSize={9}
+                  offset={10}
+                />
+              }
+            />
+            
+            {/* 90% utilization critical line */}
+            <ReferenceLine
+              x={maxTokenValue * 0.1}
+              stroke="#ef4444"
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              label={
+                <Label
+                  value="90% Utilization"
+                  position="center"
+                  fill="#ef4444"
+                  fontSize={9}
+                  offset={10}
+                />
+              }
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Legend / Status Guide */}
+      <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1 font-medium">Status:</span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#22c55e" }} />
+          Healthy ({'<'}70%)
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
+          Warning (70-90%)
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#ef4444" }} />
+          Critical ({'>'}90%)
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#8b5cf6" }} />
+          Queued
+        </span>
+        <span className="flex items-center gap-1 ml-auto">
+          <span className="w-6 h-1.5" style={{ background: "linear-gradient(90deg, transparent 50%, #8b5cf633 50%)", backgroundSize: "4px 100%" }} />
+          Buffer
+        </span>
+      </div>
     </div>
-  </div>
   );
 }
