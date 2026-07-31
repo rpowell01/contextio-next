@@ -287,30 +287,6 @@ function MetricsContent() {
         )}
         {rateLimiterMetrics && rateLimiterMetrics.config.enabled && (
           <div className="space-y-4">
-            {/* Config Summary */}
-            <div className="grid gap-4 md:grid-cols-5">
-              <div className="rounded-lg border p-4">
-                <div className="text-sm text-muted-foreground">Max Requests</div>
-                <div className="text-2xl font-bold">{formatNumber(rateLimiterMetrics.config.maxRequests)}</div>
-              </div>
-              <div className="rounded-lg border p-4">
-                <div className="text-sm text-muted-foreground">Window (ms)</div>
-                <div className="text-2xl font-bold">{formatNumber(rateLimiterMetrics.config.windowMs)}</div>
-              </div>
-              <div className="rounded-lg border p-4">
-                <div className="text-sm text-muted-foreground">Buffer Capacity</div>
-                <div className="text-2xl font-bold">{formatNumber(rateLimiterMetrics.config.bufferCapacity)}</div>
-              </div>
-              <div className="rounded-lg border p-4">
-                <div className="text-sm text-muted-foreground">Active Buckets</div>
-                <div className="text-2xl font-bold">{formatNumber(sortedBuckets.length)}</div>
-              </div>
-              <div className="rounded-lg border p-4">
-                <div className="text-sm text-muted-foreground">Queued Requests</div>
-                <div className="text-2xl font-bold text-orange-600">{formatNumber(rateLimiterMetrics.totalQueued)}</div>
-              </div>
-            </div>
-
             {/* Chart */}
             <div className="rounded-lg border p-4">
               <h4 className="text-md font-medium mb-3">Token Bucket States</h4>
