@@ -321,16 +321,6 @@ function MetricsContent() {
         )}
         {rateLimiterMetrics && rateLimiterMetrics.config.enabled && (
           <div className="space-y-4">
-            {/* NVIDIA Worker Retry Counter */}
-            <div className={`rounded-lg border p-4 ${rateLimiterMetrics.nvidiaWorkerRetryCount && rateLimiterMetrics.nvidiaWorkerRetryCount > 0 ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-gray-700">NVIDIA Worker Retries:</span>
-                <span className={`font-mono text-lg font-bold ${rateLimiterMetrics.nvidiaWorkerRetryCount && rateLimiterMetrics.nvidiaWorkerRetryCount > 0 ? 'text-amber-700' : 'text-gray-500'}`}>
-                  {rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0}
-                </span>
-                <span className="text-sm text-gray-500">("continue" retries for ResourceExhausted limit reached)</span>
-              </div>
-            </div>
             {/* Chart */}
             <div className="rounded-lg border p-4">
               <h4 className="text-md font-medium mb-3">Request Bucket States</h4>
@@ -350,12 +340,14 @@ function MetricsContent() {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left p-2 font-medium">Key</th>
+                        <th className="text-right p-2 font-medium">Total Current Requests / Window</th>
                         <th className="text-right p-2 font-medium">Requests Remaining</th>
                         <th className="text-right p-2 font-medium">Max Requests</th>
                         <th className="text-right p-2 font-medium">Buffer Capacity</th>
                         <th className="text-right p-2 font-medium">Queue</th>
                         <th className="text-left p-2 font-medium">Provider</th>
                         <th className="text-left p-2 font-medium">Scope</th>
+                        <th className="text-right p-2 font-medium">NVIDIA Worker Retries</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -364,6 +356,7 @@ function MetricsContent() {
                             <td className="p-2 font-mono text-xs truncate max-w-xs" title={bucket.key}>
                               {bucket.key}
                             </td>
+                            <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.maxTokens)}</td>
                             <td className="p-2 text-right">
                               <span className={bucket.tokens < 5 ? "text-destructive font-medium" : ""}>
                                 {formatNumber(bucket.tokens)}
@@ -385,6 +378,15 @@ function MetricsContent() {
                                 </span>
                               ) : (
                                 bucket.sessionId ?? "unknown"
+                              )}
+                            </td>
+                            <td className="p-2 text-right">
+                              {bucket.provider === "nvidia" && (rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0) > 0 ? (
+                                <span className="font-mono font-bold text-amber-700">
+                                  {rateLimiterMetrics.nvidiaWorkerRetryCount}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">0</span>
                               )}
                             </td>
                           </tr>
