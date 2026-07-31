@@ -6,7 +6,7 @@
  * and signaling retries through special response codes.
  */
 
-import type { ProxyPlugin, RequestContext, ResponseContext, HeaderMap, JsonValue, Provider, RetryConfig as CoreRetryConfig } from "@contextio/core";
+import type { ProxyPlugin, RequestContext, ResponseContext, HeaderMap, JsonValue, JsonObject, Provider, RetryConfig as CoreRetryConfig } from "@contextio/core";
 
 /**
  * Internal retry config with enabled flag.
@@ -503,6 +503,64 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Check if a data field string contains NVIDIA ResourceExhausted error.
+   * NVIDIA returns 200 OK with error in response body:
+   * { "error": { "code": "ResourceExhausted", "message": "Worker local total request limit reached (32/32)" } }
+   */
+  private checkNvidiaResourceExhausted(responseBody: string): { isError: boolean; message: string | null } {
+    if (!responseBody) return { isError: false, message: null };
+    
+    try {
+      const parsed = JSON.parse(responseBody);
+      
+      // Check for NVIDIA error format: { error: { code: "ResourceExhausted", message: "..." } }
+      if (parsed.error && parsed.error.code === "ResourceExhausted") {
+        const message = parsed.error.message ?? "ResourceExhausted";
+        if (message.includes("Worker local total request limit reached")) {
+          return { isError: true, message };
+        }
+      }
+      
+      // Also check for alternative format: { code: "ResourceExhausted", message: "..." }
+      if (parsed.code === "ResourceExhausted" && parsed.message?.includes("Worker local total request limit reached")) {
+        return { isError: true, message: parsed.message };
+      }
+      
+    } catch {
+      // Not valid JSON, not an error we can parse
+    }
+    
+    return { isError: false, message: null };
+  }
+
+  /**
+   * Append "continue" message to the request body's messages array for NVIDIA retry.
+   * Returns the modified body as a Buffer, or null if the body structure is not compatible.
+   */
+  private appendContinueMessage(originalBodyJson: JsonValue | null): Buffer | null {
+    if (!originalBodyJson || typeof originalBodyJson !== 'object' || Array.isArray(originalBodyJson)) {
+      return null;
+    }
+    
+    const body = originalBodyJson as JsonObject;
+    
+    // Check if body has messages array (OpenAI chat completions format)
+    if (!body.messages || !Array.isArray(body.messages)) {
+      return null;
+    }
+    
+    // Create a deep copy of the body and append "continue" message
+    const modifiedBody: JsonObject = { ...body };
+    modifiedBody.messages = [...body.messages, { role: "user", content: "continue" }];
+    
+    try {
+      return Buffer.from(JSON.stringify(modifiedBody), "utf8");
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Get the storage key for a request (captureId or requestId).
    */
   private getStorageKey(captureId: string | undefined, requestId: string): string {
@@ -692,16 +750,59 @@ export class RetryPlugin implements ProxyPlugin {
 
     // Check if status code indicates success (less than 400)
     if (ctx.status < 400 && !ctx.isStreaming) {
-      // Successful non-streaming response - clean up request store and stream state
-      this.requestStore.delete(storageKey);
-      if (ctx.sessionId) {
-        this.streamState.delete(ctx.sessionId);
+      // Check for NVIDIA ResourceExhausted error in response body (returns 200 with error in body)
+      let nvidiaErrorDetected = false;
+      let nvidiaErrorMessage: string | null = null;
+      
+      if (entry.provider === "nvidia" && ctx.body) {
+        const nvidiaError = this.checkNvidiaResourceExhausted(ctx.body);
+        if (nvidiaError.isError) {
+          nvidiaErrorDetected = true;
+          nvidiaErrorMessage = nvidiaError.message;
+          console.debug(`[retry] NVIDIA ResourceExhausted detected: ${nvidiaErrorMessage}`);
+        }
       }
-      return ctx;
+      
+      if (!nvidiaErrorDetected) {
+        // Successful non-streaming response - clean up request store and stream state
+        this.requestStore.delete(storageKey);
+        if (ctx.sessionId) {
+          this.streamState.delete(ctx.sessionId);
+        }
+        return ctx;
+      }
+      // If NVIDIA error detected, fall through to retry logic below
     }
 
-    // Check if status code is retryable
-    if (!this.isRetryableStatus(ctx.status, config)) {
+    // Check if status code indicates success (less than 400)
+    if (ctx.status < 400 && !ctx.isStreaming) {
+      // Check for NVIDIA ResourceExhausted error in response body (returns 200 with error in body)
+      let nvidiaErrorDetected = false;
+      let nvidiaErrorMessage: string | null = null;
+      
+      if (entry.provider === "nvidia" && ctx.body) {
+        const nvidiaError = this.checkNvidiaResourceExhausted(ctx.body);
+        if (nvidiaError.isError) {
+          nvidiaErrorDetected = true;
+          nvidiaErrorMessage = nvidiaError.message;
+          console.debug(`[retry] NVIDIA ResourceExhausted detected: ${nvidiaErrorMessage}`);
+        }
+      }
+      
+      if (!nvidiaErrorDetected) {
+        // Successful non-streaming response - clean up request store and stream state
+        this.requestStore.delete(storageKey);
+        if (ctx.sessionId) {
+          this.streamState.delete(ctx.sessionId);
+        }
+        return ctx;
+      }
+      // If NVIDIA error detected, fall through to retry logic below
+    }
+
+    // Check if status code is retryable OR if it's a NVIDIA ResourceExhausted error
+    const isNvidiaErrorRetry = entry.provider === "nvidia" && ctx.status < 400;
+    if (!this.isRetryableStatus(ctx.status, config) && !isNvidiaErrorRetry) {
       // Not retryable - clean up request store
       // Only clean up for non-streaming responses (streaming handled in onStreamEnd)
       if (!ctx.isStreaming) {
@@ -754,6 +855,22 @@ export class RetryPlugin implements ProxyPlugin {
       retryCount: retryCount + 1,
     });
 
+    // For NVIDIA ResourceExhausted errors, create modified body with "continue" message
+    let modifiedBodyBuffer: Buffer | null = null;
+    if (isNvidiaErrorRetry) {
+      modifiedBodyBuffer = this.appendContinueMessage(entry.originalBodyJson);
+      if (modifiedBodyBuffer) {
+        // Store modified body for retry
+        this.setEntry(storageKey, {
+          ...entry,
+          retryCount: retryCount + 1,
+          // @ts-ignore - adding modified body for NVIDIA retry
+          modifiedBodyForRetry: modifiedBodyBuffer,
+        });
+        console.debug(`[retry] NVIDIA ResourceExhausted: created modified request body with "continue" message`);
+      }
+    }
+
     // Apply delay before signaling retry
     if (delayMs > 0) {
       await this.delay(delayMs);
@@ -770,6 +887,11 @@ export class RetryPlugin implements ProxyPlugin {
     // Also propagate captureId if we have it
     if (entry.captureId) {
       responseHeaders["x-contextio-capture-id"] = entry.captureId;
+    }
+    
+    // For NVIDIA ResourceExhausted errors, indicate modified body is available
+    if (isNvidiaErrorRetry) {
+      responseHeaders["x-retry-modified-body"] = "true";
     }
 
     return {
@@ -1028,6 +1150,17 @@ export class RetryPlugin implements ProxyPlugin {
       if (entry) {
         const config = this.getConfigForProvider(entry.provider);
         if (entry.retryCount < config.maxRetries) {
+          // Check if this is a NVIDIA ResourceExhausted error in the SSE data
+          let isNvidiaStreamingError = false;
+          if (entry.provider === "nvidia" && streamState.errorStatus === null && streamState.errorMessage) {
+            // Check if the error message indicates NVIDIA ResourceExhausted
+            if (streamState.errorMessage.includes("ResourceExhausted") && 
+                streamState.errorMessage.includes("Worker local total request limit reached")) {
+              isNvidiaStreamingError = true;
+              console.debug(`[retry] NVIDIA ResourceExhausted detected in streaming: ${streamState.errorMessage}`);
+            }
+          }
+          
           // Calculate delay for this retry
           let delayMs = this.calculateDelay(entry.retryCount, config);
           
@@ -1041,6 +1174,8 @@ export class RetryPlugin implements ProxyPlugin {
           this.setEntry(storageKey, {
             ...entry,
             retryCount: entry.retryCount + 1,
+            // @ts-ignore - adding modified body for NVIDIA streaming retry
+            modifiedBodyForRetry: isNvidiaStreamingError ? this.appendContinueMessage(entry.originalBodyJson) : undefined,
           });
           
           // Store pending retry info for forward.ts to consume
@@ -1103,6 +1238,16 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Get the modified request body buffer for NVIDIA retry (if available).
+   * Can look up by captureId or requestId.
+   */
+  getModifiedBodyForRetry(key: string): Buffer | undefined {
+    const entry = this.requestStore.get(key);
+    // @ts-ignore - custom property for NVIDIA retry
+    return entry?.modifiedBodyForRetry;
+  }
+
+  /**
    * Get streaming error state for testing/inspection.
    * Returns the detected error info for a streaming session, if any.
    * Can look up by sessionId.
@@ -1129,6 +1274,7 @@ export class RetryPlugin implements ProxyPlugin {
     originalBodyBuffer: Buffer;
     originalBodyJson: JsonValue | null;
     delayMs: number;
+    modifiedBodyBuffer?: Buffer;
   } | null {
     if (!sessionId) return null;
     
@@ -1155,6 +1301,8 @@ export class RetryPlugin implements ProxyPlugin {
     // Refresh requestStore entry timestamp to prevent premature eviction during retry delay
     const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
     const entry = this.requestStore.get(storageKey);
+    // @ts-ignore - custom property for NVIDIA retry
+    const modifiedBodyBuffer = entry?.modifiedBodyForRetry;
     if (entry) {
       entry.lastAccessed = Date.now();
     }
@@ -1167,6 +1315,7 @@ export class RetryPlugin implements ProxyPlugin {
       originalBodyBuffer: pendingRetry.originalBodyBuffer,
       originalBodyJson: pendingRetry.originalBodyJson,
       delayMs: pendingRetry.delayMs,
+      modifiedBodyBuffer,
     };
   }
 
@@ -1221,6 +1370,7 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getRequestBodyJson: (key: string) => plugin.getRequestBodyJsonForTesting(key),
     getRequestHeaders: (key: string) => plugin.getRequestHeadersForTesting(key),
     getRetryCount: (key: string) => plugin.getRetryCountForTesting(key),
+    getModifiedBodyForRetry: (key: string) => plugin.getModifiedBodyForRetry(key),
     getStreamError: (sessionId: string) => plugin.getStreamErrorForTesting(sessionId),
     getAndConsumePendingStreamRetry: (sessionId: string | null) => plugin.getAndConsumePendingStreamRetry(sessionId),
     clear: () => plugin.clearForTesting(),

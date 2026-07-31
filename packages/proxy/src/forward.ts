@@ -781,6 +781,12 @@ export function createProxyHandler(
                     ? (retryPlugin as any)._internal.getAndConsumePendingStreamRetry(sessionId)
                     : null;
                 if (pendingRetry) {
+                  // Use modified body for NVIDIA retries if available, otherwise use original
+                  const bodyBuffer = pendingRetry.modifiedBodyBuffer ?? pendingRetry.originalBodyBuffer;
+                  const bodyJson = bodyBuffer === pendingRetry.modifiedBodyBuffer
+                    ? (bodyBuffer ? JSON.parse(bodyBuffer.toString("utf8")) : null)
+                    : pendingRetry.originalBodyJson;
+                  
                   // Don't end the response yet - just re-issue the request
                   // The new response will replace the current one
                   // Apply retry delay before re-issuing request
@@ -791,8 +797,8 @@ export function createProxyHandler(
                         try {
                           doForward({
                             ...currentCtx,
-                            rawBody: pendingRetry.originalBodyBuffer,
-                            body: pendingRetry.originalBodyJson ?? currentCtx.body,
+                            rawBody: bodyBuffer,
+                            body: bodyJson ?? currentCtx.body,
                             captureId: pendingRetry.captureId ?? currentCtx.captureId,
                           });
                         } catch (err) {
@@ -805,15 +811,15 @@ export function createProxyHandler(
                       try {
                         doForward({
                           ...currentCtx,
-                          rawBody: pendingRetry.originalBodyBuffer,
-                          body: pendingRetry.originalBodyJson ?? currentCtx.body,
+                          rawBody: bodyBuffer,
+                          body: bodyJson ?? currentCtx.body,
                           captureId: pendingRetry.captureId ?? currentCtx.captureId,
                         });
-                    } catch (err) {
-                        console.error("Streaming retry doForward error:", err);
+                      } catch (err) {
+                          console.error("Streaming retry doForward error:", err);
+                        }
                       }
                     }
-                  }
                   return;
                 }
               }
@@ -941,18 +947,33 @@ export function createProxyHandler(
                         if (retryId || captureId) {
                           const retryPlugin = plugins.find((p) => p.name === "retry");
                           if (retryPlugin && (retryPlugin as any)._internal?.getRequestBody) {
-                            // Try lookup by retryId first (backward compatibility), then by captureId
-                            const originalBodyBuffer = (retryPlugin as any)._internal.getRequestBody(retryId || "") ??
-                              (captureId ? (retryPlugin as any)._internal.getRequestBody(captureId) : undefined);
-                            const originalBodyJson = (retryPlugin as any)._internal.getRequestBodyJson?.(retryId || "") ??
-                              (captureId ? (retryPlugin as any)._internal.getRequestBodyJson?.(captureId) : undefined);
-                            if (originalBodyBuffer) {
-                              // Create new context with original body for retry
+                            // Check if this is a NVIDIA ResourceExhausted retry (modified body available)
+                            const hasModifiedBodyHeader = finalCtx.headers["x-retry-modified-body"] === "true";
+                            let bodyBuffer: Buffer | undefined;
+                            let bodyJson: JsonValue | undefined;
+                            
+                            if (hasModifiedBodyHeader && (retryPlugin as any)._internal?.getModifiedBodyForRetry) {
+                              // Use modified body with "continue" message for NVIDIA retry
+                              bodyBuffer = (retryPlugin as any)._internal.getModifiedBodyForRetry(retryId || "") ??
+                                (captureId ? (retryPlugin as any)._internal.getModifiedBodyForRetry(captureId) : undefined);
+                              // Also get the JSON version if available
+                              bodyJson = bodyBuffer ? JSON.parse(bodyBuffer.toString("utf8")) : undefined;
+                              console.debug(`[forward] Using modified body with "continue" for NVIDIA retry`);
+                            } else {
+                              // Use original body for standard retries
+                              bodyBuffer = (retryPlugin as any)._internal.getRequestBody(retryId || "") ??
+                                (captureId ? (retryPlugin as any)._internal.getRequestBody(captureId) : undefined);
+                              bodyJson = (retryPlugin as any)._internal.getRequestBodyJson?.(retryId || "") ??
+                                (captureId ? (retryPlugin as any)._internal.getRequestBodyJson?.(captureId) : undefined);
+                            }
+                            
+                            if (bodyBuffer) {
+                              // Create new context with body for retry
                               // Also ensure captureId is propagated so retry request has it in ctx.captureId
                               retryCtx = {
                                 ...currentCtx,
-                                rawBody: originalBodyBuffer,
-                                body: originalBodyJson ?? currentCtx.body,
+                                rawBody: bodyBuffer,
+                                body: bodyJson ?? currentCtx.body,
                                 captureId: captureId ?? currentCtx.captureId,
                               };
                             }
