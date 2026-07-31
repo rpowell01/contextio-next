@@ -24,6 +24,10 @@ services:
       REDACT_CAPTURE_DIR: /app/captures
       # Plugin configuration
       CONTEXT_PROXY_PLUGINS: /app/redact-plugin.js,/app/logger-plugin.js,/app/rate-limiter-plugin.js
+      RATE_LIMITER_ENABLED: "true"
+      RATE_LIMITER_MAX_REQUESTS: "60"
+      RATE_LIMITER_WINDOW_MS: "60000"
+      RATE_LIMITER_BUFFER_CAPACITY: "10"
       # Web UI configuration
       NEXT_PUBLIC_SITE_URL: http://localhost:4041
       # Next.js cache directory for ISR (Incremental Static Regeneration)

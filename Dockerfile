@@ -276,6 +276,19 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'NEXT_CACHE="${NEXT_CACHE_DIR:-/app/captures/.next/cache}"' >> /app/start.sh && \
     echo 'mkdir -p "$NEXT_CACHE" /app/packages/web/.next/cache' >> /app/start.sh && \
     echo 'chmod 755 "$NEXT_CACHE" /app/packages/web/.next/cache 2>/dev/null || true' >> /app/start.sh && \
+    echo '# Create rate-limiter plugin at runtime with actual env vars' >> /app/start.sh && \
+    echo 'cat > /app/rate-limiter-plugin.js << '"'"'EOF'"'"'' >> /app/start.sh && \
+    echo 'import { createRateLimiterPlugin } from "@contextio/proxy";' >> /app/start.sh && \
+    echo 'const maxRequests = process.env.RATE_LIMITER_MAX_REQUESTS ? parseInt(process.env.RATE_LIMITER_MAX_REQUESTS, 10) : 60;' >> /app/start.sh && \
+    echo 'const windowMs = process.env.RATE_LIMITER_WINDOW_MS ? parseInt(process.env.RATE_LIMITER_WINDOW_MS, 10) : 60000;' >> /app/start.sh && \
+    echo 'const bufferCapacity = process.env.RATE_LIMITER_BUFFER_CAPACITY ? parseInt(process.env.RATE_LIMITER_BUFFER_CAPACITY, 10) : 10;' >> /app/start.sh && \
+    echo 'const enabled = process.env.RATE_LIMITER_ENABLED !== "false";' >> /app/start.sh && \
+    echo 'console.log("Rate limiter plugin: maxRequests =", maxRequests);' >> /app/start.sh && \
+    echo 'console.log("Rate limiter plugin: windowMs =", windowMs);' >> /app/start.sh && \
+    echo 'console.log("Rate limiter plugin: bufferCapacity =", bufferCapacity);' >> /app/start.sh && \
+    echo 'console.log("Rate limiter plugin: enabled =", enabled);' >> /app/start.sh && \
+    echo 'export default () => createRateLimiterPlugin({ defaults: { maxRequests, windowMs, bufferCapacity }, enabled });' >> /app/start.sh && \
+    echo 'EOF' >> /app/start.sh && \
     echo 'echo "Starting ContextIO-Next (Proxy + Web UI) on port 4040..."' >> /app/start.sh && \
     echo 'node dist/combined-entry.js' >> /app/start.sh && \
     chmod +x /app/start.sh
