@@ -112,9 +112,11 @@ function MetricsContent() {
   }, [timeRange, maxDataPoints, page, pageSize, registerPageLoad, registerPageReady]);
 
   // Fetch rate limiter metrics
-  const fetchRateLimiterMetrics = useCallback(async (signal?: AbortSignal, requestId?: number): Promise<boolean> => {
+  const fetchRateLimiterMetrics = useCallback(async (signal?: AbortSignal, requestId?: number, isInitialLoad = false): Promise<boolean> => {
     if (!isMountedRef.current) return false;
-    setRateLimiterLoading(true);
+    if (isInitialLoad) {
+      setRateLimiterLoading(true);
+    }
     try {
       const data = await apiClient.getRateLimiterMetrics(signal);
       // Only update if this request is still the latest one
@@ -159,7 +161,7 @@ function MetricsContent() {
       }
       return false;
     } finally {
-      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current) && isInitialLoad) {
         setRateLimiterLoading(false);
       }
     }
@@ -168,6 +170,7 @@ function MetricsContent() {
   // Poll for rate limiter metrics
   useEffect(() => {
     let cancelled = false;
+    let isFirstPoll = true;
 
     const runPoll = async () => {
       if (cancelled) return;
@@ -181,7 +184,7 @@ function MetricsContent() {
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
       try {
-        await fetchRateLimiterMetrics(abortController.signal, requestId);
+        await fetchRateLimiterMetrics(abortController.signal, requestId, isFirstPoll);
       } catch (e) {
         // Connection error - stop polling to avoid infinite failed requests
         if (e instanceof Error && (
@@ -193,6 +196,7 @@ function MetricsContent() {
           return;
         }
       }
+      isFirstPoll = false;
       // Schedule next poll after current one completes
       if (!cancelled) {
         pollingIntervalRef.current = setTimeout(runPoll, 5000);
