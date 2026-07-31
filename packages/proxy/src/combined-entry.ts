@@ -74,14 +74,22 @@ async function main(): Promise<void> {
   
   // Create rate-limiter plugin with resolved per-provider config
   // The config.rateLimiter has per-provider settings from database + env overrides
+  const providers: Record<string, { maxRequests: number; windowMs: number; bufferCapacity: number }> = {};
+  for (const [provider, rlConfig] of Object.entries(config.rateLimiter)) {
+    providers[provider] = {
+      maxRequests: rlConfig.maxRequests,
+      windowMs: rlConfig.windowMs,
+      bufferCapacity: rlConfig.bufferCapacity,
+    };
+  }
+  
   const rateLimiterPlugin = createRateLimiterPlugin({
     defaults: {
       maxRequests: config.rateLimiter.openai.maxRequests,
       windowMs: config.rateLimiter.openai.windowMs,
       bufferCapacity: config.rateLimiter.openai.bufferCapacity,
     },
-    // Use the provider-aware key generator (default uses sessionId:provider)
-    // The plugin will use per-provider config via the keyGenerator
+    providers,
   });
   
   // Replace any rate-limiter plugin loaded from env with our properly configured one

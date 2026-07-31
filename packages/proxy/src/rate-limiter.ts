@@ -3,6 +3,7 @@
  *
  * Token bucket rate limiter with optional burst buffer.
  * Tracks state per sessionId + provider combination.
+ * Supports per-provider configuration overrides.
  */
 
 import type { ProxyPlugin, RequestContext } from "@contextio/core";
@@ -12,7 +13,7 @@ import type { ProxyPlugin, RequestContext } from "@contextio/core";
  *
  * Supports two formats for backward compatibility:
  * 1. Flat format (legacy): { maxRequests, windowMs, bufferCapacity, ... }
- * 2. Nested format (new): { defaults: { maxRequests, windowMs, bufferCapacity }, ... }
+ * 2. Nested format (new): { defaults: { maxRequests, windowMs, bufferCapacity }, providers: {...} }
  *
  * The flat format is deprecated but still supported.
  */
@@ -51,6 +52,20 @@ export interface RateLimiterConfig {
     /** Additional burst capacity beyond maxRequests. @default 10 */
     bufferCapacity?: number;
   };
+
+  /**
+   * Per-provider rate limit configuration.
+   * Overrides defaults for specific providers.
+   * Keys are provider names (e.g., "openai", "nvidia", "anthropic").
+   */
+  providers?: Record<string, {
+    /** Maximum number of requests allowed per window. */
+    maxRequests?: number;
+    /** Time window in milliseconds for the rate limit. */
+    windowMs?: number;
+    /** Additional burst capacity beyond maxRequests. */
+    bufferCapacity?: number;
+  }>;
 
   /**
    * Maximum number of unique session/provider buckets to track.
@@ -138,6 +153,11 @@ interface ResolvedRateLimiterConfig {
   enabled: boolean;
   keyGenerator: (ctx: RequestContext) => string;
   onRateLimited: (ctx: RequestContext, retryAfterMs: number) => void;
+  providers: Record<string, {
+    maxRequests: number;
+    windowMs: number;
+    bufferCapacity: number;
+  }>;
 }
 
 /**
@@ -154,7 +174,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
   constructor(config: RateLimiterConfig = {}) {
     // Support both flat (legacy) and nested formats for backward compatibility
     // Flat: { maxRequests, windowMs, bufferCapacity, ... }
-    // Nested: { defaults: { maxRequests, windowMs, bufferCapacity }, ... }
+    // Nested: { defaults: { maxRequests, windowMs, bufferCapacity }, providers: {...}, ... }
     const defaults = config.defaults ?? {};
     const maxRequests = config.maxRequests ?? defaults.maxRequests ?? DEFAULT_MAX_REQUESTS;
     const windowMs = config.windowMs ?? defaults.windowMs ?? DEFAULT_WINDOW_MS;
@@ -182,6 +202,18 @@ export class RateLimiterPlugin implements ProxyPlugin {
       throw new Error("entryTtlMs must be positive");
     }
 
+    // Parse per-provider config
+    const providers: Record<string, { maxRequests: number; windowMs: number; bufferCapacity: number }> = {};
+    if (config.providers) {
+      for (const [provider, pConfig] of Object.entries(config.providers)) {
+        providers[provider] = {
+          maxRequests: pConfig.maxRequests ?? maxRequests,
+          windowMs: pConfig.windowMs ?? windowMs,
+          bufferCapacity: pConfig.bufferCapacity ?? bufferCapacity,
+        };
+      }
+    }
+
     this.config = {
       maxRequests,
       windowMs,
@@ -192,10 +224,42 @@ export class RateLimiterPlugin implements ProxyPlugin {
       enabled: config.enabled ?? true,
       keyGenerator: config.keyGenerator ?? defaultKeyGenerator,
       onRateLimited: config.onRateLimited ?? (() => {}),
+      providers,
     };
 
     this.refillRate = this.config.maxRequests / this.config.windowMs;
     this.startCleanupTimer();
+  }
+
+  /**
+   * Get the rate limit config for a specific provider.
+   * Falls back to defaults if provider not configured.
+   */
+  private getProviderConfig(provider: string): { maxRequests: number; windowMs: number; bufferCapacity: number; refillRate: number } {
+    const p = this.config.providers[provider];
+    if (p) {
+      return {
+        maxRequests: p.maxRequests,
+        windowMs: p.windowMs,
+        bufferCapacity: p.bufferCapacity,
+        refillRate: p.maxRequests / p.windowMs,
+      };
+    }
+    // Fall back to defaults
+    return {
+      maxRequests: this.config.maxRequests,
+      windowMs: this.config.windowMs,
+      bufferCapacity: this.config.bufferCapacity,
+      refillRate: this.refillRate,
+    };
+  }
+
+  /**
+   * Extract provider from bucket key (format: "sessionId:provider")
+   */
+  private getProviderFromKey(key: string): string {
+    const lastColonIndex = key.lastIndexOf(":");
+    return lastColonIndex >= 0 ? key.slice(lastColonIndex + 1) : "unknown";
   }
 
   /**
@@ -281,8 +345,11 @@ export class RateLimiterPlugin implements ProxyPlugin {
       // Enforce maxEntries limit with LRU eviction before creating new bucket
       this.enforceMaxEntries();
 
+      const provider = this.getProviderFromKey(key);
+      const pConfig = this.getProviderConfig(provider);
+
       bucket = {
-        tokens: this.config.maxRequests,
+        tokens: pConfig.maxRequests,
         lastRefill: now,
         queue: [],
         lastAccessed: now,
@@ -291,7 +358,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
       this.buckets.set(key, bucket);
     }
 
-    this.refillTokens(bucket, now);
+    this.refillTokens(bucket, now, key);
     bucket.lastAccessed = now;
 
     // Move to end for LRU (delete and re-add)
@@ -326,13 +393,16 @@ export class RateLimiterPlugin implements ProxyPlugin {
   /**
    * Refill tokens based on elapsed time since last refill.
    */
-  private refillTokens(bucket: BucketState, now: number): void {
+  private refillTokens(bucket: BucketState, now: number, key: string): void {
     const elapsed = now - bucket.lastRefill;
     if (elapsed <= 0) return;
 
-    const tokensToAdd = elapsed * this.refillRate;
+    const provider = this.getProviderFromKey(key);
+    const pConfig = this.getProviderConfig(provider);
+
+    const tokensToAdd = elapsed * pConfig.refillRate;
     bucket.tokens = Math.min(
-      this.config.maxRequests + this.config.bufferCapacity,
+      pConfig.maxRequests + pConfig.bufferCapacity,
       bucket.tokens + tokensToAdd
     );
     bucket.lastRefill = now;
@@ -353,11 +423,14 @@ export class RateLimiterPlugin implements ProxyPlugin {
   /**
    * Calculate milliseconds until next token is available.
    */
-  private calculateRetryAfter(bucket: BucketState): number {
+  private calculateRetryAfter(bucket: BucketState, key: string): number {
     if (bucket.tokens >= 1 - TOKEN_EPSILON) return 0;
 
+    const provider = this.getProviderFromKey(key);
+    const pConfig = this.getProviderConfig(provider);
+
     const tokensNeeded = 1 - bucket.tokens;
-    const msUntilToken = tokensNeeded / this.refillRate;
+    const msUntilToken = tokensNeeded / pConfig.refillRate;
     return Math.ceil(msUntilToken);
   }
 
@@ -365,7 +438,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
    * Schedule or update the refill timer for a bucket.
    * This timer fires when the next token becomes available.
    */
-  private scheduleRefillTimer(bucket: BucketState): void {
+  private scheduleRefillTimer(bucket: BucketState, key: string): void {
     // Clear existing timer
     if (bucket.refillTimer) {
       clearTimeout(bucket.refillTimer);
@@ -374,7 +447,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
 
     // If there are tokens available, process queue immediately
     if (bucket.tokens >= 1 - TOKEN_EPSILON) {
-      this.processQueue(bucket);
+      this.processQueue(bucket, key);
       return;
     }
 
@@ -384,13 +457,13 @@ export class RateLimiterPlugin implements ProxyPlugin {
     }
 
     // Calculate when next token will be available
-    const retryAfterMs = this.calculateRetryAfter(bucket);
+    const retryAfterMs = this.calculateRetryAfter(bucket, key);
 
     bucket.refillTimer = setTimeout(() => {
       bucket.refillTimer = null;
       const now = Date.now();
-      this.refillTokens(bucket, now);
-      this.processQueue(bucket);
+      this.refillTokens(bucket, now, key);
+      this.processQueue(bucket, key);
     }, retryAfterMs);
 
     bucket.refillTimer.unref?.();
@@ -399,7 +472,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
   /**
    * Process waiting queue: admit as many requests as tokens allow.
    */
-  private processQueue(bucket: BucketState): void {
+  private processQueue(bucket: BucketState, key: string): void {
     while (bucket.queue.length > 0 && bucket.tokens >= 1 - TOKEN_EPSILON) {
       const queued = bucket.queue.shift()!;
       this.tryConsumeToken(bucket);
@@ -408,7 +481,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
 
     // If there are still waiters, schedule next refill timer
     if (bucket.queue.length > 0) {
-      this.scheduleRefillTimer(bucket);
+      this.scheduleRefillTimer(bucket, key);
     }
   }
 
@@ -426,16 +499,19 @@ export class RateLimiterPlugin implements ProxyPlugin {
     }
 
     // No tokens available - check if we can queue
-    if (bucket.queue.length < this.config.bufferCapacity) {
+    const provider = this.getProviderFromKey(key);
+    const pConfig = this.getProviderConfig(provider);
+
+    if (bucket.queue.length < pConfig.bufferCapacity) {
       // Queue the request
       return new Promise<RequestContext>((resolve, reject) => {
         bucket.queue.push({ resolve, reject, ctx });
-        this.scheduleRefillTimer(bucket);
+        this.scheduleRefillTimer(bucket, key);
       });
     }
 
     // Queue is full - rate limited
-    const retryAfterMs = this.calculateRetryAfter(bucket);
+    const retryAfterMs = this.calculateRetryAfter(bucket, key);
 
     try {
       this.config.onRateLimited(ctx, retryAfterMs);
@@ -456,7 +532,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
     error.statusCode = 429;
     error.retryAfter = retryAfterMs;
     error.rateLimitInfo = {
-      limit: this.config.maxRequests,
+      limit: pConfig.maxRequests,
       remaining: 0,
       reset: Math.ceil((Date.now() + retryAfterMs) / 1000),
       retryAfter: retryAfterMs,
@@ -522,11 +598,14 @@ export class RateLimiterPlugin implements ProxyPlugin {
     }> = [];
 
     for (const [key, bucket] of this.buckets.entries()) {
+      const provider = this.getProviderFromKey(key);
+      const pConfig = this.getProviderConfig(provider);
+
       states.push({
         key,
         tokens: bucket.tokens,
-        maxTokens: this.config.maxRequests + this.config.bufferCapacity,
-        bufferCapacity: this.config.bufferCapacity,
+        maxTokens: pConfig.maxRequests + pConfig.bufferCapacity,
+        bufferCapacity: pConfig.bufferCapacity,
         queueLength: bucket.queue.length,
         lastAccessed: bucket.lastAccessed,
         lastRefill: bucket.lastRefill,
@@ -569,9 +648,10 @@ export class RateLimiterPlugin implements ProxyPlugin {
  * import { createRateLimiterPlugin } from "@contextio/proxy";
  *
  * const rateLimiter = createRateLimiterPlugin({
- *   maxRequests: 100,
- *   windowMs: 60_000,
- *   bufferCapacity: 20,
+ *   defaults: { maxRequests: 100, windowMs: 60_000, bufferCapacity: 20 },
+ *   providers: {
+ *     nvidia: { maxRequests: 40, windowMs: 60_000, bufferCapacity: 10 },
+ *   },
  * });
  * ```
  */
