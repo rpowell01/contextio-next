@@ -394,7 +394,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
       const pConfig = this.getProviderConfig(provider);
 
       bucket = {
-        tokens: pConfig.maxRequests,
+        tokens: pConfig.maxRequests + pConfig.bufferCapacity,
         lastRefill: now,
         queue: [],
         lastAccessed: now,
