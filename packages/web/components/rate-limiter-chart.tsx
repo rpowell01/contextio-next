@@ -165,9 +165,6 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
   }
 
   const globalMaxTokens = Math.max(1, Math.max(...chartData.map((d) => d.maxTokens)));
-  const queuedCount = chartData.filter(d => d.queueLength > 0).length;
-  const criticalCount = chartData.filter(d => d.status === "critical").length;
-  const warningCount = chartData.filter(d => d.status === "warning").length;
 
   return (
     <div className="w-full">
