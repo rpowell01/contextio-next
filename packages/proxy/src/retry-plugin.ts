@@ -506,6 +506,8 @@ export class RetryPlugin implements ProxyPlugin {
    * Check if a data field string contains NVIDIA ResourceExhausted error.
    * NVIDIA returns 200 OK with error in response body:
    * { "error": { "code": "ResourceExhausted", "message": "Worker local total request limit reached (32/32)" } }
+   * Or wrapped in error envelope:
+   * { "name": "UnknownError", "data": { "message": "\"ResourceExhausted: Worker local total request limit reached (32/32)\"" } }
    */
   private checkNvidiaResourceExhausted(responseBody: string): { isError: boolean; message: string | null } {
     if (!responseBody) return { isError: false, message: null };
@@ -524,6 +526,15 @@ export class RetryPlugin implements ProxyPlugin {
       // Also check for alternative format: { code: "ResourceExhausted", message: "..." }
       if (parsed.code === "ResourceExhausted" && parsed.message?.includes("Worker local total request limit reached")) {
         return { isError: true, message: parsed.message };
+      }
+      
+      // Check for error envelope format: { name: "UnknownError", data: { message: "..." } }
+      if (parsed.name === "UnknownError" && parsed.data && parsed.data.message) {
+        const message = parsed.data.message;
+        // Message may contain escaped quotes: "\"ResourceExhausted: Worker local total request limit reached (32/32)\""
+        if (message.includes("ResourceExhausted") && message.includes("Worker local total request limit reached")) {
+          return { isError: true, message };
+        }
       }
       
     } catch {
