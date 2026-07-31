@@ -9,10 +9,14 @@ FROM python:3.11-slim AS model-builder
 WORKDIR /models
 
 # Install GLiNER, Optimum CLI with ONNX support, and huggingface_hub for downloading
-RUN pip install --no-cache-dir gliner optimum[onnx] onnxruntime huggingface_hub
+# Cache pip packages to avoid re-downloading on rebuilds
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir gliner optimum[onnx] onnxruntime huggingface_hub
 
 # Download all model files from HuggingFace Hub (including tokenizer and model weights)
-RUN echo "from huggingface_hub import snapshot_download" > /download_model.py && \
+# Cache HF downloads to avoid re-downloading ~600MB model on every build
+RUN --mount=type=cache,target=/root/.cache/huggingface \
+    echo "from huggingface_hub import snapshot_download" > /download_model.py && \
     echo "snapshot_download(" >> /download_model.py && \
     echo "    repo_id='urchade/gliner_small-v2.1'," >> /download_model.py && \
     echo "    local_dir='./gliner-small-v2.1'," >> /download_model.py && \
@@ -23,7 +27,10 @@ RUN echo "from huggingface_hub import snapshot_download" > /download_model.py &&
     python /download_model.py && ls -la ./gliner-small-v2.1/
 
 # Export to ONNX using GLiNER's built-in export_to_onnx method
-RUN echo "from gliner import GLiNER" > /export_model.py && \
+# Cache HF cache and model directory to avoid re-exporting on rebuilds
+RUN --mount=type=cache,target=/root/.cache/huggingface \
+    --mount=type=cache,target=/models/gliner-small-v2.1 \
+    echo "from gliner import GLiNER" > /export_model.py && \
     echo "import os" >> /export_model.py && \
     echo "import json" >> /export_model.py && \
     echo "" >> /export_model.py && \
@@ -37,7 +44,9 @@ RUN echo "from gliner import GLiNER" > /export_model.py && \
     python /export_model.py && ls -la ./gliner-small-v2.1/onnx/
 
 # Fix model_type in the exported config (GLiNER export leaves it as null)
-RUN echo "import json" > /fix_config.py && \
+RUN --mount=type=cache,target=/root/.cache/huggingface \
+    --mount=type=cache,target=/models/gliner-small-v2.1 \
+    echo "import json" > /fix_config.py && \
     echo "with open('./gliner-small-v2.1/onnx/gliner_config.json', 'r') as f:" >> /fix_config.py && \
     echo "    config = json.load(f)" >> /fix_config.py && \
     echo "config['model_type'] = 'gliner'" >> /fix_config.py && \
