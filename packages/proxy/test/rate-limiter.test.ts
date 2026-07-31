@@ -1,6 +1,6 @@
 import { describe, it, before, after, mock } from "node:test";
 import * as assert from "node:assert";
-import { createRateLimiterPlugin, type RateLimiterConfig } from "../dist/index.js";
+import { createRateLimiterPlugin, type RateLimiterConfig } from "@contextio/proxy";
 import type { RequestContext, ProxyPlugin } from "@contextio/core";
 import * as http from "node:http";
 
@@ -19,242 +19,20 @@ function createMockContext(overrides: Partial<RequestContext> = {}): RequestCont
   };
 }
 
-// Mock rate limiter for unit tests (no timers, synchronous)
-class TestRateLimiter {
-  name = "rate-limiter";
-
-  private config: {
-    maxRequests: number;
-    windowMs: number;
-    bufferCapacity: number;
-    maxEntries: number;
-    cleanupIntervalMs: number;
-    entryTtlMs: number;
-    enabled: boolean;
-    keyGenerator: (ctx: RequestContext) => string;
-    onRateLimited: (ctx: RequestContext, retryAfterMs: number) => void;
-  };
-
-  private buckets = new Map<string, {
-    tokens: number;
-    lastRefill: number;
-    queue: Array<{
-      resolve: (value: RequestContext) => void;
-      reject: (error: Error) => void;
-      ctx: RequestContext;
-    }>;
-    lastAccessed: number;
-  }>;
-
-  private refillRate: number;
-  private TOKEN_EPSILON = 1e-10;
-
-  constructor(config: RateLimiterConfig = {}) {
-    const defaults = config.defaults ?? {};
-    const maxRequests = config.maxRequests ?? defaults.maxRequests ?? 60;
-    const windowMs = config.windowMs ?? defaults.windowMs ?? 60_000;
-    const bufferCapacity = config.bufferCapacity ?? defaults.bufferCapacity ?? 10;
-    const maxEntries = config.maxEntries ?? 10_000;
-    const cleanupIntervalMs = config.cleanupIntervalMs ?? 300_000;
-    const entryTtlMs = config.entryTtlMs ?? 600_000;
-
-    // Handle keyStrategy for tests
-    let keyGenerator: (ctx: RequestContext) => string;
-    const keyStrategy = config.keyStrategy ?? "provider";
-    if (keyStrategy === "session-provider") {
-      keyGenerator = config.keyGenerator ?? ((ctx: RequestContext) => {
-        const sessionId = ctx.sessionId ?? "__default__";
-        const provider = ctx.provider ?? "unknown";
-        return `${sessionId}:${provider}`;
-      });
-    } else if (keyStrategy === "custom") {
-      keyGenerator = config.keyGenerator ?? ((ctx: RequestContext) => ctx.provider ?? "unknown");
-    } else {
-      // "provider" (default) - share bucket across all sessions per provider
-      keyGenerator = config.keyGenerator ?? ((ctx: RequestContext) => ctx.provider ?? "unknown");
-    }
-
-    this.config = {
-      maxRequests,
-      windowMs,
-      bufferCapacity,
-      maxEntries,
-      cleanupIntervalMs,
-      entryTtlMs,
-      enabled: config.enabled ?? true,
-      keyGenerator,
-      onRateLimited: config.onRateLimited ?? (() => {}),
-    };
-
-    this.refillRate = this.config.maxRequests / this.config.windowMs;
-  }
-
-  private getBucket(key: string) {
-    let bucket = this.buckets.get(key);
-    const now = Date.now();
-
-    if (!bucket) {
-      if (this.config.maxEntries > 0 && this.buckets.size >= this.config.maxEntries) {
-        let oldestKey: string | null = null;
-        let oldestTime = Infinity;
-        for (const [k, b] of Array.from(this.buckets.entries())) {
-          if (b.lastAccessed < oldestTime) {
-            oldestTime = b.lastAccessed;
-            oldestKey = k;
-          }
-        }
-        if (oldestKey) {
-          this.buckets.delete(oldestKey);
-        }
-      }
-
-      bucket = {
-        tokens: this.config.maxRequests,
-        lastRefill: now,
-        queue: [],
-        lastAccessed: now,
-      };
-      this.buckets.set(key, bucket);
-    }
-
-    this.refillTokens(bucket, now);
-    bucket.lastAccessed = now;
-    return bucket;
-  }
-
-  private refillTokens(bucket: { tokens: number; lastRefill: number; queue: any[]; lastAccessed: number }, now: number) {
-    const elapsed = now - bucket.lastRefill;
-    if (elapsed <= 0) return;
-
-    const tokensToAdd = elapsed * this.refillRate;
-    bucket.tokens = Math.min(
-      this.config.maxRequests + this.config.bufferCapacity,
-      bucket.tokens + tokensToAdd
-    );
-    bucket.lastRefill = now;
-  }
-
-  private tryConsumeToken(bucket: { tokens: number }): boolean {
-    if (bucket.tokens >= 1 - this.TOKEN_EPSILON) {
-      bucket.tokens -= 1;
-      return true;
-    }
-    return false;
-  }
-
-  private calculateRetryAfter(bucket: { tokens: number }): number {
-    if (bucket.tokens >= 1 - this.TOKEN_EPSILON) return 0;
-    const tokensNeeded = 1 - bucket.tokens;
-    const msUntilToken = tokensNeeded / this.refillRate;
-    return Math.ceil(msUntilToken);
-  }
-
-  private processQueue(bucket: { tokens: number; queue: Array<{ resolve: Function; reject: Function; ctx: RequestContext }> }) {
-    while (bucket.queue.length > 0 && bucket.tokens >= 1 - this.TOKEN_EPSILON) {
-      const queued = bucket.queue.shift()!;
-      bucket.tokens -= 1;
-      queued.resolve(queued.ctx);
-    }
-  }
-
-  async onRequest(ctx: RequestContext): Promise<RequestContext> {
-    if (!this.config.enabled) {
-      return ctx;
-    }
-
-    const key = this.config.keyGenerator(ctx);
-    const bucket = this.getBucket(key);
-
-    if (this.tryConsumeToken(bucket)) {
-      return ctx;
-    }
-
-    if (bucket.queue.length < this.config.bufferCapacity) {
-      return new Promise<RequestContext>((resolve, reject) => {
-        bucket.queue.push({ resolve, reject, ctx });
-      });
-    }
-
-    const retryAfterMs = this.calculateRetryAfter(bucket);
-
-    try {
-      this.config.onRateLimited(ctx, retryAfterMs);
-    } catch {}
-
-    const error = new Error("Rate limit exceeded") as Error & {
-      statusCode: number;
-      retryAfter: number;
-      rateLimitInfo: {
-        limit: number;
-        remaining: number;
-        reset: number;
-        retryAfter: number;
-      };
-    };
-    error.statusCode = 429;
-    error.retryAfter = retryAfterMs;
-    error.rateLimitInfo = {
-      limit: this.config.maxRequests,
-      remaining: 0,
-      reset: Math.ceil((Date.now() + retryAfterMs) / 1000),
-      retryAfter: retryAfterMs,
-    };
-
-    throw error;
-  }
-
-  processAllQueues() {
-    for (const bucket of Array.from(this.buckets.values())) {
-      this.processQueue(bucket);
-    }
-  }
-
-  getBucketState(key: string) {
-    return this.buckets.get(key);
-  }
-
-  getAllKeys(): string[] {
-    return Array.from(this.buckets.keys());
-  }
-
-  clear() {
-    for (const bucket of Array.from(this.buckets.values())) {
-      for (const queued of bucket.queue) {
-        queued.reject(new Error("Rate limiter cleared"));
-      }
-    }
-    this.buckets.clear();
-  }
-
-  shutdown() {
-    this.clear();
-  }
-}
-
-function createTestPlugin(config: any = {}) {
-  const limiter = new TestRateLimiter(config);
-  const plugin: ProxyPlugin = {
-    name: "rate-limiter",
-    onRequest: (ctx: RequestContext) => limiter.onRequest(ctx),
-  };
-  (plugin as any)._internal = {
-    getBucketState: (key: string) => limiter.getBucketState(key),
-    getAllKeys: () => limiter.getAllKeys(),
-    clear: () => limiter.clear(),
-    shutdown: () => limiter.shutdown(),
-    processAllQueues: () => limiter.processAllQueues(),
-  };
-  return { plugin, internal: (plugin as any)._internal };
+// Helper to get internal methods from the plugin
+function getInternal(plugin: ProxyPlugin) {
+  return (plugin as any)._internal;
 }
 
 describe("rate-limiter plugin", () => {
   // Test token bucket / sliding window logic
   it("allows requests up to maxRequests within the window", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 5,
     });
+    const internal = getInternal(plugin);
     const ctx = createMockContext();
 
     for (let i = 0; i < 10; i++) {
@@ -267,11 +45,12 @@ describe("rate-limiter plugin", () => {
   it("refills tokens over time (sliding window)", async () => {
     mock.timers.enable({ apis: ["setTimeout", "Date"] });
 
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 5,
     });
+    const internal = getInternal(plugin);
     const ctx = createMockContext();
 
     for (let i = 0; i < 10; i++) {
@@ -291,11 +70,12 @@ describe("rate-limiter plugin", () => {
   });
 
   it("calculates correct retry-after when rate limited", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 2,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer - direct rate limiting
     });
+    const internal = getInternal(plugin);
     const ctx = createMockContext();
 
     // First 2 requests consume tokens
@@ -323,12 +103,13 @@ describe("rate-limiter plugin", () => {
 
   // Per-session isolation (requires explicit keyStrategy)
   it("different sessions have independent limits when keyStrategy=session-provider", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
       keyStrategy: "session-provider",
     });
+    const internal = getInternal(plugin);
     const session1 = createMockContext({ sessionId: "session-1" });
     const session2 = createMockContext({ sessionId: "session-2" });
 
@@ -346,12 +127,13 @@ describe("rate-limiter plugin", () => {
   });
 
   it("handles null sessionId with keyStrategy=session-provider", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
       keyStrategy: "session-provider",
     });
+    const internal = getInternal(plugin);
     const ctx1 = createMockContext({ sessionId: null });
     const ctx2 = createMockContext({ sessionId: "session-1" });
 
@@ -369,12 +151,13 @@ describe("rate-limiter plugin", () => {
 
   // Per-provider sharing (new default behavior)
   it("different sessions share limits per provider by default", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
       // Default keyStrategy="provider" - sessions share bucket
     });
+    const internal = getInternal(plugin);
     const session1 = createMockContext({ sessionId: "session-1", provider: "openai" });
     const session2 = createMockContext({ sessionId: "session-2", provider: "openai" });
 
@@ -399,11 +182,12 @@ describe("rate-limiter plugin", () => {
 
   // Per-provider isolation
   it("different providers have independent limits", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
     });
+    const internal = getInternal(plugin);
     const openaiCtx = createMockContext({ provider: "openai", sessionId: "session-1" });
     const anthropicCtx = createMockContext({ provider: "anthropic", sessionId: "session-1" });
 
@@ -421,11 +205,12 @@ describe("rate-limiter plugin", () => {
 
   // 429 response with Retry-After header
   it("returns 429 with rateLimitInfo when buffer is disabled (bufferCapacity=0)", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 2,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer - immediate 429
     });
+    const internal = getInternal(plugin);
     const ctx = createMockContext();
 
     // Request 1: token 2→1 (success)
@@ -453,11 +238,12 @@ describe("rate-limiter plugin", () => {
   });
 
   it("buffers requests when tokens exhausted but buffer available", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 2,
       windowMs: 1000,
       bufferCapacity: 2,
     });
+    const internal = getInternal(plugin);
     const ctx = createMockContext();
 
     // Request 1: token 2→1 (success)
@@ -497,11 +283,12 @@ describe("rate-limiter plugin", () => {
   });
 
   it("returns 429 with rateLimitInfo when buffer is full", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 2,
       windowMs: 1000,
       bufferCapacity: 1,
     });
+    const internal = getInternal(plugin);
     const ctx = createMockContext();
 
     // Request 1: token 2→1 (success)
@@ -544,7 +331,7 @@ describe("rate-limiter plugin", () => {
     let callbackCtx: RequestContext | null = null;
     let callbackRetryAfter = 0;
 
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 2,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer - immediate 429
@@ -554,6 +341,7 @@ describe("rate-limiter plugin", () => {
         callbackRetryAfter = retryAfterMs;
       },
     });
+    const internal = getInternal(plugin);
 
     const ctx = createMockContext();
 
@@ -574,11 +362,12 @@ describe("rate-limiter plugin", () => {
 
   // Cleanup of stale session entries
   it("clears entries on shutdown", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
     });
+    const internal = getInternal(plugin);
 
     const ctx = createMockContext({ sessionId: "cleanup-test" });
     await plugin.onRequest!(ctx);
@@ -593,12 +382,13 @@ describe("rate-limiter plugin", () => {
   });
 
   it("enforces maxEntries with LRU eviction", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
       maxEntries: 3,
     });
+    const internal = getInternal(plugin);
 
     // Use different providers to create different buckets (default keyStrategy="provider")
     const providers = ["openai", "anthropic", "gemini", "vertex", "nvidia"];
@@ -614,11 +404,12 @@ describe("rate-limiter plugin", () => {
   });
 
   it("supports clear() method via internal API", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
     });
+    const internal = getInternal(plugin);
     const ctx = createMockContext({ sessionId: "test-clear" });
     await plugin.onRequest!(ctx);
 
@@ -633,13 +424,14 @@ describe("rate-limiter plugin", () => {
 
   // Configuration
   it("supports nested defaults config format", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       defaults: {
         maxRequests: 5,
         windowMs: 1000,
         bufferCapacity: 0, // No buffer to avoid pending promises
       },
     });
+    const internal = getInternal(plugin);
 
     const ctx = createMockContext();
 
@@ -658,11 +450,12 @@ describe("rate-limiter plugin", () => {
   });
 
   it("supports flat legacy config format", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 5,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
     });
+    const internal = getInternal(plugin);
 
     const ctx = createMockContext();
 
@@ -702,12 +495,13 @@ describe("rate-limiter plugin", () => {
   });
 
   it("allows custom keyGenerator", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 2,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
       keyGenerator: (ctx: RequestContext) => `custom-${ctx.provider}`,
     });
+    const internal = getInternal(plugin);
 
     const ctx1 = createMockContext({ sessionId: "session-1", provider: "openai" });
     const ctx2 = createMockContext({ sessionId: "session-2", provider: "openai" });
@@ -726,12 +520,13 @@ describe("rate-limiter plugin", () => {
   });
 
   it("disabled rate limiter passes all requests", async () => {
-    const { plugin, internal } = createTestPlugin({
+    const plugin = createRateLimiterPlugin({
       maxRequests: 1,
       windowMs: 1000,
       bufferCapacity: 0,
       enabled: false,
     });
+    const internal = getInternal(plugin);
 
     const ctx = createMockContext();
 
