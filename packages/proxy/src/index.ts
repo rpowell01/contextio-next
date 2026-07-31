@@ -48,6 +48,7 @@ export {
   createRateLimiterPlugin,
   RateLimiterPlugin,
   type RateLimiterConfig,
+  type KeyStrategy,
 } from "./rate-limiter.js";
 
 // Retry plugin

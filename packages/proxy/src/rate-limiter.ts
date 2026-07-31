@@ -2,11 +2,21 @@
  * @contextio/proxy - Rate Limiter Plugin
  *
  * Token bucket rate limiter with optional burst buffer.
- * Tracks state per sessionId + provider combination.
- * Supports per-provider configuration overrides.
+ * By default tracks state per provider (all sessions share one bucket per provider).
+ * Supports per-provider configuration overrides and optional per-session isolation.
  */
 
 import type { ProxyPlugin, RequestContext } from "@contextio/core";
+
+/**
+ * Strategy for generating rate limit keys.
+ * - "provider": All sessions share the same bucket per provider (default).
+ *   Use this when the proxy appears as a single client to upstream providers.
+ * - "session-provider": Each session has its own bucket per provider.
+ *   Use this for testing or when the proxy forwards client identity.
+ * - "custom": Use the provided `keyGenerator` function.
+ */
+export type KeyStrategy = "provider" | "session-provider" | "custom";
 
 /**
  * Configuration for the rate limiter plugin.
@@ -68,6 +78,12 @@ export interface RateLimiterConfig {
   }>;
 
   /**
+   * Strategy for generating rate limit keys.
+   * @default "provider"
+   */
+  keyStrategy?: KeyStrategy;
+
+  /**
    * Maximum number of unique session/provider buckets to track.
    * Prevents unbounded memory growth. Oldest buckets are evicted first (LRU).
    * @default 10000
@@ -94,7 +110,8 @@ export interface RateLimiterConfig {
 
   /**
    * Custom key generator for rate limiting.
-   * By default uses `${sessionId}:${provider}`.
+   * Only used when keyStrategy is "custom".
+   * By default uses the provider name.
    */
   keyGenerator?: (ctx: RequestContext) => string;
 
@@ -132,12 +149,25 @@ const DEFAULT_ENTRY_TTL_MS = 600_000; // 10 minutes
 const TOKEN_EPSILON = 1e-10; // Floating-point comparison epsilon
 
 /**
- * Generate the default rate limit key from sessionId and provider.
+ * Generate a rate limit key using sessionId and provider.
+ * This provides per-session isolation (legacy behavior).
  */
-function defaultKeyGenerator(ctx: RequestContext): string {
+function sessionProviderKeyGenerator(ctx: RequestContext): string {
   const sessionId = ctx.sessionId ?? "__default__";
   const provider = ctx.provider ?? "unknown";
   return `${sessionId}:${provider}`;
+}
+
+/**
+ * Generate the default rate limit key.
+ *
+ * By default, uses only the provider since all requests through the proxy
+ * appear to come from a single source to the upstream provider.
+ * Per-session limiting can be enabled via the `keyStrategy` config option.
+ */
+function defaultKeyGenerator(ctx: RequestContext): string {
+  const provider = ctx.provider ?? "unknown";
+  return provider;
 }
 
 /**
@@ -214,6 +244,18 @@ export class RateLimiterPlugin implements ProxyPlugin {
       }
     }
 
+    // Determine key generator based on keyStrategy
+    let keyGenerator: (ctx: RequestContext) => string;
+    const keyStrategy = config.keyStrategy ?? "provider";
+    if (keyStrategy === "session-provider") {
+      keyGenerator = config.keyGenerator ?? sessionProviderKeyGenerator;
+    } else if (keyStrategy === "custom") {
+      keyGenerator = config.keyGenerator ?? defaultKeyGenerator;
+    } else {
+      // "provider" (default) - share bucket across all sessions per provider
+      keyGenerator = config.keyGenerator ?? defaultKeyGenerator;
+    }
+
     this.config = {
       maxRequests,
       windowMs,
@@ -222,7 +264,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
       cleanupIntervalMs,
       entryTtlMs,
       enabled: config.enabled ?? true,
-      keyGenerator: config.keyGenerator ?? defaultKeyGenerator,
+      keyGenerator,
       onRateLimited: config.onRateLimited ?? (() => {}),
       providers,
     };
@@ -255,11 +297,14 @@ export class RateLimiterPlugin implements ProxyPlugin {
   }
 
   /**
-   * Extract provider from bucket key (format: "sessionId:provider")
+   * Extract provider from bucket key.
+   * With keyStrategy="provider" (default), key is just the provider name.
+   * With keyStrategy="session-provider", key format is "sessionId:provider".
    */
   private getProviderFromKey(key: string): string {
+    // If key contains a colon, it's the legacy/session-provider format
     const lastColonIndex = key.lastIndexOf(":");
-    return lastColonIndex >= 0 ? key.slice(lastColonIndex + 1) : "unknown";
+    return lastColonIndex >= 0 ? key.slice(lastColonIndex + 1) : key;
   }
 
   /**

@@ -95,7 +95,8 @@ function isTransientError(error: unknown, status?: number): boolean {
   }
   if (error instanceof Error) {
     // Network errors and timeouts are transient, but AbortError is intentional cancellation
-    return error.message.includes("timeout") || error.message.includes("Network error") || error.message.includes("Failed to fetch");
+    const msg = error.message.toLowerCase();
+    return msg.includes("timeout") || msg.includes("network error") || msg.includes("networkerror") || msg.includes("failed to fetch");
   }
   return false;
 }

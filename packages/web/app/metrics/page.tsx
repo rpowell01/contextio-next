@@ -14,6 +14,18 @@ import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { usePageLoad } from "@/components/page-load-context";
 import { ProgressBar } from "@/components/ui/progress-bar";
 
+/**
+ * Checks if an error is a connection error that should stop polling.
+ * Browser-specific: ERR_CONNECTION_REFUSED is Node.js-specific and not used here.
+ */
+function isConnectionError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    ((error.name === "TypeError" && error.message === "Failed to fetch") ||
+      error.message.includes("NetworkError"))
+  );
+}
+
 const TIME_RANGES: TimeRange[] = [
   { value: "1h", label: "Last hour", hours: 1 },
   { value: "6h", label: "Last 6 hours", hours: 6 },
@@ -49,10 +61,22 @@ function MetricsContent() {
   const [rateLimiterLoading, setRateLimiterLoading] = useState(true);
 
   // Memoized sorted buckets for the table to avoid re-sorting on every render
+  // Sort by provider name, then by utilization (most constrained first)
   const sortedBuckets = useMemo(
     () =>
       rateLimiterMetrics?.buckets
-        ? [...rateLimiterMetrics.buckets].sort((a, b) => a.tokens - b.tokens)
+        ? [...rateLimiterMetrics.buckets].sort((a, b) => {
+            // First sort by provider name
+            const providerA = a.provider ?? "unknown";
+            const providerB = b.provider ?? "unknown";
+            if (providerA !== providerB) return providerA.localeCompare(providerB);
+            // Then by utilization (ascending = most used first)
+            const maxA = a.maxTokens;
+            const maxB = b.maxTokens;
+            const utilA = maxA > 0 ? 1 - a.tokens / maxA : 0;
+            const utilB = maxB > 0 ? 1 - b.tokens / maxB : 0;
+            return utilB - utilA;
+          })
         : [],
     [rateLimiterMetrics?.buckets],
   );
@@ -156,11 +180,7 @@ function MetricsContent() {
         setRateLimiterError(`Failed to fetch metrics: ${errorMessage}`);
       }
       // Re-throw connection errors so polling can stop
-      if (e instanceof Error && (
-        (e.name === "TypeError" && e.message === "Failed to fetch") ||
-        e.message.includes("NetworkError") ||
-        e.message.includes("ERR_CONNECTION_REFUSED")
-      )) {
+      if (isConnectionError(e)) {
         throw e;
       }
       return false;
@@ -191,11 +211,7 @@ function MetricsContent() {
         await fetchRateLimiterMetrics(abortController.signal, requestId, isFirstPoll);
       } catch (e) {
         // Connection error - stop polling to avoid infinite failed requests
-        if (e instanceof Error && (
-          (e.name === "TypeError" && e.message === "Failed to fetch") ||
-          e.message.includes("NetworkError") ||
-          e.message.includes("ERR_CONNECTION_REFUSED")
-        )) {
+        if (isConnectionError(e)) {
           console.error("[metrics] Rate limiter polling stopped due to connection error:", e.message);
           return;
         }
@@ -324,7 +340,7 @@ function MetricsContent() {
                         <th className="text-right p-2 font-medium">Buffer Capacity</th>
                         <th className="text-right p-2 font-medium">Queue</th>
                         <th className="text-left p-2 font-medium">Provider</th>
-                        <th className="text-left p-2 font-medium">Session</th>
+                        <th className="text-left p-2 font-medium">Scope</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -346,7 +362,16 @@ function MetricsContent() {
                               </span>
                             </td>
                             <td className="p-2 text-muted-foreground">{bucket.provider ?? "unknown"}</td>
-                            <td className="p-2 text-muted-foreground">{bucket.sessionId ?? "unknown"}</td>
+                            <td className="p-2 text-muted-foreground">
+                              {bucket.sessionId === "all" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">
+                                  <span>🔗</span>
+                                  Shared
+                                </span>
+                              ) : (
+                                bucket.sessionId ?? "unknown"
+                              )}
+                            </td>
                           </tr>
                         ))}
                     </tbody>

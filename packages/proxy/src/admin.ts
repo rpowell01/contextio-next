@@ -417,21 +417,31 @@ case "env": {
               enabled: config.enabled,
             },
             buckets: buckets.map((b: { key: string; tokens: number; maxTokens: number; bufferCapacity: number; queueLength: number; lastAccessed: number; lastRefill: number }) => {
-              // Parse provider and sessionId from key (format: "sessionId:provider")
-              // Split from the right to handle sessionIds that might contain colons
-              // Use >= 0 to correctly handle keys starting with ':' (empty sessionId)
+              // Parse provider and sessionId from key
+              // With keyStrategy="provider" (default): key = "provider"
+              // With keyStrategy="session-provider": key = "sessionId:provider"
+              // With custom keyGenerator: could be anything, try to parse as "sessionId:provider" if colon present
               const lastColonIndex = b.key.lastIndexOf(":");
-              const rawSessionId = lastColonIndex >= 0 ? b.key.slice(0, lastColonIndex) : b.key;
-              const provider = lastColonIndex >= 0 ? b.key.slice(lastColonIndex + 1) : "unknown";
-              // Normalize empty sessionId to "unknown" for UI consistency
-              const sessionId = rawSessionId || "unknown";
+              let provider: string;
+              let sessionId: string;
+
+              if (lastColonIndex >= 0) {
+                // Legacy or session-provider format: "sessionId:provider"
+                provider = b.key.slice(lastColonIndex + 1) || "unknown";
+                sessionId = b.key.slice(0, lastColonIndex) || "unknown";
+              } else {
+                // Default provider-only format: "provider" (no session isolation)
+                provider = b.key || "unknown";
+                sessionId = "all"; // Indicates shared across all sessions
+              }
+
               return {
                 key: b.key,
                 tokens: b.tokens,
                 maxTokens: b.maxTokens,
                 bufferCapacity: b.bufferCapacity,
                 queueLength: b.queueLength,
-                provider: provider || "unknown",
+                provider,
                 sessionId,
               };
             }),

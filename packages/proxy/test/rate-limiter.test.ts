@@ -22,7 +22,7 @@ function createMockContext(overrides: Partial<RequestContext> = {}): RequestCont
 // Mock rate limiter for unit tests (no timers, synchronous)
 class TestRateLimiter {
   name = "rate-limiter";
-  
+
   private config: {
     maxRequests: number;
     windowMs: number;
@@ -34,7 +34,7 @@ class TestRateLimiter {
     keyGenerator: (ctx: RequestContext) => string;
     onRateLimited: (ctx: RequestContext, retryAfterMs: number) => void;
   };
-  
+
   private buckets = new Map<string, {
     tokens: number;
     lastRefill: number;
@@ -45,7 +45,7 @@ class TestRateLimiter {
     }>;
     lastAccessed: number;
   }>;
-  
+
   private refillRate: number;
   private TOKEN_EPSILON = 1e-10;
 
@@ -58,6 +58,22 @@ class TestRateLimiter {
     const cleanupIntervalMs = config.cleanupIntervalMs ?? 300_000;
     const entryTtlMs = config.entryTtlMs ?? 600_000;
 
+    // Handle keyStrategy for tests
+    let keyGenerator: (ctx: RequestContext) => string;
+    const keyStrategy = config.keyStrategy ?? "provider";
+    if (keyStrategy === "session-provider") {
+      keyGenerator = config.keyGenerator ?? ((ctx: RequestContext) => {
+        const sessionId = ctx.sessionId ?? "__default__";
+        const provider = ctx.provider ?? "unknown";
+        return `${sessionId}:${provider}`;
+      });
+    } else if (keyStrategy === "custom") {
+      keyGenerator = config.keyGenerator ?? ((ctx: RequestContext) => ctx.provider ?? "unknown");
+    } else {
+      // "provider" (default) - share bucket across all sessions per provider
+      keyGenerator = config.keyGenerator ?? ((ctx: RequestContext) => ctx.provider ?? "unknown");
+    }
+
     this.config = {
       maxRequests,
       windowMs,
@@ -66,14 +82,10 @@ class TestRateLimiter {
       cleanupIntervalMs,
       entryTtlMs,
       enabled: config.enabled ?? true,
-      keyGenerator: config.keyGenerator ?? ((ctx: RequestContext) => {
-        const sessionId = ctx.sessionId ?? "__default__";
-        const provider = ctx.provider ?? "unknown";
-        return `${sessionId}:${provider}`;
-      }),
+      keyGenerator,
       onRateLimited: config.onRateLimited ?? (() => {}),
     };
-    
+
     this.refillRate = this.config.maxRequests / this.config.windowMs;
   }
 
@@ -306,12 +318,13 @@ describe("rate-limiter plugin", () => {
     internal.shutdown();
   });
 
-  // Per-session isolation
-  it("different sessions have independent limits", async () => {
+  // Per-session isolation (requires explicit keyStrategy)
+  it("different sessions have independent limits when keyStrategy=session-provider", async () => {
     const { plugin, internal } = createTestPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
+      keyStrategy: "session-provider",
     });
     const session1 = createMockContext({ sessionId: "session-1" });
     const session2 = createMockContext({ sessionId: "session-2" });
@@ -329,11 +342,12 @@ describe("rate-limiter plugin", () => {
     internal.shutdown();
   });
 
-  it("handles null sessionId as default session", async () => {
+  it("handles null sessionId with keyStrategy=session-provider", async () => {
     const { plugin, internal } = createTestPlugin({
       maxRequests: 10,
       windowMs: 1000,
       bufferCapacity: 0, // No buffer to avoid pending promises
+      keyStrategy: "session-provider",
     });
     const ctx1 = createMockContext({ sessionId: null });
     const ctx2 = createMockContext({ sessionId: "session-1" });
@@ -346,6 +360,36 @@ describe("rate-limiter plugin", () => {
     for (let i = 0; i < 10; i++) {
       await Promise.resolve(plugin.onRequest!(ctx2));
     }
+
+    internal.shutdown();
+  });
+
+  // Per-provider sharing (new default behavior)
+  it("different sessions share limits per provider by default", async () => {
+    const { plugin, internal } = createTestPlugin({
+      maxRequests: 10,
+      windowMs: 1000,
+      bufferCapacity: 0, // No buffer to avoid pending promises
+      // Default keyStrategy="provider" - sessions share bucket
+    });
+    const session1 = createMockContext({ sessionId: "session-1", provider: "openai" });
+    const session2 = createMockContext({ sessionId: "session-2", provider: "openai" });
+
+    // Exhaust the shared bucket via session1 (10 tokens)
+    for (let i = 0; i < 10; i++) {
+      await plugin.onRequest!(session1);
+    }
+
+    // session2 should be rate limited (shared bucket)
+    let lastError: any = null;
+    try {
+      await plugin.onRequest!(session2);
+    } catch (e: any) {
+      lastError = e;
+    }
+
+    assert.ok(lastError !== null);
+    assert.equal(lastError.statusCode, 429);
 
     internal.shutdown();
   });
@@ -433,7 +477,7 @@ describe("rate-limiter plugin", () => {
     assert.equal(lastError.statusCode, 429);
 
     // Verify the queue has 2 items
-    const bucket = internal.getBucketState("session-1:openai");
+    const bucket = internal.getBucketState("openai");
     assert.ok(bucket);
     assert.equal(bucket.queue.length, 2);
 
@@ -481,7 +525,7 @@ describe("rate-limiter plugin", () => {
     assert.ok(lastError.rateLimitInfo.retryAfter > 0);
 
     // Clean up the queued request
-    const bucket = internal.getBucketState("session-1:openai");
+    const bucket = internal.getBucketState("openai");
     assert.ok(bucket);
     assert.equal(bucket.queue.length, 1);
 
@@ -553,8 +597,10 @@ describe("rate-limiter plugin", () => {
       maxEntries: 3,
     });
 
-    for (let i = 0; i < 5; i++) {
-      const ctx = createMockContext({ sessionId: `session-${i}` });
+    // Use different providers to create different buckets (default keyStrategy="provider")
+    const providers = ["openai", "anthropic", "gemini", "vertex", "nvidia"];
+    for (const provider of providers) {
+      const ctx = createMockContext({ sessionId: `session-${provider}`, provider });
       await plugin.onRequest!(ctx);
     }
 
@@ -729,6 +775,7 @@ describe("rate-limiter plugin", () => {
             windowMs: 2000,
             bufferCapacity: 2,
             cleanupIntervalMs: 86400000, // 24 hours - effectively disabled for tests
+            keyStrategy: "session-provider", // Test per-session isolation
           }),
         ],
       });
@@ -811,10 +858,10 @@ describe("rate-limiter plugin", () => {
       assert.ok(body.error.rateLimitInfo.retryAfter > 0);
     });
 
-    it("different sessions have independent limits through proxy", async () => {
+    it("different sessions have independent limits through proxy (with keyStrategy=session-provider)", async () => {
       const sessionA = "openai/aaaaaaaa";
       const sessionB = "openai/bbbbbbbb";
-      
+
       for (let i = 0; i < 7; i++) {
         const res = await makeRequest("/v1/chat/completions", sessionA);
         assert.equal(res.status, 200);
