@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, after, mock } from "node:test";
 import * as assert from "node:assert";
 import { createRateLimiterPlugin, type RateLimiterConfig } from "../dist/index.js";
 import type { RequestContext, ProxyPlugin } from "@contextio/core";
@@ -265,6 +265,8 @@ describe("rate-limiter plugin", () => {
   });
 
   it("refills tokens over time (sliding window)", async () => {
+    mock.timers.enable({ apis: ["setTimeout", "Date"] });
+
     const { plugin, internal } = createTestPlugin({
       maxRequests: 10,
       windowMs: 1000,
@@ -276,14 +278,15 @@ describe("rate-limiter plugin", () => {
       await plugin.onRequest!(ctx);
     }
 
-    // Wait for full token refill (1000ms for 10 tokens at rate 10/1000ms)
-    await new Promise(resolve => setTimeout(resolve, 1100));
+    // Advance time by 1100ms to allow full token refill
+    mock.timers.tick(1100);
 
     // Should be able to make 10 more requests now
     for (let i = 0; i < 10; i++) {
       await assert.doesNotReject(Promise.resolve(plugin.onRequest!(ctx)));
     }
 
+    mock.timers.reset();
     internal.shutdown();
   });
 

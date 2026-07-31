@@ -338,6 +338,64 @@ export interface ProxyConfig {
   publicUrl?: string;
 }
 
+// --- Rate Limiter Metrics ---
+
+/**
+ * Rate limiter bucket state for a specific provider/session combination.
+ */
+export interface RateLimiterBucketState {
+  /** Unique key identifying the bucket (e.g., "sessionId:provider") */
+  key: string;
+  /** Current available tokens in the bucket */
+  tokens: number;
+  /** Maximum tokens (maxRequests + bufferCapacity) - total capacity */
+  maxTokens: number;
+  /** Buffer capacity (burst allowance) */
+  bufferCapacity: number;
+  /** Number of requests waiting in queue */
+  queueLength: number;
+  /** Provider name extracted from key */
+  provider?: string;
+  /** Session ID extracted from key */
+  sessionId?: string;
+}
+
+/**
+ * Rate limiter configuration summary.
+ */
+export interface RateLimiterConfigSummary {
+  /** Maximum requests allowed within the time window. */
+  maxRequests: number;
+  /** Time window in milliseconds. */
+  windowMs: number;
+  /** Token bucket capacity for burst handling. */
+  bufferCapacity: number;
+  /** Maximum number of buckets to track. */
+  maxEntries: number;
+  /** Whether the rate limiter is enabled. */
+  enabled: boolean;
+}
+
+/**
+ * Complete rate limiter metrics response.
+ */
+export interface RateLimiterMetrics {
+  /** Rate limiter configuration */
+  config: RateLimiterConfigSummary;
+  /** Array of all bucket states */
+  buckets: RateLimiterBucketState[];
+  /** Total number of active buckets */
+  totalBuckets: number;
+  /** Total number of queued requests across all buckets */
+  totalQueued: number;
+  /** Timestamp when metrics were collected */
+  timestamp: string;
+  /** Optional status code from the API */
+  code?: string;
+  /** Number of NVIDIA worker retries (ResourceExhausted with "Worker local total request limit reached") */
+  nvidiaWorkerRetryCount?: number;
+}
+
 // --- Routing helpers (re-exported from routing.ts) ---
 
 export interface ExtractSourceResult {

@@ -145,6 +145,9 @@ importers:
 
   packages/web:
     dependencies:
+      '@contextio/core':
+        specifier: workspace:*
+        version: link:../core
       '@contextio/logger':
         specifier: workspace:*
         version: link:../logger

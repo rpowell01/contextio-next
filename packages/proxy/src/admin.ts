@@ -7,6 +7,7 @@
 
 import http from "node:http";
 import type { ProxyPlugin } from "@contextio/core";
+import type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics } from "@contextio/core";
 
 export interface AdminOptions {
   plugins: ProxyPlugin[];
@@ -62,33 +63,7 @@ function isRateLimiterPlugin(plugin: ProxyPlugin): plugin is ProxyPlugin & { _in
 
 // --- Rate Limiter Metrics ---
 
-export interface RateLimiterBucketState {
-  key: string;
-  tokens: number;
-  maxTokens: number;
-  bufferCapacity: number;
-  queueLength: number;
-  provider?: string;
-  sessionId?: string;
-}
-
-export interface RateLimiterConfigSummary {
-  maxRequests: number;
-  windowMs: number;
-  bufferCapacity: number;
-  maxEntries: number;
-  enabled: boolean;
-}
-
-export interface RateLimiterMetrics {
-  config: RateLimiterConfigSummary;
-  buckets: RateLimiterBucketState[];
-  totalBuckets: number;
-  totalQueued: number;
-  timestamp: string;
-  code?: string;
-  nvidiaWorkerRetryCount?: number;
-}
+// Types are imported from @contextio/core
 
 // Log entry for the admin API
 export interface LogEntry {

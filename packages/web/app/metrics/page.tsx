@@ -147,22 +147,37 @@ function MetricsContent() {
       if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
         // Only update state if data actually changed to avoid unnecessary re-renders
         setRateLimiterMetrics(prev => {
-          // Compare buckets array - check length and each bucket's tokens, maxTokens, queueLength
+          // Compare buckets by key - check if any bucket's tokens, maxTokens, or queueLength changed
           if (!prev || !prev.buckets) return data;
+
           const prevBuckets = prev.buckets;
           const newBuckets = data.buckets;
-          if (prevBuckets.length !== newBuckets.length) return data;
-          for (let i = 0; i < prevBuckets.length; i++) {
-            if (prevBuckets[i].tokens !== newBuckets[i].tokens ||
-                prevBuckets[i].maxTokens !== newBuckets[i].maxTokens ||
-                prevBuckets[i].queueLength !== newBuckets[i].queueLength) {
-              return data; // Data changed
+
+          // Create maps for key-based comparison
+          const prevMap = new Map(prevBuckets.map(b => [b.key, b]));
+          const newMap = new Map(newBuckets.map(b => [b.key, b]));
+
+          // Check if keys changed (added/removed buckets)
+          if (prevMap.size !== newMap.size) return data;
+
+          // Check if any bucket values changed
+          for (const [key, newBucket] of newMap) {
+            const prevBucket = prevMap.get(key);
+            if (!prevBucket) return data; // New bucket added
+            if (prevBucket.tokens !== newBucket.tokens ||
+                prevBucket.maxTokens !== newBucket.maxTokens ||
+                prevBucket.queueLength !== newBucket.queueLength ||
+                prevBucket.provider !== newBucket.provider ||
+                prevBucket.sessionId !== newBucket.sessionId) {
+              return data; // Bucket data changed
             }
           }
+
           // Also check nvidiaWorkerRetryCount
           if (prev.nvidiaWorkerRetryCount !== data.nvidiaWorkerRetryCount) {
             return data;
           }
+
           return prev; // Data unchanged, keep previous state
         });
         setRateLimiterError(null);
@@ -307,15 +322,15 @@ function MetricsContent() {
         {rateLimiterMetrics && rateLimiterMetrics.config.enabled && (
           <div className="space-y-4">
             {/* NVIDIA Worker Retry Counter */}
-            {(rateLimiterMetrics.nvidiaWorkerRetryCount !== undefined && rateLimiterMetrics.nvidiaWorkerRetryCount > 0) && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-amber-800">NVIDIA Worker Retries:</span>
-                  <span className="font-mono text-lg font-bold text-amber-700">{rateLimiterMetrics.nvidiaWorkerRetryCount}</span>
-                  <span className="text-sm text-amber-600">("continue" retries for ResourceExhausted limit reached)</span>
-                </div>
+            <div className={`rounded-lg border p-4 ${rateLimiterMetrics.nvidiaWorkerRetryCount && rateLimiterMetrics.nvidiaWorkerRetryCount > 0 ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-gray-700">NVIDIA Worker Retries:</span>
+                <span className={`font-mono text-lg font-bold ${rateLimiterMetrics.nvidiaWorkerRetryCount && rateLimiterMetrics.nvidiaWorkerRetryCount > 0 ? 'text-amber-700' : 'text-gray-500'}`}>
+                  {rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0}
+                </span>
+                <span className="text-sm text-gray-500">("continue" retries for ResourceExhausted limit reached)</span>
               </div>
-            )}
+            </div>
             {/* Chart */}
             <div className="rounded-lg border p-4">
               <h4 className="text-md font-medium mb-3">Request Bucket States</h4>

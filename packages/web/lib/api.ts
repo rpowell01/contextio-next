@@ -769,7 +769,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
         throw new Error("Request aborted");
       }
       throw error;
-}
+    }
   }
 
   /**

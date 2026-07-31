@@ -511,13 +511,23 @@ export class RetryPlugin implements ProxyPlugin {
    * { "error": { "code": "ResourceExhausted", "message": "Worker local total request limit reached (32/32)" } }
    * Or wrapped in error envelope:
    * { "name": "UnknownError", "data": { "message": "\"ResourceExhausted: Worker local total request limit reached (32/32)\"" } }
+   * Or as plain text followed by JSON (observed in some responses).
    */
   private checkNvidiaResourceExhausted(responseBody: string): { isError: boolean; message: string | null } {
     if (!responseBody) return { isError: false, message: null };
-    
+
+    // First, check raw body for the error pattern (handles plain text + JSON mixed responses)
+    const rawLower = responseBody.toLowerCase();
+    if (rawLower.includes("resourceexhausted") && rawLower.includes("worker local total request limit reached")) {
+      // Extract the relevant error message for logging
+      const match = responseBody.match(/ResourceExhausted[:\s].*worker local total request limit reached\s*\(\d+\/\d+\)/i);
+      const message = match?.[0] ?? "ResourceExhausted: Worker local total request limit reached";
+      return { isError: true, message };
+    }
+
     try {
       const parsed = JSON.parse(responseBody);
-      
+
       // Check for NVIDIA error format: { error: { code: "ResourceExhausted", message: "..." } }
       if (parsed.error && parsed.error.code === "ResourceExhausted") {
         const message = parsed.error.message ?? "ResourceExhausted";
@@ -525,12 +535,12 @@ export class RetryPlugin implements ProxyPlugin {
           return { isError: true, message };
         }
       }
-      
+
       // Also check for alternative format: { code: "ResourceExhausted", message: "..." }
       if (parsed.code === "ResourceExhausted" && parsed.message?.includes("Worker local total request limit reached")) {
         return { isError: true, message: parsed.message };
       }
-      
+
       // Check for error envelope format: { name: "UnknownError", data: { message: "..." } }
       if (parsed.name === "UnknownError" && parsed.data && parsed.data.message) {
         const message = parsed.data.message;
@@ -539,11 +549,11 @@ export class RetryPlugin implements ProxyPlugin {
           return { isError: true, message };
         }
       }
-      
+
     } catch {
-      // Not valid JSON, not an error we can parse
+      // Not valid JSON, but we already checked raw body above
     }
-    
+
     return { isError: false, message: null };
   }
 
@@ -1170,10 +1180,11 @@ export class RetryPlugin implements ProxyPlugin {
           let isNvidiaStreamingError = false;
           if (entry.provider === "nvidia" && streamState.errorStatus === null && streamState.errorMessage) {
             // Check if the error message indicates NVIDIA ResourceExhausted
-            if (streamState.errorMessage.includes("ResourceExhausted") && 
-                streamState.errorMessage.includes("Worker local total request limit reached")) {
+            // Use the same detection logic as non-streaming for consistency
+            const nvidiaCheck = this.checkNvidiaResourceExhausted(streamState.errorMessage);
+            if (nvidiaCheck.isError) {
               isNvidiaStreamingError = true;
-              console.debug(`[retry] NVIDIA ResourceExhausted detected in streaming: ${streamState.errorMessage}`);
+              console.debug(`[retry] NVIDIA ResourceExhausted detected in streaming: ${nvidiaCheck.message}`);
             }
           }
           

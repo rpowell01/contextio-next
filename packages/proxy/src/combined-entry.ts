@@ -2,7 +2,7 @@
 
 /**
  * Combined entry point: Proxy + Next.js on single port (4040)
- * 
+ *
  * This starts both the proxy server and Next.js web UI on a single port.
  * Routes:
  * - /admin/*      → Proxy admin API
@@ -12,6 +12,7 @@
 
 import type { ProxyPlugin } from "@contextio/core";
 import { createRateLimiterPlugin } from "./rate-limiter.js";
+import { createRetryPlugin } from "./retry-plugin.js";
 import { resolveConfig } from "./config.js";
 import { createCombinedProxy } from "./combined-server.js";
 
@@ -71,7 +72,7 @@ async function main(): Promise<void> {
   
   // Load plugins from env
   const plugins = await loadPluginsFromEnv();
-  
+
   // Create rate-limiter plugin with resolved per-provider config
   // The config.rateLimiter has per-provider settings from database + env overrides
   const providers: Record<string, { maxRequests: number; windowMs: number; bufferCapacity: number }> = {};
@@ -82,7 +83,7 @@ async function main(): Promise<void> {
       bufferCapacity: rlConfig.bufferCapacity,
     };
   }
-  
+
   const rateLimiterPlugin = createRateLimiterPlugin({
     defaults: {
       maxRequests: config.rateLimiter.openai.maxRequests,
@@ -91,14 +92,40 @@ async function main(): Promise<void> {
     },
     providers,
   });
-  
-  // Replace any rate-limiter plugin loaded from env with our properly configured one
-  const filteredPlugins = plugins.filter(p => p.name !== "rate-limiter");
-  filteredPlugins.push(rateLimiterPlugin);
-  
+
+  // Create retry plugin with resolved per-provider config
+  const retryProviders: Record<string, { maxRetries: number; baseDelayMs: number; maxDelayMs: number; retryableStatuses: number[]; jitterFactor: number }> = {};
+  for (const [provider, retryConfig] of Object.entries(config.retry)) {
+    retryProviders[provider] = {
+      maxRetries: retryConfig.maxRetries,
+      baseDelayMs: retryConfig.baseDelayMs,
+      maxDelayMs: retryConfig.maxDelayMs,
+      retryableStatuses: retryConfig.retryableStatuses,
+      jitterFactor: retryConfig.jitterFactor,
+    };
+  }
+
+  const retryPlugin = createRetryPlugin({
+    maxRetries: config.retry.openai.maxRetries,
+    baseDelayMs: config.retry.openai.baseDelayMs,
+    maxDelayMs: config.retry.openai.maxDelayMs,
+    retryableStatuses: config.retry.openai.retryableStatuses,
+    jitterFactor: config.retry.openai.jitterFactor,
+    providers: retryProviders,
+  });
+
+  // Replace any rate-limiter/retry plugin loaded from env with our properly configured ones
+  const filteredPlugins = plugins.filter(p => p.name !== "rate-limiter" && p.name !== "retry");
+  filteredPlugins.push(rateLimiterPlugin, retryPlugin);
+
   console.log(`Loaded plugin: rate-limiter (with per-provider config from database)`);
   for (const [provider, rlConfig] of Object.entries(config.rateLimiter)) {
     console.log(`  ${provider}: maxRequests=${rlConfig.maxRequests}, windowMs=${rlConfig.windowMs}, buffer=${rlConfig.bufferCapacity}`);
+  }
+
+  console.log(`Loaded plugin: retry (with per-provider config from database)`);
+  for (const [provider, retryConfig] of Object.entries(config.retry)) {
+    console.log(`  ${provider}: maxRetries=${retryConfig.maxRetries}, baseDelayMs=${retryConfig.baseDelayMs}, maxDelayMs=${retryConfig.maxDelayMs}`);
   }
 
   const logTraffic = process.env.LOG_TRAFFIC === "true";

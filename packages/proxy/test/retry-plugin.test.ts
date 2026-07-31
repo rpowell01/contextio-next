@@ -38,31 +38,30 @@ function createMockRequestContext(overrides: Partial<RequestContext> = {}): Requ
   };
 }
 
-function createMockResponseContext(overrides: Partial<ResponseContext> = {}): ResponseContext {
+function createMockResponseContext(overrides: Partial<ResponseContext> & { captureId?: string } = {}): ResponseContext {
   // Get captureId from overrides or use a default
-  const captureId = overrides.captureId;
-  const defaultHeaders: HeaderMap = { 
+  const { captureId, headers: overrideHeaders, ...restOverrides } = overrides;
+  const defaultHeaders: HeaderMap = {
     "content-type": "application/json",
   };
-  
+
   // Add captureId to headers if provided
   if (captureId) {
     defaultHeaders["x-contextio-capture-id"] = captureId;
   }
-  
+
   // Merge headers from overrides with defaults
-  const mergedHeaders = overrides.headers 
-    ? { ...defaultHeaders, ...overrides.headers }
+  const mergedHeaders = overrideHeaders
+    ? { ...defaultHeaders, ...overrideHeaders }
     : defaultHeaders;
-  
+
   return {
     status: 200,
     headers: mergedHeaders,
     body: '{"result":"ok"}',
     isStreaming: false,
     sessionId: "test-session-123",
-    ...overrides,
-    headers: mergedHeaders, // Ensure merged headers are used
+    ...restOverrides,
   };
 }
 
