@@ -45,7 +45,6 @@ function MetricsContent() {
   const [maxDataPoints, setMaxDataPoints] = useState<number>(50);
   const [page, setPage] = useState<number>(1);
   const [pageSize] = useState<number>(50);
-  const [pollingEnabled, setPollingEnabled] = useState(true);
   const [rateLimiterError, setRateLimiterError] = useState<string | null>(null);
   const [rateLimiterLoading, setRateLimiterLoading] = useState(true);
 
@@ -153,11 +152,6 @@ function MetricsContent() {
 
   // Poll for rate limiter metrics
   useEffect(() => {
-    if (!pollingEnabled) {
-      setRateLimiterError(null);
-      return;
-    }
-
     let cancelled = false;
 
     const runPoll = async () => {
@@ -203,7 +197,7 @@ function MetricsContent() {
         abortControllerRef.current = null;
       }
     };
-  }, [fetchRateLimiterMetrics, pollingEnabled]);
+  }, [fetchRateLimiterMetrics]);
 
   useEffect(() => {
     fetchMetrics();
@@ -251,21 +245,7 @@ function MetricsContent() {
 
       {/* Rate Limiter Metrics - rendered independently of main metrics */}
       <div className="rounded-lg border p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Rate Limiter Status</h3>
-          <div className="flex items-center gap-2">
-            <label htmlFor="auto-refresh-rate-limiter" className="text-sm text-muted-foreground">
-              Auto-refresh (5s)
-            </label>
-            <input
-              id="auto-refresh-rate-limiter"
-              type="checkbox"
-              checked={pollingEnabled}
-              onChange={(e) => setPollingEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-            />
-          </div>
-        </div>
+        <h3 className="text-lg font-semibold mb-4">Rate Limiter Status</h3>
         {rateLimiterError && (
           <div className="rounded-lg border border-destructive bg-destructive/10 p-4 mb-4">
             <p className="text-destructive">{rateLimiterError}</p>
