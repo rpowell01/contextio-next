@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { memo, useState, useMemo, useRef, useEffect } from "react";
 import { formatNumber } from "@/lib/utils";
 import type { RateLimiterBucketState } from "@/types/api";
 import {
@@ -73,7 +73,28 @@ function getStatusColor(status: ChartDataPoint["status"]): string {
   }
 }
 
-export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 }: RateLimiterChartProps) {
+// Custom comparison function for memo - only re-render when data actually changes
+function chartDataEqual(prevProps: RateLimiterChartProps, nextProps: RateLimiterChartProps): boolean {
+  if (prevProps.loading !== nextProps.loading) return false;
+  if (prevProps.maxDataPoints !== nextProps.maxDataPoints) return false;
+
+  const prevBuckets = prevProps.buckets || [];
+  const nextBuckets = nextProps.buckets || [];
+
+  if (prevBuckets.length !== nextBuckets.length) return false;
+
+  // Compare tokens, maxTokens, queueLength for each bucket
+  for (let i = 0; i < prevBuckets.length; i++) {
+    if (prevBuckets[i].tokens !== nextBuckets[i].tokens ||
+        prevBuckets[i].maxTokens !== nextBuckets[i].maxTokens ||
+        prevBuckets[i].queueLength !== nextBuckets[i].queueLength) {
+      return false; // Data changed, re-render
+    }
+  }
+  return true; // Data unchanged, skip re-render
+}
+
+export const RateLimiterChart = memo(function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 }: RateLimiterChartProps) {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -271,6 +292,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               opacity={0.85}
               radius={[0, 4, 4, 0]}
               aria-label="Remaining requests"
+              animationDuration={0}
             >
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} />
@@ -284,6 +306,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               stackId="tokens"
               fill="transparent"
               stroke="transparent"
+              animationDuration={0}
             />
             
             {/* Buffer capacity indicator */}
@@ -294,6 +317,7 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
               fill="#8b5cf6"
               opacity={0.3}
               radius={[0, 4, 4, 0]}
+              animationDuration={0}
             />
             
             {/* Provider-specific reference lines */}
@@ -351,4 +375,4 @@ export function RateLimiterChart({ buckets, loading = false, maxDataPoints = 50 
       </div>
     </div>
   );
-}
+}, chartDataEqual);
