@@ -514,7 +514,7 @@ function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
           {utilizationPercent}% used
         </span>
         <span className="text-muted-foreground">
-          {formatNumber(totalTokens)} / {formatNumber(totalMaxTokens)} remaining
+          {formatNumber(totalMaxTokens - totalTokens)} / {formatNumber(totalMaxTokens)} used
         </span>
       </div>
 

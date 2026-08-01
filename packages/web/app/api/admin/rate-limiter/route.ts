@@ -8,7 +8,14 @@ const PROXY_ADMIN_URL =
 export async function GET() {
   try {
     // Fetch real rate limiter metrics from the proxy admin API
-    const response = await fetch(`${PROXY_ADMIN_URL}/admin/rate-limiter`);
+    const response = await fetch(`${PROXY_ADMIN_URL}/admin/rate-limiter`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    });
     if (!response.ok) {
       throw new Error(`Proxy admin API returned ${response.status}`);
     }
@@ -22,7 +29,13 @@ export async function GET() {
         }`,
       );
     }
-    return NextResponse.json(metrics);
+    return NextResponse.json(metrics, {
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    });
   } catch (error) {
     console.error("Error in rate-limiter API:", error);
     // Fallback to disabled state if proxy is unreachable
@@ -39,6 +52,12 @@ export async function GET() {
       totalQueued: 0,
       timestamp: new Date().toISOString(),
       code: "RATE_LIMITER_UNAVAILABLE",
-    } satisfies RateLimiterMetrics);
+    } satisfies RateLimiterMetrics, {
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    });
   }
 }

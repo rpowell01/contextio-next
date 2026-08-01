@@ -237,7 +237,7 @@ describe("rate-limiter plugin", () => {
     internal.shutdown();
   });
 
-  it("buffers requests when tokens exhausted but buffer available", async () => {
+  it("buffers requests when limit exhausted but buffer available", async () => {
     const plugin = createRateLimiterPlugin({
       maxRequests: 2,
       windowMs: 1000,
@@ -246,11 +246,11 @@ describe("rate-limiter plugin", () => {
     const internal = getInternal(plugin);
     const ctx = createMockContext();
 
-    // Request 1: token 2→1 (success)
+    // Request 1: success (count 1)
     await plugin.onRequest!(ctx);
-    // Request 2: token 1→0 (success)
+    // Request 2: success (count 2)
     await plugin.onRequest!(ctx);
-    // Request 3: token 0, queue length 0 < buffer 2, queue it
+    // Request 3: limit reached, queue length 0 < buffer 2, queue it
     const queued1 = plugin.onRequest!(ctx);
     // Request 4: queue length 1 < buffer 2, queue it
     const queued2 = plugin.onRequest!(ctx);
@@ -270,14 +270,17 @@ describe("rate-limiter plugin", () => {
     assert.ok(bucket);
     assert.equal(bucket.queue.length, 2);
 
-    // Manually set tokens high enough to process the queue (simulating token refill)
-    if (bucket) {
-      bucket.tokens = 2; // Enough to process both queued requests
-    }
-    internal.processAllQueues();
+    // Advance time past window to allow requests to be admitted
+    // (sliding window: after windowMs, oldest request expires)
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    // Now queued requests should be processed
+    await queued1;
+    await queued2;
 
     // Verify the queue is now empty (requests were processed)
-    assert.equal(bucket.queue.length, 0);
+    const bucketAfter = internal.getBucketState("openai");
+    assert.equal(bucketAfter!.queue.length, 0);
 
     internal.shutdown();
   });

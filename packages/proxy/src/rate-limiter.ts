@@ -1,7 +1,7 @@
 /**
  * @contextio/proxy - Rate Limiter Plugin
  *
- * Token bucket rate limiter with optional burst buffer.
+ * Sliding-window rate limiter with optional request queue for burst handling.
  * By default tracks state per provider (all sessions share one bucket per provider).
  * Supports per-provider configuration overrides and optional per-session isolation.
  */
@@ -43,8 +43,8 @@ export interface RateLimiterConfig {
   windowMs?: number;
 
   /**
-   * Additional burst capacity beyond maxRequests.
-   * Allows short bursts of traffic above the steady-state rate.
+   * Queue capacity for burst handling (requests waiting when limit is reached).
+   * Does NOT increase the request limit — only allows queuing.
    * @default 10
    * @deprecated Use defaults.bufferCapacity instead
    */
@@ -59,7 +59,7 @@ export interface RateLimiterConfig {
     maxRequests?: number;
     /** Time window in milliseconds for the rate limit. @default 60000 (1 minute) */
     windowMs?: number;
-    /** Additional burst capacity beyond maxRequests. @default 10 */
+    /** Queue capacity for burst handling. @default 10 */
     bufferCapacity?: number;
   };
 
@@ -73,7 +73,7 @@ export interface RateLimiterConfig {
     maxRequests?: number;
     /** Time window in milliseconds for the rate limit. */
     windowMs?: number;
-    /** Additional burst capacity beyond maxRequests. */
+    /** Queue capacity for burst handling. */
     bufferCapacity?: number;
   }>;
 
@@ -124,21 +124,22 @@ export interface RateLimiterConfig {
 
 /**
  * Internal state for a rate limit bucket.
+ * Uses a sliding window of request timestamps for precise limiting.
  */
 interface BucketState {
-  tokens: number;
-  lastRefill: number;
-  // Track requests made in the current window for accurate metrics
-  requestsInWindow: number;
-  // Window boundary tracking
-  windowStart: number;
+  /** Timestamps of requests in the current window (ms since epoch) */
+  requestTimestamps: number[];
+  /** Queue of waiting requests when limit is reached */
   queue: Array<{
     resolve: (value: RequestContext) => void;
     reject: (error: Error) => void;
     ctx: RequestContext;
+    enqueuedAt: number;
   }>;
+  /** Last access time for LRU eviction */
   lastAccessed: number;
-  refillTimer: NodeJS.Timeout | null;
+  /** Timer for processing queued requests */
+  queueTimer: NodeJS.Timeout | null;
 }
 
 /**
@@ -150,7 +151,6 @@ const DEFAULT_BUFFER_CAPACITY = 10;
 const DEFAULT_MAX_ENTRIES = 10_000;
 const DEFAULT_CLEANUP_INTERVAL_MS = 300_000; // 5 minutes
 const DEFAULT_ENTRY_TTL_MS = 600_000; // 10 minutes
-const TOKEN_EPSILON = 1e-10; // Floating-point comparison epsilon
 
 /**
  * Generate a rate limit key using sessionId and provider.
@@ -195,14 +195,14 @@ interface ResolvedRateLimiterConfig {
 }
 
 /**
- * Rate limiter plugin class implementing the token bucket algorithm.
+ * Rate limiter plugin class implementing a sliding-window algorithm.
+ * Enforces a hard limit of maxRequests per windowMs with optional queue for burst handling.
  */
 export class RateLimiterPlugin implements ProxyPlugin {
   name = "rate-limiter";
 
   private readonly config: ResolvedRateLimiterConfig;
   private readonly buckets = new Map<string, BucketState>();
-  private readonly refillRate: number;
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(config: RateLimiterConfig = {}) {
@@ -273,7 +273,6 @@ export class RateLimiterPlugin implements ProxyPlugin {
       providers,
     };
 
-    this.refillRate = this.config.maxRequests / this.config.windowMs;
     this.startCleanupTimer();
   }
 
@@ -281,14 +280,13 @@ export class RateLimiterPlugin implements ProxyPlugin {
    * Get the rate limit config for a specific provider.
    * Falls back to defaults if provider not configured.
    */
-  private getProviderConfig(provider: string): { maxRequests: number; windowMs: number; bufferCapacity: number; refillRate: number } {
+  private getProviderConfig(provider: string): { maxRequests: number; windowMs: number; bufferCapacity: number } {
     const p = this.config.providers[provider];
     if (p) {
       return {
         maxRequests: p.maxRequests,
         windowMs: p.windowMs,
         bufferCapacity: p.bufferCapacity,
-        refillRate: p.maxRequests / p.windowMs,
       };
     }
     // Fall back to defaults
@@ -296,7 +294,6 @@ export class RateLimiterPlugin implements ProxyPlugin {
       maxRequests: this.config.maxRequests,
       windowMs: this.config.windowMs,
       bufferCapacity: this.config.bufferCapacity,
-      refillRate: this.refillRate,
     };
   }
 
@@ -344,8 +341,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
     for (const [key, bucket] of this.buckets) {
       if (now - bucket.lastAccessed > this.config.entryTtlMs) {
         this.rejectQueue(bucket, new Error("Rate limiter entry expired"));
-        if (bucket.refillTimer) {
-          clearTimeout(bucket.refillTimer);
+        if (bucket.queueTimer) {
+          clearTimeout(bucket.queueTimer);
         }
         this.buckets.delete(key);
         cleaned++;
@@ -360,8 +357,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
       const toRemove = entries.slice(0, this.buckets.size - this.config.maxEntries);
       for (const [key, bucket] of toRemove) {
         this.rejectQueue(bucket, new Error("Rate limiter evicted (maxEntries)"));
-        if (bucket.refillTimer) {
-          clearTimeout(bucket.refillTimer);
+        if (bucket.queueTimer) {
+          clearTimeout(bucket.queueTimer);
         }
         this.buckets.delete(key);
         cleaned++;
@@ -394,22 +391,15 @@ export class RateLimiterPlugin implements ProxyPlugin {
       // Enforce maxEntries limit with LRU eviction before creating new bucket
       this.enforceMaxEntries();
 
-      const provider = this.getProviderFromKey(key);
-      const pConfig = this.getProviderConfig(provider);
-
       bucket = {
-        tokens: pConfig.maxRequests + pConfig.bufferCapacity,
-        lastRefill: now,
-        requestsInWindow: 0,
-        windowStart: now,
+        requestTimestamps: [],
         queue: [],
         lastAccessed: now,
-        refillTimer: null,
+        queueTimer: null,
       };
       this.buckets.set(key, bucket);
     }
 
-    this.refillTokens(bucket, now, key);
     bucket.lastAccessed = now;
 
     // Move to end for LRU (delete and re-add)
@@ -434,115 +424,100 @@ export class RateLimiterPlugin implements ProxyPlugin {
     const toRemove = entries.slice(0, this.buckets.size - this.config.maxEntries + 1);
     for (const [key, bucket] of toRemove) {
       this.rejectQueue(bucket, new Error("Rate limiter evicted (maxEntries)"));
-      if (bucket.refillTimer) {
-        clearTimeout(bucket.refillTimer);
+      if (bucket.queueTimer) {
+        clearTimeout(bucket.queueTimer);
       }
       this.buckets.delete(key);
     }
   }
 
   /**
-   * Refill tokens based on elapsed time since last refill.
-   * Also resets requestsInWindow counter when window boundary is crossed.
+   * Remove expired timestamps from the sliding window.
+   * Returns the number of valid requests in the current window.
    */
-  private refillTokens(bucket: BucketState, now: number, key: string): void {
-    const elapsed = now - bucket.lastRefill;
-    if (elapsed <= 0) return;
-
-    const provider = this.getProviderFromKey(key);
-    const pConfig = this.getProviderConfig(provider);
-
-    // Check if we've crossed a window boundary (elapsed >= windowMs)
-    // If so, reset the requestsInWindow counter and update windowStart
-    if (now - bucket.windowStart >= pConfig.windowMs) {
-      bucket.requestsInWindow = 0;
-      bucket.windowStart = now;
-    }
-
-    const tokensToAdd = elapsed * pConfig.refillRate;
-    bucket.tokens = Math.min(
-      pConfig.maxRequests + pConfig.bufferCapacity,
-      bucket.tokens + tokensToAdd
-    );
-    bucket.lastRefill = now;
+  private pruneWindow(bucket: BucketState, windowStart: number): number {
+    // Filter timestamps to only those within the window
+    const validTimestamps = bucket.requestTimestamps.filter(ts => ts >= windowStart);
+    bucket.requestTimestamps = validTimestamps;
+    return validTimestamps.length;
   }
 
   /**
-   * Try to consume a token from the bucket.
-   * Returns true if successful, false if no tokens available.
-   * Increments requestsInWindow counter on successful consumption.
+   * Calculate milliseconds until the oldest request in the window expires.
+   * Returns 0 if window is not full.
    */
-  private tryConsumeToken(bucket: BucketState): boolean {
-    if (bucket.tokens >= 1 - TOKEN_EPSILON) {
-      bucket.tokens -= 1;
-      bucket.requestsInWindow += 1;
-      return true;
-    }
-    return false;
+  private calculateRetryAfter(bucket: BucketState, windowStart: number, maxRequests: number): number {
+    const validCount = bucket.requestTimestamps.length;
+    if (validCount < maxRequests) return 0;
+
+    // Oldest request in the window determines when a slot opens up
+    const oldestTimestamp = bucket.requestTimestamps[0];
+    const msUntilExpiry = oldestTimestamp + (this.config.windowMs - (Date.now() - oldestTimestamp));
+    // Actually: oldestTimestamp + windowMs - now = time until oldest leaves window
+    const ms = (oldestTimestamp + this.config.windowMs) - Date.now();
+    return Math.max(1, Math.ceil(ms));
   }
 
   /**
-   * Calculate milliseconds until next token is available.
+   * Schedule or update the queue processing timer.
    */
-  private calculateRetryAfter(bucket: BucketState, key: string): number {
-    if (bucket.tokens >= 1 - TOKEN_EPSILON) return 0;
-
-    const provider = this.getProviderFromKey(key);
-    const pConfig = this.getProviderConfig(provider);
-
-    const tokensNeeded = 1 - bucket.tokens;
-    const msUntilToken = tokensNeeded / pConfig.refillRate;
-    return Math.ceil(msUntilToken);
-  }
-
-  /**
-   * Schedule or update the refill timer for a bucket.
-   * This timer fires when the next token becomes available.
-   */
-  private scheduleRefillTimer(bucket: BucketState, key: string): void {
+  private scheduleQueueTimer(bucket: BucketState, key: string): void {
     // Clear existing timer
-    if (bucket.refillTimer) {
-      clearTimeout(bucket.refillTimer);
-      bucket.refillTimer = null;
+    if (bucket.queueTimer) {
+      clearTimeout(bucket.queueTimer);
+      bucket.queueTimer = null;
     }
 
-    // If there are tokens available, process queue immediately
-    if (bucket.tokens >= 1 - TOKEN_EPSILON) {
-      this.processQueue(bucket, key);
-      return;
-    }
-
-    // If queue is empty, no need for timer
     if (bucket.queue.length === 0) {
       return;
     }
 
-    // Calculate when next token will be available
-    const retryAfterMs = this.calculateRetryAfter(bucket, key);
+    const provider = this.getProviderFromKey(key);
+    const pConfig = this.getProviderConfig(provider);
+    const now = Date.now();
+    const windowStart = now - pConfig.windowMs;
 
-    bucket.refillTimer = setTimeout(() => {
-      bucket.refillTimer = null;
-      const now = Date.now();
-      this.refillTokens(bucket, now, key);
+    // Prune and check if a slot is available
+    this.pruneWindow(bucket, windowStart);
+
+    if (bucket.requestTimestamps.length < pConfig.maxRequests) {
+      // Slot available - process queue immediately
+      this.processQueue(bucket, key);
+      return;
+    }
+
+    // No slot yet - wait until oldest request expires
+    const retryAfterMs = this.calculateRetryAfter(bucket, windowStart, pConfig.maxRequests);
+
+    bucket.queueTimer = setTimeout(() => {
+      bucket.queueTimer = null;
       this.processQueue(bucket, key);
     }, retryAfterMs);
 
-    bucket.refillTimer.unref?.();
+    bucket.queueTimer.unref?.();
   }
 
   /**
-   * Process waiting queue: admit as many requests as tokens allow.
+   * Process waiting queue: admit as many requests as window allows.
    */
   private processQueue(bucket: BucketState, key: string): void {
-    while (bucket.queue.length > 0 && bucket.tokens >= 1 - TOKEN_EPSILON) {
+    const now = Date.now();
+    const provider = this.getProviderFromKey(key);
+    const pConfig = this.getProviderConfig(provider);
+    const windowStart = now - pConfig.windowMs;
+
+    // Prune expired timestamps
+    this.pruneWindow(bucket, windowStart);
+
+    while (bucket.queue.length > 0 && bucket.requestTimestamps.length < pConfig.maxRequests) {
       const queued = bucket.queue.shift()!;
-      this.tryConsumeToken(bucket);
+      bucket.requestTimestamps.push(now);
       queued.resolve(queued.ctx);
     }
 
-    // If there are still waiters, schedule next refill timer
+    // If there are still waiters, schedule next check
     if (bucket.queue.length > 0) {
-      this.scheduleRefillTimer(bucket, key);
+      this.scheduleQueueTimer(bucket, key);
     }
   }
 
@@ -554,25 +529,31 @@ export class RateLimiterPlugin implements ProxyPlugin {
     const key = this.config.keyGenerator(ctx);
     const bucket = this.getBucket(key);
 
-    // Try to consume a token immediately
-    if (this.tryConsumeToken(bucket)) {
+    const provider = this.getProviderFromKey(key);
+    const pConfig = this.getProviderConfig(provider);
+    const now = Date.now();
+    const windowStart = now - pConfig.windowMs;
+
+    // Prune expired timestamps
+    const currentCount = this.pruneWindow(bucket, windowStart);
+
+    // Try to admit request immediately
+    if (currentCount < pConfig.maxRequests) {
+      bucket.requestTimestamps.push(now);
       return ctx;
     }
 
-    // No tokens available - check if we can queue
-    const provider = this.getProviderFromKey(key);
-    const pConfig = this.getProviderConfig(provider);
-
+    // Limit reached - check if we can queue
     if (bucket.queue.length < pConfig.bufferCapacity) {
       // Queue the request
       return new Promise<RequestContext>((resolve, reject) => {
-        bucket.queue.push({ resolve, reject, ctx });
-        this.scheduleRefillTimer(bucket, key);
+        bucket.queue.push({ resolve, reject, ctx, enqueuedAt: now });
+        this.scheduleQueueTimer(bucket, key);
       });
     }
 
     // Queue is full - rate limited
-    const retryAfterMs = this.calculateRetryAfter(bucket, key);
+    const retryAfterMs = this.calculateRetryAfter(bucket, windowStart, pConfig.maxRequests);
 
     try {
       this.config.onRateLimited(ctx, retryAfterMs);
@@ -660,19 +641,27 @@ export class RateLimiterPlugin implements ProxyPlugin {
       requestsInWindow: number;
     }> = [];
 
+    const now = Date.now();
+
     for (const [key, bucket] of this.buckets.entries()) {
       const provider = this.getProviderFromKey(key);
       const pConfig = this.getProviderConfig(provider);
+      const windowStart = now - pConfig.windowMs;
+
+      // Count requests in current window
+      const requestsInWindow = this.pruneWindow({ ...bucket, requestTimestamps: [...bucket.requestTimestamps] }, windowStart);
+      const maxTokens = pConfig.maxRequests; // For compatibility with existing metrics
+      const tokens = Math.max(0, pConfig.maxRequests - requestsInWindow); // "Remaining" in window
 
       states.push({
         key,
-        tokens: bucket.tokens,
-        maxTokens: pConfig.maxRequests + pConfig.bufferCapacity,
+        tokens,
+        maxTokens,
         bufferCapacity: pConfig.bufferCapacity,
         queueLength: bucket.queue.length,
         lastAccessed: bucket.lastAccessed,
-        lastRefill: bucket.lastRefill,
-        requestsInWindow: bucket.requestsInWindow,
+        lastRefill: bucket.requestTimestamps[0] ?? now, // Oldest request timestamp
+        requestsInWindow,
       });
     }
 
@@ -685,8 +674,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
   clear(): void {
     for (const bucket of this.buckets.values()) {
       this.rejectQueue(bucket, new Error("Rate limiter cleared"));
-      if (bucket.refillTimer) {
-        clearTimeout(bucket.refillTimer);
+      if (bucket.queueTimer) {
+        clearTimeout(bucket.queueTimer);
       }
     }
     this.buckets.clear();
@@ -702,7 +691,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
 }
 
 /**
- * Create a rate limiter plugin with token bucket algorithm.
+ * Create a rate limiter plugin with sliding-window algorithm.
  *
  * @param config - Rate limiter configuration
  * @returns ProxyPlugin implementing rate limiting

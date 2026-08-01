@@ -5,13 +5,16 @@
 # Coolify prepends ARGs to the Dockerfile, so this prevents them from breaking the model-builder stage
 ARG COOLIFY_ARGS_PLACEHOLDER
 
+# GLiNER version pin - change this to rebuild the model with a new version
+ARG GLINER_VERSION=0.2.28
+
 FROM python:3.11-slim AS model-builder
 WORKDIR /models
 
 # Install GLiNER, Optimum CLI with ONNX support, and huggingface_hub for downloading
 # Cache pip packages to avoid re-downloading on rebuilds
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir gliner optimum[onnx] onnxruntime huggingface_hub
+    pip install --no-cache-dir gliner==${GLINER_VERSION} optimum[onnx] onnxruntime huggingface_hub
 
 # Export to ONNX using GLiNER's built-in export_to_onnx method
 # Fix model_type in the exported config (GLiNER export leaves it as null)
