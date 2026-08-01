@@ -219,13 +219,16 @@ export class RetryPlugin implements ProxyPlugin {
       }
     }
 
+    // Check RATE_LIMITER_ENABLED env var since retry plugin is closely related to rate limiting
+    const rateLimiterEnabled = process.env.RATE_LIMITER_ENABLED !== "false";
+    
     this.globalConfig = {
       maxRetries,
       baseDelayMs,
       maxDelayMs,
       retryableStatuses,
       jitterFactor,
-      enabled: enabled ?? true,
+      enabled: enabled ?? rateLimiterEnabled ?? true,
     };
     this.providerConfigs = providers;
     this.maxEntries = maxEntries ?? DEFAULT_MAX_ENTRIES;

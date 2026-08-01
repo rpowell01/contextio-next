@@ -215,6 +215,16 @@ export interface ProviderConfig {
 }
 
 /**
+ * Provider configuration with runtime metadata.
+ */
+export interface ProviderMetadata extends ProviderConfig {
+  /** Source of the provider configuration */
+  source: "file" | "env" | "default";
+  /** Whether the provider configuration is dynamic (user-created) */
+  dynamic: boolean;
+}
+
+/**
  * Status of the proxy server.
  */
 export interface ProxyStatus {

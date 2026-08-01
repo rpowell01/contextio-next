@@ -867,6 +867,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
 			`Response body could not be parsed as JSON (HTTP ${response.status})\nBody preview: ${bodySnippet}`,
 		);
         }
+        cleanup();
         return data;
       } catch (error) {
         clearTimeout(timeoutId);
