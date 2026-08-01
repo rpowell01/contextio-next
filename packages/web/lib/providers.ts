@@ -135,22 +135,60 @@ async function withFileLock<T>(
 ): Promise<T> {
   for (let attempt = 0; attempt < retries; attempt++) {
     let lockHandle: fs.FileHandle | null = null;
+    let lockAcquired = false;
     try {
       lockHandle = await fs.open(lockPath, "wx");
+      // Write PID and timestamp to lock file for stale lock detection
+      const lockInfo = JSON.stringify({ pid: process.pid, timestamp: Date.now() });
+      await lockHandle.writeFile(lockInfo, "utf8");
+      lockAcquired = true;
       const result = await fn();
       return result;
     } catch (error) {
       const errno = error as NodeJS.ErrnoException;
       if (errno.code === "EEXIST") {
+        // Check if existing lock is stale
+        const isStale = await checkStaleLock(lockPath);
+        if (isStale) {
+          // Re-read and re-validate immediately before unlink to close TOCTOU race window
+          // Another process may have acquired the lock between checkStaleLock and here
+          const currentLock = await fs.readFile(lockPath, "utf8").catch(() => null);
+          if (currentLock !== null) {
+            // File exists (even if empty/invalid) - re-check staleness and unlink if still stale
+            if (await checkStaleLock(lockPath)) {
+              await fs.unlink(lockPath).catch(() => {});
+              continue;
+            }
+          } else {
+            // Lock file disappeared, retry immediately
+            continue;
+          }
+        }
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }
       throw error;
     } finally {
-      if (lockHandle) {
+      if (lockHandle && lockAcquired) {
+        // Close handle first (ignore errors)
         try {
           await lockHandle.close();
-          await fs.unlink(lockPath).catch(() => {});
+        } catch {
+          // ignore close errors
+        }
+        // Then attempt to unlink if we still own the lock
+        // Separate try block ensures unlink runs even if close() threw
+        try {
+          // Only unlink if we still own the lock (PID matches)
+          // This prevents race condition where another process acquired the lock after we removed a stale one
+          // Re-read immediately before unlink to close TOCTOU race window
+          const currentLock = await fs.readFile(lockPath, "utf8").catch(() => null);
+          if (currentLock) {
+            const lockInfo = JSON.parse(currentLock);
+            if (lockInfo.pid === process.pid) {
+              await fs.unlink(lockPath).catch(() => {});
+            }
+          }
         } catch {
           // ignore cleanup errors
         }
@@ -158,6 +196,58 @@ async function withFileLock<T>(
     }
   }
   throw new Error(`Failed to acquire file lock after ${retries} retries`);
+}
+
+async function checkStaleLock(lockPath: string): Promise<boolean> {
+  try {
+    const lockContent = await fs.readFile(lockPath, "utf8");
+    
+    // Empty or whitespace-only lock file -> treat as stale
+    if (!lockContent.trim()) {
+      return true;
+    }
+    
+    let lockInfo: { pid?: number; timestamp?: number };
+    try {
+      lockInfo = JSON.parse(lockContent);
+    } catch {
+      // Invalid JSON -> treat as stale (corrupted/old format)
+      return true;
+    }
+    
+    // Check if the owning process is still alive
+    if (lockInfo.pid) {
+      try {
+        // process.kill(pid, 0) throws if process doesn't exist
+        // On Windows, this may not work reliably, so we handle EPERM as inconclusive
+        process.kill(lockInfo.pid, 0);
+        // Process confirmed alive -> NOT stale, regardless of timestamp age
+        // (fn() may legitimately take >30s)
+        return false;
+      } catch (err) {
+        // Process doesn't exist (ESRCH) or permission denied (EPERM)
+        // If ESRCH, process is dead -> stale lock
+        // If EPERM, process exists but we can't signal -> inconclusive, fall through to timestamp check
+        const errno = err as NodeJS.ErrnoException;
+        if (errno.code === "ESRCH") {
+          return true; // Stale: process dead
+        }
+        // EPERM or other -> inconclusive, fall through to timestamp check
+      }
+    }
+    
+    // No PID in lock file, or liveness check inconclusive (EPERM):
+    // use timestamp fallback (> 30 seconds)
+    if (lockInfo.timestamp && Date.now() - lockInfo.timestamp > 30000) {
+      return true;
+    }
+    
+    // Can't determine, assume not stale to be safe
+    return false;
+  } catch {
+    // Can't read lock file (ENOENT, EACCES, etc.), assume not stale
+    return false;
+  }
 }
 
 

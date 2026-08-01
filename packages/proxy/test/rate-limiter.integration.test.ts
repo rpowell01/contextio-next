@@ -2,6 +2,21 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createRateLimiterPlugin, type RateLimiterConfig } from "@contextio/proxy";
+import type { ProxyPlugin } from "@contextio/core";
+
+interface RateLimiterInternal {
+  getAllKeys: () => string[];
+  shutdown: () => void;
+}
+
+function isRateLimiterPlugin(plugin: ProxyPlugin): plugin is ProxyPlugin & { _internal: RateLimiterInternal } {
+  return (
+    plugin.name === "rate-limiter" &&
+    "_internal" in plugin &&
+    typeof (plugin as { _internal?: RateLimiterInternal })._internal?.getAllKeys === "function" &&
+    typeof (plugin as { _internal?: RateLimiterInternal })._internal?.shutdown === "function"
+  );
+}
 
 /**
  * Helper to make an HTTP request to the proxy.
@@ -125,9 +140,9 @@ describe("rate-limiter integration", () => {
   });
 
   after(async () => {
-    if (rateLimiterPlugin) rateLimiterPlugin._internal.shutdown();
-    if (bufferingPlugin) bufferingPlugin._internal.shutdown();
-    if (cleanupPlugin) cleanupPlugin._internal.shutdown();
+    if (rateLimiterPlugin && isRateLimiterPlugin(rateLimiterPlugin)) rateLimiterPlugin._internal.shutdown();
+    if (bufferingPlugin && isRateLimiterPlugin(bufferingPlugin)) bufferingPlugin._internal.shutdown();
+    if (cleanupPlugin && isRateLimiterPlugin(cleanupPlugin)) cleanupPlugin._internal.shutdown();
     if (proxy) await proxy.stop();
     if (bufferingProxy) await bufferingProxy.stop();
     if (cleanupProxy) await cleanupProxy.stop();
@@ -248,14 +263,14 @@ describe("rate-limiter integration", () => {
     assert.equal(res.status, 200);
 
     // Bucket should exist
-    const keysBefore = cleanupPlugin._internal.getAllKeys();
+    const keysBefore = isRateLimiterPlugin(cleanupPlugin) ? cleanupPlugin._internal.getAllKeys() : [];
     assert.ok(keysBefore.length > 0, "Should have at least one bucket before cleanup");
 
     // Wait past entryTtlMs + cleanupIntervalMs so the stale entry is removed
     await new Promise((r) => setTimeout(r, 1200));
 
     // Bucket should be gone
-    const keysAfter = cleanupPlugin._internal.getAllKeys();
+    const keysAfter = isRateLimiterPlugin(cleanupPlugin) ? cleanupPlugin._internal.getAllKeys() : [];
     assert.equal(keysAfter.length, 0, "Stale entries should be cleaned up");
   });
 });

@@ -772,6 +772,13 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     }
   }
 
+  async clearProxyLogs(): Promise<{ success: boolean }> {
+    const baseUrl = getProxyAdminBaseUrl();
+    return this.requestWithBase(baseUrl, "/admin/clear-logs", {
+      method: "POST",
+    });
+  }
+
   /**
    * Make a request with a custom base URL (for proxy admin API)
    */
@@ -887,13 +894,6 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     }
 
     throw lastError || new Error("Request failed after retries");
-  }
-
-  async clearProxyLogs(): Promise<{ success: boolean }> {
-    const baseUrl = getProxyAdminBaseUrl();
-    return this.requestWithBase(baseUrl, "/admin/clear-logs", {
-      method: "POST",
-    });
   }
 }
 

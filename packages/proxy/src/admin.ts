@@ -40,8 +40,6 @@ export interface RateLimiterInternal {
     maxTokens: number;
     bufferCapacity: number;
     queueLength: number;
-    lastAccessed: number;
-    lastRefill: number;
     requestsInWindow: number;
   }>;
   getConfigSummary: () => {
@@ -392,7 +390,7 @@ case "env": {
               maxEntries: config.maxEntries,
               enabled: config.enabled,
             },
-            buckets: buckets.map((b: { key: string; tokens: number; maxTokens: number; bufferCapacity: number; queueLength: number; lastAccessed: number; lastRefill: number; requestsInWindow: number }) => {
+            buckets: buckets.map((b: { key: string; tokens: number; maxTokens: number; bufferCapacity: number; queueLength: number; requestsInWindow: number }) => {
               // Parse provider and sessionId from key
               // With keyStrategy="provider" (default): key = "provider"
               // With keyStrategy="session-provider": key = "sessionId:provider"

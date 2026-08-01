@@ -626,8 +626,6 @@ export class RateLimiterPlugin implements ProxyPlugin {
     maxTokens: number;
     bufferCapacity: number;
     queueLength: number;
-    lastAccessed: number;
-    lastRefill: number;
     requestsInWindow: number;
   }> {
     const states: Array<{
@@ -636,8 +634,6 @@ export class RateLimiterPlugin implements ProxyPlugin {
       maxTokens: number;
       bufferCapacity: number;
       queueLength: number;
-      lastAccessed: number;
-      lastRefill: number;
       requestsInWindow: number;
     }> = [];
 
@@ -659,8 +655,6 @@ export class RateLimiterPlugin implements ProxyPlugin {
         maxTokens,
         bufferCapacity: pConfig.bufferCapacity,
         queueLength: bucket.queue.length,
-        lastAccessed: bucket.lastAccessed,
-        lastRefill: bucket.requestTimestamps[0] ?? now, // Oldest request timestamp
         requestsInWindow,
       });
     }
