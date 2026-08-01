@@ -396,6 +396,8 @@ export interface RateLimiterMetrics {
   code?: string;
   /** Number of NVIDIA worker retries (ResourceExhausted with "Worker local total request limit reached") */
   nvidiaWorkerRetryCount?: number;
+  /** Count of upstream 429 responses per provider */
+  upstream429Counts?: Record<string, number>;
 }
 
 // --- Routing helpers (re-exported from routing.ts) ---

@@ -340,11 +340,15 @@ case "env": {
             return;
           }
 
-          // Find the retry plugin for NVIDIA worker retry count
+          // Find the retry plugin for NVIDIA worker retry count and upstream 429 counts
           const retryPlugin = plugins.find((p) => p.name === "retry");
           let nvidiaWorkerRetryCount = 0;
+          let upstream429Counts: Record<string, number> = {};
           if (retryPlugin && (retryPlugin as any)._internal?.getNvidiaWorkerRetryCount) {
             nvidiaWorkerRetryCount = (retryPlugin as any)._internal.getNvidiaWorkerRetryCount();
+          }
+          if (retryPlugin && (retryPlugin as any)._internal?.getUpstream429Counts) {
+            upstream429Counts = (retryPlugin as any)._internal.getUpstream429Counts();
           }
 
           // Get bucket state from the plugin (using typed internal methods)
@@ -358,7 +362,7 @@ case "env": {
           const getConfigSummary = rateLimiterPlugin._internal.getConfigSummary.bind(rateLimiterPlugin);
 
           const config = getConfigSummary();
-          
+
           // Check if rate limiter is enabled
           if (!config.enabled) {
             res.writeHead(200, { "Content-Type": "application/json" });
@@ -376,6 +380,7 @@ case "env": {
               timestamp: new Date().toISOString(),
               code: "RATE_LIMITER_DISABLED",
               nvidiaWorkerRetryCount,
+              upstream429Counts,
             }));
             return;
           }
@@ -428,6 +433,7 @@ case "env": {
             timestamp: new Date().toISOString(),
             code: "OK",
             nvidiaWorkerRetryCount,
+            upstream429Counts,
           };
 
           res.writeHead(200, { "Content-Type": "application/json" });

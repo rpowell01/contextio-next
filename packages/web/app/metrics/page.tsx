@@ -329,6 +329,7 @@ function MetricsContent() {
                 buckets={rateLimiterMetrics.buckets}
                 loading={rateLimiterLoading}
                 maxDataPoints={maxDataPoints}
+                upstream429Counts={rateLimiterMetrics.upstream429Counts}
               />
             </div>
 
@@ -348,6 +349,7 @@ function MetricsContent() {
                         <th className="text-right p-2 font-medium">Queue</th>
                         <th className="text-left p-2 font-medium">Provider</th>
                         <th className="text-left p-2 font-medium">Scope</th>
+                        <th className="text-right p-2 font-medium">Upstream 429s</th>
                         <th className="text-right p-2 font-medium">NVIDIA Worker Retries</th>
                       </tr>
                     </thead>
@@ -379,6 +381,15 @@ function MetricsContent() {
                                 </span>
                               ) : (
                                 bucket.sessionId ?? "unknown"
+                              )}
+                            </td>
+                            <td className="p-2 text-right">
+                              {(rateLimiterMetrics.upstream429Counts?.[bucket.provider ?? ""] ?? 0) > 0 ? (
+                                <span className="font-mono font-bold text-red-700">
+                                  {formatNumber(rateLimiterMetrics.upstream429Counts?.[bucket.provider ?? ""] ?? 0)}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">0</span>
                               )}
                             </td>
                             <td className="p-2 text-right">

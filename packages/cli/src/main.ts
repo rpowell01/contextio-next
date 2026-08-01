@@ -28,6 +28,8 @@ import type { LoggerPlugin } from "@contextio/logger";
 import { createProxy, resolveOidcConfig } from "@contextio/proxy";
 import { createRedactPlugin } from "@contextio/redact";
 import type { PresetName } from "@contextio/redact";
+import { createRateLimiterPlugin } from "@contextio/proxy";
+import { createRetryPlugin } from "@contextio/proxy";
 
 import { isError, parseArgs } from "./args.js";
 import type { AttachArgs, ProxyArgs } from "./args.js";
@@ -252,6 +254,25 @@ function buildProxyArgs(args: ProxyArgs, port: number): string[] {
 	if (args.verbose) out.push("--verbose");
 	if (args.publicUrl) out.push("--public-url", args.publicUrl);
 	// OIDC config is passed via env vars to child, not argv (security)
+
+	// Rate limiter options
+	if (args.enableRateLimiter) {
+		out.push("--enable-rate-limiter");
+		if (args.rateLimitMaxRequests !== null) out.push("--rate-limit-max-requests", String(args.rateLimitMaxRequests));
+		if (args.rateLimitWindowMs !== null) out.push("--rate-limit-window-ms", String(args.rateLimitWindowMs));
+		if (args.rateLimitBuffer !== null) out.push("--rate-limit-buffer", String(args.rateLimitBuffer));
+		if (args.rateLimitPerProvider) out.push("--rate-limit-per-provider", args.rateLimitPerProvider);
+	}
+	// Retry options
+	if (args.enableRetry) {
+		out.push("--enable-retry");
+		if (args.retryMaxRetries !== null) out.push("--retry-max-retries", String(args.retryMaxRetries));
+		if (args.retryBaseDelayMs !== null) out.push("--retry-base-delay-ms", String(args.retryBaseDelayMs));
+		if (args.retryMaxDelayMs !== null) out.push("--retry-max-delay-ms", String(args.retryMaxDelayMs));
+		if (args.retryRetryableStatuses) out.push("--retry-retryable-statuses", args.retryRetryableStatuses);
+		if (args.retryJitterFactor !== null) out.push("--retry-jitter-factor", String(args.retryJitterFactor));
+	}
+
 	return out;
 }
 
@@ -500,7 +521,7 @@ function releaseSharedProxyRef(manageRef: boolean): void {
 	writeProxyLock({ ...lock, count: next });
 }
 
-/** Create the plugin array from CLI args (redact + logger based on flags). */
+/** Create the plugin array from CLI args (redact + logger + rate-limiter + retry based on flags). */
 function buildPlugins(args: ProxyArgs): ProxyPlugin[] {
 	const plugins: ProxyPlugin[] = [];
 
@@ -540,6 +561,48 @@ function buildPlugins(args: ProxyArgs): ProxyPlugin[] {
 							keyLength: 32,
 						}
 					: undefined,
+			}),
+		);
+	}
+
+	// Rate limiter plugin
+	if (args.enableRateLimiter) {
+		// Parse per-provider config
+		const providers: Record<string, { maxRequests?: number; windowMs?: number; bufferCapacity?: number }> = {};
+		if (args.rateLimitPerProvider) {
+			const pairs = args.rateLimitPerProvider.split(",").map(s => s.trim()).filter(Boolean);
+			for (const pair of pairs) {
+				const [provider, value] = pair.split(":");
+				const parsedValue = parseInt(value, 10);
+				providers[provider] = { maxRequests: parsedValue };
+			}
+		}
+
+		plugins.push(
+			createRateLimiterPlugin({
+				defaults: {
+					maxRequests: args.rateLimitMaxRequests ?? undefined,
+					windowMs: args.rateLimitWindowMs ?? undefined,
+					bufferCapacity: args.rateLimitBuffer ?? undefined,
+				},
+				providers,
+				enabled: true,
+			}),
+		);
+	}
+
+	// Retry plugin
+	if (args.enableRetry) {
+		plugins.push(
+			createRetryPlugin({
+				maxRetries: args.retryMaxRetries ?? undefined,
+				baseDelayMs: args.retryBaseDelayMs ?? undefined,
+				maxDelayMs: args.retryMaxDelayMs ?? undefined,
+				retryableStatuses: args.retryRetryableStatuses
+					? args.retryRetryableStatuses.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
+					: undefined,
+				jitterFactor: args.retryJitterFactor ?? undefined,
+				enabled: true,
 			}),
 		);
 	}

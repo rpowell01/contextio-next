@@ -57,6 +57,32 @@ export interface ProxyArgs {
 	publicUrl: string | null;
 	/** Command and args after "--" to wrap, or null for standalone proxy. */
 	wrap: string[] | null;
+
+	// Rate limiter plugin options
+	/** Enable the rate limiter plugin. */
+	enableRateLimiter: boolean;
+	/** Rate limiter: max requests per window (default: 60, NVIDIA: 20). */
+	rateLimitMaxRequests: number | null;
+	/** Rate limiter: window in milliseconds (default: 60000). */
+	rateLimitWindowMs: number | null;
+	/** Rate limiter: buffer capacity for bursts (default: 10, NVIDIA: 5). */
+	rateLimitBuffer: number | null;
+	/** Rate limiter: per-provider max requests, comma-separated "provider:value,provider:value". */
+	rateLimitPerProvider: string | null;
+
+	// Retry plugin options
+	/** Enable the retry plugin for 429/5xx responses. */
+	enableRetry: boolean;
+	/** Retry: max retry attempts (default: 3). */
+	retryMaxRetries: number | null;
+	/** Retry: initial delay in ms (default: 500). */
+	retryBaseDelayMs: number | null;
+	/** Retry: max delay cap in ms (default: 30000). */
+	retryMaxDelayMs: number | null;
+	/** Retry: comma-separated retryable HTTP status codes (default: 429,500,502,503,504). */
+	retryRetryableStatuses: string | null;
+	/** Retry: jitter factor 0-1 (default: 0.1). */
+	retryJitterFactor: number | null;
 }
 
 /** Parsed arguments for `ctxio attach <tool>`. */
@@ -159,6 +185,17 @@ export function buildProgram(
 			"--oidc-public-url <url>",
 			"public-facing URL for the proxy (e.g., https://contextio.example.com)",
 		)
+		.option("--enable-rate-limiter", "enable rate limiter plugin to prevent upstream 429s")
+		.option("--rate-limit-max-requests <number>", "rate limiter: max requests per window (default: 60, NVIDIA: 20)")
+		.option("--rate-limit-window-ms <number>", "rate limiter: window in milliseconds (default: 60000)")
+		.option("--rate-limit-buffer <number>", "rate limiter: buffer capacity for bursts (default: 10, NVIDIA: 5)")
+		.option("--rate-limit-per-provider <string>", 'rate limiter: per-provider max requests, e.g. "nvidia:20,openai:100"')
+		.option("--enable-retry", "enable retry plugin for 429/5xx responses with exponential backoff")
+		.option("--retry-max-retries <number>", "retry: max retry attempts (default: 3)")
+		.option("--retry-base-delay-ms <number>", "retry: initial delay in ms (default: 500)")
+		.option("--retry-max-delay-ms <number>", "retry: max delay cap in ms (default: 30000)")
+		.option("--retry-retryable-statuses <string>", "retry: comma-separated retryable HTTP status codes (default: 429,500,502,503,504)")
+		.option("--retry-jitter-factor <number>", "retry: jitter factor 0-1 (default: 0.1)")
 		.allowUnknownOption(false)
 		.passThroughOptions()
 		.argument("[command-args...]")
@@ -196,6 +233,17 @@ export function buildProgram(
 				oidcSessionSecret: null,
 				publicUrl: null,
 				wrap: null,
+				enableRateLimiter: false,
+				rateLimitMaxRequests: null,
+				rateLimitWindowMs: null,
+				rateLimitBuffer: null,
+				rateLimitPerProvider: null,
+				enableRetry: false,
+				retryMaxRetries: null,
+				retryBaseDelayMs: null,
+				retryMaxDelayMs: null,
+				retryRetryableStatuses: null,
+				retryJitterFactor: null,
 			});
 			return;
 		}
@@ -243,6 +291,81 @@ export function buildProgram(
 			}
 		}
 
+		// Validate rate limiter options
+		if (opts.rateLimitMaxRequests !== undefined) {
+			const val = parseInt(opts.rateLimitMaxRequests, 10);
+			if (isNaN(val) || val < 1) {
+				onResult({ error: `--rate-limit-max-requests must be a positive integer` });
+				return;
+			}
+		}
+		if (opts.rateLimitWindowMs !== undefined) {
+			const val = parseInt(opts.rateLimitWindowMs, 10);
+			if (isNaN(val) || val < 100) {
+				onResult({ error: `--rate-limit-window-ms must be >= 100` });
+				return;
+			}
+		}
+		if (opts.rateLimitBuffer !== undefined) {
+			const val = parseInt(opts.rateLimitBuffer, 10);
+			if (isNaN(val) || val < 0) {
+				onResult({ error: `--rate-limit-buffer must be a non-negative integer` });
+				return;
+			}
+		}
+		if (opts.rateLimitPerProvider !== undefined) {
+			// Validate format: "provider:value,provider:value"
+			const pairs = opts.rateLimitPerProvider.split(",").map((s: string) => s.trim()).filter(Boolean);
+			for (const pair of pairs) {
+				const [provider, value] = pair.split(":");
+				if (!provider || !value || isNaN(parseInt(value, 10)) || parseInt(value, 10) < 1) {
+					onResult({ error: `--rate-limit-per-provider must be in format "provider:value,provider:value" (e.g., "nvidia:20,openai:100")` });
+					return;
+				}
+			}
+		}
+
+		// Validate retry options
+		if (opts.retryMaxRetries !== undefined) {
+			const val = parseInt(opts.retryMaxRetries, 10);
+			if (isNaN(val) || val < 0) {
+				onResult({ error: `--retry-max-retries must be a non-negative integer` });
+				return;
+			}
+		}
+		if (opts.retryBaseDelayMs !== undefined) {
+			const val = parseInt(opts.retryBaseDelayMs, 10);
+			if (isNaN(val) || val < 0) {
+				onResult({ error: `--retry-base-delay-ms must be a non-negative integer` });
+				return;
+			}
+		}
+		if (opts.retryMaxDelayMs !== undefined) {
+			const val = parseInt(opts.retryMaxDelayMs, 10);
+			if (isNaN(val) || val < 0) {
+				onResult({ error: `--retry-max-delay-ms must be a non-negative integer` });
+				return;
+			}
+		}
+		if (opts.retryJitterFactor !== undefined) {
+			const val = parseFloat(opts.retryJitterFactor);
+			if (isNaN(val) || val < 0 || val > 1) {
+				onResult({ error: `--retry-jitter-factor must be a number between 0 and 1` });
+				return;
+			}
+		}
+		if (opts.retryRetryableStatuses !== undefined) {
+			// Validate format: comma-separated HTTP status codes
+			const codes = opts.retryRetryableStatuses.split(",").map((s: string) => s.trim()).filter(Boolean);
+			for (const code of codes) {
+				const val = parseInt(code, 10);
+				if (isNaN(val) || val < 100 || val > 599) {
+					onResult({ error: `--retry-retryable-statuses must be comma-separated HTTP status codes (100-599), e.g., "429,500,502,503,504"` });
+					return;
+				}
+			}
+		}
+
 		const wrap = commandArgs.length > 0 ? commandArgs : null;
 
 		const redact =
@@ -281,6 +404,17 @@ export function buildProgram(
 			oidcSessionSecret: opts.oidcSessionSecret || null,
 			publicUrl: opts.oidcPublicUrl || null,
 			wrap,
+			enableRateLimiter: opts.enableRateLimiter || false,
+			rateLimitMaxRequests: opts.rateLimitMaxRequests ? parseInt(opts.rateLimitMaxRequests, 10) : null,
+			rateLimitWindowMs: opts.rateLimitWindowMs ? parseInt(opts.rateLimitWindowMs, 10) : null,
+			rateLimitBuffer: opts.rateLimitBuffer ? parseInt(opts.rateLimitBuffer, 10) : null,
+			rateLimitPerProvider: opts.rateLimitPerProvider || null,
+			enableRetry: opts.enableRetry || false,
+			retryMaxRetries: opts.retryMaxRetries ? parseInt(opts.retryMaxRetries, 10) : null,
+			retryBaseDelayMs: opts.retryBaseDelayMs ? parseInt(opts.retryBaseDelayMs, 10) : null,
+			retryMaxDelayMs: opts.retryMaxDelayMs ? parseInt(opts.retryMaxDelayMs, 10) : null,
+			retryRetryableStatuses: opts.retryRetryableStatuses || null,
+			retryJitterFactor: opts.retryJitterFactor ? parseFloat(opts.retryJitterFactor) : null,
 		});
 	});
 

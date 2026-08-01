@@ -168,6 +168,9 @@ export class RetryPlugin implements ProxyPlugin {
   // Counter for NVIDIA worker retries (ResourceExhausted with "Worker local total request limit reached")
   private nvidiaWorkerRetryCount = 0;
 
+  // Counter for upstream 429 responses per provider
+  private upstream429Counts = new Map<string, number>();
+
   constructor(config: RetryConfig = {}) {
     const { providers, enabled, maxEntries, cleanupIntervalMs, entryTtlMs, ...globalConfig } = config;
 
@@ -761,6 +764,13 @@ export class RetryPlugin implements ProxyPlugin {
       return ctx;
     }
 
+    // Track upstream 429 responses per provider
+    if (ctx.status === 429) {
+      const providerKey = entry.provider || "unknown";
+      const currentCount = this.upstream429Counts.get(providerKey) || 0;
+      this.upstream429Counts.set(providerKey, currentCount + 1);
+    }
+
     // Get provider-specific configuration
     const config = this.getConfigForProvider(entry.provider);
 
@@ -1287,6 +1297,19 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Get the count of upstream 429 responses per provider.
+   * This tracks how many 429 status codes have been received from each upstream provider.
+   * Useful for debugging rate limiting behavior.
+   */
+  getUpstream429Counts(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const [provider, count] of this.upstream429Counts.entries()) {
+      counts[provider] = count;
+    }
+    return counts;
+  }
+
+  /**
    * Get streaming error state for testing/inspection.
    * Returns the detected error info for a streaming session, if any.
    * Can look up by sessionId.
@@ -1396,12 +1419,12 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     name: plugin.name,
     onRequest: (ctx: RequestContext) => plugin.onRequest(ctx),
     onResponse: (ctx: ResponseContext) => plugin.onResponse(ctx),
-    onStreamChunk: (chunk: Buffer, sessionId: string | null) => 
+    onStreamChunk: (chunk: Buffer, sessionId: string | null) =>
       plugin.onStreamChunk(chunk, sessionId),
-    onStreamEnd: (sessionId: string | null) => 
+    onStreamEnd: (sessionId: string | null) =>
       plugin.onStreamEnd(sessionId),
   };
-  
+
   // Attach internal methods for testing/graceful access to state
   // @ts-ignore
   (proxy as any)._internal = {
@@ -1411,11 +1434,12 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getRetryCount: (key: string) => plugin.getRetryCountForTesting(key),
     getModifiedBodyForRetry: (key: string) => plugin.getModifiedBodyForRetry(key),
     getNvidiaWorkerRetryCount: () => plugin.getNvidiaWorkerRetryCount(),
+    getUpstream429Counts: () => plugin.getUpstream429Counts(),
     getStreamError: (sessionId: string) => plugin.getStreamErrorForTesting(sessionId),
     getAndConsumePendingStreamRetry: (sessionId: string | null) => plugin.getAndConsumePendingStreamRetry(sessionId),
     clear: () => plugin.clearForTesting(),
     shutdown: () => plugin.shutdown(),
   };
-  
+
   return proxy;
 }
