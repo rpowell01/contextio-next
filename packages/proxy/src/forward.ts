@@ -122,8 +122,12 @@ function runCapturePlugins(plugins: ProxyPlugin[], capture: CaptureData): void {
 /**
  * Process a stream chunk through onStreamChunk plugins.
  *
- * Handles JSON splitting for SSE streams, runs plugins on each complete
- * JSON object, and buffers incomplete trailing parts for the next chunk.
+ * For SSE (text/event-stream) responses: passes raw chunks to plugins
+ * without JSON splitting, since SSE format is "data: {...}\n\n" not
+ * concatenated JSON objects. Plugins like retry-plugin handle SSE parsing.
+ *
+ * For non-streaming responses with concatenated JSON: splits by JSON
+ * object boundaries and validates each part.
  */
 function processStreamChunk(
   chunk: Buffer,
@@ -131,9 +135,44 @@ function processStreamChunk(
   plugins: ProxyPlugin[],
   hasStreamPlugins: boolean,
   jsonBuffer: string,
+  isStreaming: boolean,
 ): { processedParts: Buffer[]; remainingBuffer: string } {
   const text = chunk.toString("utf8");
   const fullText = jsonBuffer ? jsonBuffer + text : text;
+
+  // For SSE streams, don't split by JSON boundaries - SSE format is
+  // "data: {...}\n\n" which doesn't match the }{ pattern.
+  // Pass the raw chunk to plugins that handle SSE parsing (e.g., retry-plugin).
+  if (isStreaming) {
+    let buf = Buffer.from(fullText, "utf8");
+
+    // Run plugins on the raw SSE chunk
+    if (hasStreamPlugins) {
+      for (const plugin of plugins) {
+        if (!plugin.onStreamChunk) continue;
+        try {
+          let ret: unknown = plugin.onStreamChunk(buf, sessionId);
+          if (ret instanceof SharedArrayBuffer) {
+            ret = Buffer.from(Buffer.from(ret as ArrayBufferLike));
+          }
+          if (ret instanceof Buffer) {
+            buf = ret;
+          }
+        } catch (err: unknown) {
+          console.error(
+            `Plugin "${plugin.name}" onStreamChunk error:`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+
+    // For SSE, we don't buffer incomplete parts - each chunk is processed
+    // independently by the plugin's internal SSE parser.
+    return { processedParts: [buf], remainingBuffer: "" };
+  }
+
+  // Non-streaming: split concatenated JSON objects by }{ boundary
   const parts = fullText.split(/(?<=})\s*(?={)/);
   const processedParts: Buffer[] = [];
   let remainingBuffer = "";
@@ -705,6 +744,7 @@ export function createProxyHandler(
                     plugins,
                     hasStreamPlugins,
                     jsonBuffer,
+                    true, // isStreaming
                   );
                   outBuffer = Buffer.concat(result.processedParts);
                   jsonBuffer = result.remainingBuffer;
@@ -734,6 +774,7 @@ export function createProxyHandler(
                     plugins,
                     hasStreamPlugins,
                     jsonBuffer,
+                    true, // isStreaming
                   );
                   const outBuffer = Buffer.concat(result.processedParts);
                   streamBufferChunks.push(outBuffer);
