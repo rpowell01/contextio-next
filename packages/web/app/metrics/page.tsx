@@ -329,7 +329,6 @@ function MetricsContent() {
                 buckets={rateLimiterMetrics.buckets}
                 loading={rateLimiterLoading}
                 maxDataPoints={maxDataPoints}
-                upstream429Counts={rateLimiterMetrics.upstream429Counts}
               />
             </div>
 

@@ -21,7 +21,6 @@ interface RateLimiterChartProps {
   buckets: RateLimiterBucketState[];
   loading?: boolean;
   maxDataPoints?: number;
-  upstream429Counts?: Record<string, number>;
 }
 
 interface ProviderSummary {
@@ -111,7 +110,6 @@ function RateLimiterChartComponent({
   buckets,
   loading = false,
   maxDataPoints = 50,
-  upstream429Counts = {},
 }: RateLimiterChartProps) {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -230,9 +228,6 @@ function RateLimiterChartComponent({
     );
   };
 
-  // Grab upstream 429 counts from props
-  const upstream429 = upstream429Counts ?? {};
-
   const copyToClipboard = async () => {
     try {
       const dataToCopy = chartData.map(({ provider, maxRequests, bufferCapacity, totalRequestsInWindow, totalQueueLength, utilizationPercent, status }) => ({
@@ -286,7 +281,7 @@ function RateLimiterChartComponent({
       {/* Provider Utilization Summary Cards */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {providerSummaries.map((summary) => (
-          <ProviderUtilizationCard key={summary.provider} summary={summary} upstream429Count={upstream429[summary.provider] ?? 0} />
+          <ProviderUtilizationCard key={summary.provider} summary={summary} />
         ))}
       </div>
 
@@ -551,13 +546,6 @@ function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
         <div className="flex items-center gap-1 text-xs text-violet-700 bg-violet-100 px-2 py-0.5 rounded">
           <span className="font-medium">{totalQueueLength}</span>
           <span>requests queued</span>
-        </div>
-      )}
-
-      {upstream429Count > 0 && (
-        <div className="flex items-center gap-1 text-xs text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
-          <span className="font-medium">{formatNumber(upstream429Count)}</span>
-          <span>upstream 429s</span>
         </div>
       )}
     </div>
