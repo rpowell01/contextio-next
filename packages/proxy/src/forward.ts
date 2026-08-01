@@ -27,10 +27,12 @@ import {
   selectHeaders,
 } from "@contextio/core";
 import type {
+  ApiFormat,
   CaptureData,
   HeaderMap,
   JsonValue,
   ProxyPlugin,
+  Provider,
   RequestContext,
   ResponseContext,
   Upstreams,
@@ -308,6 +310,128 @@ function buildCaptureData(options: {
     responseBytes: options.respBytes,
     timings: options.timings,
   };
+}
+
+/**
+ * Reclassify provider based on upstream response headers and body.
+ * This provides defense-in-depth when request-based classification was ambiguous.
+ */
+function reclassifyProviderFromResponse(
+  initialProvider: string,
+  proxyRes: http.IncomingMessage,
+  responseBody: string,
+  logTraffic: boolean,
+): { provider: string; apiFormat: string; reclassified: boolean } {
+  const headers = proxyRes.headers as Record<string, string | undefined>;
+  const serverHeader = headers["server"]?.toLowerCase() || "";
+  const poweredByHeader = headers["x-powered-by"]?.toLowerCase() || "";
+  const viaHeader = headers["via"]?.toLowerCase() || "";
+
+  // Provider detection patterns from response headers
+  if (
+    serverHeader.includes("nvidia") ||
+    poweredByHeader.includes("nvidia") ||
+    viaHeader.includes("nvidia")
+  ) {
+    return { provider: "nvidia", apiFormat: "chat-completions", reclassified: true };
+  }
+
+  if (
+    serverHeader.includes("openrouter") ||
+    poweredByHeader.includes("openrouter") ||
+    viaHeader.includes("openrouter")
+  ) {
+    return { provider: "openrouter", apiFormat: "chat-completions", reclassified: true };
+  }
+
+  if (
+    serverHeader.includes("kilo") ||
+    poweredByHeader.includes("kilo") ||
+    viaHeader.includes("kilo")
+  ) {
+    return { provider: "kilo", apiFormat: "chat-completions", reclassified: true };
+  }
+
+  if (
+    serverHeader.includes("anthropic") ||
+    poweredByHeader.includes("anthropic")
+  ) {
+    return { provider: "anthropic", apiFormat: "anthropic-messages", reclassified: true };
+  }
+
+  if (
+    serverHeader.includes("google") ||
+    poweredByHeader.includes("google") ||
+    poweredByHeader.includes("generativelanguage") ||
+    viaHeader.includes("google")
+  ) {
+    return { provider: "gemini", apiFormat: "gemini", reclassified: true };
+  }
+
+  if (
+    serverHeader.includes("chatgpt") ||
+    poweredByHeader.includes("chatgpt") ||
+    serverHeader.includes("openai-chatgpt")
+  ) {
+    return { provider: "chatgpt", apiFormat: "chatgpt-backend", reclassified: true };
+  }
+
+  if (
+    serverHeader.includes("openai") ||
+    poweredByHeader.includes("openai") ||
+    serverHeader.includes("chat.openai.com") ||
+    serverHeader.includes("api.openai.com")
+  ) {
+    return { provider: "openai", apiFormat: "chat-completions", reclassified: true };
+  }
+
+  // Check response body for provider-specific patterns
+  if (responseBody) {
+    try {
+      const parsed = JSON.parse(responseBody);
+
+      // OpenAI Responses API format
+      if (parsed.object === "chat.completion" || parsed.object === "completion") {
+        return { provider: "openai", apiFormat: "chat-completions", reclassified: true };
+      }
+
+      // OpenAI chat.completions format
+      if (parsed.choices && Array.isArray(parsed.choices) && parsed.choices[0]?.message) {
+        return { provider: "openai", apiFormat: "chat-completions", reclassified: true };
+      }
+
+      // Anthropic Messages format
+      if (parsed.type === "message" && parsed.content && Array.isArray(parsed.content)) {
+        return { provider: "anthropic", apiFormat: "anthropic-messages", reclassified: true };
+      }
+
+      // Gemini format
+      if (parsed.candidates && Array.isArray(parsed.candidates) && parsed.candidates[0]?.content) {
+        return { provider: "gemini", apiFormat: "gemini", reclassified: true };
+      }
+
+      // NVIDIA may return OpenAI-compatible format, but check for specific fields
+      if (parsed.model && typeof parsed.model === "string" && parsed.model.includes("nvidia")) {
+        return { provider: "nvidia", apiFormat: "chat-completions", reclassified: true };
+      }
+
+      // OpenRouter often includes provider info
+      if (parsed.provider && typeof parsed.provider === "string") {
+        const providerName = parsed.provider.toLowerCase();
+        if (providerName.includes("nvidia")) {
+          return { provider: "nvidia", apiFormat: "chat-completions", reclassified: true };
+        }
+        if (providerName.includes("openrouter")) {
+          return { provider: "openrouter", apiFormat: "chat-completions", reclassified: true };
+        }
+      }
+    } catch {
+      // Not JSON, ignore
+    }
+  }
+
+  // No reclassification possible - keep original
+  return { provider: initialProvider, apiFormat: "", reclassified: false };
 }
 
 /**
@@ -920,19 +1044,41 @@ export function createProxyHandler(
                       console.log("[DEBUG] Skipping capture for title-generation request");
                     }
                   } else {
+                    // Response-based provider reclassification (defense-in-depth)
+                    // This catches cases where request-based classification was ambiguous
+                    // but the upstream response identifies the actual provider
+                    const finalBodyStr = Buffer.isBuffer(finalBody) ? finalBody.toString("utf8") : finalBody;
+                    const reclassified = reclassifyProviderFromResponse(
+                      provider,
+                      proxyRes,
+                      finalBodyStr,
+                      opts.logTraffic,
+                    );
+                    const captureProvider: Provider = reclassified.reclassified
+                      ? (reclassified.provider as Provider)
+                      : provider;
+                    const captureApiFormat: ApiFormat = reclassified.reclassified
+                      ? (reclassified.apiFormat as ApiFormat)
+                      : apiFormat;
+                    if (reclassified.reclassified && opts.logTraffic) {
+                      console.error(
+                        `[FORWARD] Provider reclassified from ${provider} to ${captureProvider} based on response`,
+                      );
+                    }
+
                     const capture = buildCaptureData({
                       sessionId,
                       req,
                       cleanPath,
                       source,
-                      provider,
-                      apiFormat,
+                      provider: captureProvider,
+                      apiFormat: captureApiFormat,
                       targetUrl,
                       ctx,
                       originalBody: bodyJson,
                       reqBytes,
                       proxyRes,
-                      finalBody: Buffer.isBuffer(finalBody) ? finalBody.toString("utf8") : finalBody,
+                      finalBody: finalBodyStr,
                       isStreaming: !!isStreaming,
                       respBytes,
                       timings,
