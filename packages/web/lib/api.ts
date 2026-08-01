@@ -783,15 +783,8 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
   ): Promise<T> {
     let lastError: Error | undefined;
     let retryDelay = retryConfig.initialDelay;
-    let cleanup: (() => void) | null = null;
 
     for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
-      // Clean up previous iteration's signal listeners
-      if (cleanup) {
-        cleanup();
-        cleanup = null;
-      }
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
@@ -800,8 +793,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
       const combined = providedSignal
         ? this.combineSignals([providedSignal, controller.signal])
         : { signal: controller.signal, cleanup: () => {} };
-      const { signal, cleanup: newCleanup } = combined;
-      cleanup = newCleanup;
+      const { signal, cleanup } = combined;
 
       // Check if already aborted before making request
       if (signal.aborted) {
@@ -839,7 +831,6 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
           if (attempt < retryConfig.maxRetries && isTransientError(error, response.status)) {
             // Check signal before sleeping
             if (signal.aborted) {
-              cleanup();
               throw new Error("Request aborted");
             }
             // Add jitter to prevent thundering herd
@@ -847,10 +838,8 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
             await sleep(retryDelay + jitter);
             retryDelay = Math.min(retryDelay * retryConfig.backoffFactor, retryConfig.maxDelay);
             lastError = error;
-            cleanup();
             continue;
           }
-          cleanup();
           throw error;
         }
 
@@ -889,7 +878,6 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
             await sleep(retryDelay + jitter);
             retryDelay = Math.min(retryDelay * retryConfig.backoffFactor, retryConfig.maxDelay);
             lastError = error;
-            cleanup();
             continue;
           }
           throw error;

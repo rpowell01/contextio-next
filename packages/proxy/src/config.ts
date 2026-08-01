@@ -322,6 +322,13 @@ export function resolveConfig(
     bufferCapacity: 10,
   };
 
+  // NVIDIA NIM has stricter upstream limits - use conservative default
+  const nvidiaDefaultRateLimit: RateLimitConfig = {
+    maxRequests: 20,
+    windowMs: 60_000,
+    bufferCapacity: 5,
+  };
+
   const MIN_MAX_REQUESTS = 1;
   const MAX_MAX_REQUESTS = 10000;
   const MIN_WINDOW_MS = 100;
@@ -379,7 +386,7 @@ export function resolveConfig(
     chatgpt: parseRateLimitEnv("chatgpt", defaultRateLimit),
     gemini: parseRateLimitEnv("gemini", defaultRateLimit),
     vertex: parseRateLimitEnv("vertex", defaultRateLimit),
-    nvidia: parseRateLimitEnv("nvidia", defaultRateLimit),
+    nvidia: parseRateLimitEnv("nvidia", nvidiaDefaultRateLimit),
     openrouter: parseRateLimitEnv("openrouter", defaultRateLimit),
     kilo: parseRateLimitEnv("kilo", defaultRateLimit),
     unknown: parseRateLimitEnv("unknown", defaultRateLimit),

@@ -837,7 +837,7 @@ describe("retry plugin - unit tests", () => {
       (disabledPlugin as any)._internal.shutdown();
     });
 
-    it("ignores provider config when globally disabled", async () => {
+    it("ignores provider-specific config when plugin is globally disabled", async () => {
       const disabledPlugin = createRetryPlugin({ 
         enabled: false,
         providers: {
@@ -851,9 +851,70 @@ describe("retry plugin - unit tests", () => {
       const responseCtx = createMockResponseContext({ status: 500, sessionId: "test-session-123", captureId: ctx.captureId });
       const result = await disabledPlugin.onResponse!(responseCtx);
       
-      assert.equal(result.status, 500);
+      assert.equal(result.status, 500, "Should pass through 500 without retry when globally disabled");
       
       (disabledPlugin as any)._internal.shutdown();
+    });
+
+    it("does not retry when maxRetries=0 but plugin is enabled", async () => {
+      const zeroRetryPlugin = createRetryPlugin({
+        maxRetries: 0,
+        baseDelayMs: 10,
+        jitterFactor: 0,
+        enabled: true,
+      });
+      
+      const ctx = createMockRequestContext();
+      await zeroRetryPlugin.onRequest!(ctx);
+      
+      const responseCtx = createMockResponseContext({ 
+        status: 500, 
+        sessionId: "test-session-123", 
+        captureId: ctx.captureId 
+      });
+      const result = await zeroRetryPlugin.onResponse!(responseCtx);
+      
+      // Should not retry, pass through the error immediately
+      assert.equal(result.status, 500, "Should pass through 500 without retry when maxRetries=0");
+      assert.equal((zeroRetryPlugin as any)._internal.getRetryCount(ctx.captureId!), 0);
+      
+      (zeroRetryPlugin as any)._internal.shutdown();
+    });
+
+    it("does not retry when retryableStatuses is empty array", async () => {
+      const noRetryStatusesPlugin = createRetryPlugin({
+        maxRetries: 3,
+        baseDelayMs: 10,
+        retryableStatuses: [], // Empty array - no status codes are retryable
+        jitterFactor: 0,
+        enabled: true,
+      });
+      
+      const ctx = createMockRequestContext();
+      await noRetryStatusesPlugin.onRequest!(ctx);
+      
+      // Test 500 - normally retryable but not in empty array
+      const responseCtx500 = createMockResponseContext({ 
+        status: 500, 
+        sessionId: "test-session-123", 
+        captureId: ctx.captureId 
+      });
+      const result500 = await noRetryStatusesPlugin.onResponse!(responseCtx500);
+      assert.equal(result500.status, 500, "Should pass through 500 without retry when retryableStatuses is empty");
+      
+      // Test 429 - normally retryable but not in empty array
+      const responseCtx429 = createMockResponseContext({ 
+        status: 429, 
+        headers: { "content-type": "application/json", "retry-after": "1" },
+        sessionId: "test-session-123", 
+        captureId: ctx.captureId 
+      });
+      const result429 = await noRetryStatusesPlugin.onResponse!(responseCtx429);
+      assert.equal(result429.status, 429, "Should pass through 429 without retry when retryableStatuses is empty");
+      
+      assert.equal((noRetryStatusesPlugin as any)._internal.getRetryCount(ctx.captureId!), 0);
+      
+      (noRetryStatusesPlugin as any)._internal.shutdown();
     });
   });
 });

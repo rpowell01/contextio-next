@@ -70,7 +70,7 @@ async function handleDeleteProvider(
 
     const { id } = await context.params;
     await deleteProvider(id);
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ data: { success: true } });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes("not found in file")) {

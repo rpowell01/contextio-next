@@ -160,16 +160,28 @@ async function withFileLock<T>(
   throw new Error(`Failed to acquire file lock after ${retries} retries`);
 }
 
-async function writeFileProviders(providers: ProviderConfig[]): Promise<void> {
-  const lockPath = `${PROVIDERS_FILE}.lock`;
-  const tmpPath = `${PROVIDERS_FILE}.tmp`;
 
-  await withFileLock(lockPath, async () => {
-    // Clean up any orphaned temp file from a previous failed write
+
+/**
+ * Executes a read-modify-write operation on providers.json atomically within a file lock.
+ * The callback receives the current providers array and should return the modified array.
+ */
+async function withProvidersLock<T>(
+  fn: (providers: ProviderConfig[]) => Promise<{ providers: ProviderConfig[]; result: T }>
+): Promise<T> {
+  const lockPath = `${PROVIDERS_FILE}.lock`;
+
+  return withFileLock(lockPath, async () => {
+    // Read inside the lock
+    const providers = await readFileProviders();
+    // Execute the callback with the current providers
+    const { providers: newProviders, result } = await fn(providers);
+    // Write inside the lock
+    const tmpPath = `${PROVIDERS_FILE}.tmp`;
     await fs.unlink(tmpPath).catch(() => {});
 
     const tmpHandle = await fs.open(tmpPath, "wx");
-    await tmpHandle.writeFile(JSON.stringify(providers, null, 2), "utf8");
+    await tmpHandle.writeFile(JSON.stringify(newProviders, null, 2), "utf8");
     await tmpHandle.datasync();
     await tmpHandle.close();
 
@@ -183,6 +195,8 @@ async function writeFileProviders(providers: ProviderConfig[]): Promise<void> {
     } catch {
       // directory fsync is best-effort
     }
+
+    return result;
   });
 }
 
@@ -214,16 +228,17 @@ export async function getProviderById(id: string): Promise<ProviderMetadata | nu
 
 export async function createProvider(config: ProviderConfig): Promise<ProviderMetadata> {
   const validated = ProviderConfigSchema.parse(config);
-  const providers = await readFileProviders();
 
-  if (providers.some((p) => p.id === validated.id)) {
-    throw new Error(`Provider with id "${validated.id}" already exists in file`);
-  }
+  const result = await withProvidersLock(async (providers) => {
+    if (providers.some((p) => p.id === validated.id)) {
+      throw new Error(`Provider with id "${validated.id}" already exists in file`);
+    }
 
-  providers.push(validated);
-  await writeFileProviders(providers);
+    const newProviders = [...providers, validated];
+    return { providers: newProviders, result: { ...validated, source: "file" as const, dynamic: true } };
+  });
 
-  return { ...validated, source: "file", dynamic: true };
+  return result;
 }
 
 export async function updateProvider(id: string, config: ProviderConfig): Promise<ProviderMetadata> {
@@ -233,26 +248,29 @@ export async function updateProvider(id: string, config: ProviderConfig): Promis
     throw new Error(`Provider id in URL (${id}) does not match id in body (${validated.id})`);
   }
 
-  const providers = await readFileProviders();
-  const index = providers.findIndex((p) => p.id === id);
+  const result = await withProvidersLock(async (providers) => {
+    const index = providers.findIndex((p) => p.id === id);
 
-  if (index === -1) {
-    throw new Error(`Provider with id "${id}" not found in file`);
-  }
+    if (index === -1) {
+      throw new Error(`Provider with id "${id}" not found in file`);
+    }
 
-  providers[index] = validated;
-  await writeFileProviders(providers);
+    const newProviders = [...providers];
+    newProviders[index] = validated;
+    return { providers: newProviders, result: { ...validated, source: "file" as const, dynamic: true } };
+  });
 
-  return { ...validated, source: "file", dynamic: true };
+  return result;
 }
 
 export async function deleteProvider(id: string): Promise<void> {
-  const providers = await readFileProviders();
-  const filtered = providers.filter((p) => p.id !== id);
+  await withProvidersLock(async (providers) => {
+    const filtered = providers.filter((p) => p.id !== id);
 
-  if (filtered.length === providers.length) {
-    throw new Error(`Provider with id "${id}" not found in file`);
-  }
+    if (filtered.length === providers.length) {
+      throw new Error(`Provider with id "${id}" not found in file`);
+    }
 
-  await writeFileProviders(filtered);
+    return { providers: filtered, result: undefined };
+  });
 }
