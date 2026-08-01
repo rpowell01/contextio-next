@@ -2,7 +2,7 @@
 
 import { MainLayout } from "@/components/main-layout";
 import { formatBytes, formatNumber } from "@/lib/utils";
-import { apiClient } from "@/lib/api";
+import { apiClient, RequestAbortedError } from "@/lib/api";
 import type {
   MetricsData,
   TimeRange,
@@ -185,8 +185,8 @@ function MetricsContent() {
       }
       return true;
     } catch (e) {
-      // Ignore aborted requests - the API throws "Request aborted" error
-      if (e instanceof Error && e.message === "Request aborted") {
+      // Ignore aborted requests - the API throws RequestAbortedError
+      if (e instanceof RequestAbortedError) {
         return false;
       }
       // On any other error, clear metrics to avoid stale data

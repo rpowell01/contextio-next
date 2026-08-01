@@ -1,6 +1,18 @@
 import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, RateLimiterMetrics } from "@/types/api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
+/**
+ * Custom error class for intentionally aborted requests.
+ * This allows callers to reliably detect aborted requests without
+ * fragile string matching on error messages.
+ */
+export class RequestAbortedError extends Error {
+  constructor(message = "Request aborted") {
+    super(message);
+    this.name = "RequestAbortedError";
+  }
+}
+
 // API routes are served by the same web server that serves the frontend
 // In Docker: web server on port 4041, API routes are internal (/api/*)
 // In development: Next.js dev server handles both frontend and API routes
@@ -180,7 +192,7 @@ class APIClient {
       if (signal.aborted) {
         clearTimeout(timeoutId);
         cleanup();
-        throw new Error("Request aborted");
+        throw new RequestAbortedError();
       }
 
       try {
@@ -213,7 +225,7 @@ class APIClient {
           if (attempt < retryConfig.maxRetries && isTransientError(error, response.status)) {
             // Check signal before sleeping
             if (signal.aborted) {
-              throw new Error("Request aborted");
+              throw new RequestAbortedError();
             }
             // Add jitter to prevent thundering herd
             const jitter = Math.random() * 100;
@@ -245,14 +257,14 @@ class APIClient {
 
         if (error instanceof Error) {
           if (error.name === "AbortError") {
-            throw new Error("Request aborted");
+            throw new RequestAbortedError();
           }
 
           // Check if we should retry for transient network errors
           if (attempt < retryConfig.maxRetries && isTransientError(error)) {
             // Check signal before sleeping
             if (signal.aborted) {
-              throw new Error("Request aborted");
+              throw new RequestAbortedError();
             }
             // Add jitter to prevent thundering herd
             const jitter = Math.random() * 100;
@@ -472,7 +484,7 @@ class APIClient {
     } catch (error) {
       cleanupSignal();
       if (error instanceof Error && error.name === "AbortError") {
-        throw new Error("Request aborted");
+        throw new RequestAbortedError();
       }
       throw error;
     }
@@ -766,7 +778,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     } catch (error) {
       cleanupSignal();
       if (error instanceof Error && error.name === "AbortError") {
-        throw new Error("Request aborted");
+        throw new RequestAbortedError();
       }
       throw error;
     }
@@ -806,7 +818,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
       if (signal.aborted) {
         clearTimeout(timeoutId);
         cleanup();
-        throw new Error("Request aborted");
+        throw new RequestAbortedError();
       }
 
       try {
@@ -838,7 +850,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
           if (attempt < retryConfig.maxRetries && isTransientError(error, response.status)) {
             // Check signal before sleeping
             if (signal.aborted) {
-              throw new Error("Request aborted");
+              throw new RequestAbortedError();
             }
             // Add jitter to prevent thundering herd
             const jitter = Math.random() * 100;
@@ -871,14 +883,14 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
 
         if (error instanceof Error) {
           if (error.name === "AbortError") {
-            throw new Error("Request aborted");
+            throw new RequestAbortedError();
           }
 
           // Check if we should retry for transient network errors
           if (attempt < retryConfig.maxRetries && isTransientError(error)) {
             // Check signal before sleeping
             if (signal.aborted) {
-              throw new Error("Request aborted");
+              throw new RequestAbortedError();
             }
             // Add jitter to prevent thundering herd
             const jitter = Math.random() * 100;

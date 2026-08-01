@@ -78,6 +78,7 @@ export { DEFAULT_OIDC_SCOPE } from "./types.js";
 // Core types used across all packages
 export type {
   ApiFormat,
+  AuthType,
   CaptureData,
   EncryptionAtRestConfig,
   ExtractSourceResult,
@@ -86,6 +87,8 @@ export type {
   JsonValue,
   OidcProviderConfig,
   Provider,
+  ProviderConfig,
+  ProvidersMap,
   ProxyConfig,
   ProxyPlugin,
   RateLimitConfig,
@@ -98,4 +101,14 @@ export type {
   ResolveTargetResult,
   ResponseContext,
   Upstreams,
+} from "./types.js";
+
+// Provider validation functions and constants
+export {
+  KNOWN_API_FORMATS,
+  KNOWN_AUTH_TYPES,
+  validateProviderConfig,
+  validateRateLimitConfig,
+  validateRetryConfig,
+  validateProvidersMap,
 } from "./types.js";

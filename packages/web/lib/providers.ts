@@ -127,7 +127,7 @@ async function readFileProviders(): Promise<ProviderConfig[]> {
   }
 }
 
-async function withFileLock<T>(
+export async function withFileLock<T>(
   lockPath: string,
   fn: () => Promise<T>,
   retries = 5,
@@ -198,7 +198,7 @@ async function withFileLock<T>(
   throw new Error(`Failed to acquire file lock after ${retries} retries`);
 }
 
-async function checkStaleLock(lockPath: string): Promise<boolean> {
+export async function checkStaleLock(lockPath: string): Promise<boolean> {
   try {
     const lockContent = await fs.readFile(lockPath, "utf8");
     

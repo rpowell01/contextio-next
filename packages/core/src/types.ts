@@ -40,6 +40,24 @@ export type ApiFormat =
   | "raw"
   | "unknown";
 
+/** All known ApiFormat values for runtime validation. */
+export const KNOWN_API_FORMATS: readonly ApiFormat[] = [
+  "anthropic-messages",
+  "chatgpt-backend",
+  "responses",
+  "chat-completions",
+  "gemini",
+  "raw",
+  "unknown",
+] as const;
+
+/** All known AuthType values for runtime validation. */
+export const KNOWN_AUTH_TYPES: readonly AuthType[] = [
+  "bearer",
+  "api-key",
+  "none",
+] as const;
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };
@@ -300,6 +318,167 @@ export interface RetryConfig {
 	retryableStatuses: number[];
 	/** Factor to randomize delay (0-1) to avoid thundering herd. */
 	jitterFactor: number;
+}
+
+// --- Provider configuration ---
+
+/**
+ * Authentication type for a provider.
+ */
+export type AuthType = "bearer" | "api-key" | "none";
+
+/**
+ * Configuration for a single LLM provider.
+ *
+ * This is the canonical schema used by providers.json and the
+ * providers management UI. All fields are required except where noted.
+ */
+export interface ProviderConfig {
+	/** Unique provider identifier (key in providers map). */
+	id: Provider;
+	/** Human-readable display name. */
+	name: string;
+	/** Base URL for the provider's API. */
+	upstreamUrl: string;
+	/** Wire format of the provider's API. */
+	apiFormat: ApiFormat;
+	/** Authentication method. */
+	authType: AuthType;
+	/** Whether this provider is enabled. */
+	enabled: boolean;
+	/** Rate limiting configuration. */
+	rateLimit: RateLimitConfig;
+	/** Retry configuration. */
+	retry: RetryConfig;
+	/** Custom headers to include in requests to this provider. */
+	customHeaders: Record<string, string>;
+}
+
+/**
+ * Map of provider configurations keyed by provider ID.
+ */
+export type ProvidersMap = Record<Provider, ProviderConfig>;
+
+/**
+ * Validates a ProviderConfig object.
+ *
+ * @throws {Error} If validation fails, with a descriptive message.
+ */
+export function validateProviderConfig(config: ProviderConfig): void {
+	if (!config.id) {
+		throw new Error("ProviderConfig.id is required");
+	}
+	if (!config.name) {
+		throw new Error("ProviderConfig.name is required");
+	}
+	if (!config.upstreamUrl) {
+		throw new Error("ProviderConfig.upstreamUrl is required");
+	}
+	try {
+		new URL(config.upstreamUrl);
+	} catch {
+		throw new Error("ProviderConfig.upstreamUrl must be a valid URL");
+	}
+	if (!config.apiFormat) {
+		throw new Error("ProviderConfig.apiFormat is required");
+	}
+	if (!KNOWN_API_FORMATS.includes(config.apiFormat)) {
+		throw new Error(`ProviderConfig.apiFormat must be one of: ${KNOWN_API_FORMATS.join(", ")}`);
+	}
+	if (!KNOWN_AUTH_TYPES.includes(config.authType)) {
+		throw new Error(`ProviderConfig.authType must be one of: ${KNOWN_AUTH_TYPES.join(", ")}`);
+	}
+	if (typeof config.enabled !== "boolean") {
+		throw new Error("ProviderConfig.enabled must be a boolean");
+	}
+	if (!config.rateLimit) {
+		throw new Error("ProviderConfig.rateLimit is required");
+	}
+	validateRateLimitConfig(config.rateLimit);
+	if (!config.retry) {
+		throw new Error("ProviderConfig.retry is required");
+	}
+	validateRetryConfig(config.retry);
+	if (!config.customHeaders || typeof config.customHeaders !== "object" || Array.isArray(config.customHeaders)) {
+		throw new Error("ProviderConfig.customHeaders must be an object");
+	}
+	for (const [key, value] of Object.entries(config.customHeaders)) {
+		if (typeof key !== "string" || typeof value !== "string") {
+			throw new Error("ProviderConfig.customHeaders must be Record<string, string>");
+		}
+	}
+}
+
+/**
+ * Validates a RateLimitConfig object.
+ *
+ * @throws {Error} If validation fails, with a descriptive message.
+ */
+export function validateRateLimitConfig(config: RateLimitConfig): void {
+	if (typeof config.maxRequests !== "number" || config.maxRequests < 0) {
+		throw new Error("RateLimitConfig.maxRequests must be a non-negative number");
+	}
+	if (typeof config.windowMs !== "number" || config.windowMs <= 0) {
+		throw new Error("RateLimitConfig.windowMs must be a positive number");
+	}
+	if (typeof config.bufferCapacity !== "number" || config.bufferCapacity < 0) {
+		throw new Error("RateLimitConfig.bufferCapacity must be a non-negative number");
+	}
+}
+
+/**
+ * Validates a RetryConfig object.
+ *
+ * @throws {Error} If validation fails, with a descriptive message.
+ */
+export function validateRetryConfig(config: RetryConfig): void {
+	if (typeof config.maxRetries !== "number" || Number.isNaN(config.maxRetries) || config.maxRetries < 0) {
+		throw new Error("RetryConfig.maxRetries must be a non-negative number");
+	}
+	if (typeof config.baseDelayMs !== "number" || Number.isNaN(config.baseDelayMs) || config.baseDelayMs < 0) {
+		throw new Error("RetryConfig.baseDelayMs must be a non-negative number");
+	}
+	if (typeof config.maxDelayMs !== "number" || Number.isNaN(config.maxDelayMs) || config.maxDelayMs < 0) {
+		throw new Error("RetryConfig.maxDelayMs must be a non-negative number");
+	}
+	if (config.maxDelayMs < config.baseDelayMs) {
+		throw new Error("RetryConfig.maxDelayMs must be >= baseDelayMs");
+	}
+	if (!Array.isArray(config.retryableStatuses)) {
+		throw new Error("RetryConfig.retryableStatuses must be an array");
+	}
+	for (const status of config.retryableStatuses) {
+		if (typeof status !== "number" || Number.isNaN(status) || status < 100 || status > 599) {
+			throw new Error("RetryConfig.retryableStatuses must contain valid HTTP status codes (100-599)");
+		}
+	}
+	if (typeof config.jitterFactor !== "number" || Number.isNaN(config.jitterFactor) || config.jitterFactor < 0 || config.jitterFactor > 1) {
+		throw new Error("RetryConfig.jitterFactor must be a number between 0 and 1");
+	}
+}
+
+/**
+ * Validates a ProvidersMap object.
+ *
+ * @throws {Error} If validation fails, with a descriptive message.
+ */
+export function validateProvidersMap(providers: ProvidersMap): void {
+	if (!providers || typeof providers !== "object") {
+		throw new Error("ProvidersMap must be an object");
+	}
+	for (const [key, config] of Object.entries(providers)) {
+		// Validate config first to catch missing id and other issues
+		// with descriptive messages before checking key match
+		try {
+			validateProviderConfig(config);
+		} catch (error) {
+			throw new Error(`Provider '${key}': ${error instanceof Error ? error.message : String(error)}`);
+		}
+		// Then check that map key matches config.id
+		if (key !== config.id) {
+			throw new Error(`Provider map key '${key}' does not match config.id '${config.id}'`);
+		}
+	}
 }
 
 /**
