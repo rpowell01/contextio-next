@@ -527,9 +527,15 @@ export class RateLimiterPlugin implements ProxyPlugin {
     }
 
     const key = this.config.keyGenerator(ctx);
+    const provider = this.getProviderFromKey(key);
+
+    // Debug: log provider/key for NVIDIA requests
+    if (provider === "nvidia" || key === "nvidia" || ctx.provider === "nvidia") {
+      console.debug(`[rate-limiter] Request: provider=${provider}, key=${key}, ctx.provider=${ctx.provider}, sessionId=${ctx.sessionId}`);
+    }
+
     const bucket = this.getBucket(key);
 
-    const provider = this.getProviderFromKey(key);
     const pConfig = this.getProviderConfig(provider);
     const now = Date.now();
     const windowStart = now - pConfig.windowMs;
@@ -626,6 +632,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
     maxTokens: number;
     bufferCapacity: number;
     queueLength: number;
+    lastAccessed: number;
+    lastRefill: number;
     requestsInWindow: number;
   }> {
     const states: Array<{
@@ -634,6 +642,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
       maxTokens: number;
       bufferCapacity: number;
       queueLength: number;
+      lastAccessed: number;
+      lastRefill: number;
       requestsInWindow: number;
     }> = [];
 
@@ -644,10 +654,10 @@ export class RateLimiterPlugin implements ProxyPlugin {
       const pConfig = this.getProviderConfig(provider);
       const windowStart = now - pConfig.windowMs;
 
-      // Count requests in current window
-      const requestsInWindow = this.pruneWindow({ ...bucket, requestTimestamps: [...bucket.requestTimestamps] }, windowStart);
-      const maxTokens = pConfig.maxRequests; // For compatibility with existing metrics
-      const tokens = Math.max(0, pConfig.maxRequests - requestsInWindow); // "Remaining" in window
+      // Prune the ACTUAL bucket (not a copy) so metrics match enforcement
+      const requestsInWindow = this.pruneWindow(bucket, windowStart);
+      const maxTokens = pConfig.maxRequests;
+      const tokens = Math.max(0, pConfig.maxRequests - requestsInWindow);
 
       states.push({
         key,
@@ -655,6 +665,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
         maxTokens,
         bufferCapacity: pConfig.bufferCapacity,
         queueLength: bucket.queue.length,
+        lastAccessed: bucket.lastAccessed,
+        lastRefill: bucket.requestTimestamps[0] ?? now,
         requestsInWindow,
       });
     }
