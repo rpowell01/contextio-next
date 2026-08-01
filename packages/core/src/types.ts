@@ -41,7 +41,7 @@ export type ApiFormat =
   | "unknown";
 
 /** All known ApiFormat values for runtime validation. */
-export const KNOWN_API_FORMATS: readonly ApiFormat[] = [
+export const KNOWN_API_FORMATS = [
   "anthropic-messages",
   "chatgpt-backend",
   "responses",
@@ -49,14 +49,22 @@ export const KNOWN_API_FORMATS: readonly ApiFormat[] = [
   "gemini",
   "raw",
   "unknown",
-] as const;
+] as const satisfies readonly ApiFormat[];
+
+/** Exhaustiveness check: ensures KNOWN_API_FORMATS includes all ApiFormat values. */
+type _ApiFormatExhaustiveCheck = Exclude<ApiFormat, typeof KNOWN_API_FORMATS[number]> extends never ? true : false;
+const _apiFormatExhaustive: _ApiFormatExhaustiveCheck = true;
 
 /** All known AuthType values for runtime validation. */
-export const KNOWN_AUTH_TYPES: readonly AuthType[] = [
+export const KNOWN_AUTH_TYPES = [
   "bearer",
   "api-key",
   "none",
-] as const;
+] as const satisfies readonly AuthType[];
+
+/** Exhaustiveness check: ensures KNOWN_AUTH_TYPES includes all AuthType values. */
+type _AuthTypeExhaustiveCheck = Exclude<AuthType, typeof KNOWN_AUTH_TYPES[number]> extends never ? true : false;
+const _authTypeExhaustive: _AuthTypeExhaustiveCheck = true;
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];

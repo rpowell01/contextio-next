@@ -246,7 +246,7 @@ async function* processMetricsWithProgress(
 
   // Convert traffic map to array
   const traffic = Array.from(trafficMap.values());
-  traffic.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  traffic.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   const totalTrafficPoints = traffic.length;
   const startIndex = (page - 1) * pageSize;

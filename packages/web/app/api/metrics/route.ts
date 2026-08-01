@@ -295,9 +295,9 @@ export async function GET(request: Request): Promise<Response> {
 
     const metrics = aggregateMetrics(captures);
 
-    // Sort traffic by timestamp to ensure chronological order
+    // Sort traffic by timestamp to ensure reverse chronological order (most recent first)
     metrics.traffic.sort(
-      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
     const totalTrafficPoints = metrics.traffic.length;
     const totalPages = Math.ceil(totalTrafficPoints / pageSize);

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useMemo, useRef, useEffect } from "react";
+import React, { memo, useState, useMemo, useRef, useEffect } from "react";
 import { formatNumber } from "@/lib/utils";
 import type { RateLimiterBucketState } from "@/types/api";
 import {
@@ -14,7 +14,6 @@ import {
   Tooltip,
   ReferenceLine,
   Label,
-  Cell,
 } from "recharts";
 import { Copy, Loader2 } from "lucide-react";
 
@@ -25,68 +24,59 @@ interface RateLimiterChartProps {
   upstream429Counts?: Record<string, number>;
 }
 
-interface ChartDataPoint {
-  key: string;
-  provider: string;
-  tokens: number;
-  maxTokens: number;
-  bufferCapacity: number;
-  queueLength: number;
-  sessionId: string;
-  utilizationPercent: number;
-  status: "healthy" | "warning" | "critical" | "queued";
-  // Computed for display
-  used: number;
-  totalCapacity: number;
-}
-
 interface ProviderSummary {
   provider: string;
   maxRequests: number;
-  windowMs: number;
   bufferCapacity: number;
-  totalTokens: number;
-  totalMaxTokens: number;
   totalQueueLength: number;
-  totalUsed: number;
+  totalRequestsInWindow: number;
   utilizationPercent: number;
-  status: "healthy" | "warning" | "critical" | "queued";
+  status: "healthy" | "warning" | "critical" | "buffered";
 }
 
 /**
  * Downsample data to a maximum number of points by grouping adjacent points
- * and taking the min value in each group (to preserve most constrained buckets).
+ * and taking the max totalRequestsInWindow in each group (to preserve most constrained buckets).
  */
-function downsampleData(data: ChartDataPoint[], maxPoints: number): ChartDataPoint[] {
+function downsampleData(data: ProviderSummary[], maxPoints: number): ProviderSummary[] {
   if (maxPoints <= 0 || data.length <= maxPoints) return data;
 
   const step = Math.ceil(data.length / maxPoints);
-  const result: ChartDataPoint[] = [];
+  const result: ProviderSummary[] = [];
 
   for (let i = 0; i < data.length; i += step) {
     const chunk = data.slice(i, i + step);
-    const minItem = chunk.reduce((min, item) => (item.tokens < min.tokens ? item : min), chunk[0]);
-    result.push(minItem);
+    const maxItem = chunk.reduce((max, item) =>
+      item.totalRequestsInWindow > max.totalRequestsInWindow ? item : max
+    , chunk[0]);
+    result.push(maxItem);
   }
 
   return result;
 }
 
-function getStatus(tokens: number, maxTokens: number, queueLength: number): ChartDataPoint["status"] {
-  if (queueLength > 0) return "queued";
-  const utilization = 1 - tokens / maxTokens;
+function getProviderStatus(
+  requestsInWindow: number,
+  maxRequests: number,
+  queueLength: number
+): ProviderSummary["status"] {
+  if (queueLength > 0) return "buffered";
+  if (maxRequests === 0) return "healthy";
+  
+  const utilization = requestsInWindow / maxRequests;
+  if (utilization >= 1.0) return "critical";  // Over hard limit
   if (utilization >= 0.9) return "critical";
   if (utilization >= 0.7) return "warning";
   return "healthy";
 }
 
-function getStatusColor(status: ChartDataPoint["status"]): string {
+function getStatusColor(status: ProviderSummary["status"]): string {
   switch (status) {
     case "critical":
       return "#ef4444";
     case "warning":
       return "#f59e0b";
-    case "queued":
+    case "buffered":
       return "#8b5cf6";
     default:
       return "#22c55e";
@@ -103,20 +93,21 @@ function chartDataEqual(prevProps: RateLimiterChartProps, nextProps: RateLimiter
 
   if (prevBuckets.length !== nextBuckets.length) return false;
 
-  // Compare tokens, maxTokens, queueLength for each bucket
   for (let i = 0; i < prevBuckets.length; i++) {
     if (
-      prevBuckets[i].tokens !== nextBuckets[i].tokens ||
+      prevBuckets[i].provider !== nextBuckets[i].provider ||
       prevBuckets[i].maxTokens !== nextBuckets[i].maxTokens ||
-      prevBuckets[i].queueLength !== nextBuckets[i].queueLength
+      prevBuckets[i].bufferCapacity !== nextBuckets[i].bufferCapacity ||
+      prevBuckets[i].queueLength !== nextBuckets[i].queueLength ||
+      prevBuckets[i].requestsInWindow !== nextBuckets[i].requestsInWindow
     ) {
-      return false; // Data changed, re-render
+      return false;
     }
   }
-  return true; // Data unchanged, skip re-render
+  return true;
 }
 
-export const RateLimiterChart = memo(function RateLimiterChart({
+function RateLimiterChartComponent({
   buckets,
   loading = false,
   maxDataPoints = 50,
@@ -125,72 +116,42 @@ export const RateLimiterChart = memo(function RateLimiterChart({
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const chartData = useMemo(() => {
-    const raw = buckets.map((bucket) => {
-      const maxTokens = bucket.maxTokens;
-      const used = maxTokens - bucket.tokens;
-      const utilizationPercent = maxTokens > 0 ? Math.round((used / maxTokens) * 100) : 0;
-      return {
-        key: bucket.key,
-        provider: bucket.provider ?? "unknown",
-        tokens: bucket.tokens,
-        maxTokens,
-        bufferCapacity: bucket.bufferCapacity,
-        queueLength: bucket.queueLength,
-        sessionId: bucket.sessionId ?? "unknown",
-        used,
-        totalCapacity: maxTokens + bucket.bufferCapacity,
-        utilizationPercent,
-        status: getStatus(bucket.tokens, maxTokens, bucket.queueLength),
-      };
-    });
-
-    // Sort by utilization (most constrained first), then by queue length
-    const sorted = [...raw].sort((a, b) => {
-      if (a.queueLength !== b.queueLength) return b.queueLength - a.queueLength;
-      return b.utilizationPercent - a.utilizationPercent;
-    });
-
-    return downsampleData(sorted, maxDataPoints);
-  }, [buckets, maxDataPoints]);
-
-  // Provider summaries - aggregate since we may have multiple buckets per provider
-  // (e.g., if using custom keyStrategy or legacy session-provider)
+  // Provider summaries - aggregate per provider
   const providerSummaries = useMemo((): ProviderSummary[] => {
     const providerMap = new Map<string, ProviderSummary>();
 
-    chartData.forEach((d) => {
-      const provider = d.provider;
+    buckets.forEach((bucket) => {
+      const provider = bucket.provider ?? "unknown";
+      const maxRequests = bucket.maxTokens - bucket.bufferCapacity;
+      const requestsInWindow = bucket.requestsInWindow ?? 0;
+      
       const existing = providerMap.get(provider);
       if (!existing) {
         providerMap.set(provider, {
           provider,
-          maxRequests: d.maxTokens - d.bufferCapacity,
-          windowMs: 60_000, // Would need to come from config
-          bufferCapacity: d.bufferCapacity,
-          totalTokens: d.tokens,
-          totalMaxTokens: d.maxTokens,
-          totalQueueLength: d.queueLength,
-          totalUsed: d.used,
-          utilizationPercent: d.utilizationPercent,
-          status: d.status,
+          maxRequests,
+          bufferCapacity: bucket.bufferCapacity,
+          totalQueueLength: bucket.queueLength,
+          totalRequestsInWindow: requestsInWindow,
+          utilizationPercent: maxRequests > 0 ? Math.round((requestsInWindow / maxRequests) * 100) : 0,
+          status: getProviderStatus(requestsInWindow, maxRequests, bucket.queueLength),
         });
       } else {
-        // Aggregate: sum used, max, queue; weighted average utilization
-        existing.totalTokens += d.tokens;
-        existing.totalMaxTokens += d.maxTokens;
-        existing.totalQueueLength += d.queueLength;
-        existing.totalUsed += d.used;
-        existing.utilizationPercent = existing.totalMaxTokens > 0
-          ? Math.round((existing.totalUsed / existing.totalMaxTokens) * 100)
+        existing.maxRequests += maxRequests;
+        existing.bufferCapacity += bucket.bufferCapacity;
+        existing.totalQueueLength += bucket.queueLength;
+        existing.totalRequestsInWindow += requestsInWindow;
+        existing.utilizationPercent = existing.maxRequests > 0
+          ? Math.round((existing.totalRequestsInWindow / existing.maxRequests) * 100)
           : 0;
-        // Escalate status
-        if (d.status === "queued" || existing.status === "critical") {
-          existing.status = d.status === "queued" ? "queued" : "critical";
-        } else if (d.status === "critical" || existing.status === "warning") {
-          existing.status = d.status === "critical" ? "critical" : "warning";
-        } else if (d.status === "warning") {
-          existing.status = "warning";
+        const newStatus = getProviderStatus(
+          existing.totalRequestsInWindow,
+          existing.maxRequests,
+          existing.totalQueueLength
+        );
+        const statusPriority = { healthy: 0, warning: 1, critical: 2, buffered: 3 };
+        if (statusPriority[newStatus] > statusPriority[existing.status]) {
+          existing.status = newStatus;
         }
       }
     });
@@ -199,22 +160,87 @@ export const RateLimiterChart = memo(function RateLimiterChart({
       if (a.totalQueueLength !== b.totalQueueLength) return b.totalQueueLength - a.totalQueueLength;
       return b.utilizationPercent - a.utilizationPercent;
     });
-  }, [chartData]);
+  }, [buckets]);
+
+  // Downsample if needed
+  const chartData = useMemo(() => {
+    const downsampled = downsampleData(providerSummaries, maxDataPoints);
+    // Add cappedUsage field for visual overlay - cap at total capacity
+    return downsampled.map(d => ({
+      ...d,
+      cappedUsage: Math.min(d.totalRequestsInWindow, d.maxRequests + d.bufferCapacity),
+      totalCapacity: d.maxRequests + d.bufferCapacity,
+    }));
+  }, [providerSummaries, maxDataPoints]);
+
+  // Custom shape for capacity bar with usage overlay
+  const CapacityBarShape = (props: any) => {
+    const { x, y, width, height, payload } = props;
+    const data = payload;
+    if (!data) return <g />;
+    
+    const maxRequests = data.maxRequests ?? 0;
+    const bufferCapacity = data.bufferCapacity ?? 0;
+    const cappedUsage = data.cappedUsage ?? 0;
+    const totalCapacity = maxRequests + bufferCapacity;
+    
+    if (totalCapacity === 0) return <g />;
+    
+    const limitWidth = (maxRequests / totalCapacity) * width;
+    const bufferWidth = (bufferCapacity / totalCapacity) * width;
+    const usageWidth = (cappedUsage / totalCapacity) * width;
+    const statusColor = getStatusColor(data.status);
+    
+    return (
+      <g>
+        {/* Limit portion - gray */}
+        <rect
+          x={x}
+          y={y}
+          width={Math.max(0, limitWidth)}
+          height={height}
+          fill="#9ca3af"
+          stroke="#6b7280"
+          strokeWidth={0.5}
+        />
+        {/* Buffer portion - lighter gray */}
+        {bufferCapacity > 0 && (
+          <rect
+            x={x + limitWidth}
+            y={y}
+            width={Math.max(0, bufferWidth)}
+            height={height}
+            fill="#d1d5db"
+            stroke="#9ca3af"
+            strokeWidth={0.5}
+          />
+        )}
+        {/* Usage overlay - colored by status, full height */}
+        {cappedUsage > 0 && (
+          <rect
+            x={x}
+            y={y}
+            width={Math.min(usageWidth, width)}
+            height={height}
+            fill={statusColor}
+            opacity={0.9}
+          />
+        )}
+      </g>
+    );
+  };
 
   // Grab upstream 429 counts from props
   const upstream429 = upstream429Counts ?? {};
 
   const copyToClipboard = async () => {
     try {
-      const dataToCopy = chartData.map(({ key, provider, tokens, maxTokens, bufferCapacity, queueLength, sessionId, used, utilizationPercent, status }) => ({
-        key,
+      const dataToCopy = chartData.map(({ provider, maxRequests, bufferCapacity, totalRequestsInWindow, totalQueueLength, utilizationPercent, status }) => ({
         provider,
-        tokens,
-        maxTokens,
+        maxRequests,
         bufferCapacity,
-        queueLength,
-        sessionId,
-        used,
+        requestsInWindow: totalRequestsInWindow,
+        queueLength: totalQueueLength,
         utilizationPercent,
         status,
       }));
@@ -233,7 +259,7 @@ export const RateLimiterChart = memo(function RateLimiterChart({
     };
   }, []);
 
-  const isDownsampled = chartData.length < buckets.length;
+  const isDownsampled = chartData.length < providerSummaries.length;
 
   if (loading) {
     return (
@@ -252,7 +278,8 @@ export const RateLimiterChart = memo(function RateLimiterChart({
     );
   }
 
-  const globalMaxTokens = Math.max(1, Math.max(...chartData.map((d) => d.maxTokens)));
+  // Find global max for X axis domain
+  const globalMaxCapacity = Math.max(1, Math.max(...chartData.map((d) => d.maxRequests + d.bufferCapacity)));
 
   return (
     <div className="w-full space-y-4">
@@ -277,32 +304,34 @@ export const RateLimiterChart = memo(function RateLimiterChart({
           </button>
           {isDownsampled && (
             <span className="text-muted-foreground text-xs">
-              Showing {chartData.length} of {buckets.length} buckets (min-sampled)
+              Showing {chartData.length} of {providerSummaries.length} providers (max-sampled)
             </span>
           )}
         </div>
 
         <div id="rate-limiter-chart-description" className="sr-only">
-          Horizontal bar chart displaying token bucket states per provider.
-          Bars colored by utilization: green (healthy), amber (warning), red (critical), violet (queued).
+          Horizontal stacked bar chart displaying rate limiter capacity per provider.
+          Base gray bar: request limit. Top lighter bar: buffer capacity.
+          Colored overlay bar shows current usage: green (healthy), amber (warning), red (critical), violet (buffered).
           Hover bars for exact values and provider details.
         </div>
 
         <div className="max-h-[600px] overflow-y-auto">
-          <ResponsiveContainer width="100%" height={Math.min(600, Math.max(300, chartData.length * 36 + 120))}>
+          <ResponsiveContainer width="100%" height={Math.min(600, Math.max(300, chartData.length * 48 + 120))}>
             <BarChart
               data={chartData}
               aria-labelledby="rate-limiter-chart-description"
               role="img"
               layout="vertical"
+              margin={{ top: 20, right: 20, bottom: 60, left: 160 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
 
-              {/* X Axis - Token values */}
+              {/* X Axis - Request values */}
               <XAxis
                 type="number"
                 label={{
-                  value: "Requests Remaining / Max Requests",
+                  value: "Requests",
                   position: "outsideBottom",
                   offset: 80,
                   style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
@@ -311,14 +340,14 @@ export const RateLimiterChart = memo(function RateLimiterChart({
                 tickLine={{ stroke: "#999" }}
                 axisLine={{ stroke: "#999" }}
                 tickFormatter={(value) => formatNumber(value)}
-                domain={[0, globalMaxTokens * 1.15]}
+                domain={[0, globalMaxCapacity * 1.15]}
               />
 
               {/* Y Axis - Provider names */}
               <YAxis
                 dataKey="provider"
                 type="category"
-                width={140}
+                width={160}
                 label={{
                   value: "Provider",
                   position: "outsideLeft",
@@ -335,7 +364,11 @@ export const RateLimiterChart = memo(function RateLimiterChart({
                 labelFormatter={(label, payload) => {
                   if (payload && payload.length > 0 && payload[0].payload) {
                     const p = payload[0].payload;
-                    return `${p.provider} | ${p.used}/${p.maxTokens} requests used (${p.utilizationPercent}%)${p.queueLength > 0 ? ` | ${p.queueLength} queued` : ""}`;
+                    const totalCapacity = p.totalCapacity ?? (p.maxRequests + p.bufferCapacity);
+                    const usagePercent = totalCapacity > 0 
+                      ? Math.round((p.totalRequestsInWindow / totalCapacity) * 100) 
+                      : 0;
+                    return `${p.provider} | ${p.totalRequestsInWindow}/${p.maxRequests} requests used (${usagePercent}%)${p.totalQueueLength > 0 ? ` | ${p.totalQueueLength} queued` : ""} | Buffer: ${p.bufferCapacity}`;
                   }
                   return `Provider: ${label}`;
                 }}
@@ -355,99 +388,65 @@ export const RateLimiterChart = memo(function RateLimiterChart({
                 wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
               />
 
-              {/* Used requests (filled portion showing consumption) */}
+              {/* Single Bar with custom shape rendering capacity + usage overlay */}
               <Bar
-                dataKey="used"
-                name="Used"
-                stackId="tokens"
-                fill="#d1d5db"
-                stroke="#9ca3af"
-                strokeWidth={0.5}
-                opacity={0.5}
-                radius={[0, 4, 4, 0]}
-                aria-label="Used requests"
+                dataKey="totalCapacity"
+                name="Capacity"
+                fill="#9ca3af"
+                shape={CapacityBarShape}
+                aria-label="Rate limiter capacity and usage"
                 animationDuration={0}
               />
 
-              {/* Remaining requests (colored by status) */}
-              <Bar
-                dataKey="tokens"
-                name="Remaining"
-                stackId="tokens"
-                fill="#3b82f6"
-                stroke="#1d4ed8"
-                strokeDasharray="4 4"
-                strokeWidth={1}
-                opacity={0.85}
-                radius={[0, 4, 4, 0]}
-                aria-label="Remaining requests"
-                animationDuration={0}
-              >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} />
-                ))}
-              </Bar>
-
-              {/* Buffer capacity indicator */}
-              <Bar
-                dataKey="bufferCapacity"
-                name="Buffer"
-                stackId="buffer"
-                fill="#8b5cf6"
-                opacity={0.3}
-                radius={[0, 4, 4, 0]}
-                animationDuration={0}
-              />
-
-              {/* Provider max reference lines */}
-              {providerSummaries.map((p, idx) => (
-                <>
+              {/* Reference lines for utilization thresholds */}
+              {chartData.map((p, idx) => (
+                <React.Fragment key={p.provider}>
                   <ReferenceLine
-                    x={p.totalMaxTokens}
-                    stroke="#3b82f6"
+                    x={p.totalCapacity * 0.7}
+                    stroke="#f59e0b"
                     strokeWidth={1}
                     strokeDasharray="4 4"
-                    label={
-                      <Label
-                        value={`${p.provider}: ${formatNumber(p.totalMaxTokens)} max`}
-                        position="center"
-                        fill="#3b82f6"
-                        fontSize={9}
-                        offset={10 + idx * 15}
-                      />
-                    }
-                  />
-                  <ReferenceLine
-                    x={p.totalMaxTokens * 0.3}
-                    stroke="#f59e0b"
-                    strokeWidth={0.8}
-                    strokeDasharray="3 3"
                     label={
                       <Label
                         value={`${p.provider}: 70%`}
                         position="center"
                         fill="#f59e0b"
                         fontSize={8}
-                        offset={10 + idx * 15}
+                        offset={10 + idx * 25}
                       />
                     }
                   />
                   <ReferenceLine
-                    x={p.totalMaxTokens * 0.1}
+                    x={p.totalCapacity * 0.9}
                     stroke="#ef4444"
-                    strokeWidth={0.8}
-                    strokeDasharray="3 3"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
                     label={
                       <Label
                         value={`${p.provider}: 90%`}
                         position="center"
                         fill="#ef4444"
                         fontSize={8}
-                        offset={10 + idx * 15}
+                        offset={10 + idx * 25}
                       />
                     }
                   />
-                </>
+                  <ReferenceLine
+                    x={p.totalCapacity}
+                    stroke="#6b7280"
+                    strokeWidth={1}
+                    strokeDasharray="2 2"
+                    label={
+                      <Label
+                        value={`${p.provider}: Limit`}
+                        position="center"
+                        fill="#6b7280"
+                        fontSize={8}
+                        offset={10 + idx * 25}
+                      />
+                    }
+                  />
+                </React.Fragment>
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -458,7 +457,7 @@ export const RateLimiterChart = memo(function RateLimiterChart({
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded" style={{ background: "#22c55e" }} />
-          <span>Healthy ({"<"} 70%)</span>
+          <span>Healthy (below 70%)</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded" style={{ background: "#f59e0b" }} />
@@ -466,35 +465,41 @@ export const RateLimiterChart = memo(function RateLimiterChart({
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded" style={{ background: "#ef4444" }} />
-          <span>Critical ({">"} 90%)</span>
+          <span>Critical (90%+ or over limit)</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded" style={{ background: "#8b5cf6" }} />
-          <span>Queued</span>
+          <span>Buffered</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-4 h-4 rounded border-2 border-dashed border-gray-400" />
-          <span>Buffer</span>
+          <div className="w-8 h-4 rounded" style={{ background: "linear-gradient(90deg, #9ca3af 50%, #d1d5db 50%)" }} />
+          <span>Capacity (Limit + Buffer)</span>
         </div>
       </div>
     </div>
   );
-}, chartDataEqual);
+}
 
 /**
  * Provider Utilization Card - compact summary per provider
  */
-function ProviderUtilizationCard({ summary, upstream429Count }: { summary: ProviderSummary; upstream429Count: number }) {
-  const { provider, totalTokens, totalMaxTokens, totalQueueLength, utilizationPercent, status } = summary;
+function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
+  const { provider, maxRequests, bufferCapacity, totalRequestsInWindow, totalQueueLength, status } = summary;
 
   const statusColors = {
-    healthy: { bg: "bg-green-50", border: "border-green-200", text: "text-green-800", dot: "bg-green-500" },
-    warning: { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-800", dot: "bg-amber-500" },
-    critical: { bg: "bg-red-50", border: "border-red-200", text: "text-red-800", dot: "bg-red-500" },
-    queued: { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-800", dot: "bg-violet-500" },
+    healthy: { bg: "bg-green-50", border: "border-green-200", text: "text-green-800", dot: "bg-green-500", hex: "#22c55e" },
+    warning: { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-800", dot: "bg-amber-500", hex: "#f59e0b" },
+    critical: { bg: "bg-red-50", border: "border-red-200", text: "text-red-800", dot: "bg-red-500", hex: "#ef4444" },
+    buffered: { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-800", dot: "bg-violet-500", hex: "#8b5cf6" },
   };
 
   const colors = statusColors[status];
+  
+  // Guard against zero total capacity - match main chart behavior
+  const totalCapacity = maxRequests + bufferCapacity;
+  const limitPercent = totalCapacity > 0 ? Math.min(100, (maxRequests / totalCapacity) * 100) : 0;
+  const bufferPercent = totalCapacity > 0 ? Math.min(100, (bufferCapacity / totalCapacity) * 100) : 0;
+  const usagePercent = totalCapacity > 0 ? Math.min(100, (totalRequestsInWindow / totalCapacity) * 100) : 0;
 
   return (
     <div className={`rounded-lg border p-3 ${colors.bg} ${colors.border} flex flex-col gap-2`}>
@@ -503,23 +508,42 @@ function ProviderUtilizationCard({ summary, upstream429Count }: { summary: Provi
         <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
       </div>
 
-      {/* Utilization meter */}
-      <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+      {/* Capacity meter - shows limit + buffer */}
+      <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative">
+        {/* Limit portion */}
         <div
-          className="h-full rounded-full transition-all duration-300"
+          className="h-full rounded-l-full bg-gray-400"
           style={{
-            width: `${Math.min(100, utilizationPercent)}%`,
-            backgroundColor: totalQueueLength > 0 ? "#8b5cf6" : colors.text,
+            width: `${limitPercent}%`,
+          }}
+        />
+        {/* Buffer portion - positioned after limit */}
+        {bufferCapacity > 0 && (
+          <div
+            className="h-full bg-gray-300"
+            style={{
+              width: `${bufferPercent}%`,
+              borderRadius: limitPercent === 100 ? "0 0.25rem 0.25rem 0" : "0",
+            }}
+          />
+        )}
+        {/* Usage overlay - based on total capacity */}
+        <div
+          className="absolute top-0 left-0 h-full rounded-full transition-all duration-300"
+          style={{
+            width: `${usagePercent}%`,
+            backgroundColor: colors.hex,
           }}
         />
       </div>
 
       <div className="flex items-center justify-between text-xs">
         <span className={colors.text} font-medium>
-          {utilizationPercent}% used
+          {usagePercent}% used
         </span>
         <span className="text-muted-foreground">
-          {formatNumber(totalMaxTokens - totalTokens)} / {formatNumber(totalMaxTokens)} used
+          {formatNumber(totalRequestsInWindow)} / {formatNumber(totalCapacity)} used
+          {bufferCapacity > 0 && <span className="ml-1">(limit: {formatNumber(maxRequests)}, buffer: {formatNumber(bufferCapacity)})</span>}
         </span>
       </div>
 
@@ -539,3 +563,5 @@ function ProviderUtilizationCard({ summary, upstream429Count }: { summary: Provi
     </div>
   );
 }
+
+export const RateLimiterChart = memo(RateLimiterChartComponent, chartDataEqual);
