@@ -708,6 +708,7 @@ Set limits per provider using `CONTEXTIO_RATE_LIMIT_<PROVIDER>_<SETTING>`:
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_MAX_REQUESTS` | Max requests per window | `60` |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_WINDOW_MS` | Time window in milliseconds | `60000` (1 min) |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_BUFFER` | Burst buffer capacity | `10` |
+| `RATE_LIMITER_ENABLED` | Master enable/disable switch for the entire rate limiter | `true` |
 
 Valid providers: `openai`, `anthropic`, `chatgpt`, `gemini`, `vertex`, `nvidia`, `openrouter`, `kilo`, `unknown`.
 
@@ -718,6 +719,11 @@ CONTEXTIO_RATE_LIMIT_ANTHROPIC_MAX_REQUESTS=100 \
 CONTEXTIO_RATE_LIMIT_ANTHROPIC_WINDOW_MS=60000 \
 CONTEXTIO_RATE_LIMIT_ANTHROPIC_BUFFER=20 \
 ctxio proxy -- claude
+```
+
+**To completely disable the rate limiter:**
+```bash
+RATE_LIMITER_ENABLED=false
 ```
 
 ### Configuration via Web UI

@@ -73,6 +73,9 @@ async function main(): Promise<void> {
   // Load plugins from env
   const plugins = await loadPluginsFromEnv();
 
+  // Check if rate limiter is globally disabled via environment variable
+  const rateLimiterEnabled = process.env.RATE_LIMITER_ENABLED !== "false";
+
   // Create rate-limiter plugin with resolved per-provider config
   // The config.rateLimiter has per-provider settings from database + env overrides
   const providers: Record<string, { maxRequests: number; windowMs: number; bufferCapacity: number }> = {};
@@ -91,6 +94,7 @@ async function main(): Promise<void> {
       bufferCapacity: config.rateLimiter.openai.bufferCapacity,
     },
     providers,
+    enabled: rateLimiterEnabled,
   });
 
   // Create retry plugin with resolved per-provider config
@@ -118,7 +122,7 @@ async function main(): Promise<void> {
   const filteredPlugins = plugins.filter(p => p.name !== "rate-limiter" && p.name !== "retry");
   filteredPlugins.push(rateLimiterPlugin, retryPlugin);
 
-  console.log(`Loaded plugin: rate-limiter (with per-provider config from database)`);
+  console.log(`Loaded plugin: rate-limiter (with per-provider config from database, enabled=${rateLimiterEnabled})`);
   for (const [provider, rlConfig] of Object.entries(config.rateLimiter)) {
     console.log(`  ${provider}: maxRequests=${rlConfig.maxRequests}, windowMs=${rlConfig.windowMs}, buffer=${rlConfig.bufferCapacity}`);
   }

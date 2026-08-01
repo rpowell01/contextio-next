@@ -68,8 +68,14 @@ All settings use the pattern `CONTEXTIO_RATE_LIMIT_<PROVIDER>_<SETTING>`.
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_MAX_REQUESTS` | integer | `60` | 1–10000 | Max requests per window |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_WINDOW_MS` | integer | `60000` | 100–86400000 | Window duration in ms |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_BUFFER` | integer | `10` | 0–10000 | Burst buffer capacity |
+| `RATE_LIMITER_ENABLED` | boolean | `true` | `true`/`false` | Master enable/disable switch for the entire rate limiter |
 
 **Valid providers**: `openai`, `anthropic`, `chatgpt`, `gemini`, `vertex`, `nvidia`, `openrouter`, `kilo`, `unknown`
+
+To completely disable the rate limiter, set:
+```bash
+RATE_LIMITER_ENABLED=false
+```
 
 ### Web UI Settings
 
