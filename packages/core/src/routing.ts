@@ -55,6 +55,7 @@ export function classifyRequest(
   pathname: string,
   headers: Record<string, string | undefined>,
   strictUrlForwarding = false,
+  upstreams?: Upstreams,
 ): { provider: Provider; apiFormat: ApiFormat } {
   if (process.env.DEBUG_ROUTING === "true") {
     console.log(
@@ -113,6 +114,39 @@ export function classifyRequest(
     headers["authorization"]?.startsWith("Bearer nv-")
   )
     return { provider: "nvidia", apiFormat: "chat-completions" };
+
+  // Fallback: detect provider via x-target-url header pointing to known upstream
+  // This handles cases where the client sends requests to the proxy with an explicit
+  // target URL (e.g., via mitmproxy or direct forwarding)
+  const targetUrlHeader = headers["x-target-url"];
+  if (targetUrlHeader && typeof targetUrlHeader === "string" && upstreams) {
+    try {
+      const targetUrlObj = new URL(targetUrlHeader);
+      const hostname = targetUrlObj.hostname;
+      for (const [upstreamProvider, upstreamUrl] of Object.entries(upstreams)) {
+        if (upstreamUrl) {
+          const upstreamUrlObj = new URL(upstreamUrl);
+          if (hostname === upstreamUrlObj.hostname || hostname.endsWith(`.${upstreamUrlObj.hostname}`)) {
+            // For NVIDIA, OpenRouter, Kilo - they use chat-completions format
+            let apiFormat: ApiFormat = "chat-completions";
+            if (upstreamProvider === "anthropic") apiFormat = "anthropic-messages";
+            else if (upstreamProvider === "gemini" || upstreamProvider === "vertex") apiFormat = "gemini";
+            else if (upstreamProvider === "chatgpt") apiFormat = "chatgpt-backend";
+            else if (upstreamProvider === "openai") apiFormat = "chat-completions";
+
+            if (process.env.DEBUG_ROUTING === "true") {
+              console.error(
+                `[DEBUG_ROUTING] Provider fallback detection via x-target-url: ${upstreamProvider} (${hostname})`,
+              );
+            }
+            return { provider: upstreamProvider as Provider, apiFormat };
+          }
+        }
+      }
+    } catch {
+      // Invalid URL, ignore
+    }
+  }
 
   // Kilo Code Gateway: detect by x-kilo-baseurl (header contains the actual URL)
   // Skip header check when strictUrlForwarding.
@@ -215,6 +249,7 @@ export function resolveTargetUrl(
     pathname,
     headers,
     strictUrlForwarding,
+    upstreams,
   );
   const qs = search || "";
   let targetUrl: string | undefined = headers["x-target-url"];
@@ -323,11 +358,44 @@ export function resolveTargetUrl(
     }
   }
 
+  // Second-pass: if the resolved target URL matches a known upstream,
+  // override the provider to ensure correct rate limiting and retry behavior.
+  // This handles cases where the client uses an OpenAI-compatible upstream (NVIDIA,
+  // OpenRouter, Kilo, etc.) via x-openai-baseurl or x-target-url headers.
+  let finalProvider = provider;
+  let finalApiFormat = apiFormat;
+  if (targetUrl) {
+    try {
+      const targetUrlObj = new URL(targetUrl);
+      for (const [upstreamProvider, upstreamUrl] of Object.entries(upstreams)) {
+        if (upstreamUrl) {
+          const upstreamUrlObj = new URL(upstreamUrl);
+          if (targetUrlObj.hostname === upstreamUrlObj.hostname) {
+            finalProvider = upstreamProvider as Provider;
+            // Most OpenAI-compatible providers use chat-completions format
+            // Override apiFormat for known providers
+            if (upstreamProvider === "nvidia" || upstreamProvider === "openrouter" || upstreamProvider === "kilo") {
+              finalApiFormat = "chat-completions";
+            }
+            if (process.env.DEBUG_ROUTING === "true") {
+              console.error(
+                `[DEBUG_ROUTING] Second-pass: Overriding provider to ${upstreamProvider} based on target URL hostname: ${targetUrlObj.hostname}`,
+              );
+            }
+            break;
+          }
+        }
+      }
+    } catch {
+      // Invalid URL, keep original provider
+    }
+  }
+
   // targetUrl may be undefined for unknown providers
   if (process.env.DEBUG_ROUTING === "true") {
     console.error(
-      `[DEBUG_ROUTING] Result: targetUrl=${targetUrl}, provider=${provider}`,
+      `[DEBUG_ROUTING] Result: targetUrl=${targetUrl}, provider=${finalProvider}`,
     );
   }
-  return { targetUrl, provider, apiFormat };
+  return { targetUrl, provider: finalProvider, apiFormat: finalApiFormat };
 }

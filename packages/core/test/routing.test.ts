@@ -166,6 +166,22 @@ it("classifies NVIDIA by Bearer token starting with nv-", () => {
   assert.equal(result.provider, "nvidia");
 });
 
+it("classifies NVIDIA by x-target-url header with NVIDIA hostname", () => {
+  const result = classifyRequest("/v1/chat/completions", {
+    "x-target-url": "https://integrate.api.nvidia.com/v1/chat/completions",
+  }, false, mockUpstreams);
+  assert.equal(result.provider, "nvidia");
+  assert.equal(result.apiFormat, "chat-completions");
+});
+
+it("classifies NVIDIA by x-target-url header with NVIDIA subdomain", () => {
+  const result = classifyRequest("/v1/chat/completions", {
+    "x-target-url": "https://sub.integrate.api.nvidia.com/v1/chat/completions",
+  }, false, mockUpstreams);
+  assert.equal(result.provider, "nvidia");
+  assert.equal(result.apiFormat, "chat-completions");
+});
+
 it("still detects NVIDIA by Bearer token in strict mode (token detection unaffected)", () => {
   const result = classifyRequest(
     "/v1/chat/completions",
@@ -177,7 +193,7 @@ it("still detects NVIDIA by Bearer token in strict mode (token detection unaffec
 });
 
 it("classifies OpenRouter by x-openrouter-baseurl header", () => {
-  const result = classifyRequest("/api/v1/chat/completions", {
+  const result = classifyRequest("/v1/chat/completions", {
     "x-openrouter-baseurl": "https://custom.openrouter.endpoint",
   });
   assert.equal(result.provider, "openrouter");
@@ -422,7 +438,7 @@ describe("resolveTargetUrl", () => {
       {},
       mockUpstreams,
     );
-    assert.equal(result.provider, "gemini");
+    assert.equal(result.provider, "geminiCodeAssist");
     assert.equal(
       result.targetUrl,
       "https://cloudcode-assist.googleusercontent.com/v1internal:test",
@@ -559,7 +575,19 @@ describe("resolveTargetUrl", () => {
     assert.equal(result.targetUrl, "https://custom.nvidia.endpoint/v1/chat/completions");
   });
 
-it("resolves to openrouter with x-openrouter-baseurl header", () => {
+  it("classifies NVIDIA via second-pass when target URL matches NVIDIA upstream (x-openai-baseurl pointing to NVIDIA)", () => {
+    const result = resolveTargetUrl(
+      "/v1/chat/completions",
+      "",
+      { "x-openai-baseurl": "https://integrate.api.nvidia.com" },
+      mockUpstreams,
+    );
+    assert.equal(result.provider, "nvidia");
+    assert.equal(result.apiFormat, "chat-completions");
+    assert.equal(result.targetUrl, "https://integrate.api.nvidia.com/v1/chat/completions");
+  });
+
+  it("resolves to openrouter with x-openrouter-baseurl header", () => {
     const result = resolveTargetUrl(
       "/v1/chat/completions",
       "",
