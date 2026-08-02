@@ -302,6 +302,17 @@ export class RateLimiterPlugin implements ProxyPlugin {
   }
 
   /**
+   * Extract provider from bucket key (fallback for old buckets without stored provider).
+   * With keyStrategy="provider" (default), key is just the provider name.
+   * With keyStrategy="session-provider", key format is "sessionId:provider".
+   */
+  private getProviderFromKey(key: string): string {
+    // If key contains a colon, it's the legacy/session-provider format
+    const lastColonIndex = key.lastIndexOf(":");
+    return lastColonIndex >= 0 ? key.slice(lastColonIndex + 1) : key;
+  }
+
+  /**
    * Start the periodic cleanup timer.
    */
   private startCleanupTimer(): void {
