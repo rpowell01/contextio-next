@@ -95,26 +95,33 @@ function mergeProviderConfig(
     const userRetry = userConfig.retry as Record<string, unknown>;
     const mergedRetry: RetryConfig = { ...defaultConfig.retry };
 
+    // Track which fields the user explicitly provided (and are valid)
+    const userProvidedBaseDelayMs =
+      typeof userRetry.baseDelayMs === "number" && Number.isFinite(userRetry.baseDelayMs) && userRetry.baseDelayMs >= 0;
+    const userProvidedMaxDelayMs =
+      typeof userRetry.maxDelayMs === "number" && Number.isFinite(userRetry.maxDelayMs) && userRetry.maxDelayMs >= 0;
+
     // Apply valid individual fields first
     if (typeof userRetry.maxRetries === "number" && Number.isFinite(userRetry.maxRetries) && userRetry.maxRetries >= 0) {
       mergedRetry.maxRetries = userRetry.maxRetries;
     }
-    if (typeof userRetry.baseDelayMs === "number" && Number.isFinite(userRetry.baseDelayMs) && userRetry.baseDelayMs >= 0) {
-      mergedRetry.baseDelayMs = userRetry.baseDelayMs;
+    if (userProvidedBaseDelayMs) {
+      mergedRetry.baseDelayMs = userRetry.baseDelayMs as number;
     }
-    if (typeof userRetry.maxDelayMs === "number" && Number.isFinite(userRetry.maxDelayMs) && userRetry.maxDelayMs >= 0) {
-      mergedRetry.maxDelayMs = userRetry.maxDelayMs;
+    if (userProvidedMaxDelayMs) {
+      mergedRetry.maxDelayMs = userRetry.maxDelayMs as number;
     }
-    // Check cross-field constraint: maxDelayMs must be >= baseDelayMs
-    // If user provided both and constraint is violated, don't apply either user value
-    if (
-      typeof userRetry.maxDelayMs === "number" && Number.isFinite(userRetry.maxDelayMs) &&
-      typeof userRetry.baseDelayMs === "number" && Number.isFinite(userRetry.baseDelayMs) &&
-      userRetry.maxDelayMs < userRetry.baseDelayMs
-    ) {
-      // Revert both to defaults
-      mergedRetry.maxDelayMs = defaultConfig.retry.maxDelayMs;
-      mergedRetry.baseDelayMs = defaultConfig.retry.baseDelayMs;
+    // Check cross-field constraint on the MERGED result (user values + defaults)
+    // If violated, revert ONLY the user-provided field(s) that cause the violation
+    if (mergedRetry.maxDelayMs < mergedRetry.baseDelayMs) {
+      // Constraint violated: maxDelayMs < baseDelayMs
+      // Revert user-provided fields that contribute to the violation
+      if (userProvidedMaxDelayMs) {
+        mergedRetry.maxDelayMs = defaultConfig.retry.maxDelayMs;
+      }
+      if (userProvidedBaseDelayMs) {
+        mergedRetry.baseDelayMs = defaultConfig.retry.baseDelayMs;
+      }
     }
     if (Array.isArray(userRetry.retryableStatuses)) {
       const statuses = userRetry.retryableStatuses;
