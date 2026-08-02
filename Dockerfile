@@ -285,7 +285,7 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo '    echo "Providers file not found at $PROVIDERS_FILE, creating from default..."' >> /app/start.sh && \
     echo '    cp /app/default-providers.json "$PROVIDERS_FILE"' >> /app/start.sh && \
     echo 'fi' >> /app/start.sh && \
-    echo 'chmod 644 "$PROVIDERS_FILE" 2>/dev/null || true' >> /app/start.sh && \
+    echo 'chmod 600 "$PROVIDERS_FILE" 2>/dev/null || true' >> /app/start.sh && \
     echo 'mkdir -p "$CAPTURE_DIR"' >> /app/start.sh && \
     echo 'chmod 700 "$CAPTURE_DIR" 2>/dev/null || true' >> /app/start.sh && \
     echo '# Ensure Next.js cache directories exist and are writable' >> /app/start.sh && \

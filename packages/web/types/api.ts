@@ -655,4 +655,4 @@ export interface ProxyLogEntry {
 // --- Rate Limiter Metrics ---
 
 // Re-exported from @contextio/core for the web package
-export type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics } from "@contextio/core";
+export type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics, Provider } from "@contextio/core";

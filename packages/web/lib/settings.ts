@@ -1,13 +1,6 @@
-export type Provider =
-  | "anthropic"
-  | "openai"
-  | "chatgpt"
-  | "gemini"
-  | "vertex"
-  | "nvidia"
-  | "openrouter"
-  | "kilo"
-  | "unknown";
+import type { Provider } from "@contextio/core";
+
+export type { Provider };
 
 export interface RateLimitConfig {
   /** Maximum requests allowed within the time window. */

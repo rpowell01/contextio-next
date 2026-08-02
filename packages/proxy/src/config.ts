@@ -41,24 +41,32 @@ interface WebUISettings {
 
 /** Read web UI settings from the JSON file. */
 function readWebUISettings(): WebUISettings {
-  const settingsPath = "/app/custom-policy/settings.json";
-  try {
-    const data = fs.readFileSync(settingsPath, "utf8");
-    const parsed = JSON.parse(data);
-    const result = {
-      captureCleanupEnabled: parsed.captureCleanupEnabled,
-      captureCleanupIntervalHours: parsed.captureCleanupIntervalHours,
-      captureCleanupMaxAgeDays: parsed.captureCleanupMaxAgeDays,
-      oidcEnabled: parsed.oidcEnabled,
-      oidcPublicUrl: parsed.oidcPublicUrl,
-      rateLimiter: parsed.rateLimiter,
-    };
-    console.log(`[config] read settings.json: ${JSON.stringify(result)}`);
-    return result;
-  } catch (err) {
-    console.log(`[config] failed to read settings.json at ${settingsPath}: ${err instanceof Error ? err.message : String(err)}`);
-    return {};
+  // Check local development path first, then Docker path
+  const homePath = process.env.HOME || process.env.USERPROFILE;
+  const localSettingsPath = homePath ? `${homePath}/.contextio-next/settings.json` : null;
+  const dockerSettingsPath = "/app/custom-policy/settings.json";
+
+  const paths = [localSettingsPath, dockerSettingsPath].filter(Boolean) as string[];
+
+  for (const settingsPath of paths) {
+    try {
+      const data = fs.readFileSync(settingsPath, "utf8");
+      const parsed = JSON.parse(data);
+      const result = {
+        captureCleanupEnabled: parsed.captureCleanupEnabled,
+        captureCleanupIntervalHours: parsed.captureCleanupIntervalHours,
+        captureCleanupMaxAgeDays: parsed.captureCleanupMaxAgeDays,
+        oidcEnabled: parsed.oidcEnabled,
+        oidcPublicUrl: parsed.oidcPublicUrl,
+        rateLimiter: parsed.rateLimiter,
+      };
+      console.log(`[config] read settings.json from ${settingsPath}: ${JSON.stringify(result)}`);
+      return result;
+    } catch (err) {
+      console.log(`[config] failed to read settings.json at ${settingsPath}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
+  return {};
 }
 
 const PROVIDERS_FILE = "/app/custom-policy/providers.json";

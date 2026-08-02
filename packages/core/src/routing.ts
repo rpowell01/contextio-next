@@ -253,6 +253,8 @@ export function resolveTargetUrl(
   );
   const qs = search || "";
   let targetUrl: string | undefined = headers["x-target-url"];
+  // Track whether targetUrl came from an explicit header (vs. configured upstream)
+  let targetUrlFromHeader = !!headers["x-target-url"];
 
   if (process.env.DEBUG_ROUTING === "true") {
     console.error(
@@ -285,6 +287,7 @@ export function resolveTargetUrl(
             `[DEBUG_ROUTING] Using ${headerName} header: ${normalized}`,
           );
         }
+        targetUrlFromHeader = true;
         return normalized;
       }
       return upstreams[upstreamKey];
@@ -360,27 +363,51 @@ export function resolveTargetUrl(
 
   // Second-pass: if the resolved target URL matches a known upstream,
   // override the provider to ensure correct rate limiting and retry behavior.
-  // This handles cases where the client uses an OpenAI-compatible upstream (NVIDIA,
-  // OpenRouter, Kilo, etc.) via x-openai-baseurl or x-target-url headers.
+  // This handles cases where:
+  // 1. The client uses an OpenAI-compatible upstream (NVIDIA, OpenRouter, Kilo, etc.)
+  //    via x-openai-baseurl or x-target-url headers
+  // 2. The classified provider's upstream differs from the actual target upstream
+  //    (e.g., gemini paths with /v1internal: routed to geminiCodeAssist upstream)
+  // Only override when:
+  // 1. The targetUrl came from an explicit header (x-target-url or provider-specific base URL), OR
+  // 2. The provider was not confidently identified (unknown), OR
+  // 3. The targetUrl doesn't match the classified provider's upstream (different upstream used)
   let finalProvider = provider;
   let finalApiFormat = apiFormat;
   if (targetUrl) {
     try {
       const targetUrlObj = new URL(targetUrl);
+      // Check if targetUrl hostname matches the classified provider's upstream
+      const classifiedUpstreamUrl = upstreams[provider as keyof Upstreams];
+      const matchesClassifiedUpstream = classifiedUpstreamUrl
+        ? targetUrlObj.hostname === new URL(classifiedUpstreamUrl).hostname
+        : false;
+
       for (const [upstreamProvider, upstreamUrl] of Object.entries(upstreams)) {
         if (upstreamUrl) {
           const upstreamUrlObj = new URL(upstreamUrl);
           if (targetUrlObj.hostname === upstreamUrlObj.hostname) {
-            finalProvider = upstreamProvider as Provider;
-            // Most OpenAI-compatible providers use chat-completions format
-            // Override apiFormat for known providers
-            if (upstreamProvider === "nvidia" || upstreamProvider === "openrouter" || upstreamProvider === "kilo") {
-              finalApiFormat = "chat-completions";
-            }
-            if (process.env.DEBUG_ROUTING === "true") {
-              console.error(
-                `[DEBUG_ROUTING] Second-pass: Overriding provider to ${upstreamProvider} based on target URL hostname: ${targetUrlObj.hostname}`,
-              );
+            // Only override if:
+            // - targetUrl came from an explicit header, OR
+            // - provider was unknown, OR
+            // - targetUrl doesn't match the classified provider's upstream (different upstream used)
+            const shouldOverride =
+              targetUrlFromHeader ||
+              provider === "unknown" ||
+              !matchesClassifiedUpstream;
+
+            if (shouldOverride) {
+              finalProvider = upstreamProvider as Provider;
+              // Most OpenAI-compatible providers use chat-completions format
+              // Override apiFormat for known providers
+              if (upstreamProvider === "nvidia" || upstreamProvider === "openrouter" || upstreamProvider === "kilo") {
+                finalApiFormat = "chat-completions";
+              }
+              if (process.env.DEBUG_ROUTING === "true") {
+                console.error(
+                  `[DEBUG_ROUTING] Second-pass: Overriding provider to ${upstreamProvider} based on target URL hostname: ${targetUrlObj.hostname}`,
+                );
+              }
             }
             break;
           }

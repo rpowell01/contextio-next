@@ -271,7 +271,9 @@ describe("readProvidersConfig", () => {
 	});
 
 	it("returns built-in defaults when file is missing", () => {
-		const config = readProvidersConfig();
+		// Use a non-existent path in the temp directory to ensure the file is truly absent
+		const nonExistentPath = path.join(tempDir!, "non-existent-providers.json");
+		const config = readProvidersConfig(nonExistentPath);
 		assert.equal(config.openai.upstreamUrl, "https://api.openai.com");
 		assert.equal(config.anthropic.apiFormat, "anthropic-messages");
 		assert.equal(config.nvidia.rateLimit.maxRequests, 20);
