@@ -522,6 +522,67 @@ describe("rate-limiter plugin", () => {
     internal.shutdown();
   });
 
+  it("processes queued requests with correct provider config when using custom keyGenerator", async () => {
+    const plugin = createRateLimiterPlugin({
+      defaults: {
+        maxRequests: 60, // High default - should NOT be used for openai
+        windowMs: 1000,
+        bufferCapacity: 10,
+      },
+      providers: {
+        openai: {
+          maxRequests: 1, // Low limit for openai - this should be used
+          windowMs: 1000,
+          bufferCapacity: 1,
+        },
+      },
+      keyGenerator: (ctx: RequestContext) => "custom-key", // Non-provider-prefixed key
+    });
+    const internal = getInternal(plugin);
+
+    const ctx = createMockContext({ sessionId: "session-1", provider: "openai" });
+
+    // Request 1: admitted immediately (count=0 < maxRequests=1)
+    await plugin.onRequest!(ctx);
+
+    // Request 2: limit reached, should be queued (queue=0 < buffer=1)
+    const queuedPromise = plugin.onRequest!(ctx);
+
+    // Request 3: queue full, should be rejected (queue=1 >= buffer=1)
+    let rejectedError: any = null;
+    try {
+      await plugin.onRequest!(ctx);
+      assert.fail("Should have thrown");
+    } catch (e: any) {
+      rejectedError = e;
+    }
+    assert.ok(rejectedError !== null);
+    assert.equal(rejectedError.statusCode, 429);
+
+    // Verify bucket state: 1 request in window, 1 queued
+    const bucket = internal.getBucketState("custom-key");
+    assert.ok(bucket);
+    assert.equal(bucket.requestTimestamps.length, 1);
+    assert.equal(bucket.queue.length, 1);
+    assert.equal(bucket.provider, "openai");
+
+    // Advance time past the window to allow the queued request to be processed
+    // The windowMs is 1000ms, so wait 1100ms
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    // The queued request should now be admitted using openai's config (maxRequests=1)
+    // After window expiry, count=0 < maxRequests=1, so it should be admitted
+    await queuedPromise;
+
+    // Verify the queue is now empty
+    const bucketAfter = internal.getBucketState("custom-key");
+    assert.equal(bucketAfter!.queue.length, 0);
+    // The request should have been admitted, so count should be 1 (the queued request)
+    assert.equal(bucketAfter!.requestTimestamps.length, 1);
+
+    internal.shutdown();
+  });
+
   it("disabled rate limiter passes all requests", async () => {
     const plugin = createRateLimiterPlugin({
       maxRequests: 1,
