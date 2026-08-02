@@ -1,4 +1,4 @@
-import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, RateLimiterMetrics } from "@/types/api";
+import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, RateLimiterMetrics, ProviderConfig, ProviderMetadata } from "@/types/api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
 /**
@@ -583,6 +583,32 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(settings),
+    });
+  }
+
+  async getProviders(): Promise<APIResponse<ProviderMetadata[]>> {
+    return this.request("/api/providers");
+  }
+
+  async createProvider(config: ProviderConfig): Promise<APIResponse<ProviderMetadata>> {
+    return this.request("/api/providers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+  }
+
+  async updateProvider(id: string, config: ProviderConfig): Promise<APIResponse<ProviderMetadata>> {
+    return this.request(`/api/providers/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+  }
+
+  async deleteProvider(id: string): Promise<APIResponse<{ success: boolean }>> {
+    return this.request(`/api/providers/${id}`, {
+      method: "DELETE",
     });
   }
 

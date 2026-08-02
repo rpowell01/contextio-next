@@ -423,13 +423,13 @@ export function validateProviderConfig(config: ProviderConfig): void {
  * @throws {Error} If validation fails, with a descriptive message.
  */
 export function validateRateLimitConfig(config: RateLimitConfig): void {
-	if (typeof config.maxRequests !== "number" || config.maxRequests < 0) {
+	if (typeof config.maxRequests !== "number" || Number.isNaN(config.maxRequests) || config.maxRequests < 0) {
 		throw new Error("RateLimitConfig.maxRequests must be a non-negative number");
 	}
-	if (typeof config.windowMs !== "number" || config.windowMs <= 0) {
+	if (typeof config.windowMs !== "number" || Number.isNaN(config.windowMs) || config.windowMs <= 0) {
 		throw new Error("RateLimitConfig.windowMs must be a positive number");
 	}
-	if (typeof config.bufferCapacity !== "number" || config.bufferCapacity < 0) {
+	if (typeof config.bufferCapacity !== "number" || Number.isNaN(config.bufferCapacity) || config.bufferCapacity < 0) {
 		throw new Error("RateLimitConfig.bufferCapacity must be a non-negative number");
 	}
 }

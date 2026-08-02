@@ -181,6 +181,7 @@ RUN mkdir -p /app/packages/web/.next/cache /app/captures/.next/cache && \
 
 # Copy bundled default policy file
 COPY --from=build /app/packages/web/public/default-policy.json /app/default-policy.json
+COPY --from=build /app/packages/proxy/public/default-providers.json /app/default-providers.json
 
 # Copy GLiNER model from model-builder stage (ONNX export is in onnx/ subdirectory)
 COPY --from=model-builder /models/gliner-small-v2.1/onnx /app/models/gliner-small-v2.1
@@ -277,6 +278,13 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'fi' >> /app/start.sh && \
     echo 'echo "Active policy contents:"' >> /app/start.sh && \
     echo 'cat "$POLICY_FILE"' >> /app/start.sh && \
+    echo '# Providers config file in mounted directory' >> /app/start.sh && \
+    echo 'PROVIDERS_FILE="/app/custom-policy/providers.json"' >> /app/start.sh && \
+    echo 'if [ ! -f "$PROVIDERS_FILE" ]; then' >> /app/start.sh && \
+    echo '    echo "Providers file not found at $PROVIDERS_FILE, creating from default..."' >> /app/start.sh && \
+    echo '    cp /app/default-providers.json "$PROVIDERS_FILE"' >> /app/start.sh && \
+    echo 'fi' >> /app/start.sh && \
+    echo 'chmod 644 "$PROVIDERS_FILE" 2>/dev/null || true' >> /app/start.sh && \
     echo 'mkdir -p "$CAPTURE_DIR"' >> /app/start.sh && \
     echo 'chmod 700 "$CAPTURE_DIR" 2>/dev/null || true' >> /app/start.sh && \
     echo '# Ensure Next.js cache directories exist and are writable' >> /app/start.sh && \
@@ -289,7 +297,7 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
 
 # Fix permissions for node user (after all files are created)
 # Only change ownership of files we control, not mounted volumes
-RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /app/default-policy.json /app/captures /app/custom-policy /home/node/.contextio-next /app/captures/.next/cache /app/packages/web/.next/cache && \
+RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/start.sh /app/default-policy.json /app/default-providers.json /app/captures /app/custom-policy /home/node/.contextio-next /app/captures/.next/cache /app/packages/web/.next/cache && \
     chmod +x /app/start.sh
 
 USER node

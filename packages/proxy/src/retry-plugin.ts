@@ -764,13 +764,6 @@ export class RetryPlugin implements ProxyPlugin {
       return ctx;
     }
 
-    // Track upstream 429 responses per provider
-    if (ctx.status === 429) {
-      const providerKey = entry.provider || "unknown";
-      const currentCount = this.upstream429Counts.get(providerKey) || 0;
-      this.upstream429Counts.set(providerKey, currentCount + 1);
-    }
-
     // Get provider-specific configuration
     const config = this.getConfigForProvider(entry.provider);
 
@@ -785,60 +778,33 @@ export class RetryPlugin implements ProxyPlugin {
       return ctx;
     }
 
-    // Check if status code indicates success (less than 400)
-    if (ctx.status < 400 && !ctx.isStreaming) {
-      // Check for NVIDIA ResourceExhausted error in response body (returns 200 with error in body)
-      let nvidiaErrorDetected = false;
-      let nvidiaErrorMessage: string | null = null;
-      
-      if (entry.provider === "nvidia" && ctx.body) {
-        const nvidiaError = this.checkNvidiaResourceExhausted(ctx.body);
-        if (nvidiaError.isError) {
-          nvidiaErrorDetected = true;
-          nvidiaErrorMessage = nvidiaError.message;
-          console.debug(`[retry] NVIDIA ResourceExhausted detected: ${nvidiaErrorMessage}`);
-        }
+    // Check for NVIDIA ResourceExhausted error in response body (returns 200 with error in body)
+    // Check for ALL providers since any provider might use NVIDIA NIM under the hood
+    let nvidiaErrorDetected = false;
+    let nvidiaErrorMessage: string | null = null;
+
+    if (ctx.status < 400 && !ctx.isStreaming && ctx.body) {
+      const nvidiaError = this.checkNvidiaResourceExhausted(ctx.body);
+      if (nvidiaError.isError) {
+        nvidiaErrorDetected = true;
+        nvidiaErrorMessage = nvidiaError.message;
+        console.debug(`[retry] NVIDIA ResourceExhausted detected for provider ${entry.provider}: ${nvidiaErrorMessage}`);
       }
-      
-      if (!nvidiaErrorDetected) {
-        // Successful non-streaming response - clean up request store and stream state
-        this.requestStore.delete(storageKey);
-        if (ctx.sessionId) {
-          this.streamState.delete(ctx.sessionId);
-        }
-        return ctx;
-      }
-      // If NVIDIA error detected, fall through to retry logic below
     }
 
-    // Check if status code indicates success (less than 400)
-    if (ctx.status < 400 && !ctx.isStreaming) {
-      // Check for NVIDIA ResourceExhausted error in response body (returns 200 with error in body)
-      let nvidiaErrorDetected = false;
-      let nvidiaErrorMessage: string | null = null;
-      
-      if (entry.provider === "nvidia" && ctx.body) {
-        const nvidiaError = this.checkNvidiaResourceExhausted(ctx.body);
-        if (nvidiaError.isError) {
-          nvidiaErrorDetected = true;
-          nvidiaErrorMessage = nvidiaError.message;
-          console.debug(`[retry] NVIDIA ResourceExhausted detected: ${nvidiaErrorMessage}`);
-        }
+    if (!nvidiaErrorDetected && ctx.status < 400 && !ctx.isStreaming) {
+      // Successful non-streaming response - clean up request store and stream state
+      this.requestStore.delete(storageKey);
+      if (ctx.sessionId) {
+        this.streamState.delete(ctx.sessionId);
       }
-      
-      if (!nvidiaErrorDetected) {
-        // Successful non-streaming response - clean up request store and stream state
-        this.requestStore.delete(storageKey);
-        if (ctx.sessionId) {
-          this.streamState.delete(ctx.sessionId);
-        }
-        return ctx;
-      }
-      // If NVIDIA error detected, fall through to retry logic below
+      return ctx;
     }
+    // If NVIDIA error detected, fall through to retry logic below
 
     // Check if status code is retryable OR if it's a NVIDIA ResourceExhausted error
-    const isNvidiaErrorRetry = entry.provider === "nvidia" && ctx.status < 400;
+    // nvidiaErrorDetected is set in the block above when we detect the error in 200 responses
+    const isNvidiaErrorRetry = nvidiaErrorDetected;
     if (!this.isRetryableStatus(ctx.status, config) && !isNvidiaErrorRetry) {
       // Not retryable - clean up request store
       // Only clean up for non-streaming responses (streaming handled in onStreamEnd)
@@ -1191,7 +1157,7 @@ export class RetryPlugin implements ProxyPlugin {
         if (entry.retryCount < config.maxRetries) {
           // Check if this is a NVIDIA ResourceExhausted error in the SSE data
           let isNvidiaStreamingError = false;
-          if (entry.provider === "nvidia" && streamState.errorStatus === null && streamState.errorMessage) {
+          if (streamState.errorStatus === null && streamState.errorMessage) {
             // Check if the error message indicates NVIDIA ResourceExhausted
             // Use the same detection logic as non-streaming for consistency
             const nvidiaCheck = this.checkNvidiaResourceExhausted(streamState.errorMessage);
@@ -1199,7 +1165,7 @@ export class RetryPlugin implements ProxyPlugin {
               isNvidiaStreamingError = true;
               // Increment NVIDIA worker retry counter (same as non-streaming path)
               this.nvidiaWorkerRetryCount++;
-              console.debug(`[retry] NVIDIA ResourceExhausted detected in streaming: ${nvidiaCheck.message} (total retries: ${this.nvidiaWorkerRetryCount})`);
+              console.debug(`[retry] NVIDIA ResourceExhausted detected in streaming for provider ${entry.provider}: ${nvidiaCheck.message} (total retries: ${this.nvidiaWorkerRetryCount})`);
             }
           }
           
@@ -1307,6 +1273,15 @@ export class RetryPlugin implements ProxyPlugin {
       counts[provider] = count;
     }
     return counts;
+  }
+
+  /**
+   * Increment the upstream 429 counter for a specific provider.
+   * Called from forward.ts after provider reclassification to ensure accurate tracking.
+   */
+  incrementUpstream429Count(provider: string): void {
+    const currentCount = this.upstream429Counts.get(provider) || 0;
+    this.upstream429Counts.set(provider, currentCount + 1);
   }
 
   /**
@@ -1435,6 +1410,7 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getModifiedBodyForRetry: (key: string) => plugin.getModifiedBodyForRetry(key),
     getNvidiaWorkerRetryCount: () => plugin.getNvidiaWorkerRetryCount(),
     getUpstream429Counts: () => plugin.getUpstream429Counts(),
+    incrementUpstream429Count: (provider: string) => plugin.incrementUpstream429Count(provider),
     getStreamError: (sessionId: string) => plugin.getStreamErrorForTesting(sessionId),
     getAndConsumePendingStreamRetry: (sessionId: string | null) => plugin.getAndConsumePendingStreamRetry(sessionId),
     clear: () => plugin.clearForTesting(),

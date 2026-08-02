@@ -456,15 +456,14 @@ export class RateLimiterPlugin implements ProxyPlugin {
    * Calculate milliseconds until the oldest request in the window expires.
    * Returns 0 if window is not full.
    */
-  private calculateRetryAfter(bucket: BucketState, windowStart: number, maxRequests: number): number {
+  private calculateRetryAfter(bucket: BucketState, windowMs: number, maxRequests: number): number {
     const validCount = bucket.requestTimestamps.length;
     if (validCount < maxRequests) return 0;
 
     // Oldest request in the window determines when a slot opens up
     const oldestTimestamp = bucket.requestTimestamps[0];
-    const msUntilExpiry = oldestTimestamp + (this.config.windowMs - (Date.now() - oldestTimestamp));
-    // Actually: oldestTimestamp + windowMs - now = time until oldest leaves window
-    const ms = (oldestTimestamp + this.config.windowMs) - Date.now();
+    // Time until oldest request leaves the window: oldestTimestamp + windowMs - now
+    const ms = (oldestTimestamp + windowMs) - Date.now();
     return Math.max(1, Math.ceil(ms));
   }
 
@@ -496,7 +495,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
     }
 
     // No slot yet - wait until oldest request expires
-    const retryAfterMs = this.calculateRetryAfter(bucket, windowStart, pConfig.maxRequests);
+    const retryAfterMs = this.calculateRetryAfter(bucket, pConfig.windowMs, pConfig.maxRequests);
 
     bucket.queueTimer = setTimeout(() => {
       bucket.queueTimer = null;
@@ -568,7 +567,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
     }
 
     // Queue is full - rate limited
-    const retryAfterMs = this.calculateRetryAfter(bucket, windowStart, pConfig.maxRequests);
+    const retryAfterMs = this.calculateRetryAfter(bucket, pConfig.windowMs, pConfig.maxRequests);
 
     try {
       this.config.onRateLimited(ctx, retryAfterMs);

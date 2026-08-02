@@ -1068,6 +1068,15 @@ export function createProxyHandler(
                       );
                     }
 
+                    // Track upstream 429 responses using the reclassified provider
+                    // This ensures accurate tracking even when provider is reclassified from response
+                    if (proxyRes.statusCode === 429) {
+                      const retryPlugin = plugins.find((p) => p.name === "retry");
+                      if (retryPlugin && (retryPlugin as any)._internal?.incrementUpstream429Count) {
+                        (retryPlugin as any)._internal.incrementUpstream429Count(captureProvider);
+                      }
+                    }
+
                     const capture = buildCaptureData({
                       sessionId,
                       req,
