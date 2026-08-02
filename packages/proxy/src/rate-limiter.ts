@@ -656,8 +656,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
 
       // Prune the ACTUAL bucket (not a copy) so metrics match enforcement
       const requestsInWindow = this.pruneWindow(bucket, windowStart);
-      const maxTokens = pConfig.maxRequests;
-      const tokens = Math.max(0, pConfig.maxRequests - requestsInWindow);
+      const maxTokens = pConfig.maxRequests + pConfig.bufferCapacity;
+      const tokens = Math.max(0, pConfig.maxRequests + pConfig.bufferCapacity - requestsInWindow);
 
       states.push({
         key,

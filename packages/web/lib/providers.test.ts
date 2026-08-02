@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { withFileLock, checkStaleLock } from "./providers.js";
+import { LOCK_FILE_VERSION, getStaleLockThresholdMs } from "./providers.js";
 
 function makeTempDir(): string {
   return path.join(tmpdir(), `contextio-lock-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
@@ -12,8 +13,9 @@ function makeTempDir(): string {
 describe("checkStaleLock", () => {
   let tempDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempDir = makeTempDir();
+    await fs.mkdir(tempDir, { recursive: true });
   });
 
   afterEach(async () => {
@@ -24,10 +26,10 @@ describe("checkStaleLock", () => {
     }
   });
 
-  it("returns true for non-existent lock file", async () => {
+  it("returns false for non-existent lock file (conservative: assume not stale)", async () => {
     const lockPath = path.join(tempDir, "nonexistent.lock");
     const result = await checkStaleLock(lockPath);
-    assert.equal(result, true);
+    assert.equal(result, false);
   });
 
   it("returns true for empty lock file", async () => {
@@ -67,17 +69,17 @@ describe("checkStaleLock", () => {
 
   it("returns true for lock file with only PID but dead process (ESRCH)", async () => {
     const lockPath = path.join(tempDir, "dead-process.lock");
-    // Use a PID that definitely doesn't exist (very high number)
+    // Use a PID that definitely doesn't exist (very high number), with current version
     const deadPid = 999999;
-    await fs.writeFile(lockPath, JSON.stringify({ pid: deadPid, timestamp: Date.now() }), "utf8");
+    await fs.writeFile(lockPath, JSON.stringify({ pid: deadPid, timestamp: Date.now(), version: LOCK_FILE_VERSION }), "utf8");
     const result = await checkStaleLock(lockPath);
     assert.equal(result, true);
   });
 
   it("returns false for lock file with live process PID", async () => {
     const lockPath = path.join(tempDir, "live-process.lock");
-    // Use current process PID - should be alive
-    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, timestamp: Date.now() }), "utf8");
+    // Use current process PID - should be alive, with current version
+    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, timestamp: Date.now(), version: LOCK_FILE_VERSION }), "utf8");
     const result = await checkStaleLock(lockPath);
     assert.equal(result, false);
   });
@@ -85,7 +87,7 @@ describe("checkStaleLock", () => {
   it("returns true for lock file with old timestamp (>30s) and no PID", async () => {
     const lockPath = path.join(tempDir, "old-timestamp.lock");
     const oldTimestamp = Date.now() - 60000; // 60 seconds ago
-    await fs.writeFile(lockPath, JSON.stringify({ timestamp: oldTimestamp }), "utf8");
+    await fs.writeFile(lockPath, JSON.stringify({ timestamp: oldTimestamp, version: LOCK_FILE_VERSION }), "utf8");
     const result = await checkStaleLock(lockPath);
     assert.equal(result, true);
   });
@@ -93,7 +95,7 @@ describe("checkStaleLock", () => {
   it("returns false for lock file with recent timestamp (<30s) and no PID", async () => {
     const lockPath = path.join(tempDir, "recent-timestamp.lock");
     const recentTimestamp = Date.now() - 5000; // 5 seconds ago
-    await fs.writeFile(lockPath, JSON.stringify({ timestamp: recentTimestamp }), "utf8");
+    await fs.writeFile(lockPath, JSON.stringify({ timestamp: recentTimestamp, version: LOCK_FILE_VERSION }), "utf8");
     const result = await checkStaleLock(lockPath);
     assert.equal(result, false);
   });
@@ -101,7 +103,7 @@ describe("checkStaleLock", () => {
   it("returns false for lock file with live PID even if timestamp is old", async () => {
     const lockPath = path.join(tempDir, "live-pid-old-timestamp.lock");
     const oldTimestamp = Date.now() - 60000; // 60 seconds ago
-    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, timestamp: oldTimestamp }), "utf8");
+    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, timestamp: oldTimestamp, version: LOCK_FILE_VERSION }), "utf8");
     const result = await checkStaleLock(lockPath);
     // Live process takes precedence over timestamp
     assert.equal(result, false);
@@ -131,13 +133,97 @@ describe("checkStaleLock", () => {
       }
     }
   });
+
+  it("returns true for old-format lock file (version 1)", async () => {
+    const lockPath = path.join(tempDir, "old-version.lock");
+    // Version 1 format (no version field)
+    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, timestamp: Date.now() }), "utf8");
+    const result = await checkStaleLock(lockPath);
+    assert.equal(result, true);
+  });
+
+  it("returns true for lock file with version < current version", async () => {
+    const lockPath = path.join(tempDir, "older-version.lock");
+    // Explicitly set old version
+    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, timestamp: Date.now(), version: 1 }), "utf8");
+    const result = await checkStaleLock(lockPath);
+    assert.equal(result, true);
+  });
+
+  it("returns false for lock file with current version and live PID", async () => {
+    const lockPath = path.join(tempDir, "current-version-live.lock");
+    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, timestamp: Date.now(), version: LOCK_FILE_VERSION }), "utf8");
+    const result = await checkStaleLock(lockPath);
+    assert.equal(result, false);
+  });
+
+  it("returns true for lock file with current version but old timestamp and no PID", async () => {
+    const lockPath = path.join(tempDir, "current-version-old-timestamp.lock");
+    const oldTimestamp = Date.now() - 60000; // 60 seconds ago
+    await fs.writeFile(lockPath, JSON.stringify({ timestamp: oldTimestamp, version: LOCK_FILE_VERSION }), "utf8");
+    const result = await checkStaleLock(lockPath);
+    assert.equal(result, true);
+  });
+
+  it("returns false for lock file with current version and recent timestamp and no PID", async () => {
+    const lockPath = path.join(tempDir, "current-version-recent-timestamp.lock");
+    const recentTimestamp = Date.now() - 5000; // 5 seconds ago
+    await fs.writeFile(lockPath, JSON.stringify({ timestamp: recentTimestamp, version: LOCK_FILE_VERSION }), "utf8");
+    const result = await checkStaleLock(lockPath);
+    assert.equal(result, false);
+  });
+
+  it("getStaleLockThresholdMs returns default threshold", () => {
+    // Test that the function returns a valid number
+    const threshold = getStaleLockThresholdMs();
+    assert.ok(typeof threshold === "number");
+    assert.ok(threshold > 0);
+    // On Windows default should be 300000 (5 min), on Unix 30000 (30 sec)
+    const expectedDefault = process.platform === "win32" ? 300000 : 30000;
+    assert.equal(threshold, expectedDefault);
+  });
+
+  it("getStaleLockThresholdMs respects STALE_LOCK_THRESHOLD_MS env var", () => {
+    // Save original env
+    const originalEnv = process.env.STALE_LOCK_THRESHOLD_MS;
+    try {
+      process.env.STALE_LOCK_THRESHOLD_MS = "60000"; // 1 minute
+      const threshold = getStaleLockThresholdMs();
+      assert.equal(threshold, 60000);
+    } finally {
+      // Restore original env
+      if (originalEnv === undefined) {
+        delete process.env.STALE_LOCK_THRESHOLD_MS;
+      } else {
+        process.env.STALE_LOCK_THRESHOLD_MS = originalEnv;
+      }
+    }
+  });
+
+  it("getStaleLockThresholdMs ignores invalid env var values", () => {
+    const originalEnv = process.env.STALE_LOCK_THRESHOLD_MS;
+    try {
+      process.env.STALE_LOCK_THRESHOLD_MS = "invalid";
+      const threshold = getStaleLockThresholdMs();
+      // Should fall back to platform default
+      const expectedDefault = process.platform === "win32" ? 300000 : 30000;
+      assert.equal(threshold, expectedDefault);
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.STALE_LOCK_THRESHOLD_MS;
+      } else {
+        process.env.STALE_LOCK_THRESHOLD_MS = originalEnv;
+      }
+    }
+  });
 });
 
 describe("withFileLock", () => {
   let tempDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempDir = makeTempDir();
+    await fs.mkdir(tempDir, { recursive: true });
   });
 
   afterEach(async () => {
@@ -193,9 +279,9 @@ describe("withFileLock", () => {
         firstAttempt = false;
         // Simulate another process holding the lock briefly
         const otherLock = path.join(tempDir, "retry-success.lock");
-        await fs.writeFile(otherLock, JSON.stringify({ pid: 999999, timestamp: Date.now() }), "utf8");
+        await fs.writeFile(otherLock, JSON.stringify({ pid: 999999, timestamp: Date.now(), version: LOCK_FILE_VERSION }), "utf8");
         // Wait a bit then release
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise((r) => setTimeout(r, 50));
         await fs.unlink(otherLock).catch(() => {});
       }
       return "retry worked";
@@ -205,24 +291,40 @@ describe("withFileLock", () => {
 
   it("detects and recovers from stale lock (dead process)", async () => {
     const lockPath = path.join(tempDir, "stale-dead-process.lock");
-    // Create a stale lock with a dead PID
-    await fs.writeFile(lockPath, JSON.stringify({ pid: 999999, timestamp: Date.now() }), "utf8");
+    // Create a stale lock with a dead PID (with current version)
+    await fs.writeFile(lockPath, JSON.stringify({ pid: 999999, timestamp: Date.now(), version: LOCK_FILE_VERSION }), "utf8");
+    let lockPid: number | null = null;
+    let lockVersion: number | null = null;
     const result = await withFileLock(lockPath, async () => {
+      // Read lock file while we hold it
+      const lockContent = await fs.readFile(lockPath, "utf8").catch(() => null);
+      if (lockContent !== null) {
+        const lockInfo = JSON.parse(lockContent) as { pid: number; timestamp: number; version: number };
+        lockPid = lockInfo.pid;
+        lockVersion = lockInfo.version;
+      }
       return "acquired after stale";
     }, 5, 10);
     assert.equal(result, "acquired after stale");
-    // Lock should be owned by current process now
-    const lockContent = await fs.readFile(lockPath, "utf8").catch(() => null);
-    assert.ok(lockContent !== null);
-    const lockInfo = JSON.parse(lockContent!);
-    assert.equal(lockInfo.pid, process.pid);
+    // Lock should have been owned by current process during callback
+    assert.ok(lockPid !== null);
+    assert.ok(lockVersion !== null);
+    if (lockPid !== null) {
+      assert.equal(lockPid, process.pid);
+    }
+    if (lockVersion !== null) {
+      assert.equal(lockVersion, LOCK_FILE_VERSION);
+    }
+    // Lock file should be cleaned up after release
+    const lockExists = await fs.access(lockPath).then(() => true).catch(() => false);
+    assert.equal(lockExists, false);
   });
 
   it("detects and recovers from stale lock (old timestamp)", async () => {
     const lockPath = path.join(tempDir, "stale-old-timestamp.lock");
-    // Create a stale lock with old timestamp and no PID
+    // Create a stale lock with old timestamp and no PID (with current version)
     const oldTimestamp = Date.now() - 60000;
-    await fs.writeFile(lockPath, JSON.stringify({ timestamp: oldTimestamp }), "utf8");
+    await fs.writeFile(lockPath, JSON.stringify({ timestamp: oldTimestamp, version: LOCK_FILE_VERSION }), "utf8");
     const result = await withFileLock(lockPath, async () => {
       return "acquired after stale timestamp";
     }, 5, 10);
@@ -257,11 +359,11 @@ describe("withFileLock", () => {
     // Start multiple concurrent lock attempts
     const promises = Array.from({ length: 5 }, (_, i) =>
       withFileLock(lockPath, async () => {
-        await new Promise(r => setTimeout(r, 10)); // Hold lock briefly
+        await new Promise((r) => setTimeout(r, 10)); // Hold lock briefly
         return `task-${i}`;
       }, 10, 10)
-        .then(r => results.push(r))
-        .catch(e => errors.push(e))
+        .then((r) => results.push(r))
+        .catch((e) => errors.push(e))
     );
 
     await Promise.all(promises);
@@ -275,8 +377,8 @@ describe("withFileLock", () => {
 
   it("throws after max retries exceeded", async () => {
     const lockPath = path.join(tempDir, "max-retries.lock");
-    // Create a lock that won't be released (live PID)
-    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, timestamp: Date.now() }), "utf8");
+    // Create a lock that won't be released (live PID) - use current version
+    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, timestamp: Date.now(), version: LOCK_FILE_VERSION }), "utf8");
     
     try {
       await withFileLock(lockPath, async () => {
@@ -288,7 +390,7 @@ describe("withFileLock", () => {
     }
   });
 
-  it("lock file contains PID and timestamp when acquired", async () => {
+  it("lock file contains PID, timestamp, and version when acquired", async () => {
     const lockPath = path.join(tempDir, "lock-content.lock");
     await withFileLock(lockPath, async () => {
       // Read lock file while we hold it
@@ -298,6 +400,7 @@ describe("withFileLock", () => {
       assert.ok(lockInfo.timestamp);
       assert.ok(lockInfo.timestamp <= Date.now());
       assert.ok(lockInfo.timestamp > Date.now() - 1000); // Recent
+      assert.equal(lockInfo.version, LOCK_FILE_VERSION);
     });
   });
 
@@ -316,8 +419,8 @@ describe("withFileLock", () => {
 
   it("does not remove lock file if another process acquired it after stale recovery", async () => {
     const lockPath = path.join(tempDir, "race-condition.lock");
-    // Create stale lock
-    await fs.writeFile(lockPath, JSON.stringify({ pid: 999999, timestamp: Date.now() }), "utf8");
+    // Create stale lock (dead PID, current version)
+    await fs.writeFile(lockPath, JSON.stringify({ pid: 999999, timestamp: Date.now(), version: LOCK_FILE_VERSION }), "utf8");
     
     // Start a lock attempt that will recover the stale lock
     const promise = withFileLock(lockPath, async () => {
@@ -336,8 +439,8 @@ describe("withFileLock", () => {
 
   it("handles lock file that disappears between check and unlink", async () => {
     const lockPath = path.join(tempDir, "disappearing.lock");
-    // Create stale lock
-    await fs.writeFile(lockPath, JSON.stringify({ pid: 999999, timestamp: Date.now() }), "utf8");
+    // Create stale lock (dead PID, current version)
+    await fs.writeFile(lockPath, JSON.stringify({ pid: 999999, timestamp: Date.now(), version: LOCK_FILE_VERSION }), "utf8");
     
     const result = await withFileLock(lockPath, async () => {
       // Lock file should be gone (we unlinked it after detecting stale)
@@ -352,8 +455,9 @@ describe("withFileLock", () => {
 describe("withFileLock - integration with checkStaleLock", () => {
   let tempDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempDir = makeTempDir();
+    await fs.mkdir(tempDir, { recursive: true });
   });
 
   afterEach(async () => {
@@ -372,8 +476,10 @@ describe("withFileLock - integration with checkStaleLock", () => {
       { name: "invalid json", content: "not json", expected: true },
       { name: "corrupted json", content: '{"pid": 1}', expected: true },
       { name: "old format empty object", content: "{}", expected: true },
-      { name: "dead pid", content: JSON.stringify({ pid: 999999, timestamp: Date.now() }), expected: true },
-      { name: "old timestamp no pid", content: JSON.stringify({ timestamp: Date.now() - 60000 }), expected: true },
+      { name: "dead pid", content: JSON.stringify({ pid: 999999, timestamp: Date.now(), version: LOCK_FILE_VERSION }), expected: true },
+      { name: "old timestamp no pid", content: JSON.stringify({ timestamp: Date.now() - 60000, version: LOCK_FILE_VERSION }), expected: true },
+      { name: "old version", content: JSON.stringify({ pid: process.pid, timestamp: Date.now(), version: 1 }), expected: true },
+      { name: "missing version", content: JSON.stringify({ pid: process.pid, timestamp: Date.now() }), expected: true },
     ];
 
     for (const tc of testCases) {
@@ -386,9 +492,9 @@ describe("withFileLock - integration with checkStaleLock", () => {
 
   it("checkStaleLock correctly identifies non-stale conditions", async () => {
     const testCases = [
-      { name: "live pid", content: JSON.stringify({ pid: process.pid, timestamp: Date.now() }), expected: false },
-      { name: "live pid old timestamp", content: JSON.stringify({ pid: process.pid, timestamp: Date.now() - 60000 }), expected: false },
-      { name: "recent timestamp no pid", content: JSON.stringify({ timestamp: Date.now() - 5000 }), expected: false },
+      { name: "live pid", content: JSON.stringify({ pid: process.pid, timestamp: Date.now(), version: LOCK_FILE_VERSION }), expected: false },
+      { name: "live pid old timestamp", content: JSON.stringify({ pid: process.pid, timestamp: Date.now() - 60000, version: LOCK_FILE_VERSION }), expected: false },
+      { name: "recent timestamp no pid", content: JSON.stringify({ timestamp: Date.now() - 5000, version: LOCK_FILE_VERSION }), expected: false },
     ];
 
     for (const tc of testCases) {

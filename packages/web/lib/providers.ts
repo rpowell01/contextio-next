@@ -3,7 +3,7 @@
 
 import fs from "fs/promises";
 import { z } from "zod";
-import type { ProviderConfig, ProviderMetadata } from "@/types/api";
+import type { ProviderConfig, ProviderMetadata } from "../types/api.ts";
 
 export const PROVIDERS_DIR = "/app/custom-policy";
 export const PROVIDERS_FILE = "/app/custom-policy/providers.json";
@@ -127,6 +127,21 @@ async function readFileProviders(): Promise<ProviderConfig[]> {
   }
 }
 
+// Lock file format version - increment when changing the lock file structure
+export const LOCK_FILE_VERSION = 2;
+
+// Configurable stale lock threshold (ms). Default: 30s on Unix, 5min on Windows to account for PID reuse.
+export function getStaleLockThresholdMs(): number {
+  const envThreshold = process.env.STALE_LOCK_THRESHOLD_MS;
+  if (envThreshold) {
+    const parsed = parseInt(envThreshold, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  // Default: 5 minutes on Windows (PID reuse is common), 30 seconds on Unix
+  return process.platform === "win32" ? 300000 : 30000;
+}
 export async function withFileLock<T>(
   lockPath: string,
   fn: () => Promise<T>,
@@ -138,8 +153,12 @@ export async function withFileLock<T>(
     let lockAcquired = false;
     try {
       lockHandle = await fs.open(lockPath, "wx");
-      // Write PID and timestamp to lock file for stale lock detection
-      const lockInfo = JSON.stringify({ pid: process.pid, timestamp: Date.now() });
+      // Write PID, timestamp, and version to lock file for stale lock detection
+      const lockInfo = JSON.stringify({ 
+        pid: process.pid, 
+        timestamp: Date.now(),
+        version: LOCK_FILE_VERSION
+      });
       await lockHandle.writeFile(lockInfo, "utf8");
       lockAcquired = true;
       const result = await fn();
@@ -207,13 +226,20 @@ export async function checkStaleLock(lockPath: string): Promise<boolean> {
       return true;
     }
     
-    let lockInfo: { pid?: number; timestamp?: number };
+    let lockInfo: { pid?: number; timestamp?: number; version?: number };
     try {
       lockInfo = JSON.parse(lockContent);
     } catch {
       // Invalid JSON -> treat as stale (corrupted/old format)
       return true;
     }
+    
+    // Old format (version 1 or missing) -> treat as stale to force upgrade
+    if (!lockInfo.version || lockInfo.version < LOCK_FILE_VERSION) {
+      return true;
+    }
+    
+    const staleThresholdMs = getStaleLockThresholdMs();
     
     // Check if the owning process is still alive
     if (lockInfo.pid) {
@@ -222,7 +248,7 @@ export async function checkStaleLock(lockPath: string): Promise<boolean> {
         // On Windows, this may not work reliably, so we handle EPERM as inconclusive
         process.kill(lockInfo.pid, 0);
         // Process confirmed alive -> NOT stale, regardless of timestamp age
-        // (fn() may legitimately take >30s)
+        // (fn() may legitimately take > threshold)
         return false;
       } catch (err) {
         // Process doesn't exist (ESRCH) or permission denied (EPERM)
@@ -237,8 +263,8 @@ export async function checkStaleLock(lockPath: string): Promise<boolean> {
     }
     
     // No PID in lock file, or liveness check inconclusive (EPERM):
-    // use timestamp fallback (> 30 seconds)
-    if (lockInfo.timestamp && Date.now() - lockInfo.timestamp > 30000) {
+    // use timestamp fallback (> configured threshold)
+    if (lockInfo.timestamp && Date.now() - lockInfo.timestamp > staleThresholdMs) {
       return true;
     }
     

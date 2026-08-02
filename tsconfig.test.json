@@ -3,15 +3,19 @@
   "compilerOptions": {
     "outDir": "dist-test",
     "rootDir": ".",
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "packages/web/*"
+      ]
+    }
   },
   "include": [
-    "test",
     "packages/web/lib/diff.ts",
     "packages/web/lib/diff.test.ts",
     "packages/web/lib/providers.ts",
     "packages/web/lib/providers.test.ts",
-    "packages/proxy/test/*.test.ts",
-    "packages/core/test/*.test.ts"
+    "packages/web/types/api.ts"
   ]
 }
