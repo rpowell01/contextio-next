@@ -8,8 +8,8 @@
 
 import fs from "node:fs";
 
-import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig, RetryConfig } from "@contextio/core";
-import { DEFAULT_OIDC_SCOPE } from "@contextio/core";
+import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig, RetryConfig, ProvidersMap, ProviderConfig } from "@contextio/core";
+import { DEFAULT_OIDC_SCOPE, validateProviderConfig } from "@contextio/core";
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
  * double-prefix API paths. Empty values pass through intact.
@@ -58,6 +58,235 @@ function readWebUISettings(): WebUISettings {
   } catch (err) {
     console.log(`[config] failed to read settings.json at ${settingsPath}: ${err instanceof Error ? err.message : String(err)}`);
     return {};
+  }
+}
+
+const PROVIDERS_FILE = "/app/custom-policy/providers.json";
+
+const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
+  anthropic: {
+    id: "anthropic",
+    name: "Anthropic",
+    upstreamUrl: "https://api.anthropic.com",
+    apiFormat: "anthropic-messages",
+    authType: "bearer",
+    enabled: true,
+    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30_000,
+      retryableStatuses: [429, 500, 502, 503, 504],
+      jitterFactor: 0.2,
+    },
+    customHeaders: {},
+  },
+  openai: {
+    id: "openai",
+    name: "OpenAI",
+    upstreamUrl: "https://api.openai.com",
+    apiFormat: "chat-completions",
+    authType: "bearer",
+    enabled: true,
+    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30_000,
+      retryableStatuses: [429, 500, 502, 503, 504],
+      jitterFactor: 0.2,
+    },
+    customHeaders: {},
+  },
+  chatgpt: {
+    id: "chatgpt",
+    name: "ChatGPT",
+    upstreamUrl: "https://chatgpt.com",
+    apiFormat: "chatgpt-backend",
+    authType: "bearer",
+    enabled: true,
+    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30_000,
+      retryableStatuses: [429, 500, 502, 503, 504],
+      jitterFactor: 0.2,
+    },
+    customHeaders: {},
+  },
+  gemini: {
+    id: "gemini",
+    name: "Gemini",
+    upstreamUrl: "https://generativelanguage.googleapis.com",
+    apiFormat: "gemini",
+    authType: "api-key",
+    enabled: true,
+    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30_000,
+      retryableStatuses: [429, 500, 502, 503, 504],
+      jitterFactor: 0.2,
+    },
+    customHeaders: {},
+  },
+  vertex: {
+    id: "vertex",
+    name: "Vertex AI",
+    upstreamUrl: "https://us-central1-aiplatform.googleapis.com",
+    apiFormat: "gemini",
+    authType: "api-key",
+    enabled: true,
+    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30_000,
+      retryableStatuses: [429, 500, 502, 503, 504],
+      jitterFactor: 0.2,
+    },
+    customHeaders: {},
+  },
+  nvidia: {
+    id: "nvidia",
+    name: "NVIDIA",
+    upstreamUrl: "https://integrate.api.nvidia.com",
+    apiFormat: "chat-completions",
+    authType: "bearer",
+    enabled: true,
+    rateLimit: { maxRequests: 20, windowMs: 60_000, bufferCapacity: 5 },
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30_000,
+      retryableStatuses: [429, 500, 502, 503, 504],
+      jitterFactor: 0.2,
+    },
+    customHeaders: {},
+  },
+  openrouter: {
+    id: "openrouter",
+    name: "OpenRouter",
+    upstreamUrl: "https://openrouter.ai/api",
+    apiFormat: "chat-completions",
+    authType: "bearer",
+    enabled: true,
+    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30_000,
+      retryableStatuses: [429, 500, 502, 503, 504],
+      jitterFactor: 0.2,
+    },
+    customHeaders: {},
+  },
+  kilo: {
+    id: "kilo",
+    name: "Kilo",
+    upstreamUrl: "https://api.kilo.ai/api/gateway",
+    apiFormat: "chat-completions",
+    authType: "bearer",
+    enabled: true,
+    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30_000,
+      retryableStatuses: [429, 500, 502, 503, 504],
+      jitterFactor: 0.2,
+    },
+    customHeaders: {},
+  },
+  unknown: {
+    id: "unknown",
+    name: "Unknown",
+    upstreamUrl: "https://unknown.provider",
+    apiFormat: "unknown",
+    authType: "none",
+    enabled: true,
+    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
+    retry: {
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 30_000,
+      retryableStatuses: [429, 500, 502, 503, 504],
+      jitterFactor: 0.2,
+    },
+    customHeaders: {},
+  },
+};
+
+/**
+ * Load provider configurations from /app/custom-policy/providers.json.
+ *
+ * If the file is missing or invalid, falls back to built-in defaults.
+ * Invalid entries in a valid file are skipped. Providers with enabled=false
+ * are excluded from the returned map.
+ *
+ * Note: validateProviderConfig() in @contextio/core deeply validates nested
+ * rateLimit and retry objects, so accepted entries always have complete
+ * nested configs.
+ */
+export function readProvidersConfig(filePath = PROVIDERS_FILE): ProvidersMap {
+  try {
+    const data = fs.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(data);
+    const result: ProvidersMap = { ...DEFAULT_PROVIDERS_CONFIG };
+
+    let loaded = 0;
+    let skipped = 0;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value !== "object" || value === null) {
+        skipped++;
+        console.warn(`[config] skip providers.json[${key}]: not an object`);
+        continue;
+      }
+      const config = value as Record<string, unknown>;
+      if (config.id !== key) {
+        skipped++;
+        console.warn(`[config] skip providers.json[${key}]: id mismatch (expected ${key}, got ${config.id})`);
+        continue;
+      }
+      if (typeof config.upstreamUrl !== "string") {
+        skipped++;
+        console.warn(`[config] skip providers.json[${key}]: missing or non-string upstreamUrl`);
+        continue;
+      }
+      const providerConfig = config as unknown as ProviderConfig;
+      try {
+        validateProviderConfig(providerConfig);
+      } catch (err) {
+        skipped++;
+        console.warn(`[config] skip providers.json[${key}]: validation failed - ${err instanceof Error ? err.message : String(err)}`);
+        continue;
+      }
+      if (providerConfig.enabled === false) {
+        skipped++;
+        console.warn(`[config] skip providers.json[${key}]: disabled by enabled=false`);
+        continue;
+      }
+      result[key as Provider] = providerConfig;
+      loaded++;
+    }
+
+    // Remove any providers from defaults that were explicitly disabled in file
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "object" && value !== null) {
+        const config = value as Record<string, unknown>;
+        if (config.id === key && config.enabled === false && result[key as Provider]) {
+          delete result[key as Provider];
+        }
+      }
+    }
+
+    console.log(`[config] read providers.json: ${loaded} providers loaded from file, ${skipped} skipped, ${Object.keys(result).length} active (file entries replace defaults per provider)`);
+    return result;
+  } catch (err) {
+    console.error(`[config] failed to read providers.json at ${filePath}: ${err instanceof Error ? err.message : String(err)}. Using built-in defaults.`);
+    return { ...DEFAULT_PROVIDERS_CONFIG };
   }
 }
 
@@ -223,25 +452,44 @@ export function resolveOidcConfig(
 export function resolveConfig(
   overrides?: ProxyConfig,
 ): ResolvedProxyConfig {
+  const providersConfig = readProvidersConfig();
+
   const defaultUpstreams: Upstreams = {
-    openai: process.env.UPSTREAM_OPENAI_URL || "https://api.openai.com",
+    openai:
+      process.env.UPSTREAM_OPENAI_URL ||
+      providersConfig.openai?.upstreamUrl ||
+      "https://api.openai.com",
     anthropic:
-      process.env.UPSTREAM_ANTHROPIC_URL || "https://api.anthropic.com",
-    chatgpt: process.env.UPSTREAM_CHATGPT_URL || "https://chatgpt.com",
+      process.env.UPSTREAM_ANTHROPIC_URL ||
+      providersConfig.anthropic?.upstreamUrl ||
+      "https://api.anthropic.com",
+    chatgpt:
+      process.env.UPSTREAM_CHATGPT_URL ||
+      providersConfig.chatgpt?.upstreamUrl ||
+      "https://chatgpt.com",
     gemini:
       process.env.UPSTREAM_GEMINI_URL ||
+      providersConfig.gemini?.upstreamUrl ||
       "https://generativelanguage.googleapis.com",
     geminiCodeAssist:
       process.env.UPSTREAM_GEMINI_CODE_ASSIST_URL ||
       "https://cloudcode-pa.googleapis.com",
     vertex:
       process.env.UPSTREAM_VERTEX_URL ||
+      providersConfig.vertex?.upstreamUrl ||
       "https://us-central1-aiplatform.googleapis.com",
-    nvidia: process.env.UPSTREAM_NVIDIA_URL || "https://integrate.api.nvidia.com",
+    nvidia:
+      process.env.UPSTREAM_NVIDIA_URL ||
+      providersConfig.nvidia?.upstreamUrl ||
+      "https://integrate.api.nvidia.com",
     kilo:
       process.env.UPSTREAM_KILO_URL ||
+      providersConfig.kilo?.upstreamUrl ||
       "https://api.kilo.ai/api/gateway",
-    openrouter: process.env.UPSTREAM_OPENROUTER_URL || "https://openrouter.ai/api",
+    openrouter:
+      process.env.UPSTREAM_OPENROUTER_URL ||
+      providersConfig.openrouter?.upstreamUrl ||
+      "https://openrouter.ai/api",
   };
 
   const bindHost =
@@ -316,6 +564,13 @@ export function resolveConfig(
     openrouter: normalizeUpstreamUrl(upstreams.openrouter),
   };
 
+  const MIN_MAX_REQUESTS = 1;
+  const MAX_MAX_REQUESTS = 10000;
+  const MIN_WINDOW_MS = 100;
+  const MAX_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+  const MIN_BUFFER_CAPACITY = 0;
+  const MAX_BUFFER_CAPACITY = 10000;
+
   const defaultRateLimit: RateLimitConfig = {
     maxRequests: 60,
     windowMs: 60_000,
@@ -329,29 +584,26 @@ export function resolveConfig(
     bufferCapacity: 5,
   };
 
-  const MIN_MAX_REQUESTS = 1;
-  const MAX_MAX_REQUESTS = 10000;
-  const MIN_WINDOW_MS = 100;
-  const MAX_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
-  const MIN_BUFFER_CAPACITY = 0;
-  const MAX_BUFFER_CAPACITY = 10000;
-
-  function parseRateLimitEnv(
+  function parseRateLimitForProvider(
     provider: Provider,
-    defaults: RateLimitConfig,
+    fileConfig: RateLimitConfig | undefined,
   ): RateLimitConfig {
     const prefix = `CONTEXTIO_RATE_LIMIT_${provider.toUpperCase()}`;
     const settingsRateLimit = readWebUISettings().rateLimiter?.[provider];
-    
-    const maxRequestsRaw = process.env[`${prefix}_MAX_REQUESTS`] 
-      ?? settingsRateLimit?.maxRequests?.toString() 
-      ?? defaults.maxRequests;
-    const windowMsRaw = process.env[`${prefix}_WINDOW_MS`] 
-      ?? settingsRateLimit?.windowMs?.toString() 
-      ?? defaults.windowMs;
-    const bufferCapacityRaw = process.env[`${prefix}_BUFFER`] 
-      ?? settingsRateLimit?.bufferCapacity?.toString() 
-      ?? defaults.bufferCapacity;
+
+    const fallback =
+      provider === "nvidia" ? nvidiaDefaultRateLimit : defaultRateLimit;
+    const effectiveFileConfig = fileConfig ?? fallback;
+
+    const maxRequestsRaw = process.env[`${prefix}_MAX_REQUESTS`]
+      ?? settingsRateLimit?.maxRequests?.toString()
+      ?? effectiveFileConfig.maxRequests;
+    const windowMsRaw = process.env[`${prefix}_WINDOW_MS`]
+      ?? settingsRateLimit?.windowMs?.toString()
+      ?? effectiveFileConfig.windowMs;
+    const bufferCapacityRaw = process.env[`${prefix}_BUFFER`]
+      ?? settingsRateLimit?.bufferCapacity?.toString()
+      ?? effectiveFileConfig.bufferCapacity;
 
     const maxRequests = Number.parseInt(String(maxRequestsRaw), 10);
     const windowMs = Number.parseInt(String(windowMsRaw), 10);
@@ -381,31 +633,27 @@ export function resolveConfig(
   }
 
   const rateLimiter: Record<Provider, RateLimitConfig> = {
-    openai: parseRateLimitEnv("openai", defaultRateLimit),
-    anthropic: parseRateLimitEnv("anthropic", defaultRateLimit),
-    chatgpt: parseRateLimitEnv("chatgpt", defaultRateLimit),
-    gemini: parseRateLimitEnv("gemini", defaultRateLimit),
-    vertex: parseRateLimitEnv("vertex", defaultRateLimit),
-    nvidia: parseRateLimitEnv("nvidia", nvidiaDefaultRateLimit),
-    openrouter: parseRateLimitEnv("openrouter", defaultRateLimit),
-    kilo: parseRateLimitEnv("kilo", defaultRateLimit),
-    unknown: parseRateLimitEnv("unknown", defaultRateLimit),
+    openai: parseRateLimitForProvider("openai", providersConfig.openai?.rateLimit),
+    anthropic: parseRateLimitForProvider("anthropic", providersConfig.anthropic?.rateLimit),
+    chatgpt: parseRateLimitForProvider("chatgpt", providersConfig.chatgpt?.rateLimit),
+    gemini: parseRateLimitForProvider("gemini", providersConfig.gemini?.rateLimit),
+    vertex: parseRateLimitForProvider("vertex", providersConfig.vertex?.rateLimit),
+    nvidia: parseRateLimitForProvider("nvidia", providersConfig.nvidia?.rateLimit),
+    openrouter: parseRateLimitForProvider("openrouter", providersConfig.openrouter?.rateLimit),
+    kilo: parseRateLimitForProvider("kilo", providersConfig.kilo?.rateLimit),
+    unknown: parseRateLimitForProvider("unknown", providersConfig.unknown?.rateLimit),
   };
 
-  const defaultRetry: RetryConfig = {
-    maxRetries: 3,
-    baseDelayMs: 1000,
-    maxDelayMs: 30000,
-    retryableStatuses: [429, 500, 502, 503, 504],
-    jitterFactor: 0.2,
-  };
-
-  function resolveRetryForProvider(provider: Provider): RetryConfig {
+  function resolveRetryForProvider(
+    provider: Provider,
+    fileConfig: RetryConfig | undefined,
+  ): RetryConfig {
     const prefix = `CONTEXTIO_RETRY_${provider.toUpperCase()}`;
+    const effectiveConfig = fileConfig ?? DEFAULT_PROVIDERS_CONFIG[provider].retry;
 
     const maxRetries = (() => {
       const raw = process.env[`${prefix}_MAX_RETRIES`];
-      if (raw === undefined) return defaultRetry.maxRetries;
+      if (raw === undefined) return effectiveConfig.maxRetries;
       const parsed = Number.parseInt(raw, 10);
       if (!Number.isFinite(parsed) || parsed < 0) {
         throw new Error(`Invalid ${prefix}_MAX_RETRIES="${raw}": must be a non-negative integer`);
@@ -415,7 +663,7 @@ export function resolveConfig(
 
     const baseDelayMs = (() => {
       const raw = process.env[`${prefix}_BASE_DELAY_MS`];
-      if (raw === undefined) return defaultRetry.baseDelayMs;
+      if (raw === undefined) return effectiveConfig.baseDelayMs;
       const parsed = Number.parseInt(raw, 10);
       if (!Number.isFinite(parsed) || parsed < 0) {
         throw new Error(`Invalid ${prefix}_BASE_DELAY_MS="${raw}": must be a non-negative integer`);
@@ -425,7 +673,7 @@ export function resolveConfig(
 
     const maxDelayMs = (() => {
       const raw = process.env[`${prefix}_MAX_DELAY_MS`];
-      if (raw === undefined) return defaultRetry.maxDelayMs;
+      if (raw === undefined) return effectiveConfig.maxDelayMs;
       const parsed = Number.parseInt(raw, 10);
       if (!Number.isFinite(parsed) || parsed < 0) {
         throw new Error(`Invalid ${prefix}_MAX_DELAY_MS="${raw}": must be a non-negative integer`);
@@ -439,9 +687,9 @@ export function resolveConfig(
 
     const retryableStatuses = (() => {
       const raw = process.env[`${prefix}_RETRYABLE_STATUSES`];
-      if (raw === undefined) return defaultRetry.retryableStatuses;
+      if (raw === undefined) return effectiveConfig.retryableStatuses;
       const trimmed = raw.trim();
-      if (trimmed === "") return defaultRetry.retryableStatuses;
+      if (trimmed === "") return effectiveConfig.retryableStatuses;
       const parsed = trimmed
         .split(",")
         .map((s) => s.trim())
@@ -457,7 +705,7 @@ export function resolveConfig(
 
     const jitterFactor = (() => {
       const raw = process.env[`${prefix}_JITTER_FACTOR`];
-      if (raw === undefined) return defaultRetry.jitterFactor;
+      if (raw === undefined) return effectiveConfig.jitterFactor;
       const parsed = Number.parseFloat(raw);
       if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
         throw new Error(`Invalid ${prefix}_JITTER_FACTOR="${raw}": must be between 0 and 1`);
@@ -475,15 +723,15 @@ export function resolveConfig(
   }
 
   const retry: Record<Provider, RetryConfig> = {
-    openai: resolveRetryForProvider("openai"),
-    anthropic: resolveRetryForProvider("anthropic"),
-    chatgpt: resolveRetryForProvider("chatgpt"),
-    gemini: resolveRetryForProvider("gemini"),
-    vertex: resolveRetryForProvider("vertex"),
-    nvidia: resolveRetryForProvider("nvidia"),
-    openrouter: resolveRetryForProvider("openrouter"),
-    kilo: resolveRetryForProvider("kilo"),
-    unknown: resolveRetryForProvider("unknown"),
+    openai: resolveRetryForProvider("openai", providersConfig.openai?.retry),
+    anthropic: resolveRetryForProvider("anthropic", providersConfig.anthropic?.retry),
+    chatgpt: resolveRetryForProvider("chatgpt", providersConfig.chatgpt?.retry),
+    gemini: resolveRetryForProvider("gemini", providersConfig.gemini?.retry),
+    vertex: resolveRetryForProvider("vertex", providersConfig.vertex?.retry),
+    nvidia: resolveRetryForProvider("nvidia", providersConfig.nvidia?.retry),
+    openrouter: resolveRetryForProvider("openrouter", providersConfig.openrouter?.retry),
+    kilo: resolveRetryForProvider("kilo", providersConfig.kilo?.retry),
+    unknown: resolveRetryForProvider("unknown", providersConfig.unknown?.retry),
   };
 
   return {
