@@ -9,7 +9,25 @@
 import fs from "node:fs";
 
 import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig, RetryConfig, ProvidersMap, ProviderConfig, ApiFormat, AuthType } from "@contextio/core";
-import { DEFAULT_OIDC_SCOPE, validateRateLimitConfig, validateRetryConfig, KNOWN_API_FORMATS, KNOWN_AUTH_TYPES, KNOWN_PROVIDERS } from "@contextio/core";
+import { DEFAULT_OIDC_SCOPE, validateRateLimitConfig, validateRetryConfig, KNOWN_API_FORMATS, KNOWN_AUTH_TYPES } from "@contextio/core";
+
+/** Known provider identifiers for runtime validation. */
+const KNOWN_PROVIDERS = [
+  "anthropic",
+  "openai",
+  "chatgpt",
+  "gemini",
+  "vertex",
+  "nvidia",
+  "openrouter",
+  "kilo",
+  "unknown",
+] as const satisfies readonly Provider[];
+
+/** Type predicate to check if a string is a valid Provider. */
+function isProvider(value: string): value is Provider {
+  return KNOWN_PROVIDERS.includes(value as Provider);
+}
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
  * double-prefix API paths. Empty values pass through intact.
@@ -408,12 +426,12 @@ export function readProvidersConfig(filePath = PROVIDERS_FILE): ProvidersMap {
         continue;
       }
       // Validate that the key is a known Provider before casting
-      if (!KNOWN_PROVIDERS.includes(key as Provider)) {
+      if (!isProvider(key)) {
         skipped++;
         console.warn(`[config] skip providers.json[${key}]: unknown provider`);
         continue;
       }
-      const providerKey = key as Provider;
+      const providerKey = key;
       const defaultConfig = DEFAULT_PROVIDERS_CONFIG[providerKey];
       if (!defaultConfig) {
         skipped++;
@@ -435,8 +453,8 @@ export function readProvidersConfig(filePath = PROVIDERS_FILE): ProvidersMap {
     for (const [key, value] of Object.entries(parsed)) {
       if (typeof value === "object" && value !== null) {
         const config = value as Record<string, unknown>;
-        if (config.id === key && config.enabled === false && KNOWN_PROVIDERS.includes(key as Provider) && result[key as Provider]) {
-          delete result[key as Provider];
+        if (config.id === key && config.enabled === false && isProvider(key) && result[key]) {
+          delete result[key];
         }
       }
     }

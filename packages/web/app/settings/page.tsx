@@ -1311,13 +1311,13 @@ export default function SettingsPage() {
                         <td className="px-3 py-2 font-mono text-xs max-w-xs truncate" title={provider.baseUrl}>
                           {provider.baseUrl}
                         </td>
-                        <td className="px-3 py-2">
-                          {provider.models.length > 0 ? (
-                            <span className="text-xs text-muted-foreground">{provider.models.join(", ")}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
+<td className="px-3 py-2">
+                           {provider.models.length > 0 ? (
+                             <span className="text-xs text-muted-foreground whitespace-pre-wrap">{provider.models.join("\n")}</span>
+                           ) : (
+                             <span className="text-xs text-muted-foreground">—</span>
+                           )}
+                         </td>
                         <td className="px-3 py-2">
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -1437,15 +1437,17 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="provider-models">Models (comma-separated)</Label>
-                <Input
+                <Label htmlFor="provider-models">Models (one per line)</Label>
+                <textarea
                   id="provider-models"
-                  value={providerFormData.models.join(", ")}
-                  onChange={(e) => handleProviderFormChange("models", e.target.value.split(",").map(s => s.trim()).filter(Boolean))}
-                  placeholder="model-1, model-2, model-3 (avoid commas in names)"
+                  value={providerFormData.models.join("\n")}
+                  onChange={(e) => handleProviderFormChange("models", e.target.value.split("\n").map(s => s.trim()).filter(Boolean))}
+                  placeholder="model-1&#10;model-2&#10;model-3"
                   disabled={providerFormSubmitting}
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  rows={4}
                 />
-                <p className="text-xs text-muted-foreground">Optional: comma-separated list of model names (commas in names not supported)</p>
+                <p className="text-xs text-muted-foreground">Optional: one model name per line (commas in names are supported)</p>
               </div>
               {providerFormError && (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -1514,15 +1516,17 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-provider-models">Models (comma-separated)</Label>
-                <Input
+                <Label htmlFor="edit-provider-models">Models (one per line)</Label>
+                <textarea
                   id="edit-provider-models"
-                  value={providerFormData.models.join(", ")}
-                  onChange={(e) => handleProviderFormChange("models", e.target.value.split(",").map(s => s.trim()).filter(Boolean))}
-                  placeholder="model-1, model-2, model-3 (avoid commas in names)"
+                  value={providerFormData.models.join("\n")}
+                  onChange={(e) => handleProviderFormChange("models", e.target.value.split("\n").map(s => s.trim()).filter(Boolean))}
+                  placeholder="model-1&#10;model-2&#10;model-3"
                   disabled={providerFormSubmitting}
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  rows={4}
                 />
-                <p className="text-xs text-muted-foreground">Optional: comma-separated list of model names (commas in names not supported)</p>
+                <p className="text-xs text-muted-foreground">Optional: one model name per line (commas in names are supported)</p>
               </div>
               {providerFormError && (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
