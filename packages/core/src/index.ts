@@ -118,6 +118,7 @@ export {
 export {
   KNOWN_API_FORMATS,
   KNOWN_AUTH_TYPES,
+  KNOWN_PROVIDERS,
   validateProviderConfig,
   validateRateLimitConfig,
   validateRetryConfig,

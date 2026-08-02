@@ -9,7 +9,7 @@
 import fs from "node:fs";
 
 import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig, RetryConfig, ProvidersMap, ProviderConfig, ApiFormat, AuthType } from "@contextio/core";
-import { DEFAULT_OIDC_SCOPE, validateRateLimitConfig, validateRetryConfig, KNOWN_API_FORMATS, KNOWN_AUTH_TYPES } from "@contextio/core";
+import { DEFAULT_OIDC_SCOPE, validateRateLimitConfig, validateRetryConfig, KNOWN_API_FORMATS, KNOWN_AUTH_TYPES, KNOWN_PROVIDERS } from "@contextio/core";
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
  * double-prefix API paths. Empty values pass through intact.
@@ -407,6 +407,12 @@ export function readProvidersConfig(filePath = PROVIDERS_FILE): ProvidersMap {
         console.warn(`[config] skip providers.json[${key}]: missing or non-string upstreamUrl`);
         continue;
       }
+      // Validate that the key is a known Provider before casting
+      if (!KNOWN_PROVIDERS.includes(key as Provider)) {
+        skipped++;
+        console.warn(`[config] skip providers.json[${key}]: unknown provider`);
+        continue;
+      }
       const providerKey = key as Provider;
       const defaultConfig = DEFAULT_PROVIDERS_CONFIG[providerKey];
       if (!defaultConfig) {
@@ -429,7 +435,7 @@ export function readProvidersConfig(filePath = PROVIDERS_FILE): ProvidersMap {
     for (const [key, value] of Object.entries(parsed)) {
       if (typeof value === "object" && value !== null) {
         const config = value as Record<string, unknown>;
-        if (config.id === key && config.enabled === false && result[key as Provider]) {
+        if (config.id === key && config.enabled === false && KNOWN_PROVIDERS.includes(key as Provider) && result[key as Provider]) {
           delete result[key as Provider];
         }
       }

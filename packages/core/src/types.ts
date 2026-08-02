@@ -66,6 +66,23 @@ export const KNOWN_AUTH_TYPES = [
 type _AuthTypeExhaustiveCheck = Exclude<AuthType, typeof KNOWN_AUTH_TYPES[number]> extends never ? true : false;
 const _authTypeExhaustive: _AuthTypeExhaustiveCheck = true;
 
+/** All known Provider values for runtime validation. */
+export const KNOWN_PROVIDERS = [
+  "anthropic",
+  "openai",
+  "chatgpt",
+  "gemini",
+  "vertex",
+  "nvidia",
+  "openrouter",
+  "kilo",
+  "unknown",
+] as const satisfies readonly Provider[];
+
+/** Exhaustiveness check: ensures KNOWN_PROVIDERS includes all Provider values. */
+type _ProviderExhaustiveCheck = Exclude<Provider, typeof KNOWN_PROVIDERS[number]> extends never ? true : false;
+const _providerExhaustive: _ProviderExhaustiveCheck = true;
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };

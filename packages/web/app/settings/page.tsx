@@ -3,6 +3,7 @@
 import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
 import type { Settings, SettingMeta, Provider, RateLimitConfig } from "@/lib/settings";
+import type { ProviderConfig, ProviderMetadata } from "@/types/api";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "@/components/theme-provider";
 
@@ -19,7 +20,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Loader2, Trash2, Edit2, Plus } from "lucide-react";
 
 // NOTE: /api/settings (GET and POST) has no authentication. Any client that can reach
 // the web server can read or overwrite settings. Treat the settings file as sensitive
@@ -155,6 +164,26 @@ export default function SettingsPage() {
   const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  
+  // Providers state
+  const [providers, setProviders] = useState<ProviderMetadata[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(true);
+  const [providersError, setProvidersError] = useState<string | null>(null);
+  const [addProviderDialogOpen, setAddProviderDialogOpen] = useState(false);
+  const [editProviderDialogOpen, setEditProviderDialogOpen] = useState(false);
+  const [deleteProviderDialogOpen, setDeleteProviderDialogOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<ProviderMetadata | null>(null);
+  const [deletingProvider, setDeletingProvider] = useState<ProviderMetadata | null>(null);
+  const [providerFormData, setProviderFormData] = useState<ProviderConfig>({
+    id: "",
+    name: "",
+    baseUrl: "",
+    models: [],
+  });
+  const [providerFormError, setProviderFormError] = useState<string | null>(null);
+  const [providerFormSubmitting, setProviderFormSubmitting] = useState(false);
+  const [deleteProviderSubmitting, setDeleteProviderSubmitting] = useState(false);
+  
   const { theme, setTheme, isOverridden: themeIsOverridden } = useTheme();
 
   useEffect(() => {
@@ -221,6 +250,26 @@ export default function SettingsPage() {
       controller.abort();
     };
   }, [loading, settings.redactPolicyFile]);
+
+  // Load providers
+  useEffect(() => {
+    async function loadProviders() {
+      try {
+        setProvidersLoading(true);
+        setProvidersError(null);
+        const response = await apiClient.getProviders();
+        if (response.data) {
+          setProviders(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to load providers:", error);
+        setProvidersError(error instanceof Error ? error.message : "Failed to load providers");
+      } finally {
+        setProvidersLoading(false);
+      }
+    }
+    loadProviders();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -318,6 +367,104 @@ export default function SettingsPage() {
     } finally {
       setIsCleaning(false);
       setDeleteDialogOpen(false);
+    }
+  };
+
+  // Provider handler functions
+  const openAddProviderDialog = () => {
+    setProviderFormData({ id: "", name: "", baseUrl: "", models: [] });
+    setProviderFormError(null);
+    setAddProviderDialogOpen(true);
+  };
+
+  const openEditProviderDialog = (provider: ProviderMetadata) => {
+    setEditingProvider(provider);
+    setProviderFormData({
+      id: provider.id,
+      name: provider.name,
+      baseUrl: provider.baseUrl,
+      models: provider.models,
+    });
+    setProviderFormError(null);
+    setEditProviderDialogOpen(true);
+  };
+
+  const openDeleteProviderDialog = (provider: ProviderMetadata) => {
+    setDeletingProvider(provider);
+    setProviderFormError(null);
+    setDeleteProviderDialogOpen(true);
+  };
+
+  const handleProviderFormChange = (field: keyof ProviderConfig, value: string | string[]) => {
+    setProviderFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleProviderFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Client-side validation
+    if (!providerFormData.id.trim()) {
+      setProviderFormError("Provider ID is required");
+      return;
+    }
+    if (!providerFormData.name.trim()) {
+      setProviderFormError("Display Name is required");
+      return;
+    }
+    if (!providerFormData.baseUrl.trim()) {
+      setProviderFormError("Base URL is required");
+      return;
+    }
+    // Basic URL validation
+    try {
+      new URL(providerFormData.baseUrl);
+    } catch {
+      setProviderFormError("Base URL must be a valid URL");
+      return;
+    }
+    
+    setProviderFormSubmitting(true);
+    setProviderFormError(null);
+    try {
+      if (editProviderDialogOpen && editingProvider) {
+        // Update existing provider
+        await apiClient.updateProvider(editingProvider.id, providerFormData);
+      } else {
+        // Create new provider
+        await apiClient.createProvider(providerFormData);
+      }
+      // Refresh providers list
+      const response = await apiClient.getProviders();
+      if (response.data) {
+        setProviders(response.data);
+      }
+      setAddProviderDialogOpen(false);
+      setEditProviderDialogOpen(false);
+      setEditingProvider(null);
+    } catch (error) {
+      setProviderFormError(error instanceof Error ? error.message : "Failed to save provider");
+    } finally {
+      setProviderFormSubmitting(false);
+    }
+  };
+
+  const handleDeleteProvider = async () => {
+    if (!deletingProvider) return;
+    setDeleteProviderSubmitting(true);
+    setProviderFormError(null);
+    try {
+      await apiClient.deleteProvider(deletingProvider.id);
+      // Refresh providers list
+      const response = await apiClient.getProviders();
+      if (response.data) {
+        setProviders(response.data);
+      }
+      setDeleteProviderDialogOpen(false);
+      setDeletingProvider(null);
+    } catch (error) {
+      setProviderFormError(error instanceof Error ? error.message : "Failed to delete provider");
+    } finally {
+      setDeleteProviderSubmitting(false);
     }
   };
 
@@ -1113,11 +1260,345 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Providers Section */}
+          <div className="rounded-lg border p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Providers</h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openAddProviderDialog}
+                disabled={providersLoading}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Provider
+              </Button>
+            </div>
+            
+            {providersError && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 mb-4">
+                {providersError}
+              </div>
+            )}
+
+            {providersLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : providers.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No providers configured. Click "Add Provider" to create one.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border rounded">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Name</th>
+                      <th className="px-3 py-2 text-left font-medium">ID</th>
+                      <th className="px-3 py-2 text-left font-medium">Base URL</th>
+                      <th className="px-3 py-2 text-left font-medium">Models</th>
+                      <th className="px-3 py-2 text-left font-medium">Status</th>
+                      <th className="px-3 py-2 text-left font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {providers.map((provider) => (
+                      <tr key={provider.id} className="border-t">
+                        <td className="px-3 py-2 font-medium">{provider.name}</td>
+                        <td className="px-3 py-2 font-mono text-xs">{provider.id}</td>
+                        <td className="px-3 py-2 font-mono text-xs max-w-xs truncate" title={provider.baseUrl}>
+                          {provider.baseUrl}
+                        </td>
+                        <td className="px-3 py-2">
+                          {provider.models.length > 0 ? (
+                            <span className="text-xs text-muted-foreground">{provider.models.join(", ")}</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              provider.source === "file"
+                                ? "bg-blue-100 text-blue-800"
+                                : provider.source === "env"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                            title={
+                              provider.source === "file"
+                                ? "Configured in providers.json (user-defined)"
+                                : provider.source === "env"
+                                ? "Configured via environment variable"
+                                : "Default built-in provider"
+                            }
+                          >
+                            {provider.source === "file" ? "File" : provider.source === "env" ? "Env" : "Default"}
+                          </span>
+                          {provider.dynamic && (
+                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-800" title="User-created">
+                              Custom
+                            </span>
+                          )}
+                          {provider.source === "env" && (
+                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800" title="Overridden by environment variable">
+                              Env Override
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            {provider.source === "file" && provider.dynamic && (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditProviderDialog(provider)}
+                                  disabled={providerFormSubmitting}
+                                  className="h-8 w-8 p-0"
+                                  title="Edit provider"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openDeleteProviderDialog(provider)}
+                                  disabled={deleteProviderSubmitting}
+                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  title="Delete provider"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            {provider.source !== "file" && (
+                              <span className="text-xs text-muted-foreground">Managed externally</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           <Button type="submit" className="w-full md:w-auto" disabled={loading}>
             {loading ? "Loading..." : "Save Settings"}
           </Button>
         </form>
       </div>
+
+      {/* Add Provider Dialog */}
+      <Dialog open={addProviderDialogOpen} onOpenChange={setAddProviderDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Provider</DialogTitle>
+            <DialogDescription>
+              Configure a new API provider. All fields are required.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleProviderFormSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="provider-id">Provider ID</Label>
+                <Input
+                  id="provider-id"
+                  value={providerFormData.id}
+                  onChange={(e) => handleProviderFormChange("id", e.target.value)}
+                  placeholder="e.g., my-custom-provider"
+                  disabled={providerFormSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="provider-name">Display Name</Label>
+                <Input
+                  id="provider-name"
+                  value={providerFormData.name}
+                  onChange={(e) => handleProviderFormChange("name", e.target.value)}
+                  placeholder="e.g., My Custom Provider"
+                  disabled={providerFormSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="provider-baseurl">Base URL</Label>
+                <Input
+                  id="provider-baseurl"
+                  value={providerFormData.baseUrl}
+                  onChange={(e) => handleProviderFormChange("baseUrl", e.target.value)}
+                  placeholder="https://api.example.com"
+                  disabled={providerFormSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="provider-models">Models (comma-separated)</Label>
+                <Input
+                  id="provider-models"
+                  value={providerFormData.models.join(", ")}
+                  onChange={(e) => handleProviderFormChange("models", e.target.value.split(",").map(s => s.trim()).filter(Boolean))}
+                  placeholder="model-1, model-2, model-3 (avoid commas in names)"
+                  disabled={providerFormSubmitting}
+                />
+                <p className="text-xs text-muted-foreground">Optional: comma-separated list of model names (commas in names not supported)</p>
+              </div>
+              {providerFormError && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  {providerFormError}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAddProviderDialogOpen(false)} disabled={providerFormSubmitting}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={providerFormSubmitting}>
+                {providerFormSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  "Add Provider"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Provider Dialog */}
+      <Dialog open={editProviderDialogOpen} onOpenChange={setEditProviderDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Provider</DialogTitle>
+            <DialogDescription>
+              Modify the provider configuration. Provider ID cannot be changed.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleProviderFormSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-provider-id">Provider ID</Label>
+                <Input
+                  id="edit-provider-id"
+                  value={providerFormData.id}
+                  disabled
+                  className="bg-muted cursor-not-allowed"
+                />
+                <p className="text-xs text-muted-foreground">Provider ID cannot be changed</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-provider-name">Display Name</Label>
+                <Input
+                  id="edit-provider-name"
+                  value={providerFormData.name}
+                  onChange={(e) => handleProviderFormChange("name", e.target.value)}
+                  placeholder="e.g., My Custom Provider"
+                  disabled={providerFormSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-provider-baseurl">Base URL</Label>
+                <Input
+                  id="edit-provider-baseurl"
+                  value={providerFormData.baseUrl}
+                  onChange={(e) => handleProviderFormChange("baseUrl", e.target.value)}
+                  placeholder="https://api.example.com"
+                  disabled={providerFormSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-provider-models">Models (comma-separated)</Label>
+                <Input
+                  id="edit-provider-models"
+                  value={providerFormData.models.join(", ")}
+                  onChange={(e) => handleProviderFormChange("models", e.target.value.split(",").map(s => s.trim()).filter(Boolean))}
+                  placeholder="model-1, model-2, model-3 (avoid commas in names)"
+                  disabled={providerFormSubmitting}
+                />
+                <p className="text-xs text-muted-foreground">Optional: comma-separated list of model names (commas in names not supported)</p>
+              </div>
+              {providerFormError && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  {providerFormError}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setEditProviderDialogOpen(false); setEditingProvider(null); }} disabled={providerFormSubmitting}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={providerFormSubmitting}>
+                {providerFormSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Provider Dialog */}
+      <Dialog open={deleteProviderDialogOpen} onOpenChange={setDeleteProviderDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Provider</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this provider? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {deletingProvider && (
+              <div className="space-y-2 text-sm">
+                <p><strong>Name:</strong> {deletingProvider.name}</p>
+                <p><strong>ID:</strong> <code className="text-xs bg-muted px-1 rounded">{deletingProvider.id}</code></p>
+                <p><strong>Base URL:</strong> <code className="text-xs bg-muted px-1 rounded">{deletingProvider.baseUrl}</code></p>
+              </div>
+            )}
+            {providerFormError && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 mt-4">
+                {providerFormError}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { setDeleteProviderDialogOpen(false); setDeletingProvider(null); }}
+              disabled={deleteProviderSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteProvider}
+              disabled={deleteProviderSubmitting}
+            >
+              {deleteProviderSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Provider"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
