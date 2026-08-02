@@ -8,6 +8,7 @@ import {
 } from "@/lib/sessions/server-utils";
 
 import { withRequestCache } from "@/lib/request-cache";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 interface RedactionDetailResponse {
   redactionType: string;
@@ -59,7 +60,7 @@ export async function GET(
       const captureData = await readCaptureFile(capturePath);
 
       if (!captureData) {
-        return Response.json({ error: "Capture file not found" }, { status: 404 });
+        return Response.json(createErrorResponse({ message: "Capture file not found", status: 404 }), { status: 404 });
       }
 
       // Load the redaction meta file to get matches (authoritative source)
@@ -68,7 +69,7 @@ export async function GET(
       const meta = await readRedactionMetaFile(metaPath);
 
       if (!meta) {
-        return Response.json({ error: "Redaction metadata not found" }, { status: 404 });
+        return Response.json(createErrorResponse({ message: "Redaction metadata not found", status: 404 }), { status: 404 });
       }
 
       // Get matches from meta file (authoritative source for match ordering)
@@ -86,10 +87,11 @@ export async function GET(
         const index = parseInt(matchIndex, 10);
         if (isNaN(index) || index < 0 || index >= matches.length) {
           return Response.json(
-            {
-              error: "Match index out of range",
-              totalMatches: matches.length,
-            },
+            createErrorResponse({ 
+              message: "Match index out of range", 
+              status: 400, 
+              details: { totalMatches: matches.length } 
+            }),
             { status: 400 }
           );
         }
@@ -152,11 +154,11 @@ export async function GET(
         const syntheticMatch: MetaMatch = { ruleId: firstRule, path: "" };
         return buildFullBodyResponse(response, captureData, syntheticMatch);
       } else {
-        return Response.json({ error: "No redactions found in this capture" }, { status: 404 });
+        return Response.json(createErrorResponse({ message: "No redactions found in this capture", status: 404 }), { status: 404 });
       }
     } catch (error) {
       console.error("Error in redaction detail API:", error);
-      return Response.json({ error: "Internal server error" }, { status: 500 });
+      return Response.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
     }
   });
 }
@@ -206,9 +208,9 @@ function buildFullBodyResponse(
     }
   }
 
-  return Response.json(response);
+  return Response.json(createSuccessResponse(response));
 }
 
 export async function POST(_request: Request) {
-  return Response.json({ error: "Method not allowed" }, { status: 405 });
+  return Response.json(createErrorResponse({ message: "Method not allowed", status: 405 }), { status: 405 });
 }

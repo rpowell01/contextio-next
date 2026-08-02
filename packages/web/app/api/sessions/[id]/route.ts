@@ -17,6 +17,7 @@ import {
 } from "@/lib/sessions/redaction-utils";
 import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 import { withRequestCache } from "@/lib/request-cache";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 interface CaptureRedactionStats {
   totalRedactions: number;
@@ -286,7 +287,7 @@ export async function GET(
       }
 
       if (sessionCaptures.length === 0) {
-        return Response.json({ error: "Session not found" }, { status: 404 });
+        return Response.json(createErrorResponse({ message: "Session not found", status: 404 }), { status: 404 });
       }
 
       // Compute metrics and enriched data
@@ -338,10 +339,10 @@ export async function GET(
         })),
       };
 
-      return Response.json(sessionDetail);
+      return Response.json(createSuccessResponse(sessionDetail));
     } catch (error) {
       console.error("Error in session detail API:", error);
-      return Response.json({ error: "Internal server error" }, { status: 500 });
+      return Response.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
     }
   });
 }

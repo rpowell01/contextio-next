@@ -16,6 +16,7 @@ import {
 import { consumeToken } from "@/lib/csrf";
 import { withRequestCache } from "@/lib/request-cache";
 import { withAuth } from "@/lib/auth/guards";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 function extractCaptureMetadata(
   filename: string,
@@ -131,23 +132,23 @@ async function handleGetCaptures(
         const filepath = join(captureDir, id);
         const stats = await fs.stat(filepath).catch(() => null);
         if (!stats) {
-          return Response.json({ error: "Capture not found" }, { status: 404 });
+          return Response.json(createErrorResponse({ message: "Capture not found", status: 404 }), { status: 404 });
         }
         if (stats.size > MAX_FILE_SIZE) {
-          return Response.json({ error: "Capture file too large" }, { status: 413 });
+          return Response.json(createErrorResponse({ message: "Capture file too large", status: 413 }), { status: 413 });
         }
 
         const data = await readCaptureFile(filepath);
         if (!data) {
-          return Response.json({ error: "Failed to read capture file" }, { status: 500 });
+          return Response.json(createErrorResponse({ message: "Failed to read capture file", status: 500 }), { status: 500 });
         }
         const capture = extractCaptureMetadata(id, data);
 
-        return Response.json({
+        return Response.json(createSuccessResponse({
           ...capture,
           requestBody: data.requestBody,
           responseBody: data.responseBody,
-        });
+        }));
       }
 
       const sessionId = url.searchParams.get("sessionId");
@@ -166,10 +167,10 @@ async function handleGetCaptures(
       const toDate = validateDate(to);
 
       if (from && !fromDate) {
-        return Response.json({ error: "Invalid 'from' date parameter" }, { status: 400 });
+        return Response.json(createErrorResponse({ message: "Invalid 'from' date parameter", status: 400 }), { status: 400 });
       }
       if (to && !toDate) {
-        return Response.json({ error: "Invalid 'to' date parameter" }, { status: 400 });
+        return Response.json(createErrorResponse({ message: "Invalid 'to' date parameter", status: 400 }), { status: 400 });
       }
 
       const files = await listCaptureFiles();
@@ -253,14 +254,14 @@ async function handleGetCaptures(
       const startIndex = (validPage - 1) * validPageSize;
       const paginatedCaptures = filtered.slice(startIndex, startIndex + validPageSize);
 
-      return Response.json({
+      return Response.json(createSuccessResponse({
         data: paginatedCaptures,
         total: filtered.length,
         pagination,
-      });
+      }));
     } catch (error) {
       console.error("Error in captures API:", error);
-      return Response.json({ error: "Internal server error" }, { status: 500 });
+      return Response.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
     }
   });
 }
@@ -274,22 +275,22 @@ async function handleClearCaptures(
       const url = new URL(request.url);
 
       if (url.pathname !== "/api/captures") {
-        return Response.json({ error: "Not found" }, { status: 404 });
+        return Response.json(createErrorResponse({ message: "Not found", status: 404 }), { status: 404 });
       }
 
       const action = url.searchParams.get("action");
       if (action !== "clear") {
-        return Response.json({ error: "Invalid action" }, { status: 400 });
+        return Response.json(createErrorResponse({ message: "Invalid action", status: 400 }), { status: 400 });
       }
 
       const csrfToken = request.headers.get("x-csrf-token");
       if (!(await consumeToken(csrfToken ?? ""))) {
-        return Response.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+        return Response.json(createErrorResponse({ message: "Invalid or missing CSRF token", status: 400 }), { status: 400 });
       }
 
       const body = (await request.json().catch(() => ({}))) as { action?: string };
       if (body.action !== "DELETE_ALL_CAPTURES") {
-        return Response.json({ error: "Confirmation required" }, { status: 400 });
+        return Response.json(createErrorResponse({ message: "Confirmation required", status: 400 }), { status: 400 });
       }
 
       const captureDir = await getCaptureDir();
@@ -312,15 +313,15 @@ async function handleClearCaptures(
         }
       }
 
-      return Response.json({
+      return Response.json(createSuccessResponse({
         success: true,
         deleted,
         errors,
         message: `Deleted ${deleted} capture(s)${errors > 0 ? `, ${errors} error(s)` : ""}`,
-      });
+      }));
     } catch (error) {
       console.error("Error clearing captures:", error);
-      return Response.json({ error: "Internal server error" }, { status: 500 });
+      return Response.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
     }
   });
 }

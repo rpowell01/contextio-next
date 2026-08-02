@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCaptureDir } from "@/lib/sessions/server-utils";
 import { promises as fs } from "fs";
 import path from "path";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
@@ -10,7 +11,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     if (!filename) {
       return NextResponse.json(
-        { error: "filename parameter required" },
+        createErrorResponse({ message: "filename parameter required", status: 400 }),
         { status: 400 }
       );
     }
@@ -28,21 +29,21 @@ export async function GET(request: Request): Promise<NextResponse> {
       stat = await fs.stat(filepath);
     } catch (e) {
       return NextResponse.json(
-        { error: e instanceof Error ? e.message : "Unknown error" },
+        createErrorResponse({ message: e instanceof Error ? e.message : "Unknown error", status: 500 }),
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
+    return NextResponse.json(createSuccessResponse({
       filename,
       filepath,
       size: stat.size,
       raw,
       parsed,
-    });
+    }));
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
+      createErrorResponse({ message: error instanceof Error ? error.message : "Unknown error", status: 500 }),
       { status: 500 }
     );
   }

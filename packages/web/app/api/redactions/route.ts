@@ -5,6 +5,7 @@ import {
 import { consumeToken } from "@/lib/csrf";
 import { unstable_cache } from "next/cache";
 import { computePlaceholderCounts, convertByRuleToByPlaceholder } from "@/lib/sessions/placeholder-map";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 interface RedactionSummary {
   totalRedactions: number;
@@ -281,7 +282,7 @@ export async function GET(request: Request): Promise<Response> {
     if (summaryOnly) {
       // Fast path: use cached summary computation
       const summary = await getRedactionsSummary();
-      return Response.json({ summary });
+      return Response.json(createSuccessResponse({ summary }));
     }
 
     // Parse pagination params
@@ -328,10 +329,10 @@ export async function GET(request: Request): Promise<Response> {
       sortDir,
     );
 
-    return Response.json(result);
+    return Response.json(createSuccessResponse(result));
   } catch (error) {
     console.error("Error in redactions API:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    return Response.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
   }
 }
 
@@ -340,7 +341,7 @@ export async function POST(request: Request) {
     const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
       return Response.json(
-        { error: "Invalid or missing CSRF token" },
+        createErrorResponse({ message: "Invalid or missing CSRF token", status: 400 }),
         { status: 400 },
       );
     }
@@ -348,7 +349,7 @@ export async function POST(request: Request) {
       action?: string;
     };
     if (body.action !== "clear") {
-      return Response.json({ error: "Invalid action" }, { status: 400 });
+      return Response.json(createErrorResponse({ message: "Invalid action", status: 400 }), { status: 400 });
     }
 
     // Clear all redactions by returning empty summary
@@ -360,9 +361,9 @@ export async function POST(request: Request) {
       totalPages: 1,
       totalCount: 0,
     };
-    return Response.json({ success: true, ...result });
+    return Response.json(createSuccessResponse({ success: true, ...result }));
   } catch (error) {
     console.error("Error in redactions POST API:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    return Response.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
   }
 }

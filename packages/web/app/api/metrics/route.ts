@@ -2,6 +2,7 @@ import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from 
 import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/server-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
+import { createSuccessResponse } from "@contextio/core";
 
 /**
  * Parse a single capture metadata and extract metrics.
@@ -314,7 +315,7 @@ export async function GET(request: Request): Promise<Response> {
       metrics.traffic = paginatedTraffic;
     }
 
-    const response = Response.json({
+    const response = Response.json(createSuccessResponse({
       ...metrics,
       traffic: metrics.traffic,
       redactionStatsDeduped: {
@@ -331,7 +332,7 @@ export async function GET(request: Request): Promise<Response> {
         totalPages,
         totalItems: totalTrafficPoints,
       },
-    });
+    }));
     if (maxPoints) {
       response.headers.set(
         "X-Data-Points-Total",

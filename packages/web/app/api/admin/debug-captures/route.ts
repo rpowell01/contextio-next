@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCaptureDir, listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/server-utils";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 export async function GET(): Promise<NextResponse> {
   try {
@@ -24,14 +25,14 @@ export async function GET(): Promise<NextResponse> {
       });
     }
 
-    return NextResponse.json({
+    return NextResponse.json(createSuccessResponse({
       captureDir,
       metaFileCount: metaFiles.length,
       samples: results,
-    });
+    }));
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
+      createErrorResponse({ message: error instanceof Error ? error.message : "Unknown error", status: 500 }),
       { status: 500 }
     );
   }

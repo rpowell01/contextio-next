@@ -103,6 +103,17 @@ export type {
   Upstreams,
 } from "./types.js";
 
+// Response utilities: service identification for client-facing messages
+export {
+  SERVICE_IDENTIFIER,
+  createErrorResponse,
+  createSuccessResponse,
+  createInfoResponse,
+  addServiceIdentifier,
+  hasServiceIdentifier,
+  type ServiceResponseOptions,
+} from "./response-utils.js";
+
 // Provider validation functions and constants
 export {
   KNOWN_API_FORMATS,

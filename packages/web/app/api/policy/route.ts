@@ -4,6 +4,7 @@ import { policySchema } from "@/lib/schema";
 import type { RedactionPolicy } from "@/types/api";
 import { join } from "path";
 import { consumeToken } from "@/lib/csrf";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 // Default policy - bundled with the application (used as fallback)
 const bundledDefaultPolicy: RedactionPolicy = {
@@ -102,10 +103,10 @@ async function savePolicyToFile(policy: RedactionPolicy): Promise<void> {
 export async function GET(_request: NextRequest) {
   try {
     const policy = await loadPolicyFromFile();
-    return NextResponse.json(policy);
+    return NextResponse.json(createSuccessResponse(policy));
   } catch (error) {
     return NextResponse.json(
-      { error: "Failed to load policy" },
+      createErrorResponse({ message: "Failed to load policy", status: 500 }),
       { status: 500 }
     );
   }
@@ -113,11 +114,11 @@ export async function GET(_request: NextRequest) {
 
 // Debug endpoint to check file status
 export async function POST(_request: NextRequest) {
-const csrfToken = _request.headers.get("x-csrf-token");
-if (!(await consumeToken(csrfToken ?? ""))) {
-return NextResponse.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
-}
-const debugInfo: Record<string, unknown> = {
+  const csrfToken = _request.headers.get("x-csrf-token");
+  if (!(await consumeToken(csrfToken ?? ""))) {
+    return NextResponse.json(createErrorResponse({ message: "Invalid or missing CSRF token", status: 400 }), { status: 400 });
+  }
+  const debugInfo: Record<string, unknown> = {
     customPolicyPath: CUSTOM_POLICY_PATH,
     bundledPolicyPath: BUNDLED_POLICY_PATH,
   };
@@ -160,14 +161,14 @@ const debugInfo: Record<string, unknown> = {
   debugInfo.processGid = process.getgid?.() ?? "N/A";
   debugInfo.cwd = process.cwd();
 
-  return NextResponse.json(debugInfo);
+  return NextResponse.json(createSuccessResponse(debugInfo));
 }
 
 export async function PUT(request: NextRequest) {
   try {
     const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
-      return NextResponse.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+      return NextResponse.json(createErrorResponse({ message: "Invalid or missing CSRF token", status: 400 }), { status: 400 });
     }
     const body = await request.json();
     
@@ -179,7 +180,7 @@ export async function PUT(request: NextRequest) {
         message: err.message,
       }));
       return NextResponse.json(
-        { error: "Invalid policy", details: errorDetails },
+        createErrorResponse({ message: "Invalid policy", status: 400, details: errorDetails }),
         { status: 400 }
       );
     }
@@ -187,7 +188,7 @@ export async function PUT(request: NextRequest) {
     // Save the policy to file
     await savePolicyToFile(result.data);
     
-    return NextResponse.json(result.data);
+    return NextResponse.json(createSuccessResponse(result.data));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
@@ -197,15 +198,16 @@ export async function PUT(request: NextRequest) {
     const errorPath = (error as NodeJS.ErrnoException)?.path;
     console.error("Failed to save policy:", error);
     return NextResponse.json(
-      { 
-        error: "Failed to save policy", 
+      createErrorResponse({ 
+        message: "Failed to save policy", 
+        status: 500, 
         details: errorMessage, 
         stack: errorStack,
         code: errorCode,
         errno: errorErrno,
         syscall: errorSyscall,
         path: errorPath
-      },
+      }),
       { status: 500 }
     );
   }

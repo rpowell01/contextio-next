@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { RateLimiterMetrics } from "@/types/api";
+import { createSuccessResponse } from "@contextio/core";
 
 // Proxy admin API URL (for server-side requests)
 const PROXY_ADMIN_URL =
@@ -29,7 +30,7 @@ export async function GET() {
         }`,
       );
     }
-    return NextResponse.json(metrics, {
+    return NextResponse.json(createSuccessResponse(metrics), {
       headers: {
         "Cache-Control": "no-cache, no-store, must-revalidate",
         Pragma: "no-cache",
@@ -39,7 +40,7 @@ export async function GET() {
   } catch (error) {
     console.error("Error in rate-limiter API:", error);
     // Fallback to disabled state if proxy is unreachable
-    return NextResponse.json({
+    return NextResponse.json(createSuccessResponse({
       config: {
         maxRequests: 60,
         windowMs: 60000,
@@ -52,7 +53,7 @@ export async function GET() {
       totalQueued: 0,
       timestamp: new Date().toISOString(),
       code: "RATE_LIMITER_UNAVAILABLE",
-    } satisfies RateLimiterMetrics, {
+    } satisfies RateLimiterMetrics), {
       headers: {
         "Cache-Control": "no-cache, no-store, must-revalidate",
         Pragma: "no-cache",

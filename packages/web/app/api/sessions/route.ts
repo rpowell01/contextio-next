@@ -12,6 +12,7 @@ import {
 } from "@/lib/sessions/server-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import { groupCapturesIntoSessions, type RawCaptureData } from "@/lib/sessions/grouping";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 async function handleGet(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -81,7 +82,7 @@ async function handleGet(request: Request): Promise<Response> {
     }
 
     if (sessionCaptures.length === 0) {
-      return Response.json({ error: "Session not found" }, { status: 404 });
+      return Response.json(createErrorResponse({ message: "Session not found", status: 404 }), { status: 404 });
     }
 
     // Calculate metrics for this session using the grouping function
@@ -184,7 +185,7 @@ async function handleGet(request: Request): Promise<Response> {
       })),
     };
 
-    return Response.json(sessionDetail);
+    return Response.json(createSuccessResponse(sessionDetail));
   }
 
   const files = await listCaptureFiles();
@@ -226,7 +227,7 @@ async function handleGet(request: Request): Promise<Response> {
     const endIndex = startIndex + pageSize;
     const paginatedSessions = listSessions.slice(startIndex, endIndex);
     const totalPages = Math.ceil(listSessions.length / pageSize);
-    return Response.json({
+    return Response.json(createSuccessResponse({
       sessions: paginatedSessions,
       pagination: {
         page,
@@ -234,7 +235,7 @@ async function handleGet(request: Request): Promise<Response> {
         totalPages,
         totalItems: listSessions.length,
       },
-    });
+    }));
   }
 
   // Return grouped summaries if requested
@@ -324,7 +325,7 @@ async function handleGet(request: Request): Promise<Response> {
     const paginatedSummaries = summaries.slice(startIndex, endIndex);
     const totalPages = Math.ceil(summaries.length / pageSize);
 
-    return Response.json({
+    return Response.json(createSuccessResponse({
       sessions: [],
       summaries: paginatedSummaries,
       metrics,
@@ -334,11 +335,14 @@ async function handleGet(request: Request): Promise<Response> {
         totalPages,
         totalItems: summaries.length,
       },
-    });
+    }));
   }
 
   // For non-grouped list without pagination params, return all
-  return Response.json(listSessions);
+  // Preserve array response shape while adding service identification via header
+  const response = Response.json(listSessions);
+  response.headers.set("x-service-identifier", "contextio-next");
+  return response;
 }
 
 export async function GET(request: Request) {
@@ -346,6 +350,6 @@ export async function GET(request: Request) {
     return await withRequestCache(() => handleGet(request));
   } catch (error) {
     console.error("Error in sessions API:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    return Response.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
   }
 }

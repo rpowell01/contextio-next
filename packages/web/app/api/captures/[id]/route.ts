@@ -26,6 +26,7 @@ import { computeTokenUsage } from "@/lib/sessions/utils";
 import type { RedactionDetails } from "@/types/api";
 import { consumeToken } from "@/lib/csrf";
 import { withAuth } from "@/lib/auth/guards";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 async function readRedactionMetaSidecar(captureFilepath: string): Promise<{
   captureId: string;
@@ -118,19 +119,19 @@ async function handleGetCapture(
 
     try {
       if (!isValidFilename(id)) {
-        return NextResponse.json({ error: "Invalid capture id" }, { status: 400 });
+        return NextResponse.json(createErrorResponse({ message: "Invalid capture id", status: 400 }), { status: 400 });
       }
 
       const captureDir = await getCaptureDir();
       const filepath = join(captureDir, id);
       const stats = await fs.stat(filepath).catch(() => null);
       if (!stats) {
-        return NextResponse.json({ error: "Capture not found" }, { status: 404 });
+        return NextResponse.json(createErrorResponse({ message: "Capture not found", status: 404 }), { status: 404 });
       }
 
       if (stats.size > MAX_FILE_SIZE) {
         return NextResponse.json(
-          { error: "Capture file too large" },
+          createErrorResponse({ message: "Capture file too large", status: 413 }),
           { status: 413 },
         );
       }
@@ -210,7 +211,7 @@ async function handleGetCapture(
         })),
       };
 
-      return NextResponse.json({
+      return NextResponse.json(createSuccessResponse({
         ...capture,
         requestBody,
         responseBody,
@@ -222,7 +223,7 @@ async function handleGetCapture(
         redactionMeta,
         redaction: redactionDetails,
         redactions: redactionDetails,
-      });
+      }));
     } catch (error) {
       if (error instanceof CaptureReadError) {
         const status =
@@ -232,12 +233,12 @@ async function handleGetCapture(
               ? 422
               : 500;
         return NextResponse.json(
-          { error: error.message, kind: error.kind },
+          createErrorResponse({ message: error.message, code: error.kind, status }),
           { status },
         );
       }
       console.error("Error in capture detail API:", error);
-      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+      return NextResponse.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
     }
   });
 }
@@ -250,13 +251,13 @@ async function handlePutCapture(
 
   try {
     if (!isValidFilename(id)) {
-      return NextResponse.json({ error: "Invalid capture id" }, { status: 400 });
+      return NextResponse.json(createErrorResponse({ message: "Invalid capture id", status: 400 }), { status: 400 });
     }
 
     const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
       return NextResponse.json(
-        { error: "Invalid or missing CSRF token" },
+        createErrorResponse({ message: "Invalid or missing CSRF token", status: 400 }),
         { status: 400 },
       );
     }
@@ -264,10 +265,10 @@ async function handlePutCapture(
     const filepath = join(await getCaptureDir(), id);
     const stats = await fs.stat(filepath).catch(() => null);
     if (!stats) {
-      return NextResponse.json({ error: "Capture not found" }, { status: 404 });
+      return NextResponse.json(createErrorResponse({ message: "Capture not found", status: 404 }), { status: 404 });
     }
     if (stats.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: "Capture too large" }, { status: 413 });
+      return NextResponse.json(createErrorResponse({ message: "Capture too large", status: 413 }), { status: 413 });
     }
 
     const raw = await fs.readFile(filepath, "utf8");
@@ -331,14 +332,14 @@ async function handlePutCapture(
     await fs.writeFile(tmpMetaPath, JSON.stringify(meta, null, 2), "utf8");
     await fs.rename(tmpMetaPath, metaPath);
 
-    return NextResponse.json({
+    return NextResponse.json(createSuccessResponse({
       success: true,
       redactionMeta: meta,
       redactions: redaction,
-    });
+    }));
   } catch (error) {
     console.error("Error in capture redact API:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
   }
 }
 
@@ -354,13 +355,13 @@ async function handlePostCapture(
 
   try {
     if (!isValidFilename(id)) {
-      return NextResponse.json({ error: "Invalid capture id" }, { status: 400 });
+      return NextResponse.json(createErrorResponse({ message: "Invalid capture id", status: 400 }), { status: 400 });
     }
 
     const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
       return NextResponse.json(
-        { error: "Invalid or missing CSRF token" },
+        createErrorResponse({ message: "Invalid or missing CSRF token", status: 400 }),
         { status: 400 },
       );
     }
@@ -368,11 +369,11 @@ async function handlePostCapture(
     const filepath = join(await getCaptureDir(), id);
     const stats = await fs.stat(filepath).catch(() => null);
     if (!stats) {
-      return NextResponse.json({ error: "Capture not found" }, { status: 404 });
+      return NextResponse.json(createErrorResponse({ message: "Capture not found", status: 404 }), { status: 404 });
     }
     if (stats.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: "Capture file too large" },
+        createErrorResponse({ message: "Capture file too large", status: 413 }),
         { status: 413 },
       );
     }
@@ -438,12 +439,12 @@ async function handlePostCapture(
       await fs.writeFile(filepath, JSON.stringify(updatedData, null, 2));
 
       const capture = extractCaptureMetadata(id, updatedData);
-      return NextResponse.json({
+      return NextResponse.json(createSuccessResponse({
         ...capture,
         requestBody: redacted.requestBody,
         responseBody: redacted.responseBody,
         redaction: redactionDetails,
-      });
+      }));
     }
 
     // ------------------------------------------------------------------
@@ -510,15 +511,15 @@ async function handlePostCapture(
     await fs.writeFile(tmpMetaPath, JSON.stringify(meta, null, 2), "utf8");
     await fs.rename(tmpMetaPath, metaPath);
 
-    return NextResponse.json({
+    return NextResponse.json(createSuccessResponse({
       success: true,
       capture: patched,
       redactionMeta: meta,
       redactions: redaction,
-    });
+    }));
   } catch (error) {
     console.error("Error in capture rerun API:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
   }
 }
 

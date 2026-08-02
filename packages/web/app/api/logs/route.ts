@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { LogEntry, LogLevel } from "@/types/api";
 import { apiClient } from "@/lib/api";
 import { consumeToken } from "@/lib/csrf";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 // Input validation helpers
 function sanitizeString(value: string | null, maxLength = 256): string | null {
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
     const logs = await apiClient.getProxyLogs({ levels, search: search ?? "" });
     
     // Always return "contextio-next" as the container name for consistency
-    return NextResponse.json({ logs, containerId: "contextio-next", sessionId });
+    return NextResponse.json(createSuccessResponse({ logs, containerId: "contextio-next", sessionId }));
   } catch (error) {
     console.error("Error fetching proxy logs, falling back to mock:", error);
     // Fallback to mock data if proxy is unreachable
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ logs: filtered, containerId: "contextio-next", sessionId });
+    return NextResponse.json(createSuccessResponse({ logs: filtered, containerId: "contextio-next", sessionId }));
   }
 }
 
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
   try {
     const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
-      return NextResponse.json({ error: "Invalid or missing CSRF token" }, { status: 400 });
+      return NextResponse.json(createErrorResponse({ message: "Invalid or missing CSRF token", status: 400 }), { status: 400 });
     }
     const body = await request.json();
     const { action, containerId } = body;
@@ -131,26 +132,26 @@ export async function POST(request: NextRequest) {
     if (action === "clear") {
       try {
         await apiClient.clearProxyLogs();
-        return NextResponse.json({ success: true, message: "Logs cleared" });
+        return NextResponse.json(createSuccessResponse({ success: true, message: "Logs cleared" }));
       } catch (error) {
         console.error("Error clearing proxy logs:", error);
-        return NextResponse.json({ success: true, message: "Logs cleared (mock)" });
+        return NextResponse.json(createSuccessResponse({ success: true, message: "Logs cleared (mock)" }));
       }
     }
 
     if (action === "stream" && sanitizedContainerId) {
       // For SSE streaming, we'll use GET with stream=true parameter
-      return NextResponse.json({ 
+      return NextResponse.json(createSuccessResponse({ 
         success: true, 
         message: "Use GET /api/logs?stream=true for streaming",
         streamUrl: `/api/logs?containerId=${encodeURIComponent(sanitizedContainerId)}&stream=true` 
-      });
+      }));
     }
 
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    return NextResponse.json(createErrorResponse({ message: "Invalid action", status: 400 }), { status: 400 });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to process request" },
+      createErrorResponse({ message: error instanceof Error ? error.message : "Failed to process request", status: 500 }),
       { status: 500 }
     );
   }

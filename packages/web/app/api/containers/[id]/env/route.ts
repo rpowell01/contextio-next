@@ -26,10 +26,15 @@ export async function GET(
   await params;
   try {
     const envVars = await apiClient.getProxyEnvVars();
-    return NextResponse.json(envVars);
+    // Preserve array response shape (matching proxy /admin/env) while adding service identification via header
+    const response = NextResponse.json(envVars);
+    response.headers.set("x-service-identifier", "contextio-next");
+    return response;
   } catch (error) {
     console.error("Error fetching proxy env vars:", error);
     // Graceful fallback — returns default config values when proxy is down
-    return NextResponse.json(FALLBACK_ENV_VARS);
+    const response = NextResponse.json(FALLBACK_ENV_VARS);
+    response.headers.set("x-service-identifier", "contextio-next");
+    return response;
   }
 }

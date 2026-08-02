@@ -37,6 +37,7 @@ import type {
   ResponseContext,
   Upstreams,
 } from "@contextio/core";
+import { SERVICE_IDENTIFIER } from "@contextio/core";
 
 export interface ForwardOptions {
   upstreams: Upstreams;
@@ -456,7 +457,7 @@ function attachLifecycleHandlers(
       res.writeHead(502, { "Content-Type": "application/json" });
     }
     if (!res.destroyed) {
-      res.end(JSON.stringify({ error: "Proxy error", details: err.message }));
+      res.end(JSON.stringify({ error: "Proxy error", details: err.message, service: SERVICE_IDENTIFIER }));
     }
   });
 }
@@ -642,6 +643,7 @@ export function createProxyHandler(
             type: "route_error",
             provider,
           },
+          service: SERVICE_IDENTIFIER,
         }),
       );
       return;
@@ -969,7 +971,7 @@ export function createProxyHandler(
                       if (!res.headersSent) {
                         res.writeHead(504, { "Content-Type": "application/json" });
                       }
-                      res.end(JSON.stringify({ error: { message: "Gateway timeout", type: "gateway_timeout" } }));
+                      res.end(JSON.stringify({ error: { message: "Gateway timeout", type: "gateway_timeout" }, service: SERVICE_IDENTIFIER }));
                       return;
                     }
                     try {
@@ -985,7 +987,7 @@ export function createProxyHandler(
                       if (!res.headersSent) {
                         res.writeHead(500, { "Content-Type": "application/json" });
                       }
-                      res.end(JSON.stringify({ error: { message: "Internal server error", type: "internal_error" } }));
+                      res.end(JSON.stringify({ error: { message: "Internal server error", type: "internal_error" }, service: SERVICE_IDENTIFIER }));
                     }
                   };
                   if (delayMs > 0) {
@@ -1178,7 +1180,7 @@ export function createProxyHandler(
                       } catch (err) {
                         console.error("Retry request setup error:", err);
                         finishResponse(
-                          JSON.stringify({ error: "Proxy error" }),
+                          JSON.stringify({ error: "Proxy error", service: SERVICE_IDENTIFIER }),
                           { "content-type": "application/json" },
                           502
                         );
@@ -1261,6 +1263,7 @@ export function createProxyHandler(
                     type: "rate_limit_exceeded",
                     rateLimitInfo,
                   },
+                  service: SERVICE_IDENTIFIER,
                 }));
               }
               return;

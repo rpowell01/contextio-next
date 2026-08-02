@@ -15,6 +15,7 @@ import http from "node:http";
 import { createCipheriv, createDecipheriv, createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { fetchProviderMetadata, validateIdToken, type OidcProviderMetadata } from "@contextio/core/server";
 import type { OidcProviderConfig } from "@contextio/core";
+import { SERVICE_IDENTIFIER } from "@contextio/core";
 
 export interface AuthSession {
   /** User's subject identifier from the ID token. */
@@ -309,12 +310,12 @@ export function createAuthHandler(options: AuthOptions): http.RequestListener {
         await handleSession(req, res, oidc);
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Not found" }));
+        res.end(JSON.stringify({ error: "Not found", service: SERVICE_IDENTIFIER }));
       }
     } catch (error) {
       console.error("Auth handler error:", error);
       res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Internal server error" }));
+      res.end(JSON.stringify({ error: "Internal server error", service: SERVICE_IDENTIFIER }));
     }
   };
 }
@@ -363,7 +364,7 @@ async function handleLogin(
   } catch (error) {
     console.error("Login error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Failed to initiate login" }));
+    res.end(JSON.stringify({ error: "Failed to initiate login", service: SERVICE_IDENTIFIER }));
   }
 }
 
@@ -389,14 +390,14 @@ async function handleCallback(
   if (error) {
     console.error("OIDC callback error:", error, errorDescription);
     res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: errorDescription || "Authentication failed" }));
+    res.end(JSON.stringify({ error: errorDescription || "Authentication failed", service: SERVICE_IDENTIFIER }));
     return;
   }
 
   if (!code || !state) {
     console.error("[auth] Missing code or state");
     res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Missing code or state parameter" }));
+    res.end(JSON.stringify({ error: "Missing code or state parameter", service: SERVICE_IDENTIFIER }));
     return;
   }
 
@@ -405,7 +406,7 @@ async function handleCallback(
   if (!nonce) {
     console.error("[auth] Invalid or expired state");
     res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Invalid or expired state parameter" }));
+    res.end(JSON.stringify({ error: "Invalid or expired state parameter", service: SERVICE_IDENTIFIER }));
     return;
   }
   console.log("[auth] State validated, nonce:", nonce);
@@ -435,7 +436,7 @@ async function handleCallback(
       const errorText = await tokenResponse.text();
       console.error("Token exchange failed:", tokenResponse.status, errorText);
       res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Failed to exchange authorization code" }));
+      res.end(JSON.stringify({ error: "Failed to exchange authorization code", service: SERVICE_IDENTIFIER }));
       return;
     }
 
@@ -451,7 +452,7 @@ async function handleCallback(
 
     if (!tokens.id_token) {
       res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "No ID token in response" }));
+      res.end(JSON.stringify({ error: "No ID token in response", service: SERVICE_IDENTIFIER }));
       return;
     }
 
@@ -468,7 +469,7 @@ async function handleCallback(
     if (payload.nonce !== nonce) {
       console.error("[auth] Nonce mismatch:", { expected: nonce, actual: payload.nonce });
       res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Invalid nonce in ID token" }));
+      res.end(JSON.stringify({ error: "Invalid nonce in ID token", service: SERVICE_IDENTIFIER }));
       return;
     }
 
@@ -513,7 +514,7 @@ async function handleCallback(
   } catch (error) {
     console.error("Callback error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Authentication failed" }));
+    res.end(JSON.stringify({ error: "Authentication failed", service: SERVICE_IDENTIFIER }));
   }
 }
 
@@ -566,7 +567,7 @@ async function handleSession(
 
   if (!session) {
     res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ authenticated: false }));
+    res.end(JSON.stringify({ authenticated: false, service: SERVICE_IDENTIFIER }));
     return;
   }
 
@@ -574,7 +575,7 @@ async function handleSession(
   const now = Math.floor(Date.now() / 1000);
   if (session.expiresAt < now) {
     res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ authenticated: false }));
+    res.end(JSON.stringify({ authenticated: false, service: SERVICE_IDENTIFIER }));
     return;
   }
 
@@ -582,6 +583,7 @@ async function handleSession(
   res.end(
     JSON.stringify({
       authenticated: true,
+      service: SERVICE_IDENTIFIER,
       user: {
         sub: session.sub,
         email: session.email,
@@ -640,14 +642,14 @@ export function requireAuth(
 
   if (!session) {
     res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Unauthorized", loginUrl: "/auth/login" }));
+    res.end(JSON.stringify({ error: "Unauthorized", loginUrl: "/auth/login", service: SERVICE_IDENTIFIER }));
     return null;
   }
 
   const now = Math.floor(Date.now() / 1000);
   if (session.expiresAt < now) {
     res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Session expired", loginUrl: "/auth/login" }));
+    res.end(JSON.stringify({ error: "Session expired", loginUrl: "/auth/login", service: SERVICE_IDENTIFIER }));
     return null;
   }
 

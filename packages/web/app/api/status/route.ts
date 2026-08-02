@@ -1,4 +1,5 @@
 import type { ProxyStatus } from "@/types/api";
+import { createSuccessResponse } from "@contextio/core";
 
 // Proxy admin API URL (for server-side requests)
 const PROXY_ADMIN_URL =
@@ -22,11 +23,11 @@ export async function GET() {
       );
     }
     // Include container name for consistency
-    return Response.json({ ...status, containerId: "contextio-next" });
+    return Response.json(createSuccessResponse({ ...status, containerId: "contextio-next" }));
   } catch (error) {
     console.error("Error in status API:", error);
     // Fallback to mock data if proxy is unreachable
-    return Response.json({
+    return Response.json(createSuccessResponse({
       running: true,
       pid: process.pid,
       port: 4040,
@@ -35,6 +36,6 @@ export async function GET() {
       plugins: [],
       logTraffic: false,
       containerId: "contextio-next",
-    } satisfies ProxyStatus);
+    } satisfies ProxyStatus));
   }
 }

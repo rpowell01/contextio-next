@@ -6,6 +6,7 @@ import {
 } from "@/lib/sessions/redaction-utils";
 import { computeTokenUsage } from "@/lib/sessions/utils";
 import { decryptCapture } from "@contextio/logger";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
   const fs = await import("fs/promises");
@@ -131,18 +132,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    return NextResponse.json({
+    return NextResponse.json(createSuccessResponse({
       success: true,
       total: captureFiles.length,
       processed,
       skippedExisting,
       errors,
       totalRedactions,
-    });
+    }));
   } catch (error) {
     console.error("Backfill error:", error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      createErrorResponse({ message: error instanceof Error ? error.message : "Unknown error", status: 500 }),
       { status: 500 },
     );
   }

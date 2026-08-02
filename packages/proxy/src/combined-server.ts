@@ -19,6 +19,7 @@ import { join } from "node:path";
 import fs from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
+import { SERVICE_IDENTIFIER } from "@contextio/core";
 
 async function cleanupCaptureFiles(config: {
   loggerCaptureDir: string;
@@ -368,7 +369,7 @@ export function createCombinedProxy(
       nextHandler(req, res);
     } else {
       res.writeHead(503, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Web UI not available" }));
+      res.end(JSON.stringify({ error: "Web UI not available", service: SERVICE_IDENTIFIER }));
     }
   };
 

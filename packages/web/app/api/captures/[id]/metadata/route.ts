@@ -10,6 +10,7 @@ import {
 } from "@/lib/sessions/server-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import { withAuth } from "@/lib/auth/guards";
+import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 async function handleGetMetadata(
   _request: NextRequest,
@@ -20,18 +21,18 @@ async function handleGetMetadata(
 
     try {
       if (!isValidFilename(id)) {
-        return NextResponse.json({ error: "Invalid capture id" }, { status: 400 });
+        return NextResponse.json(createErrorResponse({ message: "Invalid capture id", status: 400 }), { status: 400 });
       }
 
       const captureDir = await getCaptureDir();
       const filepath = join(captureDir, id);
       const stats = await import("fs/promises").then((fs) => fs.stat(filepath).catch(() => null));
       if (!stats) {
-        return NextResponse.json({ error: "Capture not found" }, { status: 404 });
+        return NextResponse.json(createErrorResponse({ message: "Capture not found", status: 404 }), { status: 404 });
       }
 
       if (stats.size > MAX_FILE_SIZE) {
-        return NextResponse.json({ error: "Capture file too large" }, { status: 413 });
+        return NextResponse.json(createErrorResponse({ message: "Capture file too large", status: 413 }), { status: 413 });
       }
 
       const metaFilename = metaFilenameFor(id);
@@ -39,15 +40,15 @@ async function handleGetMetadata(
 
       if (!meta) {
         return NextResponse.json(
-          { error: "Metadata not found", captureId: id },
+          createErrorResponse({ message: "Metadata not found", status: 404, details: { captureId: id } }),
           { status: 404 },
         );
       }
 
-      return NextResponse.json(meta);
+      return NextResponse.json(createSuccessResponse(meta));
     } catch (error) {
       console.error("Error reading capture metadata:", error);
-      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+      return NextResponse.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
     }
   });
 }

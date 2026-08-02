@@ -3,6 +3,7 @@ import { withRequestCache } from "@/lib/request-cache";
 import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/server-utils";
 import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
+import { createSuccessResponse } from "@contextio/core";
 
 interface ProgressUpdate {
   type: "progress" | "complete" | "error";
@@ -97,7 +98,7 @@ async function* processMetricsWithProgress(
       type: "complete",
       current: 0,
       total: 0,
-      data: {
+      data: createSuccessResponse({
         traffic: [],
         providers: [],
         redactions: [],
@@ -118,7 +119,7 @@ async function* processMetricsWithProgress(
           byRule: {},
         },
         pagination: { page, pageSize, totalPages: 0, totalItems: 0 },
-      },
+      }),
     };
     return;
   }
@@ -266,7 +267,7 @@ async function* processMetricsWithProgress(
     type: "complete",
     current: metaFiles.length,
     total: metaFiles.length,
-    data: {
+    data: createSuccessResponse({
       traffic: finalTraffic,
       providers,
       redactions,
@@ -288,7 +289,7 @@ async function* processMetricsWithProgress(
         byRule: redactionByPlaceholderSum,
       },
       pagination: { page, pageSize, totalPages, totalItems: totalTrafficPoints },
-    },
+    }),
   };
 }
 

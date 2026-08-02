@@ -505,20 +505,27 @@ function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
 
       {/* Capacity meter - shows limit + buffer */}
       <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative">
-        {/* Limit portion */}
+        {/* Limit portion - absolute positioned at left */}
         <div
-          className="h-full rounded-l-full bg-gray-400"
+          className="h-full bg-gray-400"
           style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
             width: `${limitPercent}%`,
+            borderRadius: limitPercent === 100 ? '0.25rem' : '0.25rem 0 0 0.25rem',
           }}
         />
-        {/* Buffer portion - positioned after limit */}
+        {/* Buffer portion - absolute positioned after limit */}
         {bufferCapacity > 0 && (
           <div
             className="h-full bg-gray-300"
             style={{
+              position: 'absolute',
+              top: 0,
+              left: `${limitPercent}%`,
               width: `${bufferPercent}%`,
-              borderRadius: limitPercent === 100 ? "0 0.25rem 0.25rem 0" : "0",
+              borderRadius: limitPercent === 0 ? '0.25rem' : '0 0.25rem 0.25rem 0',
             }}
           />
         )}

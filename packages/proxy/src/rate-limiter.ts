@@ -140,6 +140,10 @@ interface BucketState {
   lastAccessed: number;
   /** Timer for processing queued requests */
   queueTimer: NodeJS.Timeout | null;
+  /** Provider name (e.g., "openai", "nvidia") - stored separately for custom key generators */
+  provider?: string;
+  /** Session ID - stored separately for custom key generators */
+  sessionId?: string;
 }
 
 /**
@@ -298,17 +302,6 @@ export class RateLimiterPlugin implements ProxyPlugin {
   }
 
   /**
-   * Extract provider from bucket key.
-   * With keyStrategy="provider" (default), key is just the provider name.
-   * With keyStrategy="session-provider", key format is "sessionId:provider".
-   */
-  private getProviderFromKey(key: string): string {
-    // If key contains a colon, it's the legacy/session-provider format
-    const lastColonIndex = key.lastIndexOf(":");
-    return lastColonIndex >= 0 ? key.slice(lastColonIndex + 1) : key;
-  }
-
-  /**
    * Start the periodic cleanup timer.
    */
   private startCleanupTimer(): void {
@@ -383,7 +376,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
   /**
    * Get or create a bucket for the given key.
    */
-  private getBucket(key: string): BucketState {
+  private getBucket(key: string, provider?: string, sessionId?: string): BucketState {
     let bucket = this.buckets.get(key);
     const now = Date.now();
 
@@ -396,11 +389,17 @@ export class RateLimiterPlugin implements ProxyPlugin {
         queue: [],
         lastAccessed: now,
         queueTimer: null,
+        provider,
+        sessionId,
       };
       this.buckets.set(key, bucket);
     }
 
     bucket.lastAccessed = now;
+    
+    // Update provider/sessionId if provided (useful for custom key generators)
+    if (provider) bucket.provider = provider;
+    if (sessionId) bucket.sessionId = sessionId;
 
     // Move to end for LRU (delete and re-add)
     this.buckets.delete(key);
@@ -461,7 +460,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
   /**
    * Schedule or update the queue processing timer.
    */
-  private scheduleQueueTimer(bucket: BucketState, key: string): void {
+  private scheduleQueueTimer(bucket: BucketState, key: string, provider: string): void {
     // Clear existing timer
     if (bucket.queueTimer) {
       clearTimeout(bucket.queueTimer);
@@ -472,7 +471,6 @@ export class RateLimiterPlugin implements ProxyPlugin {
       return;
     }
 
-    const provider = this.getProviderFromKey(key);
     const pConfig = this.getProviderConfig(provider);
     const now = Date.now();
     const windowStart = now - pConfig.windowMs;
@@ -482,7 +480,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
 
     if (bucket.requestTimestamps.length < pConfig.maxRequests) {
       // Slot available - process queue immediately
-      this.processQueue(bucket, key);
+      this.processQueue(bucket, key, provider);
       return;
     }
 
@@ -491,7 +489,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
 
     bucket.queueTimer = setTimeout(() => {
       bucket.queueTimer = null;
-      this.processQueue(bucket, key);
+      this.processQueue(bucket, key, provider);
     }, retryAfterMs);
 
     bucket.queueTimer.unref?.();
@@ -500,9 +498,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
   /**
    * Process waiting queue: admit as many requests as window allows.
    */
-  private processQueue(bucket: BucketState, key: string): void {
+  private processQueue(bucket: BucketState, key: string, provider: string): void {
     const now = Date.now();
-    const provider = this.getProviderFromKey(key);
     const pConfig = this.getProviderConfig(provider);
     const windowStart = now - pConfig.windowMs;
 
@@ -517,7 +514,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
 
     // If there are still waiters, schedule next check
     if (bucket.queue.length > 0) {
-      this.scheduleQueueTimer(bucket, key);
+      this.scheduleQueueTimer(bucket, key, provider);
     }
   }
 
@@ -527,14 +524,15 @@ export class RateLimiterPlugin implements ProxyPlugin {
     }
 
     const key = this.config.keyGenerator(ctx);
-    const provider = this.getProviderFromKey(key);
+    const provider = ctx.provider ?? "unknown";
+    const sessionId = ctx.sessionId ?? undefined;
 
     // Debug: log provider/key for NVIDIA requests
     if (provider === "nvidia" || key === "nvidia" || ctx.provider === "nvidia") {
       console.debug(`[rate-limiter] Request: provider=${provider}, key=${key}, ctx.provider=${ctx.provider}, sessionId=${ctx.sessionId}`);
     }
 
-    const bucket = this.getBucket(key);
+    const bucket = this.getBucket(key, provider, sessionId);
 
     const pConfig = this.getProviderConfig(provider);
     const now = Date.now();
@@ -554,7 +552,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
       // Queue the request
       return new Promise<RequestContext>((resolve, reject) => {
         bucket.queue.push({ resolve, reject, ctx, enqueuedAt: now });
-        this.scheduleQueueTimer(bucket, key);
+        this.scheduleQueueTimer(bucket, key, provider);
       });
     }
 
@@ -635,6 +633,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
     lastAccessed: number;
     lastRefill: number;
     requestsInWindow: number;
+    provider?: string;
+    sessionId?: string;
   }> {
     const states: Array<{
       key: string;
@@ -645,12 +645,15 @@ export class RateLimiterPlugin implements ProxyPlugin {
       lastAccessed: number;
       lastRefill: number;
       requestsInWindow: number;
+      provider?: string;
+      sessionId?: string;
     }> = [];
 
     const now = Date.now();
 
     for (const [key, bucket] of this.buckets.entries()) {
-      const provider = this.getProviderFromKey(key);
+      // Use stored provider if available, otherwise fall back to extracting from key
+      const provider = bucket.provider ?? this.getProviderFromKey(key);
       const pConfig = this.getProviderConfig(provider);
       const windowStart = now - pConfig.windowMs;
 
@@ -668,6 +671,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
         lastAccessed: bucket.lastAccessed,
         lastRefill: bucket.requestTimestamps[0] ?? now,
         requestsInWindow,
+        provider,
+        sessionId: bucket.sessionId,
       });
     }
 

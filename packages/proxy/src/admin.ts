@@ -8,6 +8,7 @@
 import http from "node:http";
 import type { ProxyPlugin } from "@contextio/core";
 import type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics } from "@contextio/core";
+import { SERVICE_IDENTIFIER } from "@contextio/core";
 
 export interface AdminOptions {
   plugins: ProxyPlugin[];
@@ -177,7 +178,7 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
     // Only handle /admin/* routes
     if (!parsedUrl.pathname.startsWith("/admin/")) {
       res.writeHead(404, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Not found" }));
+      res.end(JSON.stringify({ error: "Not found", service: SERVICE_IDENTIFIER }));
       return;
     }
 
@@ -199,7 +200,7 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
         case "status": {
           if (req.method !== "GET") {
             res.writeHead(405, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Method not allowed" }));
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
             return;
           }
 
@@ -214,14 +215,14 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
           };
 
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(status));
+          res.end(JSON.stringify({ ...status, service: SERVICE_IDENTIFIER }));
           break;
         }
 
 case "env": {
   if (req.method !== "GET") {
     res.writeHead(405, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Method not allowed" }));
+    res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
     return;
   }
 
@@ -262,6 +263,8 @@ case "env": {
   }
 
   res.writeHead(200, { "Content-Type": "application/json" });
+  // Add service identification header to preserve array response shape
+  res.setHeader("x-service-identifier", SERVICE_IDENTIFIER);
   res.end(JSON.stringify(envVars));
   break;
 }
@@ -269,7 +272,7 @@ case "env": {
         case "logs": {
           if (req.method !== "GET") {
             res.writeHead(405, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Method not allowed" }));
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
             return;
           }
 
@@ -308,27 +311,27 @@ case "env": {
           }
 
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ logs, containerId: "contextio-next" }));
+          res.end(JSON.stringify({ logs, containerId: "contextio-next", service: SERVICE_IDENTIFIER }));
           break;
         }
 
         case "clear-logs": {
           if (req.method !== "POST") {
             res.writeHead(405, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Method not allowed" }));
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
             return;
           }
 
           clearLogs();
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true, message: "Logs cleared" }));
+          res.end(JSON.stringify({ success: true, message: "Logs cleared", service: SERVICE_IDENTIFIER }));
           break;
         }
 
         case "rate-limiter": {
           if (req.method !== "GET") {
             res.writeHead(405, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Method not allowed" }));
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
             return;
           }
 
@@ -336,7 +339,7 @@ case "env": {
           const rateLimiterPlugin = plugins.find((p) => p.name === "rate-limiter");
           if (!rateLimiterPlugin) {
             res.writeHead(404, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Rate limiter plugin not found", code: "RATE_LIMITER_NOT_FOUND" }));
+            res.end(JSON.stringify({ error: "Rate limiter plugin not found", code: "RATE_LIMITER_NOT_FOUND", service: SERVICE_IDENTIFIER }));
             return;
           }
 
@@ -354,7 +357,7 @@ case "env": {
           // Get bucket state from the plugin (using typed internal methods)
           if (!isRateLimiterPlugin(rateLimiterPlugin)) {
             res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Rate limiter does not expose metrics methods", code: "RATE_LIMITER_INTERNAL_ERROR" }));
+            res.end(JSON.stringify({ error: "Rate limiter does not expose metrics methods", code: "RATE_LIMITER_INTERNAL_ERROR", service: SERVICE_IDENTIFIER }));
             return;
           }
 
@@ -381,6 +384,7 @@ case "env": {
               code: "RATE_LIMITER_DISABLED",
               nvidiaWorkerRetryCount,
               upstream429Counts,
+              service: SERVICE_IDENTIFIER,
             }));
             return;
           }
@@ -395,26 +399,36 @@ case "env": {
               maxEntries: config.maxEntries,
               enabled: config.enabled,
             },
-            buckets: buckets.map((b: { key: string; tokens: number; maxTokens: number; bufferCapacity: number; queueLength: number; requestsInWindow: number }) => {
-              // Parse provider and sessionId from key
-              // With keyStrategy="provider" (default): key = "provider"
-              // With keyStrategy="session-provider": key = "sessionId:provider"
-              // With custom keyGenerator: could be anything, try to parse as "sessionId:provider" if colon present
-              const lastColonIndex = b.key.lastIndexOf(":");
-              let provider: string;
-              let sessionId: string;
+            buckets: buckets.map((b: { key: string; tokens: number; maxTokens: number; bufferCapacity: number; queueLength: number; requestsInWindow: number; provider?: string; sessionId?: string }) => {
+              // Use provider/sessionId from bucket state if available (set by rate limiter for custom key generators)
+              // Otherwise fall back to parsing from key (for backward compatibility with default/session-provider strategies)
+              let provider = b.provider;
+              let sessionId = b.sessionId;
 
-              if (lastColonIndex >= 0) {
-                // Legacy or session-provider format: "sessionId:provider"
-                // Empty sessionId (key starts with ':') should be preserved as empty string
-                const providerPart = b.key.slice(lastColonIndex + 1);
-                const sessionIdPart = b.key.slice(0, lastColonIndex);
-                provider = providerPart.length > 0 ? providerPart : "unknown";
-                sessionId = sessionIdPart; // Preserve empty string for empty sessionId
-              } else {
-                // Default provider-only format: "provider" (no session isolation)
-                provider = b.key.length > 0 ? b.key : "unknown";
-                sessionId = "all"; // Indicates shared across all sessions
+              if (!provider) {
+                // Parse provider from key (fallback for backward compatibility)
+                const lastColonIndex = b.key.lastIndexOf(":");
+                if (lastColonIndex >= 0) {
+                  // Legacy or session-provider format: "sessionId:provider"
+                  const providerPart = b.key.slice(lastColonIndex + 1);
+                  provider = providerPart.length > 0 ? providerPart : "unknown";
+                } else {
+                  // Default provider-only format: "provider" (no session isolation)
+                  provider = b.key.length > 0 ? b.key : "unknown";
+                }
+              }
+
+              if (!sessionId) {
+                // Parse sessionId from key (fallback for backward compatibility)
+                const lastColonIndex = b.key.lastIndexOf(":");
+                if (lastColonIndex >= 0) {
+                  // Legacy or session-provider format: "sessionId:provider"
+                  const sessionIdPart = b.key.slice(0, lastColonIndex);
+                  sessionId = sessionIdPart; // Preserve empty string for empty sessionId
+                } else {
+                  // Default provider-only format: "provider" (no session isolation)
+                  sessionId = "all"; // Indicates shared across all sessions
+                }
               }
 
               return {
@@ -437,19 +451,19 @@ case "env": {
           };
 
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(metrics));
+          res.end(JSON.stringify({ ...metrics, service: SERVICE_IDENTIFIER }));
           break;
         }
 
         default: {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: `Unknown admin endpoint: /admin/${path}` }));
+          res.end(JSON.stringify({ error: `Unknown admin endpoint: /admin/${path}`, service: SERVICE_IDENTIFIER }));
         }
       }
     } catch (error) {
       console.error("Admin API error:", error);
       res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Internal server error" }));
+      res.end(JSON.stringify({ error: "Internal server error", service: SERVICE_IDENTIFIER }));
     }
   };
 }
