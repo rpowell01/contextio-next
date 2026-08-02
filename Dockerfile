@@ -122,6 +122,9 @@ RUN GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") \
     && export GIT_COMMIT BUILD_TIME VERSION \
     && pnpm exec turbo build
 
+# Copy default providers config to a known location that persists in the build stage
+RUN cp /app/packages/proxy/public/default-providers.json /app/default-providers.json
+
 
 # =============================================================================
 # Runtime stage
@@ -182,7 +185,7 @@ RUN mkdir -p /app/packages/web/.next/cache /app/captures/.next/cache && \
 
 # Copy bundled default policy file
 COPY --from=build /app/packages/web/public/default-policy.json /app/default-policy.json
-COPY --from=build /app/packages/proxy/public/default-providers.json /app/default-providers.json
+COPY --from=build /app/default-providers.json /app/default-providers.json
 
 # Copy GLiNER model from model-builder stage (ONNX export is in onnx/ subdirectory)
 COPY --from=model-builder /models/gliner-small-v2.1/onnx /app/models/gliner-small-v2.1
