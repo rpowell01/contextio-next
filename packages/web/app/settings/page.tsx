@@ -1275,6 +1275,10 @@ export default function SettingsPage() {
                 Add Provider
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Default and environment-configured providers are managed externally. 
+              Click "Add Provider" to create your own custom provider, which you can then edit or delete.
+            </p>
             
             {providersError && (
               <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 mb-4">
