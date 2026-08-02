@@ -8,8 +8,8 @@
 
 import fs from "node:fs";
 
-import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig, RetryConfig, ProvidersMap, ProviderConfig } from "@contextio/core";
-import { DEFAULT_OIDC_SCOPE, validateProviderConfig } from "@contextio/core";
+import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig, RetryConfig, ProvidersMap, ProviderConfig, ApiFormat, AuthType } from "@contextio/core";
+import { DEFAULT_OIDC_SCOPE, validateRateLimitConfig, validateRetryConfig, KNOWN_API_FORMATS, KNOWN_AUTH_TYPES } from "@contextio/core";
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not
  * double-prefix API paths. Empty values pass through intact.
@@ -19,6 +19,147 @@ function normalizeUpstreamUrl(url: string): string {
     return url;
   }
   return url.replace(/\/v1$/, "");
+}
+
+/**
+ * Merge user provider config with defaults, validating each field individually.
+ * Invalid fields fall back to defaults instead of rejecting the entire provider.
+ */
+function mergeProviderConfig(
+  defaultConfig: ProviderConfig,
+  userConfig: Record<string, unknown>,
+  providerKey: Provider,
+): ProviderConfig {
+  const merged: ProviderConfig = { ...defaultConfig };
+
+  // Validate and merge id
+  if (typeof userConfig.id === "string" && userConfig.id === providerKey) {
+    merged.id = userConfig.id;
+  }
+
+  // Validate and merge name
+  if (typeof userConfig.name === "string" && userConfig.name.trim() !== "") {
+    merged.name = userConfig.name;
+  }
+
+  // Validate and merge upstreamUrl
+  if (typeof userConfig.upstreamUrl === "string") {
+    try {
+      new URL(userConfig.upstreamUrl);
+      merged.upstreamUrl = userConfig.upstreamUrl;
+    } catch {
+      // Invalid URL, keep default
+    }
+  }
+
+  // Validate and merge apiFormat
+  if (typeof userConfig.apiFormat === "string" && KNOWN_API_FORMATS.includes(userConfig.apiFormat as ApiFormat)) {
+    merged.apiFormat = userConfig.apiFormat as ApiFormat;
+  }
+
+  // Validate and merge authType
+  if (typeof userConfig.authType === "string" && KNOWN_AUTH_TYPES.includes(userConfig.authType as AuthType)) {
+    merged.authType = userConfig.authType as AuthType;
+  }
+
+  // Validate and merge enabled
+  if (typeof userConfig.enabled === "boolean") {
+    merged.enabled = userConfig.enabled;
+  }
+
+  // Validate and merge rateLimit (field by field)
+  if (userConfig.rateLimit && typeof userConfig.rateLimit === "object" && !Array.isArray(userConfig.rateLimit)) {
+    const userRateLimit = userConfig.rateLimit as Record<string, unknown>;
+    const mergedRateLimit: RateLimitConfig = { ...defaultConfig.rateLimit };
+
+    if (typeof userRateLimit.maxRequests === "number" && Number.isFinite(userRateLimit.maxRequests) && userRateLimit.maxRequests >= 0) {
+      mergedRateLimit.maxRequests = userRateLimit.maxRequests;
+    }
+    if (typeof userRateLimit.windowMs === "number" && Number.isFinite(userRateLimit.windowMs) && userRateLimit.windowMs > 0) {
+      mergedRateLimit.windowMs = userRateLimit.windowMs;
+    }
+    if (typeof userRateLimit.bufferCapacity === "number" && Number.isFinite(userRateLimit.bufferCapacity) && userRateLimit.bufferCapacity >= 0) {
+      mergedRateLimit.bufferCapacity = userRateLimit.bufferCapacity;
+    }
+
+    try {
+      validateRateLimitConfig(mergedRateLimit);
+      merged.rateLimit = mergedRateLimit;
+    } catch {
+      // Keep default rateLimit
+    }
+  }
+
+  // Validate and merge retry (field by field)
+  if (userConfig.retry && typeof userConfig.retry === "object" && !Array.isArray(userConfig.retry)) {
+    const userRetry = userConfig.retry as Record<string, unknown>;
+    const mergedRetry: RetryConfig = { ...defaultConfig.retry };
+
+    // Apply valid individual fields first
+    if (typeof userRetry.maxRetries === "number" && Number.isFinite(userRetry.maxRetries) && userRetry.maxRetries >= 0) {
+      mergedRetry.maxRetries = userRetry.maxRetries;
+    }
+    if (typeof userRetry.baseDelayMs === "number" && Number.isFinite(userRetry.baseDelayMs) && userRetry.baseDelayMs >= 0) {
+      mergedRetry.baseDelayMs = userRetry.baseDelayMs;
+    }
+    if (typeof userRetry.maxDelayMs === "number" && Number.isFinite(userRetry.maxDelayMs) && userRetry.maxDelayMs >= 0) {
+      mergedRetry.maxDelayMs = userRetry.maxDelayMs;
+    }
+    // Check cross-field constraint: maxDelayMs must be >= baseDelayMs
+    // If user provided both and constraint is violated, don't apply either user value
+    if (
+      typeof userRetry.maxDelayMs === "number" && Number.isFinite(userRetry.maxDelayMs) &&
+      typeof userRetry.baseDelayMs === "number" && Number.isFinite(userRetry.baseDelayMs) &&
+      userRetry.maxDelayMs < userRetry.baseDelayMs
+    ) {
+      // Revert both to defaults
+      mergedRetry.maxDelayMs = defaultConfig.retry.maxDelayMs;
+      mergedRetry.baseDelayMs = defaultConfig.retry.baseDelayMs;
+    }
+    if (Array.isArray(userRetry.retryableStatuses)) {
+      const statuses = userRetry.retryableStatuses;
+      let allValid = true;
+      for (const status of statuses) {
+        if (typeof status !== "number" || !Number.isFinite(status) || status < 100 || status > 599) {
+          allValid = false;
+          break;
+        }
+      }
+      if (allValid) {
+        mergedRetry.retryableStatuses = statuses as number[];
+      }
+    }
+    if (typeof userRetry.jitterFactor === "number" && Number.isFinite(userRetry.jitterFactor) && userRetry.jitterFactor >= 0 && userRetry.jitterFactor <= 1) {
+      mergedRetry.jitterFactor = userRetry.jitterFactor;
+    }
+
+    try {
+      validateRetryConfig(mergedRetry);
+      merged.retry = mergedRetry;
+    } catch {
+      // Keep default retry
+    }
+  }
+
+  // Validate and merge customHeaders
+  if (userConfig.customHeaders && typeof userConfig.customHeaders === "object" && !Array.isArray(userConfig.customHeaders)) {
+    const userHeaders = userConfig.customHeaders as Record<string, unknown>;
+    const mergedHeaders: Record<string, string> = {};
+    let headersValid = true;
+    for (const [key, value] of Object.entries(userHeaders)) {
+      if (typeof key === "string" && typeof value === "string") {
+        mergedHeaders[key] = value;
+      } else {
+        headersValid = false;
+        break;
+      }
+    }
+    if (headersValid) {
+      merged.customHeaders = mergedHeaders;
+    }
+  }
+
+  return merged;
 }
 
 /** Web UI settings interface for capture cleanup and OIDC settings. */
@@ -231,12 +372,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
  * Load provider configurations from /app/custom-policy/providers.json.
  *
  * If the file is missing or invalid, falls back to built-in defaults.
- * Invalid entries in a valid file are skipped. Providers with enabled=false
- * are excluded from the returned map.
- *
- * Note: validateProviderConfig() in @contextio/core deeply validates nested
- * rateLimit and retry objects, so accepted entries always have complete
- * nested configs.
+ * Invalid fields in a provider entry fall back to defaults individually.
+ * Providers with enabled=false are excluded from the returned map.
  */
 export function readProvidersConfig(filePath = PROVIDERS_FILE): ProvidersMap {
   try {
@@ -263,20 +400,21 @@ export function readProvidersConfig(filePath = PROVIDERS_FILE): ProvidersMap {
         console.warn(`[config] skip providers.json[${key}]: missing or non-string upstreamUrl`);
         continue;
       }
-      const providerConfig = config as unknown as ProviderConfig;
-      try {
-        validateProviderConfig(providerConfig);
-      } catch (err) {
+      const providerKey = key as Provider;
+      const defaultConfig = DEFAULT_PROVIDERS_CONFIG[providerKey];
+      if (!defaultConfig) {
         skipped++;
-        console.warn(`[config] skip providers.json[${key}]: validation failed - ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(`[config] skip providers.json[${key}]: unknown provider`);
         continue;
       }
-      if (providerConfig.enabled === false) {
+      // Merge user config with defaults, validating each field individually
+      const mergedConfig = mergeProviderConfig(defaultConfig, config, providerKey);
+      if (mergedConfig.enabled === false) {
         skipped++;
         console.warn(`[config] skip providers.json[${key}]: disabled by enabled=false`);
         continue;
       }
-      result[key as Provider] = providerConfig;
+      result[providerKey] = mergedConfig;
       loaded++;
     }
 

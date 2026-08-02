@@ -338,6 +338,47 @@ describe("readProvidersConfig", () => {
 		assert.equal(config.openai.upstreamUrl, "https://api.openai.com");
 	});
 
+	it("merges valid fields individually when nested config has invalid fields", () => {
+		const providersPath = path.join(tempDir!, "providers.json");
+		const partialConfig = {
+			openai: {
+				id: "openai",
+				name: "OpenAI Custom",
+				upstreamUrl: "https://custom.openai.com",
+				apiFormat: "chat-completions",
+				authType: "bearer",
+				enabled: true,
+				// Invalid rateLimit.maxRequests (string instead of number)
+				rateLimit: { maxRequests: "oops", windowMs: 120000, bufferCapacity: 20 },
+				retry: {
+					maxRetries: 5,
+					baseDelayMs: 500,
+					maxDelayMs: 60000,
+					retryableStatuses: [429, 500],
+					jitterFactor: 0.1,
+				},
+				customHeaders: { "X-Custom": "value" },
+			},
+		};
+		fs.writeFileSync(providersPath, JSON.stringify(partialConfig, null, 2));
+		const config = readProvidersConfig(providersPath);
+		// Valid upstreamUrl should be preserved
+		assert.equal(config.openai.upstreamUrl, "https://custom.openai.com");
+		// Valid name should be preserved
+		assert.equal(config.openai.name, "OpenAI Custom");
+		// Invalid rateLimit.maxRequests should fall back to default, but valid windowMs and bufferCapacity should be preserved
+		assert.equal(config.openai.rateLimit.maxRequests, 60); // default
+		assert.equal(config.openai.rateLimit.windowMs, 120000); // from user config
+		assert.equal(config.openai.rateLimit.bufferCapacity, 20); // from user config
+		// Valid retry config should be preserved
+		assert.equal(config.openai.retry.maxRetries, 5);
+		assert.equal(config.openai.retry.baseDelayMs, 500);
+		// Valid customHeaders should be preserved
+		assert.equal(config.openai.customHeaders["X-Custom"], "value");
+		// Other providers should still have defaults
+		assert.equal(config.anthropic.upstreamUrl, "https://api.anthropic.com");
+	});
+
 	it("env vars override built-in defaults", () => {
 		try {
 			process.env.UPSTREAM_OPENAI_URL = "https://env.openai.com";
