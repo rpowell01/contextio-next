@@ -254,6 +254,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
       jitterFactor: 0.2,
     },
     customHeaders: {},
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-anthropic-baseurl",
   },
   openai: {
     id: "openai",
@@ -271,6 +273,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
       jitterFactor: 0.2,
     },
     customHeaders: {},
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-openai-baseurl",
   },
   chatgpt: {
     id: "chatgpt",
@@ -288,6 +292,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
       jitterFactor: 0.2,
     },
     customHeaders: {},
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-chatgpt-baseurl",
   },
   gemini: {
     id: "gemini",
@@ -305,6 +311,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
       jitterFactor: 0.2,
     },
     customHeaders: {},
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-gemini-baseurl",
   },
   vertex: {
     id: "vertex",
@@ -322,6 +330,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
       jitterFactor: 0.2,
     },
     customHeaders: {},
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-vertex-baseurl",
   },
   nvidia: {
     id: "nvidia",
@@ -339,6 +349,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
       jitterFactor: 0.2,
     },
     customHeaders: {},
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-nvidia-baseurl",
   },
   openrouter: {
     id: "openrouter",
@@ -356,6 +368,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
       jitterFactor: 0.2,
     },
     customHeaders: {},
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-openrouter-baseurl",
   },
   kilo: {
     id: "kilo",
@@ -373,6 +387,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
       jitterFactor: 0.2,
     },
     customHeaders: {},
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-kilo-baseurl",
   },
   unknown: {
     id: "unknown",
@@ -390,6 +406,8 @@ const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
       jitterFactor: 0.2,
     },
     customHeaders: {},
+    allowBaseUrlOverride: false,
+    baseUrlOverrideHeader: "x-unknown-baseurl",
   },
 };
 
@@ -506,6 +524,7 @@ export interface ResolvedProxyConfig {
   publicUrl: string | null;
   rateLimiter: Record<Provider, RateLimitConfig>;
   retry: Record<Provider, RetryConfig>;
+  providers: ProvidersMap;
 }
 
 /**
@@ -926,5 +945,6 @@ export function resolveConfig(
     publicUrl,
     rateLimiter,
     retry,
+    providers: providersConfig,
   };
 }

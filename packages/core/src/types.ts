@@ -377,6 +377,10 @@ export interface ProviderConfig {
 	retry: RetryConfig;
 	/** Custom headers to include in requests to this provider. */
 	customHeaders: Record<string, string>;
+	/** Whether to allow clients to override the base URL via x-<provider>-baseurl header. */
+	allowBaseUrlOverride: boolean;
+	/** Header name to use for base URL override (e.g., "x-openai-baseurl"). */
+	baseUrlOverrideHeader: string;
 }
 
 /**
@@ -431,6 +435,12 @@ export function validateProviderConfig(config: ProviderConfig): void {
 		if (typeof key !== "string" || typeof value !== "string") {
 			throw new Error("ProviderConfig.customHeaders must be Record<string, string>");
 		}
+	}
+	if (typeof config.allowBaseUrlOverride !== "boolean") {
+		throw new Error("ProviderConfig.allowBaseUrlOverride must be a boolean");
+	}
+	if (typeof config.baseUrlOverrideHeader !== "string" || config.baseUrlOverrideHeader.trim() === "") {
+		throw new Error("ProviderConfig.baseUrlOverrideHeader must be a non-empty string");
 	}
 }
 

@@ -15,6 +15,7 @@ import type {
   Provider,
   ResolveTargetResult,
   Upstreams,
+  ProviderConfig,
 } from "./types.js";
 
 /**
@@ -24,6 +25,51 @@ import type {
  */
 function normalizeUpstreamUrl(url: string): string {
   return url.replace(/\/v1$/, "");
+}
+
+/**
+ * Resolve the base URL for a provider, checking per-provider override settings.
+ */
+function getBaseUrl(
+  headerName: string,
+  upstreamKey: keyof Upstreams,
+  headers: Record<string, string | undefined>,
+  upstreams: Upstreams,
+  strictUrlForwarding: boolean,
+  providerConfigs?: Record<string, ProviderConfig>,
+  provider?: string,
+): string {
+  if (strictUrlForwarding) {
+    const upstreamValue = upstreams[upstreamKey];
+    const headerValue = headers[headerName];
+    if (headerValue && headerValue !== upstreamValue) {
+      console.warn(
+        `[StrictURLForwarding] Ignoring ${headerName} "${headerValue}", using configured upstream "${upstreamValue}"`,
+      );
+    }
+    return upstreamValue;
+  }
+  
+  // Check if per-provider override is enabled
+  if (providerConfigs && provider) {
+    const providerConfig = providerConfigs[provider];
+    if (providerConfig && providerConfig.allowBaseUrlOverride === false) {
+      // Override disabled for this provider, use configured upstream
+      return upstreams[upstreamKey];
+    }
+  }
+  
+  const headerValue = headers[headerName];
+  if (headerValue) {
+    const normalized = normalizeUpstreamUrl(headerValue);
+    if (process.env.DEBUG_ROUTING === "true") {
+      console.error(
+        `[DEBUG_ROUTING] Using ${headerName} header: ${normalized}`,
+      );
+    }
+    return normalized;
+  }
+  return upstreams[upstreamKey];
 }
 
 const API_PATH_SEGMENTS = new Set([
@@ -59,10 +105,7 @@ export function classifyRequest(
 ): { provider: Provider; apiFormat: ApiFormat } {
   if (process.env.DEBUG_ROUTING === "true") {
     console.log(
-      `[DEBUG_ROUTING] classifyRequest: pathname=${pathname}`,
-    );
-    console.log(
-      `[DEBUG_ROUTING] headers: ${Object.keys(headers).join(", ")}`,
+      `[DEBUG_ROUTING] classifyRequest: pathname=${pathname}, strictUrlForwarding=${strictUrlForwarding}, upstreams=${upstreams ? 'provided' : 'undefined'}`,
     );
   }
 
@@ -237,6 +280,8 @@ export function extractSource(pathname: string): ExtractSourceResult {
  * @param search - Query string including "?", or null.
  * @param headers - Request headers (may contain x-target-url).
  * @param upstreams - Configured upstream base URLs per provider.
+ * @param strictUrlForwarding - If true, ignore per-provider base URL override headers.
+ * @param providerConfigs - Optional provider configurations for per-provider override settings.
  */
 export function resolveTargetUrl(
   pathname: string,
@@ -244,6 +289,7 @@ export function resolveTargetUrl(
   headers: Record<string, string | undefined>,
   upstreams: Upstreams,
   strictUrlForwarding = false,
+  providerConfigs?: Record<string, ProviderConfig>,
 ): ResolveTargetResult {
   const { provider, apiFormat } = classifyRequest(
     pathname,
@@ -251,7 +297,7 @@ export function resolveTargetUrl(
     strictUrlForwarding,
     upstreams,
   );
-  const qs = search || "";
+const qs = search || "";
   let targetUrl: string | undefined = headers["x-target-url"];
   // Track whether targetUrl came from an explicit header (vs. configured upstream)
   let targetUrlFromHeader = !!headers["x-target-url"];
@@ -266,48 +312,26 @@ export function resolveTargetUrl(
   }
 
   if (!targetUrl) {
-    // Get the base URL from header (takes precedence) or upstream config
-    const getBaseUrl = (headerName: string, upstreamKey: keyof Upstreams) => {
-      if (strictUrlForwarding) {
-        const upstreamValue = upstreams[upstreamKey];
-        const headerValue = headers[headerName];
-        if (headerValue && headerValue !== upstreamValue) {
-          // TODO: Replace with structured logger when logger is available
-          console.warn(
-            `[StrictURLForwarding] Ignoring ${headerName} "${headerValue}", using configured upstream "${upstreamValue}"`,
-          );
-        }
-        return upstreamValue;
-      }
-      const headerValue = headers[headerName];
-      if (headerValue) {
-        const normalized = normalizeUpstreamUrl(headerValue);
-        if (process.env.DEBUG_ROUTING === "true") {
-          console.error(
-            `[DEBUG_ROUTING] Using ${headerName} header: ${normalized}`,
-          );
-        }
-        targetUrlFromHeader = true;
-        return normalized;
-      }
-      return upstreams[upstreamKey];
-    };
-
     if (provider === "chatgpt") {
       // Paths from Pi's openai-codex provider arrive as /codex/responses
       // (without the /backend-api prefix). Prepend it if missing.
       const chatgptPath = pathname.match(/^\/(api|backend-api)\//)
         ? pathname
         : `/backend-api${pathname}`;
-      targetUrl = getBaseUrl("x-chatgpt-baseurl", "chatgpt") + chatgptPath + qs;
+      targetUrl = getBaseUrl("x-chatgpt-baseurl", "chatgpt", headers, upstreams, strictUrlForwarding, providerConfigs, provider) + chatgptPath + qs;
     } else if (provider === "anthropic") {
-      targetUrl = getBaseUrl("x-anthropic-baseurl", "anthropic") + pathname + qs;
+      targetUrl = getBaseUrl("x-anthropic-baseurl", "anthropic", headers, upstreams, strictUrlForwarding, providerConfigs, provider) + pathname + qs;
     } else if (provider === "gemini") {
       const isCodeAssist = pathname.includes("/v1internal");
       targetUrl =
         getBaseUrl(
           isCodeAssist ? "x-gemini-code-assist-baseurl" : "x-gemini-baseurl",
           isCodeAssist ? "geminiCodeAssist" : "gemini",
+          headers,
+          upstreams,
+          strictUrlForwarding,
+          providerConfigs,
+          provider,
         ) + pathname + qs;
     } else if (provider === "vertex") {
       const locMatch = pathname.match(/\/locations\/([^/]+)\//);
@@ -315,7 +339,7 @@ export function resolveTargetUrl(
       if (location && location !== "global") {
         targetUrl = `https://${location}-aiplatform.googleapis.com${pathname}${qs}`;
       } else {
-        targetUrl = getBaseUrl("x-vertex-baseurl", "vertex") + pathname + qs;
+        targetUrl = getBaseUrl("x-vertex-baseurl", "vertex", headers, upstreams, strictUrlForwarding, providerConfigs, provider) + pathname + qs;
       }
     } else if (provider === "nvidia") {
       // NVIDIA uses OpenAI-compatible API format
@@ -323,32 +347,32 @@ export function resolveTargetUrl(
       const nvidiaPath = pathname.startsWith("/v1/")
         ? pathname
         : `/v1${pathname}`;
-      targetUrl = getBaseUrl("x-nvidia-baseurl", "nvidia") + nvidiaPath + qs;
+      targetUrl = getBaseUrl("x-nvidia-baseurl", "nvidia", headers, upstreams, strictUrlForwarding, providerConfigs, provider) + nvidiaPath + qs;
     } else if (provider === "kilo") {
       // Kilo Code Gateway is OpenAI-compatible, normalize path: ensure /v1/ prefix
       const kiloPath = pathname.startsWith("/v1/")
         ? pathname
         : `/v1${pathname}`;
-      targetUrl = getBaseUrl("x-kilo-baseurl", "kilo") + kiloPath + qs;
-} else if (provider === "openrouter") {
-  // OpenRouter is OpenAI-compatible, ensure path starts with /v1/
-  // OpenRouter API expects /v1/chat/completions prefix
-  let openrouterPath: string;
-  if (pathname.startsWith("/v1/")) {
-    // Path already has /v1/ prefix, use as-is
-    openrouterPath = pathname;
-  } else {
-    // Path needs /v1/ prefix added
-    openrouterPath = `/v1${pathname}`;
-  }
-  targetUrl = getBaseUrl("x-openrouter-baseurl", "openrouter") + openrouterPath + qs;
-} else if (provider === "openai") {
+      targetUrl = getBaseUrl("x-kilo-baseurl", "kilo", headers, upstreams, strictUrlForwarding, providerConfigs, provider) + kiloPath + qs;
+    } else if (provider === "openrouter") {
+      // OpenRouter is OpenAI-compatible, ensure path starts with /v1/
+      // OpenRouter API expects /v1/chat/completions prefix
+      let openrouterPath: string;
+      if (pathname.startsWith("/v1/")) {
+        // Path already has /v1/ prefix, use as-is
+        openrouterPath = pathname;
+      } else {
+        // Path needs /v1/ prefix added
+        openrouterPath = `/v1${pathname}`;
+      }
+      targetUrl = getBaseUrl("x-openrouter-baseurl", "openrouter", headers, upstreams, strictUrlForwarding, providerConfigs, provider) + openrouterPath + qs;
+    } else if (provider === "openai") {
       // Codex Enterprise sets OPENAI_BASE_URL without a /v1 suffix and
       // appends paths like /responses directly. Normalize /responses to
       // /v1/responses so it reaches the correct endpoint on api.openai.com.
       const openaiPath =
         pathname === "/responses" ? "/v1/responses" : pathname;
-      targetUrl = getBaseUrl("x-openai-baseurl", "openai") + openaiPath + qs;
+      targetUrl = getBaseUrl("x-openai-baseurl", "openai", headers, upstreams, strictUrlForwarding, providerConfigs, provider) + openaiPath + qs;
     }
 
     if (process.env.DEBUG_ROUTING === "true" && targetUrl) {

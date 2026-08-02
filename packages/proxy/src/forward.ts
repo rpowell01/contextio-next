@@ -33,6 +33,7 @@ import type {
   JsonValue,
   ProxyPlugin,
   Provider,
+  ProviderConfig,
   RequestContext,
   ResponseContext,
   Upstreams,
@@ -42,8 +43,10 @@ import { SERVICE_IDENTIFIER } from "@contextio/core";
 export interface ForwardOptions {
   upstreams: Upstreams;
   allowTargetOverride: boolean;
+  strictUrlForwarding: boolean;
   plugins: ProxyPlugin[];
   logTraffic: boolean;
+  providers: Record<string, ProviderConfig>;
 }
 
 // --- Plugin pipeline helpers ---
@@ -616,6 +619,8 @@ export function createProxyHandler(
       search,
       routingHeaders,
       opts.upstreams,
+      opts.strictUrlForwarding,
+      opts.providers,
     );
 
     if (opts.logTraffic) {

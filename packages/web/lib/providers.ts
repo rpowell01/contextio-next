@@ -13,46 +13,63 @@ export const ProviderConfigSchema = z.object({
   name: z.string().min(1, "Provider name is required"),
   baseUrl: z.string().min(1, "Base URL is required"),
   models: z.array(z.string()),
+  allowBaseUrlOverride: z.boolean().default(true),
+  baseUrlOverrideHeader: z.string().min(1, "Base URL override header is required").default("x-openai-baseurl"),
 });
 
+export type ProviderConfigInput = z.input<typeof ProviderConfigSchema>;
+export type ProviderConfigOutput = z.output<typeof ProviderConfigSchema>;
+
 const DEFAULT_PROVIDERS: Omit<ProviderMetadata, "source" | "dynamic">[] = [
-  { id: "openai", name: "OpenAI", baseUrl: "https://api.openai.com", models: [] },
+  { id: "openai", name: "OpenAI", baseUrl: "https://api.openai.com", models: [], allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openai-baseurl" },
   {
     id: "anthropic",
     name: "Anthropic",
     baseUrl: "https://api.anthropic.com",
     models: [],
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-anthropic-baseurl",
   },
-  { id: "chatgpt", name: "ChatGPT", baseUrl: "https://chatgpt.com", models: [] },
+  { id: "chatgpt", name: "ChatGPT", baseUrl: "https://chatgpt.com", models: [], allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-chatgpt-baseurl" },
   {
     id: "gemini",
     name: "Gemini",
     baseUrl: "https://generativelanguage.googleapis.com",
     models: [],
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-gemini-baseurl",
   },
   {
     id: "vertex",
     name: "Vertex AI",
     baseUrl: "https://us-central1-aiplatform.googleapis.com",
     models: [],
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-vertex-baseurl",
   },
   {
     id: "nvidia",
     name: "NVIDIA",
     baseUrl: "https://integrate.api.nvidia.com",
     models: [],
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-nvidia-baseurl",
   },
   {
     id: "openrouter",
     name: "OpenRouter",
     baseUrl: "https://openrouter.ai/api",
     models: [],
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-openrouter-baseurl",
   },
   {
     id: "kilo",
     name: "Kilo",
     baseUrl: "https://api.kilo.ai/api/gateway",
     models: [],
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-kilo-baseurl",
   },
 ];
 
@@ -107,7 +124,7 @@ async function ensureProvidersFile(): Promise<void> {
   }
 }
 
-async function readFileProviders(): Promise<ProviderConfig[]> {
+async function readFileProviders(): Promise<ProviderConfigOutput[]> {
   await ensureProvidersFile();
   try {
     const raw = await fs.readFile(PROVIDERS_FILE, "utf8");
@@ -121,7 +138,7 @@ async function readFileProviders(): Promise<ProviderConfig[]> {
           return null;
         }
       })
-      .filter((p): p is ProviderConfig => p !== null);
+      .filter((p): p is ProviderConfigOutput => p !== null);
   } catch {
     return [];
   }

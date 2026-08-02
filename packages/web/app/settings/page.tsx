@@ -179,6 +179,8 @@ export default function SettingsPage() {
     name: "",
     baseUrl: "",
     models: [],
+    allowBaseUrlOverride: true,
+    baseUrlOverrideHeader: "x-openai-baseurl",
   });
   const [providerFormError, setProviderFormError] = useState<string | null>(null);
   const [providerFormSubmitting, setProviderFormSubmitting] = useState(false);
@@ -372,7 +374,7 @@ export default function SettingsPage() {
 
   // Provider handler functions
   const openAddProviderDialog = () => {
-    setProviderFormData({ id: "", name: "", baseUrl: "", models: [] });
+    setProviderFormData({ id: "", name: "", baseUrl: "", models: [], allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openai-baseurl" });
     setProviderFormError(null);
     setAddProviderDialogOpen(true);
   };
@@ -384,6 +386,8 @@ export default function SettingsPage() {
       name: provider.name,
       baseUrl: provider.baseUrl,
       models: provider.models,
+      allowBaseUrlOverride: provider.allowBaseUrlOverride ?? true,
+      baseUrlOverrideHeader: provider.baseUrlOverrideHeader ?? "x-openai-baseurl",
     });
     setProviderFormError(null);
     setEditProviderDialogOpen(true);
@@ -395,7 +399,7 @@ export default function SettingsPage() {
     setDeleteProviderDialogOpen(true);
   };
 
-  const handleProviderFormChange = (field: keyof ProviderConfig, value: string | string[]) => {
+  const handleProviderFormChange = (field: keyof ProviderConfig, value: string | string[] | boolean) => {
     setProviderFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -1453,6 +1457,34 @@ export default function SettingsPage() {
                 />
                 <p className="text-xs text-muted-foreground">Optional: one model name per line (commas in names are supported)</p>
               </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="provider-allow-baseurl-override"
+                    checked={providerFormData.allowBaseUrlOverride}
+                    onChange={(e) => handleProviderFormChange("allowBaseUrlOverride", e.target.checked)}
+                    disabled={providerFormSubmitting}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="provider-allow-baseurl-override" className="text-sm">
+                    Allow base URL override via header
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">When enabled, clients can override the base URL using the header below</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="provider-baseurl-override-header">Override Header Name</Label>
+                <Input
+                  id="provider-baseurl-override-header"
+                  value={providerFormData.baseUrlOverrideHeader}
+                  onChange={(e) => handleProviderFormChange("baseUrlOverrideHeader", e.target.value)}
+                  placeholder="e.g., x-openai-baseurl"
+                  disabled={providerFormSubmitting || !providerFormData.allowBaseUrlOverride}
+                  className={!providerFormData.allowBaseUrlOverride ? "bg-muted cursor-not-allowed" : ""}
+                />
+                <p className="text-xs text-muted-foreground">Header name clients use to override the base URL (e.g., x-openai-baseurl)</p>
+              </div>
               {providerFormError && (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                   {providerFormError}
@@ -1531,6 +1563,34 @@ export default function SettingsPage() {
                   rows={4}
                 />
                 <p className="text-xs text-muted-foreground">Optional: one model name per line (commas in names are supported)</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit-provider-allow-baseurl-override"
+                    checked={providerFormData.allowBaseUrlOverride}
+                    onChange={(e) => handleProviderFormChange("allowBaseUrlOverride", e.target.checked)}
+                    disabled={providerFormSubmitting}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="edit-provider-allow-baseurl-override" className="text-sm">
+                    Allow base URL override via header
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">When enabled, clients can override the base URL using the header below</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-provider-baseurl-override-header">Override Header Name</Label>
+                <Input
+                  id="edit-provider-baseurl-override-header"
+                  value={providerFormData.baseUrlOverrideHeader}
+                  onChange={(e) => handleProviderFormChange("baseUrlOverrideHeader", e.target.value)}
+                  placeholder="e.g., x-openai-baseurl"
+                  disabled={providerFormSubmitting || !providerFormData.allowBaseUrlOverride}
+                  className={!providerFormData.allowBaseUrlOverride ? "bg-muted cursor-not-allowed" : ""}
+                />
+                <p className="text-xs text-muted-foreground">Header name clients use to override the base URL (e.g., x-openai-baseurl)</p>
               </div>
               {providerFormError && (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">

@@ -212,6 +212,10 @@ export interface ProviderConfig {
   baseUrl: string;
   /** List of available model names */
   models: string[];
+  /** Whether to allow clients to override the base URL via x-<provider>-baseurl header */
+  allowBaseUrlOverride?: boolean;
+  /** Header name to use for base URL override (e.g., "x-openai-baseurl") */
+  baseUrlOverrideHeader?: string;
 }
 
 /**

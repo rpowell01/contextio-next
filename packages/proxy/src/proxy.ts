@@ -109,8 +109,10 @@ export function createProxy(
   const proxyHandler = createProxyHandler({
     upstreams: resolved.upstreams,
     allowTargetOverride: resolved.allowTargetOverride,
+    strictUrlForwarding: resolved.strictUrlForwarding,
     plugins,
     logTraffic,
+    providers: resolved.providers,
   });
 
   const adminHandler = createAdminHandler({ plugins, logTraffic, startTime });
