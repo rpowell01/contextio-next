@@ -93,6 +93,7 @@ COPY packages/core/src packages/core/src
 COPY packages/core/tsconfig.json packages/core/tsconfig.json
 COPY packages/proxy/src packages/proxy/src
 COPY packages/proxy/tsconfig.json packages/proxy/tsconfig.json
+COPY packages/proxy/public packages/proxy/public
 COPY packages/logger/src packages/logger/src
 COPY packages/logger/tsconfig.json packages/logger/tsconfig.json
 COPY packages/redact/src packages/redact/src
