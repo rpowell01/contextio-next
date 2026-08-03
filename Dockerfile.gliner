@@ -1,9 +1,12 @@
 # =============================================================================
-# Pre-built GLiNER Model Image (Legacy builder compatible - no BuildKit required)
-# Build once, push to registry, reference in main Dockerfile
+# GLiNER Model Image - Build ONCE, push to registry, use in main Dockerfile
 # =============================================================================
-# Build with: docker build -t ghcr.io/rpowell01/contextio-gliner-model:0.2.28 -f Dockerfile.gliner .
-# Push with: docker push ghcr.io/rpowell01/contextio-gliner-model:0.2.28
+# Build ONCE (when GLINER_VERSION changes):
+#   docker build -t ghcr.io/rpowell01/contextio-gliner-model:0.2.28 -f Dockerfile.gliner .
+#   docker push ghcr.io/rpowell01/contextio-gliner-model:0.2.28
+#
+# Then in main Dockerfile (Dockerfile):
+#   COPY --from=ghcr.io/rpowell01/contextio-gliner-model:0.2.28 /gliner-small-v2.1 /app/models/gliner-small-v2.1
 
 ARG GLINER_VERSION=0.2.28
 FROM python:3.11-slim AS model-builder
@@ -12,7 +15,6 @@ WORKDIR /models
 ARG GLINER_VERSION=0.2.28
 
 # Install GLiNER, Optimum CLI with ONNX support, and huggingface_hub for downloading
-# No cache mount - works with legacy builder
 RUN pip install --no-cache-dir gliner==${GLINER_VERSION} optimum[onnx] onnxruntime huggingface_hub
 
 # Export to ONNX using GLiNER's built-in export_to_onnx method

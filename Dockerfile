@@ -1,57 +1,15 @@
 # =============================================================================
-# Build stage: Prepare GLiNER model using Python (Debian-based for onnxruntime)
+# Main Dockerfile for Coolify - Pulls pre-built GLiNER model from registry
 # =============================================================================
-# GLiNER version pin - change this to rebuild the model with a new version
-ARG GLINER_VERSION=0.2.28
-
-FROM python:3.11-slim AS model-builder
-WORKDIR /models
-
-ARG GLINER_VERSION=0.2.28
-
-# Install GLiNER, Optimum CLI with ONNX support, and huggingface_hub for downloading
-RUN pip install --no-cache-dir gliner==${GLINER_VERSION} optimum[onnx] onnxruntime huggingface_hub
-
-# Export to ONNX using GLiNER's built-in export_to_onnx method
-RUN echo "from huggingface_hub import snapshot_download" > /download_model.py && \
-    echo "snapshot_download(" >> /download_model.py && \
-    echo "    repo_id='urchade/gliner_small-v2.1'," >> /download_model.py && \
-    echo "    local_dir='./gliner-small-v2.1'," >> /download_model.py && \
-    echo "    local_dir_use_symlinks=False," >> /download_model.py && \
-    echo "    allow_patterns=['*.json', '*.txt', '*.model', 'config.json', 'vocab.txt', 'tokenizer*', 'special_tokens*', '*.bin', '*.safetensors']" >> /download_model.py && \
-    echo ")" >> /download_model.py && \
-    echo "print('Model files downloaded')" >> /download_model.py && \
-    python /download_model.py && ls -la ./gliner-small-v2.1/ && \
-    echo "from gliner import GLiNER" > /export_model.py && \
-    echo "import os" >> /export_model.py && \
-    echo "import json" >> /export_model.py && \
-    echo "" >> /export_model.py && \
-    echo "# Load model from local files" >> /export_model.py && \
-    echo "model = GLiNER.from_pretrained('./gliner-small-v2.1')" >> /export_model.py && \
-    echo "os.makedirs('./gliner-small-v2.1/onnx', exist_ok=True)" >> /export_model.py && \
-    echo "" >> /export_model.py && \
-    echo "# Export using GLiNER's built-in export_to_onnx" >> /export_model.py && \
-    echo "model.export_to_onnx('./gliner-small-v2.1/onnx')" >> /export_model.py && \
-    echo "print('ONNX export complete')" >> /export_model.py && \
-    python /export_model.py && ls -la ./gliner-small-v2.1/onnx/ && \
-    echo "import json" > /fix_config.py && \
-    echo "with open('./gliner-small-v2.1/onnx/gliner_config.json', 'r') as f:" >> /fix_config.py && \
-    echo "    config = json.load(f)" >> /fix_config.py && \
-    echo "config['model_type'] = 'gliner'" >> /fix_config.py && \
-    echo "with open('./gliner-small-v2.1/onnx/gliner_config.json', 'w') as f:" >> /fix_config.py && \
-    echo "    json.dump(config, f, indent=2)" >> /fix_config.py && \
-    echo "print('Fixed model_type in config')" >> /fix_config.py && \
-    python /fix_config.py && cat ./gliner-small-v2.1/onnx/gliner_config.json | grep model_type
-
+# GLiNER model is pre-built and pushed to: ghcr.io/rpowell01/contextio-gliner-model:0.2.28
+# To update model version:
+#   1. Build Dockerfile.gliner with new GLINER_VERSION
+#   2. Push to ghcr.io/rpowell01/contextio-gliner-model:<new-version>
+#   3. Update the COPY --from reference in the runtime stage
 
 # =============================================================================
 # Build stage: Build all TypeScript packages
 # =============================================================================
-# Placeholder ARG to catch Coolify-injected build args
-# IMPORTANT: This MUST come AFTER model-builder stage so Coolify's injected ARGs
-# don't invalidate the model-builder cache
-ARG COOLIFY_ARGS_PLACEHOLDER
-
 FROM node:22-slim AS build
 WORKDIR /app
 
@@ -71,7 +29,7 @@ RUN corepack enable && \
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json .npmrc ./
 COPY packages/ packages/
 
-# Install dependencies (no cache mount - works with legacy builder)
+# Install dependencies
 RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     pnpm install --ignore-scripts --frozen-lockfile && \
     pnpm rebuild sharp unrs-resolver onnxruntime-node
@@ -138,8 +96,12 @@ RUN mkdir -p /app/packages/web/.next/cache /app/captures/.next/cache && \
 COPY --from=build /app/packages/web/public/default-policy.json /app/default-policy.json
 COPY --from=build /app/default-providers.json /app/default-providers.json
 
-# Copy GLiNER model from model-builder stage (cacheable - only rebuilds when GLINER_VERSION changes)
-COPY --from=model-builder /models/gliner-small-v2.1/onnx /app/models/gliner-small-v2.1
+# Copy GLiNER model from pre-built registry image (cached forever until version changes)
+# To update model version:
+#   1. Build Dockerfile.gliner with new GLINER_VERSION
+#   2. Push to ghcr.io/rpowell01/contextio-gliner-model:<new-version>
+#   3. Update the image reference below
+COPY --from=ghcr.io/rpowell01/contextio-gliner-model:0.2.28 /gliner-small-v2.1 /app/models/gliner-small-v2.1
 
 # Copy pre-built plugin files and start script
 COPY docker/plugins/logger-plugin.js /app/logger-plugin.js
