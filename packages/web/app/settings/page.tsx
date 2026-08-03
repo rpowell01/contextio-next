@@ -1427,7 +1427,7 @@ export default function SettingsPage() {
 
       {/* Add Provider Dialog */}
       <Dialog open={addProviderDialogOpen} onOpenChange={setAddProviderDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Provider</DialogTitle>
             <DialogDescription>
@@ -1534,7 +1534,7 @@ export default function SettingsPage() {
 
       {/* Edit Provider Dialog */}
       <Dialog open={editProviderDialogOpen} onOpenChange={setEditProviderDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Provider</DialogTitle>
             <DialogDescription>
@@ -1643,7 +1643,7 @@ export default function SettingsPage() {
 
       {/* Delete Provider Dialog */}
       <Dialog open={deleteProviderDialogOpen} onOpenChange={setDeleteProviderDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Delete Provider</DialogTitle>
             <DialogDescription>
