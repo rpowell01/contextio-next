@@ -19,6 +19,7 @@ export type Provider =
   | "openai"
   | "chatgpt"
   | "gemini"
+  | "geminiCodeAssist"
   | "vertex"
   | "nvidia"
   | "openrouter"
@@ -72,6 +73,7 @@ export const KNOWN_PROVIDERS = [
   "openai",
   "chatgpt",
   "gemini",
+  "geminiCodeAssist",
   "vertex",
   "nvidia",
   "openrouter",

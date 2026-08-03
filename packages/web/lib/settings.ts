@@ -323,6 +323,7 @@ export const DEFAULT_SETTINGS: Settings = {
     openai: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     chatgpt: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     gemini: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    geminiCodeAssist: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     vertex: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
@@ -580,7 +581,7 @@ export function validateSettingsLenient(input: unknown): Settings {
       }
       const rlObj = rl as Record<string, unknown>;
       const result = {} as Record<Provider, RateLimitConfig>;
-      for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "vertex", "nvidia", "openrouter", "kilo", "unknown"] as Provider[]) {
+      for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "openrouter", "kilo", "unknown"] as Provider[]) {
         const p = rlObj[provider];
         if (typeof p === "object" && p !== null) {
           const pObj = p as { maxRequests?: unknown; windowMs?: unknown; bufferCapacity?: unknown };

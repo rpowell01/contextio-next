@@ -142,6 +142,7 @@ export default function SettingsPage() {
       openai: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       chatgpt: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       gemini: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      geminiCodeAssist: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       vertex: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
