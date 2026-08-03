@@ -436,10 +436,14 @@ export function validateProviderConfig(config: ProviderConfig): void {
 			throw new Error("ProviderConfig.customHeaders must be Record<string, string>");
 		}
 	}
-	if (typeof config.allowBaseUrlOverride !== "boolean") {
+	// AllowBaseUrlOverride is optional, default to false for backwards compatibility
+	const allowBaseUrlOverride = config.allowBaseUrlOverride ?? false;
+	if (typeof allowBaseUrlOverride !== "boolean") {
 		throw new Error("ProviderConfig.allowBaseUrlOverride must be a boolean");
 	}
-	if (typeof config.baseUrlOverrideHeader !== "string" || config.baseUrlOverrideHeader.trim() === "") {
+	// BaseUrlOverrideHeader is optional, default to standard header name
+	const baseUrlOverrideHeader = config.baseUrlOverrideHeader ?? `x-${config.id}-baseurl`;
+	if (typeof baseUrlOverrideHeader !== "string" || baseUrlOverrideHeader.trim() === "") {
 		throw new Error("ProviderConfig.baseUrlOverrideHeader must be a non-empty string");
 	}
 }
