@@ -2,6 +2,14 @@
 
 import React, { memo, useState, useMemo, useRef, useEffect } from "react";
 import { formatNumber } from "@/lib/utils";
+
+/**
+ * Format a percentage value to maximum 2 decimal places, trimming trailing zeros.
+ * e.g., 50 -> "50", 50.5 -> "50.5", 50.555 -> "50.56", 50.50 -> "50.5"
+ */
+function formatPercent(value: number): string {
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
 import type { RateLimiterBucketState } from "@/types/api";
 import {
   BarChart,
@@ -131,7 +139,7 @@ function RateLimiterChartComponent({
           bufferCapacity: bucket.bufferCapacity,
           totalQueueLength: bucket.queueLength,
           totalRequestsInWindow: requestsInWindow,
-          utilizationPercent: maxRequests > 0 ? Math.round((requestsInWindow / maxRequests) * 100) : 0,
+          utilizationPercent: maxRequests > 0 ? Math.round((requestsInWindow / maxRequests) * 10000) / 100 : 0,
           status: getProviderStatus(requestsInWindow, maxRequests, bucket.queueLength),
         });
       } else {
@@ -140,7 +148,7 @@ function RateLimiterChartComponent({
         existing.totalQueueLength += bucket.queueLength;
         existing.totalRequestsInWindow += requestsInWindow;
         existing.utilizationPercent = existing.maxRequests > 0
-          ? Math.round((existing.totalRequestsInWindow / existing.maxRequests) * 100)
+          ? Math.round((existing.totalRequestsInWindow / existing.maxRequests) * 10000) / 100
           : 0;
         const newStatus = getProviderStatus(
           existing.totalRequestsInWindow,
@@ -360,9 +368,9 @@ function RateLimiterChartComponent({
                   if (payload && payload.length > 0 && payload[0].payload) {
                     const p = payload[0].payload;
                     const totalCapacity = p.totalCapacity ?? (p.maxRequests + p.bufferCapacity);
-                    const usagePercent = totalCapacity > 0 
-                      ? Math.round((p.totalRequestsInWindow / totalCapacity) * 100) 
-                      : 0;
+                    const usagePercent = totalCapacity > 0
+                      ? formatPercent((p.totalRequestsInWindow / totalCapacity) * 100)
+                      : "0";
                     return `${p.provider} | ${p.totalRequestsInWindow}/${p.maxRequests} requests used (${usagePercent}%)${p.totalQueueLength > 0 ? ` | ${p.totalQueueLength} queued` : ""} | Buffer: ${p.bufferCapacity}`;
                   }
                   return `Provider: ${label}`;
@@ -489,12 +497,15 @@ function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
   };
 
   const colors = statusColors[status];
-  
+
   // Guard against zero total capacity - match main chart behavior
   const totalCapacity = maxRequests + bufferCapacity;
   const limitPercent = totalCapacity > 0 ? Math.min(100, (maxRequests / totalCapacity) * 100) : 0;
   const bufferPercent = totalCapacity > 0 ? Math.min(100, (bufferCapacity / totalCapacity) * 100) : 0;
   const usagePercent = totalCapacity > 0 ? Math.min(100, (totalRequestsInWindow / totalCapacity) * 100) : 0;
+
+  // Formatted percentages for display (max 2 decimal places)
+  const usagePercentFormatted = formatPercent(usagePercent);
 
   return (
     <div className={`rounded-lg border p-3 ${colors.bg} ${colors.border} flex flex-col gap-2`}>
@@ -541,7 +552,7 @@ function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
 
       <div className="flex items-center justify-between text-xs">
         <span className={colors.text} font-medium>
-          {usagePercent}% used
+          {usagePercentFormatted}% used
         </span>
         <span className="text-muted-foreground">
           {formatNumber(totalRequestsInWindow)} / {formatNumber(totalCapacity)} used

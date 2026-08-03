@@ -817,6 +817,12 @@ export class RetryPlugin implements ProxyPlugin {
       return ctx;
     }
 
+    // Track upstream 429 responses for metrics
+    // Do this BEFORE checking max retries so we track all 429s
+    if (ctx.status === 429) {
+      this.incrementUpstream429Count(entry.provider);
+    }
+
     // Get current retry count
     const retryCount = entry.retryCount;
     
@@ -1154,6 +1160,12 @@ export class RetryPlugin implements ProxyPlugin {
       const entry = this.requestStore.get(storageKey);
       if (entry) {
         const config = this.getConfigForProvider(entry.provider);
+
+        // Track upstream 429 responses for metrics (streaming)
+        if (streamState.errorStatus === 429) {
+          this.incrementUpstream429Count(entry.provider);
+        }
+
         if (entry.retryCount < config.maxRetries) {
           // Check if this is a NVIDIA ResourceExhausted error in the SSE data
           let isNvidiaStreamingError = false;
