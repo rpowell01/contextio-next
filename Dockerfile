@@ -99,9 +99,9 @@ COPY --from=build /app/default-providers.json /app/default-providers.json
 # Copy GLiNER model from pre-built registry image (cached forever until version changes)
 # To update model version:
 #   1. Build Dockerfile.gliner with new GLINER_VERSION
-#   2. Push to ghcr.io/rpowell01/contextio-gliner-model:<new-version>
+#   2. Push to docker.io/rpowell01/contextio-gliner-model:<new-version>
 #   3. Update the image reference below
-COPY --from=ghcr.io/rpowell01/contextio-gliner-model:0.2.28 /gliner-small-v2.1 /app/models/gliner-small-v2.1
+COPY --from=docker.io/rpowell01/contextio-gliner-model:0.2.28 /gliner-small-v2.1 /app/models/gliner-small-v2.1
 
 # Copy pre-built plugin files and start script
 COPY docker/plugins/logger-plugin.js /app/logger-plugin.js
