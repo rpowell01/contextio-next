@@ -181,7 +181,7 @@ export default function SettingsPage() {
     baseUrl: "",
     models: [],
     allowBaseUrlOverride: true,
-    baseUrlOverrideHeader: "x-openai-baseurl",
+    baseUrlOverrideHeader: "",
   });
   const [providerFormError, setProviderFormError] = useState<string | null>(null);
   const [providerFormSubmitting, setProviderFormSubmitting] = useState(false);
@@ -376,7 +376,7 @@ export default function SettingsPage() {
 
   // Provider handler functions
   const openAddProviderDialog = () => {
-    setProviderFormData({ id: "", name: "", baseUrl: "", models: [], allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openai-baseurl" });
+    setProviderFormData({ id: "", name: "", baseUrl: "", models: [], allowBaseUrlOverride: true, baseUrlOverrideHeader: "" });
     setProviderFormError(null);
     setAddProviderDialogOpen(true);
   };
@@ -390,7 +390,7 @@ export default function SettingsPage() {
       baseUrl: provider.baseUrl,
       models: provider.models,
       allowBaseUrlOverride: provider.allowBaseUrlOverride ?? true,
-      baseUrlOverrideHeader: provider.baseUrlOverrideHeader ?? "x-openai-baseurl",
+      baseUrlOverrideHeader: provider.baseUrlOverrideHeader ?? `x-${provider.id}-baseurl`,
     });
     setProviderFormError(null);
     setEditProviderDialogOpen(true);
@@ -403,7 +403,19 @@ export default function SettingsPage() {
   };
 
   const handleProviderFormChange = (field: keyof ProviderConfig, value: string | string[] | boolean) => {
-    setProviderFormData((prev) => ({ ...prev, [field]: value }));
+    setProviderFormData((prev) => {
+      const next = { ...prev, [field]: value };
+      // Auto-generate baseUrlOverrideHeader when provider ID changes and header is empty or matches old pattern
+      if (field === "id" && typeof value === "string") {
+        const newId = value.trim();
+        const currentHeader = prev.baseUrlOverrideHeader;
+        const shouldAutoGenerate = !currentHeader || currentHeader === `x-${prev.id}-baseurl` || currentHeader === "x-openai-baseurl";
+        if (shouldAutoGenerate && newId) {
+          next.baseUrlOverrideHeader = `x-${newId}-baseurl`;
+        }
+      }
+      return next;
+    });
   };
 
   const handleProviderFormSubmit = async (e: React.FormEvent) => {
