@@ -519,19 +519,17 @@ for (const upstreamKey of requiredUpstreams) {
       ?? settingsRateLimit?.bufferCapacity?.toString()
       ?? effectiveFileConfig?.bufferCapacity?.toString();
 
-    if (maxRequestsRaw === undefined) {
-      throw new Error(`Rate limit config for provider "${provider}" missing maxRequests (no env var ${prefix}_MAX_REQUESTS, no settings, and no file config)`);
-    }
-    if (windowMsRaw === undefined) {
-      throw new Error(`Rate limit config for provider "${provider}" missing windowMs (no env var ${prefix}_WINDOW_MS, no settings, and no file config)`);
-    }
-    if (bufferCapacityRaw === undefined) {
-      throw new Error(`Rate limit config for provider "${provider}" missing bufferCapacity (no env var ${prefix}_BUFFER, no settings, and no file config)`);
-    }
-
-    const maxRequests = Number.parseInt(String(maxRequestsRaw), 10);
-    const windowMs = Number.parseInt(String(windowMsRaw), 10);
-    const bufferCapacity = Number.parseInt(String(bufferCapacityRaw), 10);
+    // For optional providers (geminiCodeAssist), provide sensible defaults if no config found
+    const isOptionalProvider = provider === "geminiCodeAssist";
+    const maxRequests = maxRequestsRaw !== undefined
+      ? Number.parseInt(String(maxRequestsRaw), 10)
+      : (isOptionalProvider ? 60 : (() => { throw new Error(`Rate limit config for provider "${provider}" missing maxRequests (no env var ${prefix}_MAX_REQUESTS, no settings, and no file config)`); })());
+    const windowMs = windowMsRaw !== undefined
+      ? Number.parseInt(String(windowMsRaw), 10)
+      : (isOptionalProvider ? 60000 : (() => { throw new Error(`Rate limit config for provider "${provider}" missing windowMs (no env var ${prefix}_WINDOW_MS, no settings, and no file config)`); })());
+    const bufferCapacity = bufferCapacityRaw !== undefined
+      ? Number.parseInt(String(bufferCapacityRaw), 10)
+      : (isOptionalProvider ? 10 : (() => { throw new Error(`Rate limit config for provider "${provider}" missing bufferCapacity (no env var ${prefix}_BUFFER, no settings, and no file config)`); })());
 
     if (!Number.isFinite(maxRequests) || !Number.isFinite(windowMs) || !Number.isFinite(bufferCapacity)) {
       throw new Error(`Rate limit config for provider "${provider}" contains non-numeric values`);
@@ -580,11 +578,15 @@ for (const upstreamKey of requiredUpstreams) {
     const prefix = `CONTEXTIO_RETRY_${provider.toUpperCase()}`;
     // Use file config as base, env vars override, no hardcoded fallbacks
     // If fileConfig is missing, env vars must provide all required fields
+    const isOptionalProvider = provider === "geminiCodeAssist";
 
     const maxRetries = (() => {
       const raw = process.env[`${prefix}_MAX_RETRIES`];
       if (raw === undefined) {
-        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing maxRetries (no env var ${prefix}_MAX_RETRIES and no file config)`);
+        if (!fileConfig) {
+          if (isOptionalProvider) return 3;
+          throw new Error(`Retry config for provider "${provider}" missing maxRetries (no env var ${prefix}_MAX_RETRIES and no file config)`);
+        }
         return fileConfig.maxRetries;
       }
       const parsed = Number.parseInt(raw, 10);
@@ -597,7 +599,10 @@ for (const upstreamKey of requiredUpstreams) {
     const baseDelayMs = (() => {
       const raw = process.env[`${prefix}_BASE_DELAY_MS`];
       if (raw === undefined) {
-        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing baseDelayMs (no env var ${prefix}_BASE_DELAY_MS and no file config)`);
+        if (!fileConfig) {
+          if (isOptionalProvider) return 1000;
+          throw new Error(`Retry config for provider "${provider}" missing baseDelayMs (no env var ${prefix}_BASE_DELAY_MS and no file config)`);
+        }
         return fileConfig.baseDelayMs;
       }
       const parsed = Number.parseInt(raw, 10);
@@ -610,7 +615,10 @@ for (const upstreamKey of requiredUpstreams) {
     const maxDelayMs = (() => {
       const raw = process.env[`${prefix}_MAX_DELAY_MS`];
       if (raw === undefined) {
-        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing maxDelayMs (no env var ${prefix}_MAX_DELAY_MS and no file config)`);
+        if (!fileConfig) {
+          if (isOptionalProvider) return 30000;
+          throw new Error(`Retry config for provider "${provider}" missing maxDelayMs (no env var ${prefix}_MAX_DELAY_MS and no file config)`);
+        }
         return fileConfig.maxDelayMs;
       }
       const parsed = Number.parseInt(raw, 10);
@@ -627,12 +635,18 @@ for (const upstreamKey of requiredUpstreams) {
     const retryableStatuses = (() => {
       const raw = process.env[`${prefix}_RETRYABLE_STATUSES`];
       if (raw === undefined) {
-        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing retryableStatuses (no env var ${prefix}_RETRYABLE_STATUSES and no file config)`);
+        if (!fileConfig) {
+          if (isOptionalProvider) return [429, 500, 502, 503, 504];
+          throw new Error(`Retry config for provider "${provider}" missing retryableStatuses (no env var ${prefix}_RETRYABLE_STATUSES and no file config)`);
+        }
         return fileConfig.retryableStatuses;
       }
       const trimmed = raw.trim();
       if (trimmed === "") {
-        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing retryableStatuses (empty env var ${prefix}_RETRYABLE_STATUSES and no file config)`);
+        if (!fileConfig) {
+          if (isOptionalProvider) return [429, 500, 502, 503, 504];
+          throw new Error(`Retry config for provider "${provider}" missing retryableStatuses (empty env var ${prefix}_RETRYABLE_STATUSES and no file config)`);
+        }
         return fileConfig.retryableStatuses;
       }
       const parsed = trimmed
@@ -651,7 +665,10 @@ for (const upstreamKey of requiredUpstreams) {
     const jitterFactor = (() => {
       const raw = process.env[`${prefix}_JITTER_FACTOR`];
       if (raw === undefined) {
-        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing jitterFactor (no env var ${prefix}_JITTER_FACTOR and no file config)`);
+        if (!fileConfig) {
+          if (isOptionalProvider) return 0.2;
+          throw new Error(`Retry config for provider "${provider}" missing jitterFactor (no env var ${prefix}_JITTER_FACTOR and no file config)`);
+        }
         return fileConfig.jitterFactor;
       }
       const parsed = Number.parseFloat(raw);
