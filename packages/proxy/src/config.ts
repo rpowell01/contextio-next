@@ -467,9 +467,11 @@ function toScreamingSnakeCase(str: string): string {
 }
 
 // Validate that all required upstreams are non-empty (after overrides applied)
+// Only require upstreams for providers that are configured (enabled in providers.json or have env var)
 const requiredUpstreams: (keyof Upstreams)[] = [
-  "openai", "anthropic", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "kilo", "openrouter"
+  "openai", "anthropic", "chatgpt", "gemini", "vertex", "nvidia", "kilo", "openrouter"
 ];
+// geminiCodeAssist is optional - only validate if explicitly configured
 for (const upstreamKey of requiredUpstreams) {
   if (!upstreamsWithOverrides[upstreamKey]) {
     const envVarName = `UPSTREAM_${toScreamingSnakeCase(upstreamKey)}_URL`;
