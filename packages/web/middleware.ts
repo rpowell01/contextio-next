@@ -29,11 +29,21 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((publicPath) => pathname.startsWith(publicPath)) || isPublicAsset(pathname);
 }
 
+// Check if OIDC is enabled via environment variable
+function isOidcEnabled(): boolean {
+  return process.env.CONTEXTIO_OIDC_ENABLED === "true";
+}
+
 export default async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Skip auth check for public paths
   if (isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Skip auth check entirely if OIDC is not enabled
+  if (!isOidcEnabled()) {
     return NextResponse.next();
   }
 
