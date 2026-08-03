@@ -185,6 +185,7 @@ export default function SettingsPage() {
   const [providerFormError, setProviderFormError] = useState<string | null>(null);
   const [providerFormSubmitting, setProviderFormSubmitting] = useState(false);
   const [deleteProviderSubmitting, setDeleteProviderSubmitting] = useState(false);
+  const [isEditingDefault, setIsEditingDefault] = useState(false);
   
   const { theme, setTheme, isOverridden: themeIsOverridden } = useTheme();
 
@@ -381,6 +382,7 @@ export default function SettingsPage() {
 
   const openEditProviderDialog = (provider: ProviderMetadata) => {
     setEditingProvider(provider);
+    setIsEditingDefault(provider.source === "default");
     setProviderFormData({
       id: provider.id,
       name: provider.name,
@@ -431,8 +433,13 @@ export default function SettingsPage() {
     setProviderFormError(null);
     try {
       if (editProviderDialogOpen && editingProvider) {
-        // Update existing provider
-        await apiClient.updateProvider(editingProvider.id, providerFormData);
+        if (isEditingDefault) {
+          // Editing a default provider - create a new custom copy
+          await apiClient.createProvider(providerFormData);
+        } else {
+          // Update existing custom provider
+          await apiClient.updateProvider(editingProvider.id, providerFormData);
+        }
       } else {
         // Create new provider
         await apiClient.createProvider(providerFormData);
@@ -445,6 +452,7 @@ export default function SettingsPage() {
       setAddProviderDialogOpen(false);
       setEditProviderDialogOpen(false);
       setEditingProvider(null);
+      setIsEditingDefault(false);
     } catch (error) {
       setProviderFormError(error instanceof Error ? error.message : "Failed to save provider");
     } finally {
@@ -1356,39 +1364,52 @@ export default function SettingsPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            {provider.source === "file" && provider.dynamic && (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openEditProviderDialog(provider)}
-                                  disabled={providerFormSubmitting}
-                                  className="h-8 w-8 p-0"
-                                  title="Edit provider"
-                                >
-                                  <Edit2 className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openDeleteProviderDialog(provider)}
-                                  disabled={deleteProviderSubmitting}
-                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                  title="Delete provider"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </>
-                            )}
-                            {provider.source !== "file" && (
-                              <span className="text-xs text-muted-foreground">Managed externally</span>
-                            )}
-                          </div>
-                        </td>
+<td className="px-3 py-2">
+                           <div className="flex items-center gap-2">
+                             {provider.source === "file" && provider.dynamic && (
+                               <>
+                                 <Button
+                                   type="button"
+                                   variant="ghost"
+                                   size="sm"
+                                   onClick={() => openEditProviderDialog(provider)}
+                                   disabled={providerFormSubmitting}
+                                   className="h-8 w-8 p-0"
+                                   title="Edit provider"
+                                 >
+                                   <Edit2 className="h-4 w-4" />
+                                 </Button>
+                                 <Button
+                                   type="button"
+                                   variant="ghost"
+                                   size="sm"
+                                   onClick={() => openDeleteProviderDialog(provider)}
+                                   disabled={deleteProviderSubmitting}
+                                   className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                   title="Delete provider"
+                                 >
+                                   <Trash2 className="h-4 w-4" />
+                                 </Button>
+                               </>
+                             )}
+                             {provider.source === "default" && (
+                               <Button
+                                 type="button"
+                                 variant="ghost"
+                                 size="sm"
+                                 onClick={() => openEditProviderDialog(provider)}
+                                 disabled={providerFormSubmitting}
+                                 className="h-8 w-8 p-0"
+                                 title="Edit provider (creates custom copy)"
+                               >
+                                 <Edit2 className="h-4 w-4" />
+                               </Button>
+                             )}
+                             {provider.source !== "file" && provider.source !== "default" && (
+                               <span className="text-xs text-muted-foreground">Managed externally</span>
+                             )}
+                           </div>
+                         </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1516,7 +1537,9 @@ export default function SettingsPage() {
           <DialogHeader>
             <DialogTitle>Edit Provider</DialogTitle>
             <DialogDescription>
-              Modify the provider configuration. Provider ID cannot be changed.
+              {isEditingDefault
+                ? "Create a custom copy of this default provider with your modifications. The original default provider remains unchanged."
+                : "Modify the provider configuration. Provider ID cannot be changed."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleProviderFormSubmit}>
@@ -1599,7 +1622,7 @@ export default function SettingsPage() {
               )}
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setEditProviderDialogOpen(false); setEditingProvider(null); }} disabled={providerFormSubmitting}>
+              <Button type="button" variant="outline" onClick={() => { setEditProviderDialogOpen(false); setEditingProvider(null); setIsEditingDefault(false); }} disabled={providerFormSubmitting}>
                 Cancel
               </Button>
               <Button type="submit" disabled={providerFormSubmitting}>
