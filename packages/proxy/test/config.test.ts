@@ -27,13 +27,55 @@ function removeSettings(home: string): void {
 	}
 }
 
+// Set up required env vars for resolveConfig tests
+before(() => {
+	process.env.UPSTREAM_OPENAI_URL = "https://api.openai.com";
+	process.env.UPSTREAM_ANTHROPIC_URL = "https://api.anthropic.com";
+	process.env.UPSTREAM_CHATGPT_URL = "https://chatgpt.com";
+	process.env.UPSTREAM_GEMINI_URL = "https://generativelanguage.googleapis.com";
+	process.env.UPSTREAM_GEMINI_CODE_ASSIST_URL = "https://cloudcode-pa.googleapis.com";
+	process.env.UPSTREAM_VERTEX_URL = "https://us-central1-aiplatform.googleapis.com";
+	process.env.UPSTREAM_NVIDIA_URL = "https://integrate.api.nvidia.com";
+	process.env.UPSTREAM_KILO_URL = "https://api.kilo.ai/api/gateway";
+	process.env.UPSTREAM_OPENROUTER_URL = "https://openrouter.ai/api";
+});
+
+after(() => {
+	delete process.env.UPSTREAM_OPENAI_URL;
+	delete process.env.UPSTREAM_ANTHROPIC_URL;
+	delete process.env.UPSTREAM_CHATGPT_URL;
+	delete process.env.UPSTREAM_GEMINI_URL;
+	delete process.env.UPSTREAM_GEMINI_CODE_ASSIST_URL;
+	delete process.env.UPSTREAM_VERTEX_URL;
+	delete process.env.UPSTREAM_NVIDIA_URL;
+	delete process.env.UPSTREAM_KILO_URL;
+	delete process.env.UPSTREAM_OPENROUTER_URL;
+});
+
 describe("resolveConfig", () => {
 	let tempHome: string | undefined;
+	let providersPath: string | undefined;
 
 	before(() => {
 		tempHome = makeTempHome();
+		fs.mkdirSync(tempHome, { recursive: true });
 		process.env.HOME = tempHome;
 		process.env.USERPROFILE = tempHome;
+		// Create a providers.json in the temp directory
+		providersPath = path.join(tempHome, "providers.json");
+		process.env.PROVIDERS_FILE = providersPath;
+		const defaultProviders = {
+			openai: { id: "openai", name: "OpenAI", upstreamUrl: "https://api.openai.com", apiFormat: "chat-completions", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openai-baseurl" },
+			anthropic: { id: "anthropic", name: "Anthropic", upstreamUrl: "https://api.anthropic.com", apiFormat: "anthropic-messages", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-anthropic-baseurl" },
+			chatgpt: { id: "chatgpt", name: "ChatGPT", upstreamUrl: "https://chatgpt.com", apiFormat: "chatgpt-backend", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-chatgpt-baseurl" },
+			gemini: { id: "gemini", name: "Gemini", upstreamUrl: "https://generativelanguage.googleapis.com", apiFormat: "gemini", authType: "api-key", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-gemini-baseurl" },
+			vertex: { id: "vertex", name: "Vertex AI", upstreamUrl: "https://us-central1-aiplatform.googleapis.com", apiFormat: "gemini", authType: "api-key", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-vertex-baseurl" },
+			nvidia: { id: "nvidia", name: "NVIDIA", upstreamUrl: "https://integrate.api.nvidia.com", apiFormat: "chat-completions", authType: "bearer", enabled: true, rateLimit: { maxRequests: 20, windowMs: 60000, bufferCapacity: 5 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-nvidia-baseurl" },
+			kilo: { id: "kilo", name: "Kilo", upstreamUrl: "https://api.kilo.ai/api/gateway", apiFormat: "chat-completions", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-kilo-baseurl" },
+			openrouter: { id: "openrouter", name: "OpenRouter", upstreamUrl: "https://openrouter.ai/api", apiFormat: "chat-completions", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openrouter-baseurl" },
+			unknown: { id: "unknown", name: "Unknown", upstreamUrl: "https://unknown.provider", apiFormat: "unknown", authType: "none", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 }, customHeaders: {}, allowBaseUrlOverride: false, baseUrlOverrideHeader: "x-unknown-baseurl" },
+		};
+		fs.writeFileSync(providersPath, JSON.stringify(defaultProviders, null, 2));
 	});
 
 	after(() => {
@@ -44,6 +86,7 @@ describe("resolveConfig", () => {
 				// best-effort cleanup
 			}
 		}
+		delete process.env.PROVIDERS_FILE;
 	});
 
 	before(() => {
@@ -270,19 +313,25 @@ describe("readProvidersConfig", () => {
 		delete process.env.CONTEXTIO_RETRY_OPENAI_MAX_RETRIES;
 	});
 
-	it("returns built-in defaults when file is missing", () => {
+	it("throws when file is missing", () => {
 		// Use a non-existent path in the temp directory to ensure the file is truly absent
 		const nonExistentPath = path.join(tempDir!, "non-existent-providers.json");
-		const config = readProvidersConfig(nonExistentPath);
-		assert.equal(config.openai.upstreamUrl, "https://api.openai.com");
-		assert.equal(config.anthropic.apiFormat, "anthropic-messages");
-		assert.equal(config.nvidia.rateLimit.maxRequests, 20);
-		assert.equal(config.unknown.apiFormat, "unknown");
+		assert.throws(() => {
+			readProvidersConfig(nonExistentPath);
+		}, /No valid providers found/);
 	});
 
-	it("reads and parses a valid providers.json file", () => {
+	it("throws when file is empty", () => {
+		const emptyPath = path.join(tempDir!, "empty-providers.json");
+		fs.writeFileSync(emptyPath, "{}");
+		assert.throws(() => {
+			readProvidersConfig(emptyPath);
+		}, /No valid providers found/);
+	});
+
+	it("reads and parses a valid providers.json file with all providers", () => {
 		const providersPath = path.join(tempDir!, "providers.json");
-		const customConfig = {
+		const fullConfig = {
 			openai: {
 				id: "openai",
 				name: "OpenAI Custom",
@@ -299,19 +348,41 @@ describe("readProvidersConfig", () => {
 					jitterFactor: 0.1,
 				},
 				customHeaders: { "X-Custom": "value" },
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-openai-baseurl",
+			},
+			anthropic: {
+				id: "anthropic",
+				name: "Anthropic Custom",
+				upstreamUrl: "https://custom.anthropic.com",
+				apiFormat: "anthropic-messages",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 100, windowMs: 120000, bufferCapacity: 20 },
+				retry: {
+					maxRetries: 5,
+					baseDelayMs: 500,
+					maxDelayMs: 60000,
+					retryableStatuses: [429, 500],
+					jitterFactor: 0.1,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-anthropic-baseurl",
 			},
 		};
-		fs.writeFileSync(providersPath, JSON.stringify(customConfig, null, 2));
+		fs.writeFileSync(providersPath, JSON.stringify(fullConfig, null, 2));
 		const config = readProvidersConfig(providersPath);
 		assert.equal(config.openai.upstreamUrl, "https://custom.openai.com");
 		assert.equal(config.openai.rateLimit.maxRequests, 100);
 		assert.equal(config.openai.retry.maxRetries, 5);
 		assert.equal(config.openai.customHeaders["X-Custom"], "value");
-		// Other providers should still have defaults
-		assert.equal(config.anthropic.upstreamUrl, "https://api.anthropic.com");
+		assert.equal(config.anthropic.upstreamUrl, "https://custom.anthropic.com");
+		// Only the two providers in the file should be present
+		assert.equal(Object.keys(config).length, 2);
 	});
 
-	it("skips invalid entries and merges with defaults", () => {
+	it("throws for invalid entries instead of falling back to defaults", () => {
 		const providersPath = path.join(tempDir!, "providers.json");
 		const mixedConfig = {
 			openai: {
@@ -330,15 +401,17 @@ describe("readProvidersConfig", () => {
 					jitterFactor: 0.2,
 				},
 				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-openai-baseurl",
 			},
 		};
 		fs.writeFileSync(providersPath, JSON.stringify(mixedConfig, null, 2));
-		const config = readProvidersConfig(providersPath);
-		// Invalid entry should be skipped, falling back to default
-		assert.equal(config.openai.upstreamUrl, "https://api.openai.com");
+		assert.throws(() => {
+			readProvidersConfig(providersPath);
+		}, /No valid providers found/);
 	});
 
-	it("merges valid fields individually when nested config has invalid fields", () => {
+	it("throws for invalid nested fields instead of merging with defaults", () => {
 		const providersPath = path.join(tempDir!, "providers.json");
 		const partialConfig = {
 			openai: {
@@ -358,29 +431,196 @@ describe("readProvidersConfig", () => {
 					jitterFactor: 0.1,
 				},
 				customHeaders: { "X-Custom": "value" },
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-openai-baseurl",
 			},
 		};
 		fs.writeFileSync(providersPath, JSON.stringify(partialConfig, null, 2));
-		const config = readProvidersConfig(providersPath);
-		// Valid upstreamUrl should be preserved
-		assert.equal(config.openai.upstreamUrl, "https://custom.openai.com");
-		// Valid name should be preserved
-		assert.equal(config.openai.name, "OpenAI Custom");
-		// Invalid rateLimit.maxRequests should fall back to default, but valid windowMs and bufferCapacity should be preserved
-		assert.equal(config.openai.rateLimit.maxRequests, 60); // default
-		assert.equal(config.openai.rateLimit.windowMs, 120000); // from user config
-		assert.equal(config.openai.rateLimit.bufferCapacity, 20); // from user config
-		// Valid retry config should be preserved
-		assert.equal(config.openai.retry.maxRetries, 5);
-		assert.equal(config.openai.retry.baseDelayMs, 500);
-		// Valid customHeaders should be preserved
-		assert.equal(config.openai.customHeaders["X-Custom"], "value");
-		// Other providers should still have defaults
-		assert.equal(config.anthropic.upstreamUrl, "https://api.anthropic.com");
+		assert.throws(() => {
+			readProvidersConfig(providersPath);
+		}, /No valid providers found/);
 	});
 
-	it("env vars override built-in defaults", () => {
+	it("env vars override file config when providers.json exists", () => {
+		// First create a valid providers.json with all required providers
+		const providersPath = path.join(tempDir!, "providers.json");
+		const baseConfig = {
+			openai: {
+				id: "openai",
+				name: "OpenAI",
+				upstreamUrl: "https://file.openai.com",
+				apiFormat: "chat-completions",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-openai-baseurl",
+			},
+			anthropic: {
+				id: "anthropic",
+				name: "Anthropic",
+				upstreamUrl: "https://api.anthropic.com",
+				apiFormat: "anthropic-messages",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-anthropic-baseurl",
+			},
+			chatgpt: {
+				id: "chatgpt",
+				name: "ChatGPT",
+				upstreamUrl: "https://chatgpt.com",
+				apiFormat: "chatgpt-backend",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-chatgpt-baseurl",
+			},
+			gemini: {
+				id: "gemini",
+				name: "Gemini",
+				upstreamUrl: "https://generativelanguage.googleapis.com",
+				apiFormat: "gemini",
+				authType: "api-key",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-gemini-baseurl",
+			},
+			vertex: {
+				id: "vertex",
+				name: "Vertex AI",
+				upstreamUrl: "https://us-central1-aiplatform.googleapis.com",
+				apiFormat: "gemini",
+				authType: "api-key",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-vertex-baseurl",
+			},
+			nvidia: {
+				id: "nvidia",
+				name: "NVIDIA",
+				upstreamUrl: "https://integrate.api.nvidia.com",
+				apiFormat: "chat-completions",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 20, windowMs: 60000, bufferCapacity: 5 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-nvidia-baseurl",
+			},
+			kilo: {
+				id: "kilo",
+				name: "Kilo",
+				upstreamUrl: "https://api.kilo.ai/api/gateway",
+				apiFormat: "chat-completions",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-kilo-baseurl",
+			},
+			openrouter: {
+				id: "openrouter",
+				name: "OpenRouter",
+				upstreamUrl: "https://openrouter.ai/api",
+				apiFormat: "chat-completions",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-openrouter-baseurl",
+			},
+			unknown: {
+				id: "unknown",
+				name: "Unknown",
+				upstreamUrl: "https://unknown.provider",
+				apiFormat: "unknown",
+				authType: "none",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: false,
+				baseUrlOverrideHeader: "x-unknown-baseurl",
+			},
+		};
+		fs.writeFileSync(providersPath, JSON.stringify(baseConfig, null, 2));
+
 		try {
+			process.env.PROVIDERS_FILE = providersPath;
 			process.env.UPSTREAM_OPENAI_URL = "https://env.openai.com";
 			process.env.CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS = "200";
 			process.env.CONTEXTIO_RETRY_OPENAI_MAX_RETRIES = "7";
@@ -389,20 +629,200 @@ describe("readProvidersConfig", () => {
 			assert.equal(config.rateLimiter.openai.maxRequests, 200);
 			assert.equal(config.retry.openai.maxRetries, 7);
 		} finally {
+			delete process.env.PROVIDERS_FILE;
 			delete process.env.UPSTREAM_OPENAI_URL;
 			delete process.env.CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS;
 			delete process.env.CONTEXTIO_RETRY_OPENAI_MAX_RETRIES;
 		}
 	});
 
-	it("programmatic overrides override env vars and defaults", () => {
+	it("programmatic overrides override env vars and file config", () => {
+		// First create a valid providers.json with all required providers
+		const providersPath = path.join(tempDir!, "providers.json");
+		const baseConfig = {
+			openai: {
+				id: "openai",
+				name: "OpenAI",
+				upstreamUrl: "https://file.openai.com",
+				apiFormat: "chat-completions",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-openai-baseurl",
+			},
+			anthropic: {
+				id: "anthropic",
+				name: "Anthropic",
+				upstreamUrl: "https://api.anthropic.com",
+				apiFormat: "anthropic-messages",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-anthropic-baseurl",
+			},
+			chatgpt: {
+				id: "chatgpt",
+				name: "ChatGPT",
+				upstreamUrl: "https://chatgpt.com",
+				apiFormat: "chatgpt-backend",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-chatgpt-baseurl",
+			},
+			gemini: {
+				id: "gemini",
+				name: "Gemini",
+				upstreamUrl: "https://generativelanguage.googleapis.com",
+				apiFormat: "gemini",
+				authType: "api-key",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-gemini-baseurl",
+			},
+			vertex: {
+				id: "vertex",
+				name: "Vertex AI",
+				upstreamUrl: "https://us-central1-aiplatform.googleapis.com",
+				apiFormat: "gemini",
+				authType: "api-key",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-vertex-baseurl",
+			},
+			nvidia: {
+				id: "nvidia",
+				name: "NVIDIA",
+				upstreamUrl: "https://integrate.api.nvidia.com",
+				apiFormat: "chat-completions",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 20, windowMs: 60000, bufferCapacity: 5 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-nvidia-baseurl",
+			},
+			kilo: {
+				id: "kilo",
+				name: "Kilo",
+				upstreamUrl: "https://api.kilo.ai/api/gateway",
+				apiFormat: "chat-completions",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-kilo-baseurl",
+			},
+			openrouter: {
+				id: "openrouter",
+				name: "OpenRouter",
+				upstreamUrl: "https://openrouter.ai/api",
+				apiFormat: "chat-completions",
+				authType: "bearer",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: true,
+				baseUrlOverrideHeader: "x-openrouter-baseurl",
+			},
+			unknown: {
+				id: "unknown",
+				name: "Unknown",
+				upstreamUrl: "https://unknown.provider",
+				apiFormat: "unknown",
+				authType: "none",
+				enabled: true,
+				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+				retry: {
+					maxRetries: 3,
+					baseDelayMs: 1000,
+					maxDelayMs: 30000,
+					retryableStatuses: [429, 500, 502, 503, 504],
+					jitterFactor: 0.2,
+				},
+				customHeaders: {},
+				allowBaseUrlOverride: false,
+				baseUrlOverrideHeader: "x-unknown-baseurl",
+			},
+		};
+		fs.writeFileSync(providersPath, JSON.stringify(baseConfig, null, 2));
+
 		try {
+			process.env.PROVIDERS_FILE = providersPath;
 			process.env.UPSTREAM_OPENAI_URL = "https://env.openai.com";
 			const config = resolveConfig({
 				upstreams: { openai: "https://override.openai.com" },
 			});
 			assert.equal(config.upstreams.openai, "https://override.openai.com");
 		} finally {
+			delete process.env.PROVIDERS_FILE;
 			delete process.env.UPSTREAM_OPENAI_URL;
 		}
 	});

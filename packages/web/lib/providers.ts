@@ -3,22 +3,82 @@
 
 import fs from "fs/promises";
 import { z } from "zod";
-import type { ProviderConfig, ProviderMetadata } from "../types/api.ts";
+import type { ProviderConfig as CoreProviderConfig, Provider, ApiFormat, AuthType } from "@contextio/core";
+import { KNOWN_API_FORMATS, KNOWN_AUTH_TYPES, validateProviderConfig } from "@contextio/core";
+import type { ProviderMetadata } from "../types/api.ts";
 
 export const PROVIDERS_DIR = "/app/custom-policy";
 export const PROVIDERS_FILE = "/app/custom-policy/providers.json";
 
+// Web UI schema for provider creation/editing (subset of full ProviderConfig)
 export const ProviderConfigSchema = z.object({
   id: z.string().min(1, "Provider id is required"),
   name: z.string().min(1, "Provider name is required"),
   baseUrl: z.string().min(1, "Base URL is required"),
   models: z.array(z.string()),
   allowBaseUrlOverride: z.boolean().default(true),
-  baseUrlOverrideHeader: z.string().min(1, "Base URL override header is required").default("x-openai-baseurl"),
+  baseUrlOverrideHeader: z.string().min(1, "Base URL override header is required").optional(),
+  // Proxy-specific fields (optional in web UI, preserved from existing config)
+  apiFormat: z.enum(KNOWN_API_FORMATS as unknown as [ApiFormat, ...ApiFormat[]]).optional(),
+  authType: z.enum(KNOWN_AUTH_TYPES as unknown as [AuthType, ...AuthType[]]).optional(),
+  enabled: z.boolean().optional(),
+  rateLimit: z.object({
+    maxRequests: z.number().int().min(1).max(10000),
+    windowMs: z.number().int().min(100).max(24 * 60 * 60 * 1000),
+    bufferCapacity: z.number().int().min(0).max(10000),
+  }).optional(),
+  retry: z.object({
+    maxRetries: z.number().int().min(0),
+    baseDelayMs: z.number().int().min(0),
+    maxDelayMs: z.number().int().min(0),
+    retryableStatuses: z.array(z.number().int().min(100).max(599)),
+    jitterFactor: z.number().min(0).max(1),
+  }).optional(),
+  customHeaders: z.record(z.string()).optional(),
 });
 
 export type ProviderConfigInput = z.input<typeof ProviderConfigSchema>;
 export type ProviderConfigOutput = z.output<typeof ProviderConfigSchema>;
+
+// Map web UI field names to core field names
+function toCoreProviderConfig(input: ProviderConfigOutput, existing?: CoreProviderConfig & { models?: string[] }): CoreProviderConfig & { models?: string[] } {
+  const coreConfig: CoreProviderConfig & { models?: string[] } = {
+    id: input.id as Provider,
+    name: input.name,
+    upstreamUrl: input.baseUrl,
+    apiFormat: input.apiFormat ?? existing?.apiFormat ?? "unknown",
+    authType: input.authType ?? existing?.authType ?? "none",
+    enabled: input.enabled ?? existing?.enabled ?? true,
+    rateLimit: input.rateLimit ?? existing?.rateLimit ?? { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    retry: input.retry ?? existing?.retry ?? { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+    customHeaders: input.customHeaders ?? existing?.customHeaders ?? {},
+    allowBaseUrlOverride: input.allowBaseUrlOverride ?? existing?.allowBaseUrlOverride ?? true,
+    baseUrlOverrideHeader: input.baseUrlOverrideHeader ?? existing?.baseUrlOverrideHeader ?? `x-${input.id}-baseurl`,
+  };
+  if (input.models !== undefined) {
+    coreConfig.models = input.models;
+  } else if (existing?.models !== undefined) {
+    coreConfig.models = existing.models;
+  }
+  return coreConfig;
+}
+
+function fromCoreProviderConfig(core: CoreProviderConfig & { models?: string[] }): ProviderConfigOutput {
+  return {
+    id: core.id,
+    name: core.name,
+    baseUrl: core.upstreamUrl,
+    models: core.models ?? [],
+    allowBaseUrlOverride: core.allowBaseUrlOverride,
+    baseUrlOverrideHeader: core.baseUrlOverrideHeader,
+    apiFormat: core.apiFormat,
+    authType: core.authType,
+    enabled: core.enabled,
+    rateLimit: core.rateLimit,
+    retry: core.retry,
+    customHeaders: core.customHeaders,
+  };
+}
 
 const DEFAULT_PROVIDERS: Omit<ProviderMetadata, "source" | "dynamic">[] = [
   { id: "openai", name: "OpenAI", baseUrl: "https://api.openai.com", models: [], allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openai-baseurl" },
@@ -114,7 +174,7 @@ async function ensureProvidersFile(): Promise<void> {
   }
   try {
     const handle = await fs.open(PROVIDERS_FILE, "wx");
-    await handle.writeFile("[]", "utf8");
+    await handle.writeFile("{}", "utf8");
     await handle.close();
   } catch (error) {
     const errno = error as NodeJS.ErrnoException;
@@ -124,23 +184,52 @@ async function ensureProvidersFile(): Promise<void> {
   }
 }
 
-async function readFileProviders(): Promise<ProviderConfigOutput[]> {
+async function readFileProviders(): Promise<Record<string, CoreProviderConfig>> {
   await ensureProvidersFile();
   try {
     const raw = await fs.readFile(PROVIDERS_FILE, "utf8");
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((p: unknown) => {
+    if (Array.isArray(parsed)) {
+      // Migrate from old array format to object format
+      const migrated: Record<string, CoreProviderConfig> = {};
+      for (const p of parsed) {
         try {
-          return ProviderConfigSchema.parse(p);
+          const validated = ProviderConfigSchema.parse(p);
+          migrated[validated.id] = toCoreProviderConfig(validated);
         } catch {
-          return null;
+          // skip invalid
         }
-      })
-      .filter((p): p is ProviderConfigOutput => p !== null);
+      }
+      // Only write back migrated format if at least one provider was successfully migrated
+      if (Object.keys(migrated).length > 0) {
+        await fs.writeFile(PROVIDERS_FILE, JSON.stringify(migrated, null, 2), "utf8");
+      }
+      return migrated;
+    }
+    if (typeof parsed === "object" && parsed !== null) {
+      const result: Record<string, CoreProviderConfig> = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value === "object" && value !== null) {
+          try {
+            const config = value as Record<string, unknown>;
+            const configId = config.id as string;
+            // Validate that object key matches provider id (consistent with proxy validation)
+            if (configId !== key) {
+              console.warn(`[providers] skip providers.json[${key}]: id mismatch (expected ${key}, got ${configId})`);
+              continue;
+            }
+            validateProviderConfig(value as CoreProviderConfig);
+            result[key] = value as CoreProviderConfig;
+          } catch {
+            // skip invalid
+          }
+        }
+      }
+      return result;
+    }
+    return {};
   } catch {
-    return [];
+    return {};
   }
 }
 
@@ -294,19 +383,24 @@ export async function checkStaleLock(lockPath: string): Promise<boolean> {
 }
 
 
-
 /**
  * Executes a read-modify-write operation on providers.json atomically within a file lock.
- * The callback receives the current providers array and should return the modified array.
+ * The callback receives the current providers object and should return the modified object.
  */
 async function withProvidersLock<T>(
-  fn: (providers: ProviderConfig[]) => Promise<{ providers: ProviderConfig[]; result: T }>
+  fn: (providers: Record<string, CoreProviderConfig>) => Promise<{ providers: Record<string, CoreProviderConfig>; result: T }>
 ): Promise<T> {
   const lockPath = `${PROVIDERS_FILE}.lock`;
 
   return withFileLock(lockPath, async () => {
     // Read inside the lock
     const providers = await readFileProviders();
+    
+    // Safeguard: ensure providers is an object (not array) to prevent spreading array with numeric keys
+    if (Array.isArray(providers)) {
+      throw new Error("providers.json is in legacy array format; migration should have been handled by readFileProviders");
+    }
+    
     // Execute the callback with the current providers
     const { providers: newProviders, result } = await fn(providers);
     // Write inside the lock
@@ -347,8 +441,8 @@ export async function getAllProviders(): Promise<ProviderMetadata[]> {
   for (const p of envProviders) {
     merged.set(p.id, p);
   }
-  for (const p of fileProviders) {
-    merged.set(p.id, { ...p, source: "file", dynamic: true });
+  for (const [id, coreConfig] of Object.entries(fileProviders)) {
+    merged.set(id, { ...fromCoreProviderConfig(coreConfig), source: "file", dynamic: true });
   }
 
   return Array.from(merged.values());
@@ -359,22 +453,25 @@ export async function getProviderById(id: string): Promise<ProviderMetadata | nu
   return all.find((p) => p.id === id) ?? null;
 }
 
-export async function createProvider(config: ProviderConfig): Promise<ProviderMetadata> {
+export async function createProvider(config: ProviderConfigInput): Promise<ProviderMetadata> {
   const validated = ProviderConfigSchema.parse(config);
 
   const result = await withProvidersLock(async (providers) => {
-    if (providers.some((p) => p.id === validated.id)) {
+    if (providers[validated.id]) {
       throw new Error(`Provider with id "${validated.id}" already exists in file`);
     }
 
-    const newProviders = [...providers, validated];
-    return { providers: newProviders, result: { ...validated, source: "file" as const, dynamic: true } };
+    const coreConfig = toCoreProviderConfig(validated);
+    validateProviderConfig(coreConfig);
+    
+    const newProviders = { ...providers, [validated.id]: coreConfig };
+    return { providers: newProviders, result: { ...fromCoreProviderConfig(coreConfig), source: "file" as const, dynamic: true } };
   });
 
   return result;
 }
 
-export async function updateProvider(id: string, config: ProviderConfig): Promise<ProviderMetadata> {
+export async function updateProvider(id: string, config: ProviderConfigInput): Promise<ProviderMetadata> {
   const validated = ProviderConfigSchema.parse(config);
 
   if (validated.id !== id) {
@@ -382,15 +479,17 @@ export async function updateProvider(id: string, config: ProviderConfig): Promis
   }
 
   const result = await withProvidersLock(async (providers) => {
-    const index = providers.findIndex((p) => p.id === id);
-
-    if (index === -1) {
+    if (!providers[id]) {
       throw new Error(`Provider with id "${id}" not found in file`);
     }
 
-    const newProviders = [...providers];
-    newProviders[index] = validated;
-    return { providers: newProviders, result: { ...validated, source: "file" as const, dynamic: true } };
+    // Merge with existing config to preserve proxy fields
+    const existingCoreConfig = providers[id];
+    const coreConfig = toCoreProviderConfig(validated, existingCoreConfig);
+    validateProviderConfig(coreConfig);
+    
+    const newProviders = { ...providers, [id]: coreConfig };
+    return { providers: newProviders, result: { ...fromCoreProviderConfig(coreConfig), source: "file" as const, dynamic: true } };
   });
 
   return result;
@@ -398,12 +497,11 @@ export async function updateProvider(id: string, config: ProviderConfig): Promis
 
 export async function deleteProvider(id: string): Promise<void> {
   await withProvidersLock(async (providers) => {
-    const filtered = providers.filter((p) => p.id !== id);
-
-    if (filtered.length === providers.length) {
+    if (!providers[id]) {
       throw new Error(`Provider with id "${id}" not found in file`);
     }
 
+    const { [id]: _, ...filtered } = providers;
     return { providers: filtered, result: undefined };
   });
 }

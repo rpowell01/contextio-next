@@ -16,6 +16,11 @@
     "packages/web/lib/diff.test.ts",
     "packages/web/lib/providers.ts",
     "packages/web/lib/providers.test.ts",
-    "packages/web/types/api.ts"
+    "packages/web/types/api.ts",
+    "packages/proxy/src/config.ts",
+    "packages/proxy/test/config.test.ts",
+    "packages/proxy/test/rate-limiter.test.ts",
+    "packages/proxy/test/retry-plugin.test.ts",
+    "packages/proxy/test/proxy.test.ts"
   ]
 }

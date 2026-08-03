@@ -9,20 +9,7 @@
 import fs from "node:fs";
 
 import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig, RetryConfig, ProvidersMap, ProviderConfig, ApiFormat, AuthType } from "@contextio/core";
-import { DEFAULT_OIDC_SCOPE, validateRateLimitConfig, validateRetryConfig, KNOWN_API_FORMATS, KNOWN_AUTH_TYPES } from "@contextio/core";
-
-/** Known provider identifiers for runtime validation. */
-const KNOWN_PROVIDERS = [
-  "anthropic",
-  "openai",
-  "chatgpt",
-  "gemini",
-  "vertex",
-  "nvidia",
-  "openrouter",
-  "kilo",
-  "unknown",
-] as const satisfies readonly Provider[];
+import { DEFAULT_OIDC_SCOPE, validateRateLimitConfig, validateRetryConfig, KNOWN_API_FORMATS, KNOWN_AUTH_TYPES, KNOWN_PROVIDERS, validateProviderConfig } from "@contextio/core";
 
 /** Type predicate to check if a string is a valid Provider. */
 function isProvider(value: string): value is Provider {
@@ -37,154 +24,6 @@ function normalizeUpstreamUrl(url: string): string {
     return url;
   }
   return url.replace(/\/v1$/, "");
-}
-
-/**
- * Merge user provider config with defaults, validating each field individually.
- * Invalid fields fall back to defaults instead of rejecting the entire provider.
- */
-function mergeProviderConfig(
-  defaultConfig: ProviderConfig,
-  userConfig: Record<string, unknown>,
-  providerKey: Provider,
-): ProviderConfig {
-  const merged: ProviderConfig = { ...defaultConfig };
-
-  // Validate and merge id
-  if (typeof userConfig.id === "string" && userConfig.id === providerKey) {
-    merged.id = userConfig.id;
-  }
-
-  // Validate and merge name
-  if (typeof userConfig.name === "string" && userConfig.name.trim() !== "") {
-    merged.name = userConfig.name;
-  }
-
-  // Validate and merge upstreamUrl
-  if (typeof userConfig.upstreamUrl === "string") {
-    try {
-      new URL(userConfig.upstreamUrl);
-      merged.upstreamUrl = userConfig.upstreamUrl;
-    } catch {
-      // Invalid URL, keep default
-    }
-  }
-
-  // Validate and merge apiFormat
-  if (typeof userConfig.apiFormat === "string" && KNOWN_API_FORMATS.includes(userConfig.apiFormat as ApiFormat)) {
-    merged.apiFormat = userConfig.apiFormat as ApiFormat;
-  }
-
-  // Validate and merge authType
-  if (typeof userConfig.authType === "string" && KNOWN_AUTH_TYPES.includes(userConfig.authType as AuthType)) {
-    merged.authType = userConfig.authType as AuthType;
-  }
-
-  // Validate and merge enabled
-  if (typeof userConfig.enabled === "boolean") {
-    merged.enabled = userConfig.enabled;
-  }
-
-  // Validate and merge rateLimit (field by field)
-  if (userConfig.rateLimit && typeof userConfig.rateLimit === "object" && !Array.isArray(userConfig.rateLimit)) {
-    const userRateLimit = userConfig.rateLimit as Record<string, unknown>;
-    const mergedRateLimit: RateLimitConfig = { ...defaultConfig.rateLimit };
-
-    if (typeof userRateLimit.maxRequests === "number" && Number.isFinite(userRateLimit.maxRequests) && userRateLimit.maxRequests >= 0) {
-      mergedRateLimit.maxRequests = userRateLimit.maxRequests;
-    }
-    if (typeof userRateLimit.windowMs === "number" && Number.isFinite(userRateLimit.windowMs) && userRateLimit.windowMs > 0) {
-      mergedRateLimit.windowMs = userRateLimit.windowMs;
-    }
-    if (typeof userRateLimit.bufferCapacity === "number" && Number.isFinite(userRateLimit.bufferCapacity) && userRateLimit.bufferCapacity >= 0) {
-      mergedRateLimit.bufferCapacity = userRateLimit.bufferCapacity;
-    }
-
-    try {
-      validateRateLimitConfig(mergedRateLimit);
-      merged.rateLimit = mergedRateLimit;
-    } catch {
-      // Keep default rateLimit
-    }
-  }
-
-  // Validate and merge retry (field by field)
-  if (userConfig.retry && typeof userConfig.retry === "object" && !Array.isArray(userConfig.retry)) {
-    const userRetry = userConfig.retry as Record<string, unknown>;
-    const mergedRetry: RetryConfig = { ...defaultConfig.retry };
-
-    // Track which fields the user explicitly provided (and are valid)
-    const userProvidedBaseDelayMs =
-      typeof userRetry.baseDelayMs === "number" && Number.isFinite(userRetry.baseDelayMs) && userRetry.baseDelayMs >= 0;
-    const userProvidedMaxDelayMs =
-      typeof userRetry.maxDelayMs === "number" && Number.isFinite(userRetry.maxDelayMs) && userRetry.maxDelayMs >= 0;
-
-    // Apply valid individual fields first
-    if (typeof userRetry.maxRetries === "number" && Number.isFinite(userRetry.maxRetries) && userRetry.maxRetries >= 0) {
-      mergedRetry.maxRetries = userRetry.maxRetries;
-    }
-    if (userProvidedBaseDelayMs) {
-      mergedRetry.baseDelayMs = userRetry.baseDelayMs as number;
-    }
-    if (userProvidedMaxDelayMs) {
-      mergedRetry.maxDelayMs = userRetry.maxDelayMs as number;
-    }
-    // Check cross-field constraint on the MERGED result (user values + defaults)
-    // If violated, revert ONLY the user-provided field(s) that cause the violation
-    if (mergedRetry.maxDelayMs < mergedRetry.baseDelayMs) {
-      // Constraint violated: maxDelayMs < baseDelayMs
-      // Revert user-provided fields that contribute to the violation
-      if (userProvidedMaxDelayMs) {
-        mergedRetry.maxDelayMs = defaultConfig.retry.maxDelayMs;
-      }
-      if (userProvidedBaseDelayMs) {
-        mergedRetry.baseDelayMs = defaultConfig.retry.baseDelayMs;
-      }
-    }
-    if (Array.isArray(userRetry.retryableStatuses)) {
-      const statuses = userRetry.retryableStatuses;
-      let allValid = true;
-      for (const status of statuses) {
-        if (typeof status !== "number" || !Number.isFinite(status) || status < 100 || status > 599) {
-          allValid = false;
-          break;
-        }
-      }
-      if (allValid) {
-        mergedRetry.retryableStatuses = statuses as number[];
-      }
-    }
-    if (typeof userRetry.jitterFactor === "number" && Number.isFinite(userRetry.jitterFactor) && userRetry.jitterFactor >= 0 && userRetry.jitterFactor <= 1) {
-      mergedRetry.jitterFactor = userRetry.jitterFactor;
-    }
-
-    try {
-      validateRetryConfig(mergedRetry);
-      merged.retry = mergedRetry;
-    } catch {
-      // Keep default retry
-    }
-  }
-
-  // Validate and merge customHeaders
-  if (userConfig.customHeaders && typeof userConfig.customHeaders === "object" && !Array.isArray(userConfig.customHeaders)) {
-    const userHeaders = userConfig.customHeaders as Record<string, unknown>;
-    const mergedHeaders: Record<string, string> = {};
-    let headersValid = true;
-    for (const [key, value] of Object.entries(userHeaders)) {
-      if (typeof key === "string" && typeof value === "string") {
-        mergedHeaders[key] = value;
-      } else {
-        headersValid = false;
-        break;
-      }
-    }
-    if (headersValid) {
-      merged.customHeaders = mergedHeaders;
-    }
-  }
-
-  return merged;
 }
 
 /** Web UI settings interface for capture cleanup and OIDC settings. */
@@ -235,253 +74,122 @@ function readWebUISettings(): WebUISettings {
   return {};
 }
 
-const PROVIDERS_FILE = "/app/custom-policy/providers.json";
-
-const DEFAULT_PROVIDERS_CONFIG: ProvidersMap = {
-  anthropic: {
-    id: "anthropic",
-    name: "Anthropic",
-    upstreamUrl: "https://api.anthropic.com",
-    apiFormat: "anthropic-messages",
-    authType: "bearer",
-    enabled: true,
-    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
-    retry: {
-      maxRetries: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 30_000,
-      retryableStatuses: [429, 500, 502, 503, 504],
-      jitterFactor: 0.2,
-    },
-    customHeaders: {},
-    allowBaseUrlOverride: true,
-    baseUrlOverrideHeader: "x-anthropic-baseurl",
-  },
-  openai: {
-    id: "openai",
-    name: "OpenAI",
-    upstreamUrl: "https://api.openai.com",
-    apiFormat: "chat-completions",
-    authType: "bearer",
-    enabled: true,
-    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
-    retry: {
-      maxRetries: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 30_000,
-      retryableStatuses: [429, 500, 502, 503, 504],
-      jitterFactor: 0.2,
-    },
-    customHeaders: {},
-    allowBaseUrlOverride: true,
-    baseUrlOverrideHeader: "x-openai-baseurl",
-  },
-  chatgpt: {
-    id: "chatgpt",
-    name: "ChatGPT",
-    upstreamUrl: "https://chatgpt.com",
-    apiFormat: "chatgpt-backend",
-    authType: "bearer",
-    enabled: true,
-    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
-    retry: {
-      maxRetries: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 30_000,
-      retryableStatuses: [429, 500, 502, 503, 504],
-      jitterFactor: 0.2,
-    },
-    customHeaders: {},
-    allowBaseUrlOverride: true,
-    baseUrlOverrideHeader: "x-chatgpt-baseurl",
-  },
-  gemini: {
-    id: "gemini",
-    name: "Gemini",
-    upstreamUrl: "https://generativelanguage.googleapis.com",
-    apiFormat: "gemini",
-    authType: "api-key",
-    enabled: true,
-    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
-    retry: {
-      maxRetries: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 30_000,
-      retryableStatuses: [429, 500, 502, 503, 504],
-      jitterFactor: 0.2,
-    },
-    customHeaders: {},
-    allowBaseUrlOverride: true,
-    baseUrlOverrideHeader: "x-gemini-baseurl",
-  },
-  vertex: {
-    id: "vertex",
-    name: "Vertex AI",
-    upstreamUrl: "https://us-central1-aiplatform.googleapis.com",
-    apiFormat: "gemini",
-    authType: "api-key",
-    enabled: true,
-    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
-    retry: {
-      maxRetries: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 30_000,
-      retryableStatuses: [429, 500, 502, 503, 504],
-      jitterFactor: 0.2,
-    },
-    customHeaders: {},
-    allowBaseUrlOverride: true,
-    baseUrlOverrideHeader: "x-vertex-baseurl",
-  },
-  nvidia: {
-    id: "nvidia",
-    name: "NVIDIA",
-    upstreamUrl: "https://integrate.api.nvidia.com",
-    apiFormat: "chat-completions",
-    authType: "bearer",
-    enabled: true,
-    rateLimit: { maxRequests: 20, windowMs: 60_000, bufferCapacity: 5 },
-    retry: {
-      maxRetries: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 30_000,
-      retryableStatuses: [429, 500, 502, 503, 504],
-      jitterFactor: 0.2,
-    },
-    customHeaders: {},
-    allowBaseUrlOverride: true,
-    baseUrlOverrideHeader: "x-nvidia-baseurl",
-  },
-  openrouter: {
-    id: "openrouter",
-    name: "OpenRouter",
-    upstreamUrl: "https://openrouter.ai/api",
-    apiFormat: "chat-completions",
-    authType: "bearer",
-    enabled: true,
-    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
-    retry: {
-      maxRetries: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 30_000,
-      retryableStatuses: [429, 500, 502, 503, 504],
-      jitterFactor: 0.2,
-    },
-    customHeaders: {},
-    allowBaseUrlOverride: true,
-    baseUrlOverrideHeader: "x-openrouter-baseurl",
-  },
-  kilo: {
-    id: "kilo",
-    name: "Kilo",
-    upstreamUrl: "https://api.kilo.ai/api/gateway",
-    apiFormat: "chat-completions",
-    authType: "bearer",
-    enabled: true,
-    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
-    retry: {
-      maxRetries: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 30_000,
-      retryableStatuses: [429, 500, 502, 503, 504],
-      jitterFactor: 0.2,
-    },
-    customHeaders: {},
-    allowBaseUrlOverride: true,
-    baseUrlOverrideHeader: "x-kilo-baseurl",
-  },
-  unknown: {
-    id: "unknown",
-    name: "Unknown",
-    upstreamUrl: "https://unknown.provider",
-    apiFormat: "unknown",
-    authType: "none",
-    enabled: true,
-    rateLimit: { maxRequests: 60, windowMs: 60_000, bufferCapacity: 10 },
-    retry: {
-      maxRetries: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 30_000,
-      retryableStatuses: [429, 500, 502, 503, 504],
-      jitterFactor: 0.2,
-    },
-    customHeaders: {},
-    allowBaseUrlOverride: false,
-    baseUrlOverrideHeader: "x-unknown-baseurl",
-  },
-};
+// Get providers file path, checking environment variable at call time for test flexibility
+function getProvidersFilePath(): string {
+  return process.env.PROVIDERS_FILE || "/app/custom-policy/providers.json";
+}
 
 /**
- * Load provider configurations from /app/custom-policy/providers.json.
+ * Load provider configurations from providers.json.
  *
- * If the file is missing or invalid, falls back to built-in defaults.
- * Invalid fields in a provider entry fall back to defaults individually.
+ * Reads and validates the providers.json file. Each provider must have all
+ * required fields per the ProviderConfig schema. Invalid providers are skipped.
  * Providers with enabled=false are excluded from the returned map.
  */
-export function readProvidersConfig(filePath = PROVIDERS_FILE): ProvidersMap {
+export function readProvidersConfig(filePath = getProvidersFilePath()): ProvidersMap {
   try {
     const data = fs.readFileSync(filePath, "utf8");
     const parsed = JSON.parse(data);
-    const result: ProvidersMap = { ...DEFAULT_PROVIDERS_CONFIG };
+    const result: ProvidersMap = {} as ProvidersMap;
 
     let loaded = 0;
     let skipped = 0;
-    for (const [key, value] of Object.entries(parsed)) {
+    const skipReasons: string[] = [];
+
+    // Handle both object format (new) and array format (legacy)
+    const entries = Array.isArray(parsed)
+      ? parsed.map((item, index) => [String(index), item] as [string, unknown])
+      : Object.entries(parsed);
+
+    for (const [key, value] of entries) {
       if (typeof value !== "object" || value === null) {
         skipped++;
-        console.warn(`[config] skip providers.json[${key}]: not an object`);
+        const reason = `providers.json[${key}]: not an object`;
+        skipReasons.push(reason);
+        console.warn(`[config] skip ${reason}`);
         continue;
       }
       const config = value as Record<string, unknown>;
-      if (config.id !== key) {
+      const providerId = config.id as string;
+      if (providerId !== key && !Array.isArray(parsed)) {
+        // For object format, key must match id; for array format, id is the key
         skipped++;
-        console.warn(`[config] skip providers.json[${key}]: id mismatch (expected ${key}, got ${config.id})`);
+        const reason = `providers.json[${key}]: id mismatch (expected ${key}, got ${providerId})`;
+        skipReasons.push(reason);
+        console.warn(`[config] skip ${reason}`);
         continue;
       }
+      const finalKey = Array.isArray(parsed) ? providerId : key;
       if (typeof config.upstreamUrl !== "string") {
         skipped++;
-        console.warn(`[config] skip providers.json[${key}]: missing or non-string upstreamUrl`);
+        const reason = `providers.json[${finalKey}]: missing or non-string upstreamUrl`;
+        skipReasons.push(reason);
+        console.warn(`[config] skip ${reason}`);
         continue;
       }
       // Validate that the key is a known Provider before casting
-      if (!isProvider(key)) {
+      if (!isProvider(finalKey)) {
         skipped++;
-        console.warn(`[config] skip providers.json[${key}]: unknown provider`);
+        const reason = `providers.json[${finalKey}]: unknown provider`;
+        skipReasons.push(reason);
+        console.warn(`[config] skip ${reason}`);
         continue;
       }
-      const providerKey = key;
-      const defaultConfig = DEFAULT_PROVIDERS_CONFIG[providerKey];
-      if (!defaultConfig) {
+      // Validate the full provider config using core validation
+      try {
+        validateProviderConfig(config as unknown as ProviderConfig);
+      } catch (validationError) {
         skipped++;
-        console.warn(`[config] skip providers.json[${key}]: unknown provider`);
+        const reason = `providers.json[${finalKey}]: validation failed - ${validationError instanceof Error ? validationError.message : String(validationError)}`;
+        skipReasons.push(reason);
+        console.warn(`[config] skip ${reason}`);
         continue;
       }
-      // Merge user config with defaults, validating each field individually
-      const mergedConfig = mergeProviderConfig(defaultConfig, config, providerKey);
-      if (mergedConfig.enabled === false) {
+      if (config.enabled === false) {
+        // Disabled providers are intentionally skipped, not an error
         skipped++;
-        console.warn(`[config] skip providers.json[${key}]: disabled by enabled=false`);
+        console.warn(`[config] skip providers.json[${finalKey}]: disabled by enabled=false`);
         continue;
       }
-      result[providerKey] = mergedConfig;
+      result[finalKey] = config as unknown as ProviderConfig;
       loaded++;
     }
 
-    // Remove any providers from defaults that were explicitly disabled in file
-    for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value === "object" && value !== null) {
-        const config = value as Record<string, unknown>;
-        if (config.id === key && config.enabled === false && isProvider(key) && result[key]) {
-          delete result[key];
-        }
+    // If no providers were loaded, the file is empty or all entries were invalid
+    if (loaded === 0) {
+      const errorMsg = `No valid providers found in ${filePath}. Ensure providers.json contains valid provider configurations, or set upstream URLs via environment variables (UPSTREAM_<PROVIDER>_URL).`;
+      console.error(`[config] ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
+    // If any providers were skipped for reasons other than being disabled, throw an error
+    if (skipReasons.length > 0) {
+      const errorMsg = `Failed to load ${skipReasons.length} provider(s) from ${filePath}: ${skipReasons.join("; ")}`;
+      console.error(`[config] ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
+    // If we migrated from array format, write back the object format
+    if (Array.isArray(parsed) && loaded > 0) {
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(result, null, 2), "utf8");
+        console.log(`[config] migrated providers.json from array format to object format`);
+      } catch (writeErr) {
+        console.warn(`[config] failed to write migrated providers.json: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}`);
       }
     }
 
-    console.log(`[config] read providers.json: ${loaded} providers loaded from file, ${skipped} skipped, ${Object.keys(result).length} active (file entries replace defaults per provider)`);
+    console.log(`[config] read providers.json: ${loaded} providers loaded from file, ${skipped} skipped, ${Object.keys(result).length} active`);
     return result;
   } catch (err) {
-    console.error(`[config] failed to read providers.json at ${filePath}: ${err instanceof Error ? err.message : String(err)}. Using built-in defaults.`);
-    return { ...DEFAULT_PROVIDERS_CONFIG };
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[config] failed to read providers.json at ${filePath}: ${errMsg}.`);
+    // If file is missing or unreadable, throw a clear actionable error
+    const nodeErr = err as NodeJS.ErrnoException;
+    if (nodeErr.code === "ENOENT") {
+      throw new Error(`No valid providers found in ${filePath}. Ensure providers.json contains valid provider configurations, or set upstream URLs via environment variables (UPSTREAM_<PROVIDER>_URL).`);
+    }
+    throw err;
   }
 }
 
@@ -648,44 +356,46 @@ export function resolveOidcConfig(
 export function resolveConfig(
   overrides?: ProxyConfig,
 ): ResolvedProxyConfig {
-  const providersConfig = readProvidersConfig();
+  const providersConfig = readProvidersConfig(process.env.PROVIDERS_FILE);
 
-  const defaultUpstreams: Upstreams = {
+  // Build upstreams from providersConfig with env var overrides
+  // Priority: env var > providersConfig > (no hardcoded fallbacks)
+  const upstreams: Upstreams = {
     openai:
       process.env.UPSTREAM_OPENAI_URL ||
       providersConfig.openai?.upstreamUrl ||
-      "https://api.openai.com",
+      "",
     anthropic:
       process.env.UPSTREAM_ANTHROPIC_URL ||
       providersConfig.anthropic?.upstreamUrl ||
-      "https://api.anthropic.com",
+      "",
     chatgpt:
       process.env.UPSTREAM_CHATGPT_URL ||
       providersConfig.chatgpt?.upstreamUrl ||
-      "https://chatgpt.com",
+      "",
     gemini:
       process.env.UPSTREAM_GEMINI_URL ||
       providersConfig.gemini?.upstreamUrl ||
-      "https://generativelanguage.googleapis.com",
+      "",
     geminiCodeAssist:
       process.env.UPSTREAM_GEMINI_CODE_ASSIST_URL ||
-      "https://cloudcode-pa.googleapis.com",
+      "",
     vertex:
       process.env.UPSTREAM_VERTEX_URL ||
       providersConfig.vertex?.upstreamUrl ||
-      "https://us-central1-aiplatform.googleapis.com",
+      "",
     nvidia:
       process.env.UPSTREAM_NVIDIA_URL ||
       providersConfig.nvidia?.upstreamUrl ||
-      "https://integrate.api.nvidia.com",
+      "",
     kilo:
       process.env.UPSTREAM_KILO_URL ||
       providersConfig.kilo?.upstreamUrl ||
-      "https://api.kilo.ai/api/gateway",
+      "",
     openrouter:
       process.env.UPSTREAM_OPENROUTER_URL ||
       providersConfig.openrouter?.upstreamUrl ||
-      "https://openrouter.ai/api",
+      "",
   };
 
   const bindHost =
@@ -743,21 +453,40 @@ export function resolveConfig(
     `[config] publicUrl resolved: overrides.publicUrl=${overrides?.publicUrl}, env.CONTEXTIO_OIDC_PUBLIC_URL=${process.env.CONTEXTIO_OIDC_PUBLIC_URL}, settings.oidcPublicUrl=${readWebUISettings().oidcPublicUrl}, final=${publicUrl}`,
   );
 
-  const upstreams: Upstreams = {
-    ...defaultUpstreams,
+  // Apply programmatic upstream overrides (highest priority after env vars)
+  const upstreamsWithOverrides: Upstreams = {
+    ...upstreams,
     ...overrides?.upstreams,
   };
 
+// Helper to convert camelCase to SNAKE_CASE
+function toScreamingSnakeCase(str: string): string {
+  return str
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .toUpperCase();
+}
+
+// Validate that all required upstreams are non-empty (after overrides applied)
+const requiredUpstreams: (keyof Upstreams)[] = [
+  "openai", "anthropic", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "kilo", "openrouter"
+];
+for (const upstreamKey of requiredUpstreams) {
+  if (!upstreamsWithOverrides[upstreamKey]) {
+    const envVarName = `UPSTREAM_${toScreamingSnakeCase(upstreamKey)}_URL`;
+    throw new Error(`Missing required upstream URL for provider "${upstreamKey}". Set ${envVarName} environment variable or configure the provider in providers.json`);
+  }
+  }
+
   const normalizedUpstreams: Upstreams = {
-    openai: normalizeUpstreamUrl(upstreams.openai),
-    anthropic: normalizeUpstreamUrl(upstreams.anthropic),
-    chatgpt: normalizeUpstreamUrl(upstreams.chatgpt),
-    gemini: normalizeUpstreamUrl(upstreams.gemini),
-    geminiCodeAssist: normalizeUpstreamUrl(upstreams.geminiCodeAssist),
-    vertex: normalizeUpstreamUrl(upstreams.vertex),
-    nvidia: normalizeUpstreamUrl(upstreams.nvidia),
-    kilo: normalizeUpstreamUrl(upstreams.kilo),
-    openrouter: normalizeUpstreamUrl(upstreams.openrouter),
+    openai: normalizeUpstreamUrl(upstreamsWithOverrides.openai),
+    anthropic: normalizeUpstreamUrl(upstreamsWithOverrides.anthropic),
+    chatgpt: normalizeUpstreamUrl(upstreamsWithOverrides.chatgpt),
+    gemini: normalizeUpstreamUrl(upstreamsWithOverrides.gemini),
+    geminiCodeAssist: normalizeUpstreamUrl(upstreamsWithOverrides.geminiCodeAssist),
+    vertex: normalizeUpstreamUrl(upstreamsWithOverrides.vertex),
+    nvidia: normalizeUpstreamUrl(upstreamsWithOverrides.nvidia),
+    kilo: normalizeUpstreamUrl(upstreamsWithOverrides.kilo),
+    openrouter: normalizeUpstreamUrl(upstreamsWithOverrides.openrouter),
   };
 
   const MIN_MAX_REQUESTS = 1;
@@ -767,19 +496,6 @@ export function resolveConfig(
   const MIN_BUFFER_CAPACITY = 0;
   const MAX_BUFFER_CAPACITY = 10000;
 
-  const defaultRateLimit: RateLimitConfig = {
-    maxRequests: 60,
-    windowMs: 60_000,
-    bufferCapacity: 10,
-  };
-
-  // NVIDIA NIM has stricter upstream limits - use conservative default
-  const nvidiaDefaultRateLimit: RateLimitConfig = {
-    maxRequests: 20,
-    windowMs: 60_000,
-    bufferCapacity: 5,
-  };
-
   function parseRateLimitForProvider(
     provider: Provider,
     fileConfig: RateLimitConfig | undefined,
@@ -787,23 +503,37 @@ export function resolveConfig(
     const prefix = `CONTEXTIO_RATE_LIMIT_${provider.toUpperCase()}`;
     const settingsRateLimit = readWebUISettings().rateLimiter?.[provider];
 
-    const fallback =
-      provider === "nvidia" ? nvidiaDefaultRateLimit : defaultRateLimit;
-    const effectiveFileConfig = fileConfig ?? fallback;
+    // Use file config as base, no hardcoded fallbacks
+    // If fileConfig is missing, env vars or settings must provide all required fields
+    const effectiveFileConfig = fileConfig;
 
     const maxRequestsRaw = process.env[`${prefix}_MAX_REQUESTS`]
       ?? settingsRateLimit?.maxRequests?.toString()
-      ?? effectiveFileConfig.maxRequests;
+      ?? effectiveFileConfig?.maxRequests?.toString();
     const windowMsRaw = process.env[`${prefix}_WINDOW_MS`]
       ?? settingsRateLimit?.windowMs?.toString()
-      ?? effectiveFileConfig.windowMs;
+      ?? effectiveFileConfig?.windowMs?.toString();
     const bufferCapacityRaw = process.env[`${prefix}_BUFFER`]
       ?? settingsRateLimit?.bufferCapacity?.toString()
-      ?? effectiveFileConfig.bufferCapacity;
+      ?? effectiveFileConfig?.bufferCapacity?.toString();
+
+    if (maxRequestsRaw === undefined) {
+      throw new Error(`Rate limit config for provider "${provider}" missing maxRequests (no env var ${prefix}_MAX_REQUESTS, no settings, and no file config)`);
+    }
+    if (windowMsRaw === undefined) {
+      throw new Error(`Rate limit config for provider "${provider}" missing windowMs (no env var ${prefix}_WINDOW_MS, no settings, and no file config)`);
+    }
+    if (bufferCapacityRaw === undefined) {
+      throw new Error(`Rate limit config for provider "${provider}" missing bufferCapacity (no env var ${prefix}_BUFFER, no settings, and no file config)`);
+    }
 
     const maxRequests = Number.parseInt(String(maxRequestsRaw), 10);
     const windowMs = Number.parseInt(String(windowMsRaw), 10);
     const bufferCapacity = Number.parseInt(String(bufferCapacityRaw), 10);
+
+    if (!Number.isFinite(maxRequests) || !Number.isFinite(windowMs) || !Number.isFinite(bufferCapacity)) {
+      throw new Error(`Rate limit config for provider "${provider}" contains non-numeric values`);
+    }
 
     validateRateLimitConfig({ maxRequests, windowMs, bufferCapacity });
 
@@ -845,11 +575,15 @@ export function resolveConfig(
     fileConfig: RetryConfig | undefined,
   ): RetryConfig {
     const prefix = `CONTEXTIO_RETRY_${provider.toUpperCase()}`;
-    const effectiveConfig = fileConfig ?? DEFAULT_PROVIDERS_CONFIG[provider].retry;
+    // Use file config as base, env vars override, no hardcoded fallbacks
+    // If fileConfig is missing, env vars must provide all required fields
 
     const maxRetries = (() => {
       const raw = process.env[`${prefix}_MAX_RETRIES`];
-      if (raw === undefined) return effectiveConfig.maxRetries;
+      if (raw === undefined) {
+        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing maxRetries (no env var ${prefix}_MAX_RETRIES and no file config)`);
+        return fileConfig.maxRetries;
+      }
       const parsed = Number.parseInt(raw, 10);
       if (!Number.isFinite(parsed) || parsed < 0) {
         throw new Error(`Invalid ${prefix}_MAX_RETRIES="${raw}": must be a non-negative integer`);
@@ -859,7 +593,10 @@ export function resolveConfig(
 
     const baseDelayMs = (() => {
       const raw = process.env[`${prefix}_BASE_DELAY_MS`];
-      if (raw === undefined) return effectiveConfig.baseDelayMs;
+      if (raw === undefined) {
+        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing baseDelayMs (no env var ${prefix}_BASE_DELAY_MS and no file config)`);
+        return fileConfig.baseDelayMs;
+      }
       const parsed = Number.parseInt(raw, 10);
       if (!Number.isFinite(parsed) || parsed < 0) {
         throw new Error(`Invalid ${prefix}_BASE_DELAY_MS="${raw}": must be a non-negative integer`);
@@ -869,7 +606,10 @@ export function resolveConfig(
 
     const maxDelayMs = (() => {
       const raw = process.env[`${prefix}_MAX_DELAY_MS`];
-      if (raw === undefined) return effectiveConfig.maxDelayMs;
+      if (raw === undefined) {
+        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing maxDelayMs (no env var ${prefix}_MAX_DELAY_MS and no file config)`);
+        return fileConfig.maxDelayMs;
+      }
       const parsed = Number.parseInt(raw, 10);
       if (!Number.isFinite(parsed) || parsed < 0) {
         throw new Error(`Invalid ${prefix}_MAX_DELAY_MS="${raw}": must be a non-negative integer`);
@@ -883,9 +623,15 @@ export function resolveConfig(
 
     const retryableStatuses = (() => {
       const raw = process.env[`${prefix}_RETRYABLE_STATUSES`];
-      if (raw === undefined) return effectiveConfig.retryableStatuses;
+      if (raw === undefined) {
+        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing retryableStatuses (no env var ${prefix}_RETRYABLE_STATUSES and no file config)`);
+        return fileConfig.retryableStatuses;
+      }
       const trimmed = raw.trim();
-      if (trimmed === "") return effectiveConfig.retryableStatuses;
+      if (trimmed === "") {
+        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing retryableStatuses (empty env var ${prefix}_RETRYABLE_STATUSES and no file config)`);
+        return fileConfig.retryableStatuses;
+      }
       const parsed = trimmed
         .split(",")
         .map((s) => s.trim())
@@ -901,7 +647,10 @@ export function resolveConfig(
 
     const jitterFactor = (() => {
       const raw = process.env[`${prefix}_JITTER_FACTOR`];
-      if (raw === undefined) return effectiveConfig.jitterFactor;
+      if (raw === undefined) {
+        if (!fileConfig) throw new Error(`Retry config for provider "${provider}" missing jitterFactor (no env var ${prefix}_JITTER_FACTOR and no file config)`);
+        return fileConfig.jitterFactor;
+      }
       const parsed = Number.parseFloat(raw);
       if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
         throw new Error(`Invalid ${prefix}_JITTER_FACTOR="${raw}": must be between 0 and 1`);

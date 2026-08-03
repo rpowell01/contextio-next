@@ -91,15 +91,24 @@ The Settings page writes to `/app/custom-policy/settings.json`. Environment vari
 }
 ```
 
-### Global Defaults (Code)
+### Provider-Specific Defaults (providers.json)
 
-```typescript
-const defaultRateLimit: RateLimitConfig = {
-  maxRequests: 60,
-  windowMs: 60_000,
-  bufferCapacity: 10,
-};
+Rate limit defaults are now defined per-provider in `/app/custom-policy/providers.json`. Each provider entry includes its own `rateLimit` configuration:
+
+```json
+{
+  "openai": {
+    "rateLimit": { "maxRequests": 60, "windowMs": 60000, "bufferCapacity": 10 },
+    ...
+  },
+  "nvidia": {
+    "rateLimit": { "maxRequests": 20, "windowMs": 60000, "bufferCapacity": 5 },
+    ...
+  }
+}
 ```
+
+Environment variables (`CONTEXTIO_RATE_LIMIT_<PROVIDER>_*`) and Web UI settings override these file defaults.
 
 ### Advanced Options (Programmatic Only)
 

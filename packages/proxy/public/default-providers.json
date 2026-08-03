@@ -18,7 +18,9 @@
       "retryableStatuses": [429, 500, 502, 503, 504],
       "jitterFactor": 0.2
     },
-    "customHeaders": {}
+    "customHeaders": {},
+    "allowBaseUrlOverride": true,
+    "baseUrlOverrideHeader": "x-anthropic-baseurl"
   },
   "openai": {
     "id": "openai",
@@ -39,7 +41,9 @@
       "retryableStatuses": [429, 500, 502, 503, 504],
       "jitterFactor": 0.2
     },
-    "customHeaders": {}
+    "customHeaders": {},
+    "allowBaseUrlOverride": true,
+    "baseUrlOverrideHeader": "x-openai-baseurl"
   },
   "chatgpt": {
     "id": "chatgpt",
@@ -60,7 +64,9 @@
       "retryableStatuses": [429, 500, 502, 503, 504],
       "jitterFactor": 0.2
     },
-    "customHeaders": {}
+    "customHeaders": {},
+    "allowBaseUrlOverride": true,
+    "baseUrlOverrideHeader": "x-chatgpt-baseurl"
   },
   "gemini": {
     "id": "gemini",
@@ -81,7 +87,9 @@
       "retryableStatuses": [429, 500, 502, 503, 504],
       "jitterFactor": 0.2
     },
-    "customHeaders": {}
+    "customHeaders": {},
+    "allowBaseUrlOverride": true,
+    "baseUrlOverrideHeader": "x-gemini-baseurl"
   },
   "vertex": {
     "id": "vertex",
@@ -102,7 +110,9 @@
       "retryableStatuses": [429, 500, 502, 503, 504],
       "jitterFactor": 0.2
     },
-    "customHeaders": {}
+    "customHeaders": {},
+    "allowBaseUrlOverride": true,
+    "baseUrlOverrideHeader": "x-vertex-baseurl"
   },
   "nvidia": {
     "id": "nvidia",
@@ -123,7 +133,9 @@
       "retryableStatuses": [429, 500, 502, 503, 504],
       "jitterFactor": 0.2
     },
-    "customHeaders": {}
+    "customHeaders": {},
+    "allowBaseUrlOverride": true,
+    "baseUrlOverrideHeader": "x-nvidia-baseurl"
   },
   "openrouter": {
     "id": "openrouter",
@@ -144,7 +156,9 @@
       "retryableStatuses": [429, 500, 502, 503, 504],
       "jitterFactor": 0.2
     },
-    "customHeaders": {}
+    "customHeaders": {},
+    "allowBaseUrlOverride": true,
+    "baseUrlOverrideHeader": "x-openrouter-baseurl"
   },
   "kilo": {
     "id": "kilo",
@@ -165,7 +179,9 @@
       "retryableStatuses": [429, 500, 502, 503, 504],
       "jitterFactor": 0.2
     },
-    "customHeaders": {}
+    "customHeaders": {},
+    "allowBaseUrlOverride": true,
+    "baseUrlOverrideHeader": "x-kilo-baseurl"
   },
   "unknown": {
     "id": "unknown",
@@ -186,6 +202,8 @@
       "retryableStatuses": [429, 500, 502, 503, 504],
       "jitterFactor": 0.2
     },
-    "customHeaders": {}
+    "customHeaders": {},
+    "allowBaseUrlOverride": false,
+    "baseUrlOverrideHeader": "x-unknown-baseurl"
   }
 }
