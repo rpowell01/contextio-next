@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { withAuth } from "@/lib/auth/guards";
 import { consumeToken } from "@/lib/csrf";
 import { getAllProviders, createProvider } from "@/lib/providers";
 import type { ProviderConfig } from "@/types/api";
@@ -51,5 +50,5 @@ async function handlePostProviders(
   }
 }
 
-export const GET = withAuth(handleGetProviders);
-export const POST = withAuth(handlePostProviders);
+export const GET = handleGetProviders;
+export const POST = handlePostProviders;
