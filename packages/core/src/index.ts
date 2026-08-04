@@ -126,15 +126,17 @@ export {
 } from "./types.js";
 
 // Database core: SQLite connection, migrations, and schema initialization
-export {
-  initDb,
-  runMigrations,
-  getDb,
-  closeDb,
-  isDbInitialized,
-  getDbPath,
-  getSchemaVersion,
-  getAppliedMigrations,
-  getPendingMigrations,
-  type Migration,
-} from "./db/index.js";
+// Exported separately via `@contextio/core/db` to avoid pulling in better-sqlite3
+// when importing types/utilities from the main entry point.
+// export {
+//   initDb,
+//   runMigrations,
+//   getDb,
+//   closeDb,
+//   isDbInitialized,
+//   getDbPath,
+//   getSchemaVersion,
+//   getAppliedMigrations,
+//   getPendingMigrations,
+//   type Migration,
+// } from "./db/index.js";
