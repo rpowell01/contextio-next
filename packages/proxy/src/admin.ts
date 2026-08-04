@@ -42,6 +42,8 @@ export interface RateLimiterInternal {
     bufferCapacity: number;
     queueLength: number;
     requestsInWindow: number;
+    provider?: string;
+    sessionId?: string;
   }>;
   getConfigSummary: () => {
     maxRequests: number;
