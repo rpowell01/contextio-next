@@ -633,6 +633,7 @@ export class RateLimiterPlugin implements ProxyPlugin {
   /**
    * Get all bucket states for metrics/monitoring.
    * Returns a serializable representation of all buckets.
+   * Does not mutate bucket state - computes metrics from a snapshot.
    */
   getAllBucketStates(): Array<{
     key: string;
@@ -667,10 +668,11 @@ export class RateLimiterPlugin implements ProxyPlugin {
       const pConfig = this.getProviderConfig(provider);
       const windowStart = now - pConfig.windowMs;
 
-      // Prune the ACTUAL bucket (not a copy) so metrics match enforcement
-      const requestsInWindow = this.pruneWindow(bucket, windowStart);
+      // Compute requests in window WITHOUT mutating the bucket
+      // (pruning is done by onRequest and the cleanup timer)
+      const requestsInWindow = bucket.requestTimestamps.filter(ts => ts >= windowStart).length;
       const maxTokens = pConfig.maxRequests + pConfig.bufferCapacity;
-      const tokens = Math.max(0, pConfig.maxRequests + pConfig.bufferCapacity - requestsInWindow);
+      const tokens = Math.max(0, maxTokens - requestsInWindow);
 
       states.push({
         key,

@@ -300,11 +300,20 @@ case "env": {
             const interval = setInterval(() => {
               // In a real implementation, you'd have a way to get new logs
               // For now, we'll just send a heartbeat
-              res.write(`: heartbeat\n\n`);
+              // Handle write errors (e.g., client disconnected)
+              try {
+                res.write(`: heartbeat\n\n`);
+              } catch {
+                clearInterval(interval);
+              }
             }, 30000);
 
             req.on("close", () => {
               clearInterval(interval);
+              // End the response if headers were sent but not ended
+              if (res.writableEnded === false && res.headersSent) {
+                res.end();
+              }
             });
 
             return;
@@ -462,8 +471,15 @@ case "env": {
       }
     } catch (error) {
       console.error("Admin API error:", error);
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Internal server error", service: SERVICE_IDENTIFIER }));
+      // Only write error response if headers haven't been sent yet
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Internal server error", service: SERVICE_IDENTIFIER }));
+      } else {
+        // Headers already sent - we can't send a proper error response
+        // Just end the response
+        res.end();
+      }
     }
   };
 }
