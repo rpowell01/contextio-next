@@ -33,6 +33,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Approve native module builds
+RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
+    pnpm approve-builds better-sqlite3
+
 # Copy root package files and all packages for pnpm install
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json .npmrc ./
 COPY packages/ packages/
