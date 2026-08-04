@@ -126,6 +126,10 @@ RUN mkdir -p /app/captures /app/custom-policy /home/node/.contextio-next /app/ca
     chmod 755 /app/captures/.next/cache /app/packages/web/.next/cache && \
     chmod +x /app/start.sh
 
+# Create default settings.json if it doesn't exist
+RUN echo '{"captureCleanupEnabled":true,"captureCleanupIntervalHours":24,"captureCleanupMaxAgeDays":7,"oidcEnabled":false}' > /app/custom-policy/settings.json && \
+    chown node:node /app/custom-policy/settings.json
+
 # Fix permissions for node user
 RUN chown node:node /app/logger-plugin.js /app/redact-plugin.js /app/rate-limiter-plugin.js /app/start.sh /app/default-policy.json /app/default-providers.json /app/captures /app/custom-policy /home/node/.contextio-next /app/captures/.next/cache /app/packages/web/.next/cache
 

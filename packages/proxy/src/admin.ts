@@ -357,6 +357,7 @@ case "env": {
           // Find the rate limiter plugin
           const rateLimiterPlugin = plugins.find((p) => p.name === "rate-limiter");
           if (!rateLimiterPlugin) {
+            console.error("[admin] Rate limiter plugin not found in plugins array:", plugins.map(p => p.name));
             res.writeHead(404, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Rate limiter plugin not found", code: "RATE_LIMITER_NOT_FOUND", service: SERVICE_IDENTIFIER }));
             return;
@@ -375,20 +376,44 @@ case "env": {
 
           // Get bucket state from the plugin (using typed internal methods)
           if (!isRateLimiterPlugin(rateLimiterPlugin)) {
+            console.error("[admin] Rate limiter plugin missing internal methods:", Object.keys(rateLimiterPlugin));
             res.writeHead(500, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Rate limiter does not expose metrics methods", code: "RATE_LIMITER_INTERNAL_ERROR", service: SERVICE_IDENTIFIER }));
             return;
           }
 
-          const getAllBucketStates = rateLimiterPlugin._internal.getAllBucketStates.bind(rateLimiterPlugin);
-          const getConfigSummary = rateLimiterPlugin._internal.getConfigSummary.bind(rateLimiterPlugin);
+          try {
+            const getAllBucketStates = rateLimiterPlugin._internal.getAllBucketStates.bind(rateLimiterPlugin);
+            const getConfigSummary = rateLimiterPlugin._internal.getConfigSummary.bind(rateLimiterPlugin);
 
-          const config = getConfigSummary();
+            const config = getConfigSummary();
 
-          // Check if rate limiter is enabled
-          if (!config.enabled) {
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({
+            // Check if rate limiter is enabled
+            if (!config.enabled) {
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({
+                config: {
+                  maxRequests: config.maxRequests,
+                  windowMs: config.windowMs,
+                  bufferCapacity: config.bufferCapacity,
+                  maxEntries: config.maxEntries,
+                  enabled: config.enabled,
+                },
+                buckets: [],
+                totalBuckets: 0,
+                totalQueued: 0,
+                timestamp: new Date().toISOString(),
+                code: "RATE_LIMITER_DISABLED",
+                nvidiaWorkerRetryCount,
+                upstream429Counts,
+                service: SERVICE_IDENTIFIER,
+              }));
+              return;
+            }
+
+            const buckets = getAllBucketStates();
+
+            const metrics = {
               config: {
                 maxRequests: config.maxRequests,
                 windowMs: config.windowMs,
@@ -396,81 +421,59 @@ case "env": {
                 maxEntries: config.maxEntries,
                 enabled: config.enabled,
               },
-              buckets: [],
-              totalBuckets: 0,
-              totalQueued: 0,
+              buckets: buckets.map((b) => {
+                let provider = b.provider;
+                let sessionId = b.sessionId;
+
+                if (!provider) {
+                  const lastColonIndex = b.key.lastIndexOf(":");
+                  if (lastColonIndex >= 0) {
+                    provider = b.key.slice(lastColonIndex + 1);
+                  } else {
+                    provider = b.key.length > 0 ? b.key : "unknown";
+                  }
+                }
+
+                if (!sessionId) {
+                  const lastColonIndex = b.key.lastIndexOf(":");
+                  if (lastColonIndex >= 0) {
+                    sessionId = b.key.slice(0, lastColonIndex);
+                  } else {
+                    sessionId = "all";
+                  }
+                }
+
+                return {
+                  key: b.key,
+                  tokens: b.tokens,
+                  maxTokens: b.maxTokens,
+                  bufferCapacity: b.bufferCapacity,
+                  queueLength: b.queueLength,
+                  provider,
+                  sessionId,
+                  requestsInWindow: b.requestsInWindow,
+                };
+              }),
+              totalBuckets: buckets.length,
+              totalQueued: buckets.reduce((sum, b) => sum + b.queueLength, 0),
               timestamp: new Date().toISOString(),
-              code: "RATE_LIMITER_DISABLED",
+              code: "OK",
               nvidiaWorkerRetryCount,
               upstream429Counts,
-              service: SERVICE_IDENTIFIER,
+            };
+
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ...metrics, service: SERVICE_IDENTIFIER }));
+          } catch (innerError) {
+            console.error("[admin] Rate limiter metrics error:", innerError);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ 
+              error: "Internal server error", 
+              details: innerError instanceof Error ? innerError.message : String(innerError),
+              code: "RATE_LIMITER_INTERNAL_ERROR",
+              service: SERVICE_IDENTIFIER 
             }));
-            return;
           }
-
-          const buckets = getAllBucketStates();
-
-          const metrics: RateLimiterMetrics = {
-            config: {
-              maxRequests: config.maxRequests,
-              windowMs: config.windowMs,
-              bufferCapacity: config.bufferCapacity,
-              maxEntries: config.maxEntries,
-              enabled: config.enabled,
-            },
-            buckets: buckets.map((b: { key: string; tokens: number; maxTokens: number; bufferCapacity: number; queueLength: number; requestsInWindow: number; provider?: string; sessionId?: string }) => {
-              // Use provider/sessionId from bucket state if available (set by rate limiter for custom key generators)
-              // Otherwise fall back to parsing from key (for backward compatibility with default/session-provider strategies)
-              let provider = b.provider;
-              let sessionId = b.sessionId;
-
-              if (!provider) {
-                // Parse provider from key (fallback for backward compatibility)
-                const lastColonIndex = b.key.lastIndexOf(":");
-                if (lastColonIndex >= 0) {
-                  // Legacy or session-provider format: "sessionId:provider"
-                  const providerPart = b.key.slice(lastColonIndex + 1);
-                  provider = providerPart.length > 0 ? providerPart : "unknown";
-                } else {
-                  // Default provider-only format: "provider" (no session isolation)
-                  provider = b.key.length > 0 ? b.key : "unknown";
-                }
-              }
-
-              if (!sessionId) {
-                // Parse sessionId from key (fallback for backward compatibility)
-                const lastColonIndex = b.key.lastIndexOf(":");
-                if (lastColonIndex >= 0) {
-                  // Legacy or session-provider format: "sessionId:provider"
-                  const sessionIdPart = b.key.slice(0, lastColonIndex);
-                  sessionId = sessionIdPart; // Preserve empty string for empty sessionId
-                } else {
-                  // Default provider-only format: "provider" (no session isolation)
-                  sessionId = "all"; // Indicates shared across all sessions
-                }
-              }
-
-              return {
-                key: b.key,
-                tokens: b.tokens,
-                maxTokens: b.maxTokens,
-                bufferCapacity: b.bufferCapacity,
-                queueLength: b.queueLength,
-                provider,
-                sessionId,
-                requestsInWindow: b.requestsInWindow,
-              };
-            }),
-            totalBuckets: buckets.length,
-            totalQueued: buckets.reduce((sum: number, b: { queueLength: number }) => sum + b.queueLength, 0),
-            timestamp: new Date().toISOString(),
-            code: "OK",
-            nvidiaWorkerRetryCount,
-            upstream429Counts,
-          };
-
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ...metrics, service: SERVICE_IDENTIFIER }));
           break;
         }
 
