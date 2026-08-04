@@ -1,8 +1,13 @@
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = path.resolve(__dirname, "../..");
 
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  outputFileTracingRoot: workspaceRoot,
   turbopack: {
     // Handle node: protocol imports by aliasing to non-prefixed versions
     // which Next.js/Turbopack can externalize via serverExternalPackages
