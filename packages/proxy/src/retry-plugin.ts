@@ -434,6 +434,14 @@ export class RetryPlugin implements ProxyPlugin {
         state.errorStatus = result.status;
         state.errorMessage = result.message;
       }
+      // Also check for NVIDIA ResourceExhausted in the data buffer (envelope format)
+      // This handles: { "name": "UnknownError", "data": { "message": "..." } }
+      const nvidiaCheck = this.checkNvidiaResourceExhausted(state.dataBuffer);
+      if (nvidiaCheck.isError) {
+        state.errorDetected = true;
+        state.errorStatus = 429; // NVIDIA ResourceExhausted is a rate limit error
+        state.errorMessage = nvidiaCheck.message;
+      }
       state.dataBuffer = "";
       state.inDataField = false;
     }
