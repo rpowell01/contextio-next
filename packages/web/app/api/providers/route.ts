@@ -1,64 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { consumeToken } from "@/lib/csrf";
-import { getAllProviders, createProvider } from "@/lib/providers";
-import type { ProviderConfig } from "@/types/api";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
-async function handleGetProviders(
-  _request: NextRequest,
-  _context: { params: Promise<Record<string, string | string[]>> },
-) {
+// Proxy admin API URL (for server-side requests)
+const PROXY_ADMIN_URL =
+  process.env.NEXT_PUBLIC_PROXY_ADMIN_URL || "http://localhost:4040";
+
+export async function GET() {
   try {
-    const providers = await getAllProviders();
-    return NextResponse.json(createSuccessResponse({ data: providers, total: providers.length }));
+    // Fetch providers from the proxy admin API
+    const response = await fetch(`${PROXY_ADMIN_URL}/admin/providers`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Proxy admin API returned ${response.status}`);
+    }
+    let data: { providers: any[]; total: number };
+    try {
+      data = await response.json();
+    } catch (e: unknown) {
+      throw new Error(
+        `Failed to parse providers JSON: ${
+          e instanceof Error ? e.message : "Unknown error"
+        }`,
+      );
+    }
+    return NextResponse.json({
+      data: data.providers,
+      total: data.total,
+    });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    console.error("Error in providers list API:", { message: errorMessage, stack: errorStack });
-    // Return a more informative error response
-    return NextResponse.json(
-      createErrorResponse({ 
-        message: "Failed to load providers", 
-        status: 500,
-        details: errorMessage 
-      }), 
-      { status: 500 }
+    console.error("Error in providers list API:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to load providers" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 }
-
-async function handlePostProviders(
-  request: NextRequest,
-  _context: { params: Promise<Record<string, string | string[]>> },
-) {
-  try {
-    const csrfToken = request.headers.get("x-csrf-token");
-    if (!(await consumeToken(csrfToken ?? ""))) {
-      return NextResponse.json(createErrorResponse({ message: "Invalid or missing CSRF token", status: 400 }), { status: 400 });
-    }
-
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(createErrorResponse({ message: "Invalid JSON body", status: 400 }), { status: 400 });
-    }
-    const provider = await createProvider(body as ProviderConfig);
-    return NextResponse.json(createSuccessResponse({ data: provider }), { status: 201 });
-  } catch (error) {
-    const details = (error as any)?.errors;
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (Array.isArray(details)) {
-      return NextResponse.json(createErrorResponse({ message: "Validation failed", status: 400, details }), { status: 400 });
-    }
-    if (errorMessage.includes("already exists")) {
-      return NextResponse.json(createErrorResponse({ message: errorMessage, status: 409 }), { status: 409 });
-    }
-    console.error("Error creating provider:", error);
-    return NextResponse.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
-  }
-}
-
-export const GET = handleGetProviders;
-export const POST = handlePostProviders;

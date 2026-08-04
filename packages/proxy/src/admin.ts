@@ -7,8 +7,9 @@
 
 import http from "node:http";
 import type { ProxyPlugin } from "@contextio/core";
-import type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics } from "@contextio/core";
+import type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics, ProviderConfig, Provider } from "@contextio/core";
 import { SERVICE_IDENTIFIER } from "@contextio/core";
+import { getAllMergedProviders } from "@contextio/core/db";
 
 export interface AdminOptions {
   plugins: ProxyPlugin[];
@@ -346,6 +347,41 @@ case "env": {
           clearLogs();
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ success: true, message: "Logs cleared", service: SERVICE_IDENTIFIER }));
+          break;
+        }
+
+        case "providers": {
+          if (req.method !== "GET") {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+
+          try {
+            const providers = getAllMergedProviders();
+            const providerList = providers.map((p) => ({
+              id: p.id,
+              name: p.name,
+              upstreamUrl: p.upstreamUrl,
+              apiFormat: p.apiFormat,
+              authType: p.authType,
+              enabled: p.enabled,
+              rateLimit: p.rateLimit,
+              retry: p.retry,
+              customHeaders: p.customHeaders,
+              allowBaseUrlOverride: p.allowBaseUrlOverride,
+              baseUrlOverrideHeader: p.baseUrlOverrideHeader,
+              source: p.source,
+              dynamic: p.dynamic,
+              models: p.models,
+            });
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ providers: providerList, total: providerList.length, service: SERVICE_IDENTIFIER }));
+          } catch (error) {
+            console.error("[admin] Providers list error:", error);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Failed to load providers", service: SERVICE_IDENTIFIER }));
+          }
           break;
         }
 
