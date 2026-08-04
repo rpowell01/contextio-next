@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { createErrorResponse, createSuccessResponse } from "@contextio/core";
-
 // Proxy admin API URL (for server-side requests)
 const PROXY_ADMIN_URL =
   process.env.NEXT_PUBLIC_PROXY_ADMIN_URL || "http://localhost:4040";
