@@ -26,11 +26,14 @@ function ensureDbInitialized(): void {
 	if (dbInitialized) return;
 	
 	try {
+		console.log("[providers] Initializing database...");
 		initDb();
 		dbInitialized = true;
+		console.log("[providers] Database initialized successfully");
 	} catch (err) {
 		dbInitError = err instanceof Error ? err : new Error(String(err));
 		console.error("[providers] Failed to initialize database:", dbInitError.message);
+		console.error("[providers] Stack:", dbInitError.stack);
 		throw dbInitError;
 	}
 }
@@ -40,14 +43,21 @@ function ensureDbInitialized(): void {
  * Returns true if database is ready, false if initialization failed.
  */
 export function isDatabaseAvailable(): boolean {
-	if (dbInitError) return false;
+	if (dbInitError) {
+		console.warn("[providers] Database not available due to previous error:", dbInitError.message);
+		return false;
+	}
 	try {
 		ensureDbInitialized();
 		// Verify the providers table exists
 		const db = getDb();
+		const dbPath = (db as any).name;
+		console.log("[providers] Database path:", dbPath);
 		db.prepare("SELECT 1 FROM providers LIMIT 1").get();
 		return true;
-	} catch {
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		console.warn("[providers] Database check failed:", msg);
 		return false;
 	}
 }

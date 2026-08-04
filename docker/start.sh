@@ -35,5 +35,8 @@ chmod 700 "$CAPTURE_DIR" 2>/dev/null || true
 NEXT_CACHE="${NEXT_CACHE_DIR:-/app/captures/.next/cache}"
 mkdir -p "$NEXT_CACHE" /app/packages/web/.next/cache
 chmod 755 "$NEXT_CACHE" /app/packages/web/.next/cache 2>/dev/null || true
+# Ensure database directory exists
+mkdir -p /app/custom-policy
+chmod 700 /app/custom-policy 2>/dev/null || true
 echo "Starting ContextIO-Next (Proxy + Web UI) on port 4040..."
 node dist/combined-entry.js

@@ -75,6 +75,7 @@ ENV DEBUG_ROUTING=false
 ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
 ENV NEXT_CACHE_DIR=/app/captures/.next/cache
+ENV CONTEXTIO_DB_PATH=/app/custom-policy/contextio.db
 
 LABEL org.opencontainers.image.title="contextio-next"
 LABEL org.opencontainers.image.description="LLM API proxy with redaction, logging, and web UI. Zero external dependencies."
