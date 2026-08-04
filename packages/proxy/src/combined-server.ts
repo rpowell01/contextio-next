@@ -170,7 +170,7 @@ async function servePublicAsset(req: http.IncomingMessage, res: http.ServerRespo
  * Create a combined proxy + Next.js server on a single port.
  */
 export function createCombinedProxy(
-  config?: ProxyConfig & { logTraffic?: boolean },
+  config?: ProxyConfig & { logTraffic?: boolean; plugins?: ProxyPlugin[] },
 ): ProxyInstance {
   const resolved = resolveConfig(config);
   const plugins: ProxyPlugin[] = config?.plugins ?? [];
