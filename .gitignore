@@ -24,3 +24,4 @@ __pycache__/
 issue-export*.jsonl
 
 scripts/test-fixture/capture.bin
+.vscode/settings.json
