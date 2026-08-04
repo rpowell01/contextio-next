@@ -9,7 +9,7 @@ import http from "node:http";
 import type { ProxyPlugin } from "@contextio/core";
 import type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics, ProviderConfig, Provider } from "@contextio/core";
 import { SERVICE_IDENTIFIER } from "@contextio/core";
-import { getAllMergedProviders } from "@contextio/core/db";
+import { getAllMergedProviders, type MergedProvider } from "@contextio/core/db";
 
 export interface AdminOptions {
   plugins: ProxyPlugin[];
@@ -53,6 +53,26 @@ export interface RateLimiterInternal {
     maxEntries: number;
     enabled: boolean;
   };
+}
+
+// --- Provider Response Type ---
+
+/** Response format for provider data in admin API. */
+export interface ProviderResponse {
+  id: string;
+  name: string;
+  upstreamUrl: string;
+  apiFormat: string;
+  authType: string;
+  enabled: boolean;
+  rateLimit: { maxRequests: number; windowMs: number; bufferCapacity: number };
+  retry: { maxRetries: number; baseDelayMs: number; maxDelayMs: number; retryableStatuses: number[]; jitterFactor: number };
+  customHeaders: Record<string, string>;
+  allowBaseUrlOverride: boolean;
+  baseUrlOverrideHeader: string;
+  source: "default" | "env" | "file";
+  dynamic: boolean;
+  models: string[] | undefined;
 }
 
 function isRateLimiterPlugin(plugin: ProxyPlugin): plugin is ProxyPlugin & { _internal: RateLimiterInternal } {
@@ -166,6 +186,26 @@ function formatUptime(ms: number): string {
   if (hours > 0) return `${hours}h ${minutes % 60}m`;
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
   return `${seconds}s`;
+}
+
+/** Maps a merged provider to the admin API response format. */
+function mapProviderToResponse(p: MergedProvider): ProviderResponse {
+  return {
+    id: p.id,
+    name: p.name,
+    upstreamUrl: p.upstreamUrl,
+    apiFormat: p.apiFormat,
+    authType: p.authType,
+    enabled: p.enabled,
+    rateLimit: p.rateLimit,
+    retry: p.retry,
+    customHeaders: p.customHeaders,
+    allowBaseUrlOverride: p.allowBaseUrlOverride,
+    baseUrlOverrideHeader: p.baseUrlOverrideHeader,
+    source: p.source,
+    dynamic: p.dynamic,
+    models: p.models,
+  };
 }
 
 export function createAdminHandler(options: AdminOptions): http.RequestListener {
@@ -359,22 +399,7 @@ case "env": {
 
           try {
             const providers = getAllMergedProviders();
-            const providerList = providers.map((p) => ({
-              id: p.id,
-              name: p.name,
-              upstreamUrl: p.upstreamUrl,
-              apiFormat: p.apiFormat,
-              authType: p.authType,
-              enabled: p.enabled,
-              rateLimit: p.rateLimit,
-              retry: p.retry,
-              customHeaders: p.customHeaders,
-              allowBaseUrlOverride: p.allowBaseUrlOverride,
-              baseUrlOverrideHeader: p.baseUrlOverrideHeader,
-              source: p.source,
-              dynamic: p.dynamic,
-              models: p.models,
-            });
+            const providerList = providers.map(mapProviderToResponse);
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ providers: providerList, total: providerList.length, service: SERVICE_IDENTIFIER }));
           } catch (error) {
