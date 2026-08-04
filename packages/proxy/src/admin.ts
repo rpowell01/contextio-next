@@ -262,9 +262,10 @@ case "env": {
     }
   }
 
-  res.writeHead(200, { "Content-Type": "application/json" });
-  // Add service identification header to preserve array response shape
-  res.setHeader("x-service-identifier", SERVICE_IDENTIFIER);
+  res.writeHead(200, {
+    "Content-Type": "application/json",
+    "x-service-identifier": SERVICE_IDENTIFIER,
+  });
   res.end(JSON.stringify(envVars));
   break;
 }
@@ -300,9 +301,18 @@ case "env": {
             const interval = setInterval(() => {
               // In a real implementation, you'd have a way to get new logs
               // For now, we'll just send a heartbeat
-              // Handle write errors (e.g., client disconnected)
+              // Check if response is still writable (res.write returns false when closed)
+              // and handle write errors (e.g., client disconnected)
               try {
-                res.write(`: heartbeat\n\n`);
+                if (!res.writableEnded && !res.destroyed) {
+                  const ok = res.write(`: heartbeat\n\n`);
+                  if (!ok) {
+                    // Buffer full or connection closed
+                    clearInterval(interval);
+                  }
+                } else {
+                  clearInterval(interval);
+                }
               } catch {
                 clearInterval(interval);
               }
