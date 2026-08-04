@@ -50,13 +50,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Merge with defaults for any missing fields
     const settings = mergeWithDefaults(validated);
 
+    // Apply env overrides to determine which keys are controlled by env vars
+    const { appliedKeys } = applyEnvOverrides(settings);
+
+    // Remove env-var-overridden keys from settings before saving to file.
+    // Environment variables should ALWAYS take precedence at runtime, so we don't
+    // persist their values to the settings file. This ensures that if an env var
+    // is removed, the setting falls back to the default or settings-file value.
+    const settingsToPersist = { ...settings };
+    for (const key of appliedKeys) {
+      delete settingsToPersist[key];
+    }
+
     await ensureSettingsFile();
     const { writeSettingsFile } = await getNodeUtils();
-    await writeSettingsFile(settings);
+    await writeSettingsFile(settingsToPersist);
 
-    const { settings: effectiveSettings, appliedKeys } = applyEnvOverrides(settings);
+    // Re-apply env overrides for the response to show effective values
+    const { settings: effectiveSettings, appliedKeys: responseAppliedKeys } = applyEnvOverrides(settingsToPersist);
     applyLogDir(effectiveSettings.logDir);
-    return NextResponse.json(createSuccessResponse({ success: true, settings: effectiveSettings, metadata: getSettingMetadata(effectiveSettings, appliedKeys) }));
+    return NextResponse.json(createSuccessResponse({ success: true, settings: effectiveSettings, metadata: getSettingMetadata(effectiveSettings, responseAppliedKeys) }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
@@ -66,10 +79,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const errorPath = (error as NodeJS.ErrnoException)?.path;
     console.error("Failed to save settings:", error);
     return NextResponse.json(
-      createErrorResponse({ 
-        message: "Failed to save settings", 
-        status: 500, 
-        details: errorMessage, 
+      createErrorResponse({
+        message: "Failed to save settings",
+        status: 500,
+        details: errorMessage,
         stack: errorStack,
         code: errorCode,
         errno: errorErrno,
