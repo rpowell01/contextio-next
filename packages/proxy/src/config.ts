@@ -10,6 +10,7 @@ import fs from "node:fs";
 
 import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig, RetryConfig, ProvidersMap, ProviderConfig, ApiFormat, AuthType } from "@contextio/core";
 import { DEFAULT_OIDC_SCOPE, validateRateLimitConfig, validateRetryConfig, KNOWN_API_FORMATS, KNOWN_AUTH_TYPES, KNOWN_PROVIDERS, validateProviderConfig } from "@contextio/core";
+import { getAllProvidersFromDb } from "@contextio/core/db";
 
 /** Type predicate to check if a string is a valid Provider. */
 function isProvider(value: string): value is Provider {
@@ -24,6 +25,11 @@ function normalizeUpstreamUrl(url: string): string {
     return url;
   }
   return url.replace(/\/v1$/, "");
+}
+
+/** Get providers file path, checking environment variable at call time for test flexibility. */
+function getProvidersFilePath(): string {
+  return process.env.PROVIDERS_FILE || "/app/custom-policy/providers.json";
 }
 
 /** Web UI settings interface for capture cleanup and OIDC settings. */
@@ -74,19 +80,63 @@ function readWebUISettings(): WebUISettings {
   return {};
 }
 
-// Get providers file path, checking environment variable at call time for test flexibility
-function getProvidersFilePath(): string {
-  return process.env.PROVIDERS_FILE || "/app/custom-policy/providers.json";
+/**
+ * Load provider configurations from SQLite database.
+ *
+ * Reads and validates providers from the database. Each provider must have all
+ * required fields per the ProviderConfig schema. Invalid providers are skipped.
+ * Providers with enabled=false are excluded from the returned map.
+ * Falls back to providers.json for backward compatibility if database is empty.
+ */
+export function readProvidersConfig(filePath = getProvidersFilePath()): ProvidersMap {
+  // Try to read from SQLite database first
+  try {
+    const dbProviders = getAllProvidersFromDb();
+    
+    // If database has providers, use them
+    if (dbProviders.size > 0) {
+      const result: ProvidersMap = {} as ProvidersMap;
+      let loaded = 0;
+      let skipped = 0;
+      
+      for (const [key, config] of dbProviders) {
+        // Validate the provider config
+        try {
+          validateProviderConfig(config);
+        } catch (validationError) {
+          skipped++;
+          console.warn(`[config] skip db provider[${key}]: validation failed - ${validationError instanceof Error ? validationError.message : String(validationError)}`);
+          continue;
+        }
+        
+        if (config.enabled === false) {
+          skipped++;
+          console.warn(`[config] skip db provider[${key}]: disabled by enabled=false`);
+          continue;
+        }
+        
+        result[key as Provider] = config;
+        loaded++;
+      }
+      
+      if (loaded > 0) {
+        console.log(`[config] read providers from database: ${loaded} loaded, ${skipped} skipped, ${Object.keys(result).length} active`);
+        return result;
+      }
+      console.log(`[config] database has providers but none are valid/enabled, falling back to providers.json`);
+    }
+  } catch (err) {
+    console.log(`[config] failed to read providers from database, falling back to providers.json: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  
+  // Fallback to providers.json for backward compatibility
+  return readProvidersConfigFromFile(filePath);
 }
 
 /**
- * Load provider configurations from providers.json.
- *
- * Reads and validates the providers.json file. Each provider must have all
- * required fields per the ProviderConfig schema. Invalid providers are skipped.
- * Providers with enabled=false are excluded from the returned map.
+ * Load provider configurations from providers.json file (legacy fallback).
  */
-export function readProvidersConfig(filePath = getProvidersFilePath()): ProvidersMap {
+function readProvidersConfigFromFile(filePath: string): ProvidersMap {
   try {
     const data = fs.readFileSync(filePath, "utf8");
     const parsed = JSON.parse(data);

@@ -3,7 +3,7 @@
     "target": "es2015",
     "downlevelIteration": true,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "lib": [
       "dom",
       "dom.iterable",

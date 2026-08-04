@@ -51,7 +51,7 @@ async function handlePutProvider(
     if (errorMessage.includes("does not match id in body")) {
       return NextResponse.json(createErrorResponse({ message: errorMessage, status: 400 }), { status: 400 });
     }
-    if (errorMessage.includes("not found in file")) {
+    if (errorMessage.includes("not found")) {
       return NextResponse.json(createErrorResponse({ message: errorMessage, status: 404 }), { status: 404 });
     }
     console.error("Error updating provider:", error);
@@ -74,7 +74,7 @@ async function handleDeleteProvider(
     return NextResponse.json(createSuccessResponse({ data: { success: true } }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes("not found in file")) {
+    if (errorMessage.includes("not found") || errorMessage.includes("Cannot delete")) {
       return NextResponse.json(createErrorResponse({ message: errorMessage, status: 404 }), { status: 404 });
     }
     console.error("Error deleting provider:", error);

@@ -19,6 +19,7 @@ import type { EncryptionAtRestConfig, ProxyPlugin } from "@contextio/core";
 import { createLoggerPlugin } from "@contextio/logger";
 import { createRateLimiterPlugin } from "./rate-limiter.js";
 import { createRetryPlugin } from "./retry-plugin.js";
+import { initDb } from "@contextio/core/db";
 
 import { createProxy } from "./proxy.js";
 import { resolveConfig } from "./config.js";
@@ -129,6 +130,9 @@ console.log("[startup] Encryption at rest configuration:");
 }
 
 async function main(): Promise<void> {
+	// Initialize database (runs migrations and seeds default providers)
+	initDb();
+
 	const resolved = resolveConfig();
 	const plugins: ProxyPlugin[] = [];
 

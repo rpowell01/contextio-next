@@ -15,6 +15,7 @@ import { createRateLimiterPlugin } from "./rate-limiter.js";
 import { createRetryPlugin } from "./retry-plugin.js";
 import { resolveConfig } from "./config.js";
 import { createCombinedProxy } from "./combined-server.js";
+import { initDb } from "@contextio/core/db";
 
 async function loadPluginsFromEnv(): Promise<ProxyPlugin[]> {
   const pluginsEnv = process.env.CONTEXT_PROXY_PLUGINS;
@@ -60,7 +61,10 @@ async function loadPluginsFromEnv(): Promise<ProxyPlugin[]> {
 }
 
 async function main(): Promise<void> {
-  // CSRF_SECRET is provided via environment variable (set by Coolify at runtime)
+	// Initialize database (runs migrations and seeds default providers)
+	initDb();
+
+	// CSRF_SECRET is provided via environment variable (set by Coolify at runtime)
   if (process.env.CSRF_SECRET) {
     console.log("CSRF_SECRET found in environment");
   } else {

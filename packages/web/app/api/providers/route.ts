@@ -42,7 +42,7 @@ async function handlePostProviders(
     if (Array.isArray(details)) {
       return NextResponse.json(createErrorResponse({ message: "Validation failed", status: 400, details }), { status: 400 });
     }
-    if (errorMessage.includes("already exists in file")) {
+    if (errorMessage.includes("already exists")) {
       return NextResponse.json(createErrorResponse({ message: errorMessage, status: 409 }), { status: 409 });
     }
     console.error("Error creating provider:", error);
