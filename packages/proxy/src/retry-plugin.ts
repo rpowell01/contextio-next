@@ -1056,7 +1056,23 @@ export class RetryPlugin implements ProxyPlugin {
         streamState.errorMessage = sseState.errorMessage;
       }
     }
-    
+
+    // Also check for NVIDIA ResourceExhausted in the accumulated data buffer (envelope format)
+    // This handles: { "name": "UnknownError", "data": { "message": "..." } }
+    // which may not be caught by standard SSE error parsing
+    if (streamState.dataBuffer && streamState.dataBuffer.length > 0) {
+      const nvidiaCheck = this.checkNvidiaResourceExhausted(streamState.dataBuffer);
+      if (nvidiaCheck.isError) {
+        const shouldUpdate = !streamState.errorDetected ||
+          (streamState.errorStatus === null);
+        if (shouldUpdate) {
+          streamState.errorDetected = true;
+          streamState.errorStatus = 429; // NVIDIA ResourceExhausted is a rate limit error
+          streamState.errorMessage = nvidiaCheck.message;
+        }
+      }
+    }
+
     // Pass through the chunk to the client
     return chunk;
   }
@@ -1100,18 +1116,29 @@ export class RetryPlugin implements ProxyPlugin {
       } else if (streamState.partialField === "retry") {
         finalLine = "retry: " + streamState.partialContent;
       }
-      
+
       if (finalLine) {
         const errorInfo = this.parseSseForError(Buffer.from(finalLine, "utf8"));
         if (errorInfo.isError) {
           // Only update if we don't have a more specific error (non-null status)
           // or if no error was previously detected
-          const shouldUpdate = !streamState.errorDetected || 
+          const shouldUpdate = !streamState.errorDetected ||
             (errorInfo.status !== null && streamState.errorStatus === null);
           if (shouldUpdate) {
             streamState.errorDetected = true;
             streamState.errorStatus = errorInfo.status;
             streamState.errorMessage = errorInfo.message;
+          }
+        }
+        // Also check for NVIDIA ResourceExhausted in the partial content (envelope format)
+        const nvidiaCheck = this.checkNvidiaResourceExhausted(streamState.partialContent);
+        if (nvidiaCheck.isError) {
+          const shouldUpdate = !streamState.errorDetected ||
+            (streamState.errorStatus === null);
+          if (shouldUpdate) {
+            streamState.errorDetected = true;
+            streamState.errorStatus = 429; // NVIDIA ResourceExhausted is a rate limit error
+            streamState.errorMessage = nvidiaCheck.message;
           }
         }
       }
@@ -1126,12 +1153,26 @@ export class RetryPlugin implements ProxyPlugin {
       if (errorInfo.isError) {
         // Only update if we don't have a more specific error (non-null status)
         // or if no error was previously detected
-        const shouldUpdate = !streamState.errorDetected || 
+        const shouldUpdate = !streamState.errorDetected ||
           (errorInfo.status !== null && streamState.errorStatus === null);
         if (shouldUpdate) {
           streamState.errorDetected = true;
           streamState.errorStatus = errorInfo.status;
           streamState.errorMessage = errorInfo.message;
+        }
+      }
+      // Also check for NVIDIA ResourceExhausted in the data buffer (envelope format)
+      // This handles: { "name": "UnknownError", "data": { "message": "..." } }
+      const nvidiaCheck = this.checkNvidiaResourceExhausted(streamState.dataBuffer);
+      if (nvidiaCheck.isError) {
+        // Only update if we don't have a more specific error (non-null status)
+        // or if no error was previously detected
+        const shouldUpdate = !streamState.errorDetected ||
+          (streamState.errorStatus === null);
+        if (shouldUpdate) {
+          streamState.errorDetected = true;
+          streamState.errorStatus = 429; // NVIDIA ResourceExhausted is a rate limit error
+          streamState.errorMessage = nvidiaCheck.message;
         }
       }
       streamState.dataBuffer = "";
