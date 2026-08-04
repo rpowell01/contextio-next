@@ -41,10 +41,9 @@ RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json .npmrc ./
 COPY packages/ packages/
 
-# Install dependencies
+# Install dependencies with scripts allowed for approved packages
 RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
-    pnpm install --ignore-scripts --frozen-lockfile && \
-    pnpm rebuild sharp unrs-resolver onnxruntime-node better-sqlite3
+    pnpm install --frozen-lockfile
 
 # Build all packages with build-time env vars for version info
 RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
