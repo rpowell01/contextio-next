@@ -40,6 +40,20 @@ export {
 	type ProviderConfigWithMeta,
 } from "./provider-repo.js";
 
+export {
+	upsertCapture,
+	upsertCaptures,
+	getCaptureById,
+	getCapturesBySession,
+	getRecentCaptures,
+	getCapturesByDateRange,
+	deleteCapture,
+	getCaptureCount,
+	getStats,
+	searchCaptures,
+	type CaptureMetadata,
+} from "./capture-repo.js";
+
 /**
  * Initialize the database: open connection and run all pending migrations.
  * Call this once at application startup.

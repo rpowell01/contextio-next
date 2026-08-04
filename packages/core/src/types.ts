@@ -534,9 +534,41 @@ export interface RetryConfigWithProviders extends RetryConfig {
 	providers?: Partial<Record<Provider, Partial<RetryConfig>>>;
 }
 
+// --- Capture metadata ---
+
+/**
+ * Capture metadata stored in the database index.
+ *
+ * This is a lightweight index entry for fast querying. The full capture
+ * data (request/response bodies, headers, etc.) remains in JSON files on disk
+ * as the authoritative source of truth.
+ */
+export interface CaptureMetadata {
+	/** Unique capture identifier (matches filename). */
+	id: string;
+	/** Session ID from the URL path, or null if not tagged. */
+	sessionId?: string | null;
+	/** Relative filepath to the capture JSON file on disk. */
+	filepath: string;
+	/** Timestamp when the request was received (epoch milliseconds). */
+	timestamp: number;
+	/** Request model name if detected. */
+	requestModel?: string | null;
+	/** Response model name if detected. */
+	responseModel?: string | null;
+	/** Number of prompt tokens (if available). */
+	tokensPrompt?: number | null;
+	/** Number of completion tokens (if available). */
+	tokensCompletion?: number | null;
+	/** Total request duration in milliseconds (if available). */
+	durationMs?: number | null;
+	/** Capture status: 'success', 'error', 'streaming', etc. */
+	status: 'success' | 'error' | 'streaming' | string;
+	/** When this metadata entry was created in the database (epoch milliseconds). */
+	createdAt: number;
+}
 
 // --- Proxy config ---
-
 export interface ProxyConfig {
   port?: number;
   bindHost?: string;

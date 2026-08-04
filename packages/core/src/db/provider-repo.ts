@@ -218,6 +218,16 @@ export function updateProvider(id: string, config: ProviderConfig): ProviderConf
 	}
 
 	const db = getDb();
+
+	// Fetch existing provider to preserve source and dynamic fields
+	const existingRow = db.prepare("SELECT source, dynamic FROM providers WHERE id = ?").get(id) as
+		| { source: string; dynamic: number }
+		| undefined;
+
+	if (!existingRow) {
+		throw new Error(`Provider with id "${id}" not found`);
+	}
+
 	const row = providerConfigToRow(config);
 
 	const stmt = db.prepare(`
@@ -260,8 +270,8 @@ export function updateProvider(id: string, config: ProviderConfig): ProviderConf
 		row.custom_headers,
 		row.allow_base_url_override,
 		row.base_url_override_header,
-		row.source,
-		row.dynamic,
+		existingRow.source,  // Preserve original source
+		existingRow.dynamic, // Preserve original dynamic
 		id
 	);
 
