@@ -17,6 +17,8 @@
 
 import type { EncryptionAtRestConfig, ProxyPlugin } from "@contextio/core";
 import { createLoggerPlugin } from "@contextio/logger";
+import { createRateLimiterPlugin } from "./rate-limiter.js";
+import { createRetryPlugin } from "./retry-plugin.js";
 
 import { createProxy } from "./proxy.js";
 import { resolveConfig } from "./config.js";
@@ -130,8 +132,64 @@ async function main(): Promise<void> {
 	const resolved = resolveConfig();
 	const plugins: ProxyPlugin[] = [];
 
+	// Create rate-limiter plugin with resolved per-provider config
+	// The config.rateLimiter has per-provider settings from database + env overrides
+	const rateLimiterEnabled = process.env.RATE_LIMITER_ENABLED !== "false";
+	const providers: Record<string, { maxRequests: number; windowMs: number; bufferCapacity: number }> = {};
+	for (const [provider, rlConfig] of Object.entries(resolved.rateLimiter)) {
+		providers[provider] = {
+			maxRequests: rlConfig.maxRequests,
+			windowMs: rlConfig.windowMs,
+			bufferCapacity: rlConfig.bufferCapacity,
+		};
+	}
+
+	const rateLimiterPlugin = createRateLimiterPlugin({
+		defaults: {
+			maxRequests: resolved.rateLimiter.openai.maxRequests,
+			windowMs: resolved.rateLimiter.openai.windowMs,
+			bufferCapacity: resolved.rateLimiter.openai.bufferCapacity,
+		},
+		providers,
+		enabled: rateLimiterEnabled,
+	});
+
+	// Create retry plugin with resolved per-provider config
+	const retryProviders: Record<string, { maxRetries: number; baseDelayMs: number; maxDelayMs: number; retryableStatuses: number[]; jitterFactor: number }> = {};
+	for (const [provider, retryConfig] of Object.entries(resolved.retry)) {
+		retryProviders[provider] = {
+			maxRetries: retryConfig.maxRetries,
+			baseDelayMs: retryConfig.baseDelayMs,
+			maxDelayMs: retryConfig.maxDelayMs,
+			retryableStatuses: retryConfig.retryableStatuses,
+			jitterFactor: retryConfig.jitterFactor,
+		};
+	}
+
+	const retryPlugin = createRetryPlugin({
+		maxRetries: resolved.retry.openai.maxRetries,
+		baseDelayMs: resolved.retry.openai.baseDelayMs,
+		maxDelayMs: resolved.retry.openai.maxDelayMs,
+		retryableStatuses: resolved.retry.openai.retryableStatuses,
+		jitterFactor: resolved.retry.openai.jitterFactor,
+		providers: retryProviders,
+	});
+
+	// Add built-in plugins first (order matters: rate-limiter before retry for proper metrics)
+	plugins.push(rateLimiterPlugin, retryPlugin);
+	console.log(`Loaded plugin: rate-limiter (with per-provider config, enabled=${rateLimiterEnabled})`);
+	for (const [provider, rlConfig] of Object.entries(resolved.rateLimiter)) {
+		console.log(`  ${provider}: maxRequests=${rlConfig.maxRequests}, windowMs=${rlConfig.windowMs}, buffer=${rlConfig.bufferCapacity}`);
+	}
+	console.log(`Loaded plugin: retry (with per-provider config from database)`);
+	for (const [provider, retryConfig] of Object.entries(resolved.retry)) {
+		console.log(`  ${provider}: maxRetries=${retryConfig.maxRetries}, baseDelayMs=${retryConfig.baseDelayMs}, maxDelayMs=${retryConfig.maxDelayMs}`);
+	}
+
 	const fromEnv = await loadPluginsFromEnv();
-	plugins.push(...fromEnv);
+	// Replace any rate-limiter/retry plugin loaded from env with our properly configured ones
+	const filteredFromEnv = fromEnv.filter(p => p.name !== "rate-limiter" && p.name !== "retry");
+	plugins.push(...filteredFromEnv);
 
 	// Construct logger plugin with encryption config if enabled
 	const loggerPlugin = buildLoggerPlugin(resolved.loggerEncryption);
