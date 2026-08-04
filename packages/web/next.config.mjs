@@ -30,6 +30,7 @@ const nextConfig = {
     "@contextio/redact",
     "onnxruntime-node",
     "@huggingface/tokenizers",
+    "better-sqlite3",
     // Node.js built-in modules with node: protocol (required for Turbopack dev mode)
     "node:crypto",
     "node:fs",
@@ -88,7 +89,7 @@ const nextConfig = {
     };
 
     // Exclude native Node.js modules from bundling
-    const nativeModules = ["onnxruntime-node", "onnxruntime-node/napi", "onnxruntime-web", "sharp", "unrs-resolver", "@huggingface/tokenizers"];
+    const nativeModules = ["onnxruntime-node", "onnxruntime-node/napi", "onnxruntime-web", "sharp", "unrs-resolver", "@huggingface/tokenizers", "better-sqlite3"];
 
     if (!isServer) {
       config.resolve.fallback = {
