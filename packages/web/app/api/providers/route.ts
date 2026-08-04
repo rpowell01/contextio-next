@@ -13,8 +13,18 @@ async function handleGetProviders(
     const providers = await getAllProviders();
     return NextResponse.json(createSuccessResponse({ data: providers, total: providers.length }));
   } catch (error) {
-    console.error("Error in providers list API:", error);
-    return NextResponse.json(createErrorResponse({ message: "Internal server error", status: 500 }), { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("Error in providers list API:", { message: errorMessage, stack: errorStack });
+    // Return a more informative error response
+    return NextResponse.json(
+      createErrorResponse({ 
+        message: "Failed to load providers", 
+        status: 500,
+        details: errorMessage 
+      }), 
+      { status: 500 }
+    );
   }
 }
 
