@@ -10,7 +10,7 @@ import { getSession, type AuthSession } from "./session";
 
 /** Options for auth guards. */
 export interface AuthGuardOptions {
-  /** Custom redirect URL for unauthenticated requests (default: /auth/login). */
+  /** Custom redirect URL for unauthenticated requests (default: /login). */
   loginUrl?: string;
   /** Whether to return 401 JSON instead of redirecting (default: false for API routes). */
   returnJson?: boolean;
@@ -52,7 +52,7 @@ export function withAuth<
   handler: T,
   options: AuthGuardOptions = {}
 ): (request: NextRequest, context: { params: ExtractParams<T> }) => Promise<Response> {
-  const { loginUrl = "/auth/login", returnJson = true, errorMessage = "Unauthorized" } = options;
+  const { loginUrl = "/login", returnJson = true, errorMessage = "Unauthorized" } = options;
 
   return async (request: NextRequest, context: { params: ExtractParams<T> }) => {
     const session = await getSession();

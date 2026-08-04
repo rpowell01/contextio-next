@@ -119,6 +119,13 @@ function applyMigration(db: ReturnType<typeof getDb>, migration: Migration): voi
 export function runMigrations(): void {
   const db = initConnection();
   const migrations = getMigrations();
+  
+  if (migrations.length === 0) {
+    console.warn("[migrations] No migration files found. Database schema may not be initialized.");
+    console.warn("[migrations] Expected migrations directory:", join(__dirname, "migrations"));
+    return;
+  }
+  
   const currentVersion = getCurrentVersion(db);
 
   const pendingMigrations = migrations.filter((m) => m.version > currentVersion);

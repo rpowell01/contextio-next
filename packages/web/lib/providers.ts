@@ -12,13 +12,44 @@ import {
 	updateProvider as dbUpdateProvider,
 	deleteProvider as dbDeleteProvider,
 	initDb,
+	getDb,
 } from "@contextio/core/db";
 
-// Initialize database on first import (for Next.js API routes)
-try {
-	initDb();
-} catch (err) {
-	console.error("[providers] Failed to initialize database:", err instanceof Error ? err.message : String(err));
+let dbInitialized = false;
+let dbInitError: Error | null = null;
+
+/**
+ * Ensure database is initialized. Call this before any database operation.
+ * Uses lazy initialization to avoid issues during build time.
+ */
+function ensureDbInitialized(): void {
+	if (dbInitialized) return;
+	
+	try {
+		initDb();
+		dbInitialized = true;
+	} catch (err) {
+		dbInitError = err instanceof Error ? err : new Error(String(err));
+		console.error("[providers] Failed to initialize database:", dbInitError.message);
+		throw dbInitError;
+	}
+}
+
+/**
+ * Check if database is available and initialized.
+ * Returns true if database is ready, false if initialization failed.
+ */
+export function isDatabaseAvailable(): boolean {
+	if (dbInitError) return false;
+	try {
+		ensureDbInitialized();
+		// Verify the providers table exists
+		const db = getDb();
+		db.prepare("SELECT 1 FROM providers LIMIT 1").get();
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 // Web UI schema for provider creation/editing (subset of full ProviderConfig)
@@ -123,17 +154,20 @@ function toProviderMetadata(provider: {
 }
 
 export async function getAllProviders(): Promise<ProviderMetadata[]> {
+	ensureDbInitialized();
 	const merged = getAllMergedProviders();
 	return merged.map(toProviderMetadata);
 }
 
 export async function getProviderById(id: string): Promise<ProviderMetadata | null> {
+	ensureDbInitialized();
 	const merged = getAllMergedProviders();
 	const provider = merged.find((p: typeof merged[0]) => p.id === id);
 	return provider ? toProviderMetadata(provider) : null;
 }
 
 export async function createProvider(config: ProviderConfigInput): Promise<ProviderMetadata> {
+	ensureDbInitialized();
 	const validated = ProviderConfigSchema.parse(config);
 
 	const coreConfig = toCoreProviderConfig(validated);
@@ -145,6 +179,7 @@ export async function createProvider(config: ProviderConfigInput): Promise<Provi
 }
 
 export async function updateProvider(id: string, config: ProviderConfigInput): Promise<ProviderMetadata> {
+	ensureDbInitialized();
 	const validated = ProviderConfigSchema.parse(config);
 
 	if (validated.id !== id) {
@@ -168,6 +203,7 @@ export async function updateProvider(id: string, config: ProviderConfigInput): P
 }
 
 export async function deleteProvider(id: string): Promise<void> {
+	ensureDbInitialized();
 	// Check if provider exists
 	const existing = await getProviderById(id);
 	if (!existing) {

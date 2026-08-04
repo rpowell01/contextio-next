@@ -18,7 +18,7 @@ export async function GET(): Promise<NextResponse> {
     {
       id: "oidc",
       name: "OpenID Connect",
-      authUrl: `/auth/login?redirect=`,
+      authUrl: `/login?redirect=`,
     },
   ];
 
