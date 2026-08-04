@@ -184,27 +184,46 @@ async function ensureProvidersFile(): Promise<void> {
   }
 }
 
+/**
+ * Migrates legacy array-format providers to the object (map) format.
+ *
+ * Pure function: no side effects, no file I/O. Called by readFileProviders
+ * when an array-format providers.json is detected. The migration itself is
+ * not persisted here — that is handled by withProvidersLock to avoid race
+ * conditions in the unlocked getAllProviders read path.
+ *
+ * @param arr - Parsed JSON array from providers.json
+ * @returns Object keyed by provider id
+ */
+export function migrateProvidersArray(
+	arr: unknown[],
+): Record<string, CoreProviderConfig> {
+	const migrated: Record<string, CoreProviderConfig> = {};
+	for (const p of arr) {
+		try {
+			const validated = ProviderConfigSchema.parse(p);
+			migrated[validated.id] = toCoreProviderConfig(validated);
+		} catch {
+			// skip invalid entries
+		}
+	}
+	return migrated;
+}
+
 async function readFileProviders(): Promise<Record<string, CoreProviderConfig>> {
   await ensureProvidersFile();
   try {
     const raw = await fs.readFile(PROVIDERS_FILE, "utf8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      // Migrate from old array format to object format
-      const migrated: Record<string, CoreProviderConfig> = {};
-      for (const p of parsed) {
-        try {
-          const validated = ProviderConfigSchema.parse(p);
-          migrated[validated.id] = toCoreProviderConfig(validated);
-        } catch {
-          // skip invalid
-        }
-      }
-      // Only write back migrated format if at least one provider was successfully migrated
-      if (Object.keys(migrated).length > 0) {
-        await fs.writeFile(PROVIDERS_FILE, JSON.stringify(migrated, null, 2), "utf8");
-      }
-      return migrated;
+      // Migrate from legacy array format to object format in-memory only.
+      // The migration write is intentionally NOT performed here to avoid a
+      // TOCTOU race: readFileProviders is called from getAllProviders without
+      // the file lock, and a direct write could clobber concurrent locked
+      // writes from createProvider/updateProvider/deleteProvider.
+      // The migration is persisted by withProvidersLock when the next write
+      // operation occurs (its callback writes the full providers object).
+      return migrateProvidersArray(parsed);
     }
     if (typeof parsed === "object" && parsed !== null) {
       const result: Record<string, CoreProviderConfig> = {};
