@@ -28,7 +28,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Loader2, Trash2, Edit2, Plus } from "lucide-react";
+import { Loader2, Trash2, Edit2, Plus, Database, Shield, Gauge, Palette, Server, EyeOff } from "lucide-react";
 
 // NOTE: /api/settings (GET and POST) has no authentication. Any client that can reach
 // the web server can read or overwrite settings. Treat the settings file as sensitive
@@ -120,6 +120,18 @@ function SettingHelp({
   );
 }
 
+// Tab configuration (module scope for stability)
+type SettingsTab = "logging" | "redaction" | "security" | "rateLimiter" | "appearance" | "providers";
+
+const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  { id: "logging", label: "Logging", icon: <Database className="h-4 w-4" /> },
+  { id: "redaction", label: "Redaction", icon: <EyeOff className="h-4 w-4" /> },
+  { id: "security", label: "Security", icon: <Shield className="h-4 w-4" /> },
+  { id: "rateLimiter", label: "Rate Limiter", icon: <Gauge className="h-4 w-4" /> },
+  { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
+  { id: "providers", label: "Providers", icon: <Server className="h-4 w-4" /> },
+];
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Omit<Settings, "theme">>({
     logDir: "./captures",
@@ -165,7 +177,325 @@ export default function SettingsPage() {
   const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
-  
+
+  // Initialize active tab from localStorage or default to "logging"
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("settings-active-tab");
+      if (saved && tabs.some((t) => t.id === saved)) {
+        return saved as SettingsTab;
+      }
+    }
+    return "logging";
+  });
+
+  // Persist active tab to localStorage
+  useEffect(() => {
+    localStorage.setItem("settings-active-tab", activeTab);
+  }, [activeTab]);
+
+  // Keyboard navigation for tabs
+  const handleTabKeyDown = (event: React.KeyboardEvent, _tabId: SettingsTab, index: number) => {
+    let newIndex = index;
+    switch (event.key) {
+      case "ArrowRight":
+        event.preventDefault();
+        newIndex = (index + 1) % tabs.length;
+        break;
+      case "ArrowLeft":
+        event.preventDefault();
+        newIndex = (index - 1 + tabs.length) % tabs.length;
+        break;
+      case "Home":
+        event.preventDefault();
+        newIndex = 0;
+        break;
+      case "End":
+        event.preventDefault();
+        newIndex = tabs.length - 1;
+        break;
+      default:
+        return;
+    }
+    setActiveTab(tabs[newIndex].id);
+  };
+
+  // Focus the active tab when it changes (handles keyboard navigation focus)
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  useEffect(() => {
+    const activeIndex = tabs.findIndex((t) => t.id === activeTab);
+    if (activeIndex >= 0 && tabRefs.current[activeIndex]) {
+      tabRefs.current[activeIndex]?.focus();
+    }
+  }, [activeTab]);
+
+  // Render tab panel content
+  const renderTabPanel = () => {
+    switch (activeTab) {
+      case "logging":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-logging" aria-labelledby="tab-logging">
+            <h3 className="font-semibold mb-4">Logging</h3>
+            <div className="space-y-4">
+              {renderSetting("logDir")}
+              {renderSetting("maxSessions")}
+              {renderSetting("captureCleanupEnabled")}
+              {settings.captureCleanupEnabled && (
+                <div className="grid gap-4 md:grid-cols-2 pt-2 border-t">
+                  {renderSetting("captureCleanupIntervalHours")}
+                  {renderSetting("captureCleanupMaxAgeDays")}
+                </div>
+              )}
+
+              <div className="pt-4 border-t">
+                <AlertDialog
+                  open={deleteDialogOpen}
+                  onOpenChange={setDeleteDialogOpen}
+                >
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="flex items-center gap-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remove All Captures
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete ALL capture files in the
+                        capture directory. This action cannot be undone. All
+                        captured API requests and responses will be lost.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <Button
+                        variant="destructive"
+                        disabled={isCleaning}
+                        onClick={handleCleanupAll}
+                        className="flex items-center gap-2"
+                      >
+                        {isCleaning ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Cleaning...
+                          </>
+                        ) : (
+                          "Yes, delete all captures"
+                        )}
+                      </Button>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+          </div>
+        );
+      case "redaction":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-redaction" aria-labelledby="tab-redaction">
+            <h3 className="font-semibold mb-4">Redaction</h3>
+            <div className="space-y-4">
+              {renderSetting("redactPreset")}
+              {renderSetting("redactReversible")}
+              {renderSetting("redactPolicyFile")}
+              <div className="pt-2 border-t">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Detector Settings</h4>
+                <div className="space-y-4">
+                  {renderSetting("detectorMode")}
+                  {renderSetting("detectorModelDir")}
+                  {renderSetting("detectorThreshold")}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case "security":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-security" aria-labelledby="tab-security">
+            <h3 className="font-semibold mb-4">Security</h3>
+            <div className="space-y-4">
+              {renderSetting("encryptionAtRest")}
+              {renderSetting("oidcEnabled")}
+              {renderSetting("oidcPublicUrl")}
+            </div>
+          </div>
+        );
+      case "rateLimiter":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-rateLimiter" aria-labelledby="tab-rateLimiter">
+            <h3 className="font-semibold mb-4">Rate Limiter</h3>
+            <div className="space-y-4">
+              {renderSetting("rateLimiter")}
+            </div>
+          </div>
+        );
+      case "appearance":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-appearance" aria-labelledby="tab-appearance">
+            <h3 className="font-semibold mb-4">Appearance</h3>
+            <div className="space-y-4">
+              {renderSetting("theme")}
+              {renderSetting("showPageLoadTime")}
+            </div>
+          </div>
+        );
+      case "providers":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-providers" aria-labelledby="tab-providers">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Providers</h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openAddProviderDialog}
+                disabled={providersLoading}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Provider
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Default and environment-configured providers are managed externally.
+              Click "Add Provider" to create your own custom provider, which you can then edit or delete.
+            </p>
+
+            {providersError && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 mb-4">
+                {providersError}
+              </div>
+            )}
+
+            {providersLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : providers.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No providers configured. Click "Add Provider" to create one.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border rounded">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Name</th>
+                      <th className="px-3 py-2 text-left font-medium">ID</th>
+                      <th className="px-3 py-2 text-left font-medium">Base URL</th>
+                      <th className="px-3 py-2 text-left font-medium">Models</th>
+                      <th className="px-3 py-2 text-left font-medium">Status</th>
+                      <th className="px-3 py-2 text-left font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {providers.map((provider) => (
+                      <tr key={provider.id} className="border-t">
+                        <td className="px-3 py-2 font-medium">{provider.name}</td>
+                        <td className="px-3 py-2 font-mono text-xs">{provider.id}</td>
+                        <td className="px-3 py-2 font-mono text-xs max-w-xs truncate" title={provider.baseUrl}>
+                          {provider.baseUrl}
+                        </td>
+                        <td className="px-3 py-2">
+                          {provider.models.length > 0 ? (
+                            <span className="text-xs text-muted-foreground whitespace-pre-wrap">{provider.models.join("\n")}</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              provider.source === "file"
+                                ? "bg-blue-100 text-blue-800"
+                                : provider.source === "env"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                            title={
+                              provider.source === "file"
+                                ? "Configured in providers.json (user-defined)"
+                                : provider.source === "env"
+                                ? "Configured via environment variable"
+                                : "Default built-in provider"
+                            }
+                          >
+                            {provider.source === "file" ? "File" : provider.source === "env" ? "Env" : "Default"}
+                          </span>
+                          {provider.dynamic && (
+                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-800" title="User-created">
+                              Custom
+                            </span>
+                          )}
+                          {provider.source === "env" && (
+                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800" title="Overridden by environment variable">
+                              Env Override
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            {provider.source === "file" && provider.dynamic && (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditProviderDialog(provider)}
+                                  disabled={providerFormSubmitting}
+                                  className="h-8 w-8 p-0"
+                                  title="Edit provider"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openDeleteProviderDialog(provider)}
+                                  disabled={deleteProviderSubmitting}
+                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  title="Delete provider"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            {provider.source === "default" && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditProviderDialog(provider)}
+                                disabled={providerFormSubmitting}
+                                className="h-8 w-8 p-0"
+                                title="Edit provider (creates custom copy)"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {provider.source !== "file" && provider.source !== "default" && (
+                              <span className="text-xs text-muted-foreground">Managed externally</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   // Providers state
   const [providers, setProviders] = useState<ProviderMetadata[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
@@ -187,7 +517,7 @@ export default function SettingsPage() {
   const [providerFormSubmitting, setProviderFormSubmitting] = useState(false);
   const [deleteProviderSubmitting, setDeleteProviderSubmitting] = useState(false);
   const [isEditingDefault, setIsEditingDefault] = useState(false);
-  
+
   const { theme, setTheme, isOverridden: themeIsOverridden } = useTheme();
 
   useEffect(() => {
@@ -420,7 +750,7 @@ export default function SettingsPage() {
 
   const handleProviderFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Client-side validation
     if (!providerFormData.id.trim()) {
       setProviderFormError("Provider ID is required");
@@ -441,7 +771,7 @@ export default function SettingsPage() {
       setProviderFormError("Base URL must be a valid URL");
       return;
     }
-    
+
     setProviderFormSubmitting(true);
     setProviderFormError(null);
     try {
@@ -1185,252 +1515,40 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* Tab Navigation */}
+        <div className="rounded-lg border">
+          <nav aria-label="Settings sections" className="border-b">
+            <ul role="tablist" aria-orientation="horizontal" className="flex flex-wrap gap-1 p-1 bg-muted/50">
+              {tabs.map((tab, index) => (
+                <li key={tab.id} role="presentation">
+                  <button
+                    ref={(el) => {
+                      tabRefs.current[index] = el;
+                    }}
+                    role="tab"
+                    id={`tab-${tab.id}`}
+                    aria-selected={activeTab === tab.id}
+                    aria-controls={`panel-${tab.id}`}
+                    tabIndex={activeTab === tab.id ? 0 : -1}
+                    onClick={() => setActiveTab(tab.id)}
+                    onKeyDown={(e) => handleTabKeyDown(e, tab.id, index)}
+                    className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+                      activeTab === tab.id
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-background"
+                    }`}
+                  >
+                    <span aria-hidden="true">{tab.icon}</span>
+                    {tab.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="rounded-lg border p-6">
-            <h3 className="font-semibold mb-4">Logging</h3>
-            <div className="space-y-4">
-              {renderSetting("logDir")}
-              {renderSetting("maxSessions")}
-              {renderSetting("captureCleanupEnabled")}
-              {settings.captureCleanupEnabled && (
-                <div className="grid gap-4 md:grid-cols-2 pt-2 border-t">
-                  {renderSetting("captureCleanupIntervalHours")}
-                  {renderSetting("captureCleanupMaxAgeDays")}
-                </div>
-              )}
-
-              <div className="pt-4 border-t">
-                <AlertDialog
-                  open={deleteDialogOpen}
-                  onOpenChange={setDeleteDialogOpen}
-                >
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      className="flex items-center gap-2"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Remove All Captures
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete ALL capture files in the
-                        capture directory. This action cannot be undone. All
-                        captured API requests and responses will be lost.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <Button
-                        variant="destructive"
-                        disabled={isCleaning}
-                        onClick={handleCleanupAll}
-                        className="flex items-center gap-2"
-                      >
-                        {isCleaning ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            Cleaning...
-                          </>
-                        ) : (
-                          "Yes, delete all captures"
-                        )}
-                      </Button>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-lg border p-6">
-            <h3 className="font-semibold mb-4">Redaction</h3>
-            <div className="space-y-4">
-              {renderSetting("redactPreset")}
-              {renderSetting("redactReversible")}
-              {renderSetting("redactPolicyFile")}
-              <div className="pt-2 border-t">
-                <h4 className="text-sm font-medium text-muted-foreground mb-3">Detector Settings</h4>
-                <div className="space-y-4">
-                  {renderSetting("detectorMode")}
-                  {renderSetting("detectorModelDir")}
-                  {renderSetting("detectorThreshold")}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border p-6">
-            <h3 className="font-semibold mb-4">Security</h3>
-            <div className="space-y-4">
-              {renderSetting("encryptionAtRest")}
-              {renderSetting("oidcEnabled")}
-              {renderSetting("oidcPublicUrl")}
-            </div>
-          </div>
-          <div className="rounded-lg border p-6">
-            <h3 className="font-semibold mb-4">Rate Limiter</h3>
-            <div className="space-y-4">
-              {renderSetting("rateLimiter")}
-            </div>
-          </div>
-          <div className="rounded-lg border p-6">
-            <h3 className="font-semibold mb-4">Appearance</h3>
-            <div className="space-y-4">
-              {renderSetting("theme")}
-              {renderSetting("showPageLoadTime")}
-            </div>
-          </div>
-
-          {/* Providers Section */}
-          <div className="rounded-lg border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Providers</h3>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={openAddProviderDialog}
-                disabled={providersLoading}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Provider
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mb-4">
-              Default and environment-configured providers are managed externally. 
-              Click "Add Provider" to create your own custom provider, which you can then edit or delete.
-            </p>
-            
-            {providersError && (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 mb-4">
-                {providersError}
-              </div>
-            )}
-
-            {providersLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : providers.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>No providers configured. Click "Add Provider" to create one.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border rounded">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium">Name</th>
-                      <th className="px-3 py-2 text-left font-medium">ID</th>
-                      <th className="px-3 py-2 text-left font-medium">Base URL</th>
-                      <th className="px-3 py-2 text-left font-medium">Models</th>
-                      <th className="px-3 py-2 text-left font-medium">Status</th>
-                      <th className="px-3 py-2 text-left font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {providers.map((provider) => (
-                      <tr key={provider.id} className="border-t">
-                        <td className="px-3 py-2 font-medium">{provider.name}</td>
-                        <td className="px-3 py-2 font-mono text-xs">{provider.id}</td>
-                        <td className="px-3 py-2 font-mono text-xs max-w-xs truncate" title={provider.baseUrl}>
-                          {provider.baseUrl}
-                        </td>
-<td className="px-3 py-2">
-                           {provider.models.length > 0 ? (
-                             <span className="text-xs text-muted-foreground whitespace-pre-wrap">{provider.models.join("\n")}</span>
-                           ) : (
-                             <span className="text-xs text-muted-foreground">—</span>
-                           )}
-                         </td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                              provider.source === "file"
-                                ? "bg-blue-100 text-blue-800"
-                                : provider.source === "env"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-gray-100 text-gray-800"
-                            }`}
-                            title={
-                              provider.source === "file"
-                                ? "Configured in providers.json (user-defined)"
-                                : provider.source === "env"
-                                ? "Configured via environment variable"
-                                : "Default built-in provider"
-                            }
-                          >
-                            {provider.source === "file" ? "File" : provider.source === "env" ? "Env" : "Default"}
-                          </span>
-                          {provider.dynamic && (
-                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-800" title="User-created">
-                              Custom
-                            </span>
-                          )}
-                          {provider.source === "env" && (
-                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800" title="Overridden by environment variable">
-                              Env Override
-                            </span>
-                          )}
-                        </td>
-<td className="px-3 py-2">
-                           <div className="flex items-center gap-2">
-                             {provider.source === "file" && provider.dynamic && (
-                               <>
-                                 <Button
-                                   type="button"
-                                   variant="ghost"
-                                   size="sm"
-                                   onClick={() => openEditProviderDialog(provider)}
-                                   disabled={providerFormSubmitting}
-                                   className="h-8 w-8 p-0"
-                                   title="Edit provider"
-                                 >
-                                   <Edit2 className="h-4 w-4" />
-                                 </Button>
-                                 <Button
-                                   type="button"
-                                   variant="ghost"
-                                   size="sm"
-                                   onClick={() => openDeleteProviderDialog(provider)}
-                                   disabled={deleteProviderSubmitting}
-                                   className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                   title="Delete provider"
-                                 >
-                                   <Trash2 className="h-4 w-4" />
-                                 </Button>
-                               </>
-                             )}
-                             {provider.source === "default" && (
-                               <Button
-                                 type="button"
-                                 variant="ghost"
-                                 size="sm"
-                                 onClick={() => openEditProviderDialog(provider)}
-                                 disabled={providerFormSubmitting}
-                                 className="h-8 w-8 p-0"
-                                 title="Edit provider (creates custom copy)"
-                               >
-                                 <Edit2 className="h-4 w-4" />
-                               </Button>
-                             )}
-                             {provider.source !== "file" && provider.source !== "default" && (
-                               <span className="text-xs text-muted-foreground">Managed externally</span>
-                             )}
-                           </div>
-                         </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
+          {renderTabPanel()}
           <Button type="submit" className="w-full md:w-auto" disabled={loading}>
             {loading ? "Loading..." : "Save Settings"}
           </Button>
