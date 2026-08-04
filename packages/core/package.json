@@ -1,7 +1,7 @@
 {
   "name": "@contextio/core",
   "version": "0.3.2",
-  "description": "Shared types, routing, and header utilities for the @context ecosystem. Zero dependencies.",
+  "description": "Shared types, routing, header utilities, and SQLite database core for the @context ecosystem.",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -14,6 +14,10 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
+    },
+    "./db": {
+      "types": "./dist/db/index.d.ts",
+      "import": "./dist/db/index.js"
     }
   },
   "files": [
@@ -31,16 +35,23 @@
     "proxy",
     "api",
     "context",
-    "http"
+    "http",
+    "sqlite",
+    "database"
   ],
   "scripts": {
     "build": "tsc",
+    "postbuild": "cp -r src/db/migrations dist/db/migrations 2>/dev/null || true",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "test": "node --test test/*.test.ts",
     "prepublishOnly": "pnpm run build"
   },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22",
     "typescript": "^5.7"
   }

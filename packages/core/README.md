@@ -2,9 +2,9 @@
 
 [![npm](https://img.shields.io/npm/v/@contextio/core)](https://www.npmjs.com/package/@contextio/core)
 
-Shared types, routing, and utility functions for the contextio-next packages. Zero npm dependencies.
+Shared types, routing, utility functions, and SQLite database core for the contextio-next packages.
 
-This is the contract layer. It defines the plugin interface, request/response types, provider routing, header filtering, model pricing, token estimation, and security scanning. Every other `@contextio/*` package depends on this.
+This is the contract layer. It defines the plugin interface, request/response types, provider routing, header filtering, model pricing, token estimation, security scanning, and SQLite database management. Every other `@contextio/*` package depends on this.
 
 ## Install
 
@@ -13,6 +13,27 @@ npm install @contextio/core
 ```
 
 ## What's in here
+
+### Database core
+
+```typescript
+import { initDb, getDb, runMigrations, closeDb } from '@contextio/core/db';
+
+// Initialize database (opens connection, runs migrations)
+initDb();
+
+// Get database instance for direct queries
+const db = getDb();
+const rows = db.prepare('SELECT * FROM providers').all();
+
+// Run pending migrations manually
+runMigrations();
+
+// Close on shutdown
+closeDb();
+```
+
+The database uses `better-sqlite3` with WAL mode, foreign keys enabled, and a configurable path (`~/.contextio/contextio.db` or `CONTEXTIO_DB_PATH` env var). Migrations are tracked in a `schema_version` table.
 
 ### Plugin interface
 

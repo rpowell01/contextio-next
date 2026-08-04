@@ -124,3 +124,17 @@ export {
   validateRetryConfig,
   validateProvidersMap,
 } from "./types.js";
+
+// Database core: SQLite connection, migrations, and schema initialization
+export {
+  initDb,
+  runMigrations,
+  getDb,
+  closeDb,
+  isDbInitialized,
+  getDbPath,
+  getSchemaVersion,
+  getAppliedMigrations,
+  getPendingMigrations,
+  type Migration,
+} from "./db/index.js";
