@@ -25,6 +25,14 @@ RUN corepack enable && \
     export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     pnpm config set minimum-release-age 0 --global
 
+# Install build dependencies for native modules (better-sqlite3 needs python3, make, g++, sqlite3)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy root package files and all packages for pnpm install
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json .npmrc ./
 COPY packages/ packages/
