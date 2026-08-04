@@ -32,7 +32,7 @@ COPY packages/ packages/
 # Install dependencies
 RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     pnpm install --ignore-scripts --frozen-lockfile && \
-    pnpm rebuild sharp unrs-resolver onnxruntime-node
+    pnpm rebuild sharp unrs-resolver onnxruntime-node better-sqlite3
 
 # Build all packages with build-time env vars for version info
 RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
