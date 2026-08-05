@@ -3,14 +3,14 @@
 import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 
-function LoginPageContent() {
+function AuthCallbackPageContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Redirect to proxy's OIDC login endpoint
-    const redirectUrl = searchParams.get("redirect") || "/";
-    const proxyLoginUrl = `/auth/login?redirect=${encodeURIComponent(redirectUrl)}`;
-    window.location.href = proxyLoginUrl;
+    // Proxy the callback to the proxy's auth callback endpoint
+    const queryString = searchParams.toString();
+    const proxyCallbackUrl = `/auth/callback${queryString ? "?" + queryString : ""}`;
+    window.location.href = proxyCallbackUrl;
   }, [searchParams]);
 
   return (
@@ -27,20 +27,20 @@ function LoginPageContent() {
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
-        <p className="text-muted-foreground">Redirecting to login...</p>
+        <p className="text-muted-foreground">Completing login...</p>
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
       </div>
     </div>
   );
 }
 
-export default function LoginPage() {
+export default function AuthCallbackPage() {
   return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-background"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}>
-      <LoginPageContent />
+      <AuthCallbackPageContent />
     </Suspense>
   );
 }

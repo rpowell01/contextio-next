@@ -113,7 +113,7 @@ export default function RedactionsPage() {
     try {
       const fetchPromise = fetch("/api/redactions?summary=true");
       const timeoutPromise = new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error("Fetch timeout")), 10000)
+        setTimeout(() => reject(new Error("Fetch timeout")), 30000)
       );
       const res = await Promise.race([fetchPromise, timeoutPromise]);
       console.log("[Redactions] Fetch completed, status:", res.status);
@@ -148,7 +148,7 @@ export default function RedactionsPage() {
     try {
       const fetchPromise = fetch(`/api/redactions/detail/${row.captureId}/0`);
       const timeoutPromise = new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error("Fetch timeout")), 10000)
+        setTimeout(() => reject(new Error("Fetch timeout")), 30000)
       );
       const res = await Promise.race([fetchPromise, timeoutPromise]);
       if (res.ok) {
@@ -208,7 +208,11 @@ export default function RedactionsPage() {
     let cancelled = false;
     const fetchSummaryData = async () => {
       try {
-        const res = await fetch("/api/redactions?summary=true");
+        const fetchPromise = fetch("/api/redactions?summary=true");
+        const timeoutPromise = new Promise<Response>((_, reject) =>
+          setTimeout(() => reject(new Error("Fetch timeout")), 30000)
+        );
+        const res = await Promise.race([fetchPromise, timeoutPromise]);
         if (!res.ok) throw new Error("Failed to fetch summary");
         const data = await res.json();
         if (!cancelled) {
@@ -250,7 +254,11 @@ export default function RedactionsPage() {
         }
         const url = `/api/redactions?${params.toString()}`;
         console.log("[RedactionFilter] Fetching:", url);
-        const res = await fetch(url);
+        const fetchPromise = fetch(url);
+        const timeoutPromise = new Promise<Response>((_, reject) =>
+          setTimeout(() => reject(new Error("Fetch timeout")), 30000)
+        );
+        const res = await Promise.race([fetchPromise, timeoutPromise]);
         if (!res.ok) throw new Error("Failed to fetch details");
         const data = await res.json();
         if (!cancelled) {
