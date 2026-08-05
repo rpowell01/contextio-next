@@ -199,6 +199,7 @@ class APIClient {
         const response = await fetch(`${baseUrl}${endpoint}`, {
           ...options,
           signal,
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
             ...this.csrfHeaders(),
@@ -851,6 +852,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
         const response = await fetch(`${baseUrl}${endpoint}`, {
           ...options,
           signal,
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
             ...this.csrfHeaders(),
