@@ -407,6 +407,13 @@ async function extractMissingFieldsFromCapture(
 
 		console.log(`[redaction-repo] DEBUG: ${captureId} - capture keys: ${Object.keys(capture).join(", ")}`);
 		console.log(`[redaction-repo] DEBUG: ${captureId} - existingMeta keys: ${Object.keys(existingMeta).join(", ")}`);
+		// Log actual values for debugging
+		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.source: ${JSON.stringify(capture.source)}, existingMeta.source: ${JSON.stringify(existingMeta.source)}`);
+		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.provider: ${JSON.stringify(capture.provider)}, existingMeta.provider: ${JSON.stringify(existingMeta.provider)}`);
+		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.targetUrl: ${JSON.stringify(capture.targetUrl)}, existingMeta.targetUrl: ${JSON.stringify(existingMeta.targetUrl)}`);
+		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.timings: ${JSON.stringify(capture.timings)}, existingMeta.timings: ${JSON.stringify(existingMeta.timings)}`);
+		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.requestBytes: ${JSON.stringify(capture.requestBytes)}, existingMeta.requestBytes: ${JSON.stringify(existingMeta.requestBytes)}`);
+		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.responseBytes: ${JSON.stringify(capture.responseBytes)}, existingMeta.responseBytes: ${JSON.stringify(existingMeta.responseBytes)}`);
 
 		// Extract fields from capture if missing in sidecar
 		const isMissingOrEmpty = (val: unknown) => val === undefined || val === null || val === "";
