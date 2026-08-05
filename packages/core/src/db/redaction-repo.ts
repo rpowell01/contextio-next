@@ -262,12 +262,11 @@ export async function importRedactionMetaFromFiles(
 
 		for (const filename of metaFiles) {
 			const filepath = join(captureDir, filename);
+			// Extract captureId from filename (remove .redact-meta.json suffix)
+			const captureId = filename.replace(/\.redact-meta\.json$/, "");
 			try {
 				const raw = fs.readFileSync(filepath, "utf8");
 				const meta = JSON.parse(raw) as Record<string, unknown>;
-
-				// Extract captureId from filename (remove .redact-meta.json suffix)
-				const captureId = filename.replace(/\.redact-meta\.json$/, "");
 
 				// Handle encrypted metadata files
 				let parsedMeta: Record<string, unknown> = meta;
