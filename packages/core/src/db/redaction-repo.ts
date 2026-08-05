@@ -410,23 +410,24 @@ async function extractMissingFieldsFromCapture(
 
 		// Extract fields from capture if missing in sidecar
 		const isMissingOrEmpty = (val: unknown) => val === undefined || val === null || val === "";
-		if (isMissingOrEmpty(existingMeta.source) && typeof capture.source === "string") {
+		const hasValue = (val: unknown) => val !== undefined && val !== null && val !== "";
+		if (isMissingOrEmpty(existingMeta.source) && hasValue(capture.source)) {
 			missing.source = capture.source;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted source: ${missing.source}`);
 		}
-		if (isMissingOrEmpty(existingMeta.provider) && typeof capture.provider === "string") {
+		if (isMissingOrEmpty(existingMeta.provider) && hasValue(capture.provider)) {
 			missing.provider = capture.provider;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted provider: ${missing.provider}`);
 		}
-		if (isMissingOrEmpty(existingMeta.targetUrl) && typeof capture.targetUrl === "string") {
+		if (isMissingOrEmpty(existingMeta.targetUrl) && hasValue(capture.targetUrl)) {
 			missing.targetUrl = capture.targetUrl;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted targetUrl: ${missing.targetUrl}`);
 		}
-		if (isMissingOrEmpty(existingMeta.requestBytes) && typeof capture.requestBytes === "number") {
+		if (isMissingOrEmpty(existingMeta.requestBytes) && hasValue(capture.requestBytes)) {
 			missing.requestBytes = capture.requestBytes;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted requestBytes: ${missing.requestBytes}`);
 		}
-		if (isMissingOrEmpty(existingMeta.responseBytes) && typeof capture.responseBytes === "number") {
+		if (isMissingOrEmpty(existingMeta.responseBytes) && hasValue(capture.responseBytes)) {
 			missing.responseBytes = capture.responseBytes;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted responseBytes: ${missing.responseBytes}`);
 		}
@@ -440,27 +441,27 @@ async function extractMissingFieldsFromCapture(
 			};
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted timings: ${JSON.stringify(missing.timings)}`);
 		}
-		if (isMissingOrEmpty(existingMeta.totalInputTokens) && typeof capture.totalInputTokens === "number") {
+		if (isMissingOrEmpty(existingMeta.totalInputTokens) && hasValue(capture.totalInputTokens)) {
 			missing.totalInputTokens = capture.totalInputTokens;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted totalInputTokens: ${missing.totalInputTokens}`);
 		}
-		if (isMissingOrEmpty(existingMeta.totalOutputTokens) && typeof capture.totalOutputTokens === "number") {
+		if (isMissingOrEmpty(existingMeta.totalOutputTokens) && hasValue(capture.totalOutputTokens)) {
 			missing.totalOutputTokens = capture.totalOutputTokens;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted totalOutputTokens: ${missing.totalOutputTokens}`);
 		}
-		if (isMissingOrEmpty(existingMeta.tokensPerSecond) && typeof capture.tokensPerSecond === "number") {
+		if (isMissingOrEmpty(existingMeta.tokensPerSecond) && hasValue(capture.tokensPerSecond)) {
 			missing.tokensPerSecond = capture.tokensPerSecond;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted tokensPerSecond: ${missing.tokensPerSecond}`);
 		}
-		if (isMissingOrEmpty(existingMeta.successCount) && typeof capture.successCount === "number") {
+		if (isMissingOrEmpty(existingMeta.successCount) && hasValue(capture.successCount)) {
 			missing.successCount = capture.successCount;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted successCount: ${missing.successCount}`);
 		}
-		if (isMissingOrEmpty(existingMeta.errorCount) && typeof capture.errorCount === "number") {
+		if (isMissingOrEmpty(existingMeta.errorCount) && hasValue(capture.errorCount)) {
 			missing.errorCount = capture.errorCount;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted errorCount: ${missing.errorCount}`);
 		}
-		if (isMissingOrEmpty(existingMeta.model) && (typeof capture.model === "string" || capture.model === null)) {
+		if (isMissingOrEmpty(existingMeta.model) && hasValue(capture.model)) {
 			missing.model = capture.model;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted model: ${missing.model}`);
 		}
