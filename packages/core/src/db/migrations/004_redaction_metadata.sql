@@ -1,4 +1,4 @@
--- Migration 002: Add redaction_metadata table for storing redaction metadata
+-- Migration 004: Add redaction_metadata table for storing redaction metadata
 -- This replaces .redact-meta.json sidecar files with a SQLite-backed index.
 
 CREATE TABLE IF NOT EXISTS redaction_metadata (
