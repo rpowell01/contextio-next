@@ -333,6 +333,9 @@ export interface RateLimitConfig {
  * - `maxDelayMs`: Maximum delay in milliseconds between retries
  * - `retryableStatuses`: HTTP status codes that should trigger a retry
  * - `jitterFactor`: Factor to randomize delay (0-1) to avoid thundering herd
+ * - `maxStreamRetries`: Maximum retry attempts for streaming responses (SSE)
+ * - `maxResponseBufferSize`: Maximum buffer size in bytes for streaming response buffering
+ * - `enabled`: Whether streaming retry is enabled for this provider
  */
 export interface RetryConfig {
 	/** Maximum number of retry attempts. */
@@ -345,6 +348,12 @@ export interface RetryConfig {
 	retryableStatuses: number[];
 	/** Factor to randomize delay (0-1) to avoid thundering herd. */
 	jitterFactor: number;
+	/** Maximum retry attempts for streaming responses (SSE). Default: 3. */
+	maxStreamRetries: number;
+	/** Maximum buffer size in bytes for streaming response buffering. Default: 10485760 (10 MB). */
+	maxResponseBufferSize: number;
+	/** Whether streaming retry is enabled for this provider. Default: true. */
+	enabled: boolean;
 }
 
 // --- Provider configuration ---
@@ -495,6 +504,15 @@ export function validateRetryConfig(config: RetryConfig): void {
 	}
 	if (typeof config.jitterFactor !== "number" || Number.isNaN(config.jitterFactor) || config.jitterFactor < 0 || config.jitterFactor > 1) {
 		throw new Error("RetryConfig.jitterFactor must be a number between 0 and 1");
+	}
+	if (typeof config.maxStreamRetries !== "number" || Number.isNaN(config.maxStreamRetries) || config.maxStreamRetries < 0 || config.maxStreamRetries > 10) {
+		throw new Error("RetryConfig.maxStreamRetries must be a number between 0 and 10");
+	}
+	if (typeof config.maxResponseBufferSize !== "number" || Number.isNaN(config.maxResponseBufferSize) || config.maxResponseBufferSize <= 0 || config.maxResponseBufferSize > 100 * 1024 * 1024) {
+		throw new Error("RetryConfig.maxResponseBufferSize must be a positive number up to 100 MB (104857600 bytes)");
+	}
+	if (typeof config.enabled !== "boolean") {
+		throw new Error("RetryConfig.enabled must be a boolean");
 	}
 }
 

@@ -159,7 +159,7 @@ async function main(): Promise<void> {
 	});
 
 	// Create retry plugin with resolved per-provider config
-	const retryProviders: Record<string, { maxRetries: number; baseDelayMs: number; maxDelayMs: number; retryableStatuses: number[]; jitterFactor: number }> = {};
+	const retryProviders: Record<string, { maxRetries: number; baseDelayMs: number; maxDelayMs: number; retryableStatuses: number[]; jitterFactor: number; maxStreamRetries: number; maxResponseBufferSize: number; enabled: boolean }> = {};
 	for (const [provider, retryConfig] of Object.entries(resolved.retry)) {
 		retryProviders[provider] = {
 			maxRetries: retryConfig.maxRetries,
@@ -167,6 +167,9 @@ async function main(): Promise<void> {
 			maxDelayMs: retryConfig.maxDelayMs,
 			retryableStatuses: retryConfig.retryableStatuses,
 			jitterFactor: retryConfig.jitterFactor,
+			maxStreamRetries: retryConfig.maxStreamRetries,
+			maxResponseBufferSize: retryConfig.maxResponseBufferSize,
+			enabled: retryConfig.enabled,
 		};
 	}
 
@@ -176,6 +179,9 @@ async function main(): Promise<void> {
 		maxDelayMs: resolved.retry.openai.maxDelayMs,
 		retryableStatuses: resolved.retry.openai.retryableStatuses,
 		jitterFactor: resolved.retry.openai.jitterFactor,
+		maxStreamRetries: resolved.retry.openai.maxStreamRetries,
+		maxBufferSize: 10 * 1024 * 1024, // 10 MB global default
+		enabled: resolved.retry.openai.enabled,
 		providers: retryProviders,
 	});
 
@@ -187,7 +193,7 @@ async function main(): Promise<void> {
 	}
 	console.log(`Loaded plugin: retry (with per-provider config from database)`);
 	for (const [provider, retryConfig] of Object.entries(resolved.retry)) {
-		console.log(`  ${provider}: maxRetries=${retryConfig.maxRetries}, baseDelayMs=${retryConfig.baseDelayMs}, maxDelayMs=${retryConfig.maxDelayMs}`);
+		console.log(`  ${provider}: maxRetries=${retryConfig.maxRetries}, baseDelayMs=${retryConfig.baseDelayMs}, maxDelayMs=${retryConfig.maxDelayMs}, maxStreamRetries=${retryConfig.maxStreamRetries}, maxResponseBufferSize=${retryConfig.maxResponseBufferSize}, enabled=${retryConfig.enabled}`);
 	}
 
 	const fromEnv = await loadPluginsFromEnv();
