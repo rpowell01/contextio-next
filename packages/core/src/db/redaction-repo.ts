@@ -355,18 +355,49 @@ export function getRedactionAggregateStats(): {
 /**
  * Extract missing session fields from the capture file.
  * Reads the capture JSON file and extracts source, provider, targetUrl, timings, etc.
+ * Handles encrypted capture files by decrypting them first.
  */
 async function extractMissingFieldsFromCapture(
 	captureDir: string,
 	captureId: string,
-	existingMeta: Record<string, unknown>
+	existingMeta: Record<string, unknown>,
+	decryptFn?: (encryptedJson: string, keyMaterial: string) => Promise<string>,
+	keyMaterial?: string
 ): Promise<Partial<RedactionMetadata>> {
 	const captureFilepath = join(captureDir, `${captureId}.json`);
 	const missing: Partial<RedactionMetadata> = {};
 
 	try {
+		let capture: Record<string, unknown>;
 		const raw = fs.readFileSync(captureFilepath, "utf8");
-		const capture = JSON.parse(raw) as Record<string, unknown>;
+
+		// Check if the capture file is encrypted (has the encrypted payload structure)
+		const parsed = JSON.parse(raw) as Record<string, unknown>;
+		const isEncrypted =
+			typeof parsed.ciphertext === "string" &&
+			typeof parsed.salt === "string" &&
+			typeof parsed.iv === "string";
+
+		if (isEncrypted) {
+			// Decrypt the capture file using the same key as the logger plugin
+			if (!keyMaterial) {
+				console.warn(`[redaction-repo] Capture file ${captureId}.json is encrypted but no key material available`);
+				return missing;
+			}
+			if (!decryptFn) {
+				console.warn(`[redaction-repo] Capture file ${captureId}.json is encrypted but no decrypt function provided`);
+				return missing;
+			}
+			try {
+				const plaintext = await decryptFn(raw, keyMaterial);
+				capture = JSON.parse(plaintext) as Record<string, unknown>;
+			} catch (e) {
+				console.warn(`[redaction-repo] Failed to decrypt capture file ${captureId}.json: ${e instanceof Error ? e.message : String(e)}`);
+				return missing;
+			}
+		} else {
+			capture = parsed;
+		}
 
 		// Extract fields from capture if missing in sidecar
 		if (existingMeta.source === undefined && typeof capture.source === "string") {
@@ -487,7 +518,8 @@ export async function importRedactionMetaFromFiles(
 				};
 
 				// Extract missing fields from capture file (source, provider, targetUrl, timings, etc.)
-				const missingFields = await extractMissingFieldsFromCapture(captureDir, captureId, parsedMeta);
+				const keyMaterial = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY;
+				const missingFields = await extractMissingFieldsFromCapture(captureDir, captureId, parsedMeta, decryptFn, keyMaterial);
 				Object.assign(metadata, missingFields);
 
 				upsertRedactionMetadata(metadata);
