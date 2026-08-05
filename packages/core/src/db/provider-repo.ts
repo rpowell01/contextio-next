@@ -511,12 +511,6 @@ export function importProvidersFromJson(filePath?: string): number {
 			
 			if (!providerId) continue;
 			
-			// Check if already exists
-			if (providerExists(finalKey)) {
-				console.log(`[provider-repo] Provider "${finalKey}" already exists in database, skipping`);
-				continue;
-			}
-			
 			// Build ProviderConfig from JSON
 			const providerConfig: ProviderConfig = {
 				id: finalKey as Provider,
@@ -535,6 +529,31 @@ export function importProvidersFromJson(filePath?: string): number {
 			// Validate required fields
 			if (!providerConfig.upstreamUrl) {
 				console.warn(`[provider-repo] Skipping provider "${finalKey}": missing upstreamUrl`);
+				continue;
+			}
+			
+			// Check if already exists
+			const existingProvider = getProviderById(finalKey);
+			if (existingProvider) {
+				// If provider exists with source='default', update it with providers.json values
+				// (changing source to 'file' and dynamic to 1)
+				// If source is 'file', it's already user-configured, so skip
+				// (env providers are never persisted to the database; they're generated in-memory)
+				if (existingProvider.source === "default") {
+					console.log(`[provider-repo] Provider "${finalKey}" exists as default, updating with providers.json values`);
+					try {
+						updateProvider(finalKey, providerConfig);
+						// updateProvider preserves source/dynamic, so we need a direct UPDATE to reclassify
+						const db = getDb();
+						db.prepare("UPDATE providers SET source = 'file', dynamic = 1 WHERE id = ?").run(finalKey);
+						imported++;
+						console.log(`[provider-repo] Updated provider "${finalKey}" from providers.json`);
+					} catch (err) {
+						console.warn(`[provider-repo] Failed to update provider "${finalKey}": ${err instanceof Error ? err.message : String(err)}`);
+					}
+				} else {
+					console.log(`[provider-repo] Provider "${finalKey}" already exists with source="${existingProvider.source}", skipping`);
+				}
 				continue;
 			}
 			

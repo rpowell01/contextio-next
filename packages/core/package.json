@@ -44,7 +44,7 @@
     "postbuild": "cp -r src/db/migrations dist/db/migrations 2>/dev/null || true",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "test": "node --test test/*.test.ts",
+    "test": "tsx --test test/*.test.ts",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
@@ -53,6 +53,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22",
+    "tsx": "^4.23.5",
     "typescript": "^5.7"
   }
 }
