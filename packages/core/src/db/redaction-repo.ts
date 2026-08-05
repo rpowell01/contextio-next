@@ -409,27 +409,28 @@ async function extractMissingFieldsFromCapture(
 		console.log(`[redaction-repo] DEBUG: ${captureId} - existingMeta keys: ${Object.keys(existingMeta).join(", ")}`);
 
 		// Extract fields from capture if missing in sidecar
-		if (existingMeta.source === undefined && typeof capture.source === "string") {
+		const isMissingOrEmpty = (val: unknown) => val === undefined || val === null || val === "";
+		if (isMissingOrEmpty(existingMeta.source) && typeof capture.source === "string") {
 			missing.source = capture.source;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted source: ${missing.source}`);
 		}
-		if (existingMeta.provider === undefined && typeof capture.provider === "string") {
+		if (isMissingOrEmpty(existingMeta.provider) && typeof capture.provider === "string") {
 			missing.provider = capture.provider;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted provider: ${missing.provider}`);
 		}
-		if (existingMeta.targetUrl === undefined && typeof capture.targetUrl === "string") {
+		if (isMissingOrEmpty(existingMeta.targetUrl) && typeof capture.targetUrl === "string") {
 			missing.targetUrl = capture.targetUrl;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted targetUrl: ${missing.targetUrl}`);
 		}
-		if (existingMeta.requestBytes === undefined && typeof capture.requestBytes === "number") {
+		if (isMissingOrEmpty(existingMeta.requestBytes) && typeof capture.requestBytes === "number") {
 			missing.requestBytes = capture.requestBytes;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted requestBytes: ${missing.requestBytes}`);
 		}
-		if (existingMeta.responseBytes === undefined && typeof capture.responseBytes === "number") {
+		if (isMissingOrEmpty(existingMeta.responseBytes) && typeof capture.responseBytes === "number") {
 			missing.responseBytes = capture.responseBytes;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted responseBytes: ${missing.responseBytes}`);
 		}
-		if (existingMeta.timings === undefined && capture.timings && typeof capture.timings === "object") {
+		if (isMissingOrEmpty(existingMeta.timings) && capture.timings && typeof capture.timings === "object") {
 			const t = capture.timings as Record<string, unknown>;
 			missing.timings = {
 				send_ms: typeof t.send_ms === "number" ? t.send_ms : undefined,
@@ -439,27 +440,27 @@ async function extractMissingFieldsFromCapture(
 			};
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted timings: ${JSON.stringify(missing.timings)}`);
 		}
-		if (existingMeta.totalInputTokens === undefined && typeof capture.totalInputTokens === "number") {
+		if (isMissingOrEmpty(existingMeta.totalInputTokens) && typeof capture.totalInputTokens === "number") {
 			missing.totalInputTokens = capture.totalInputTokens;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted totalInputTokens: ${missing.totalInputTokens}`);
 		}
-		if (existingMeta.totalOutputTokens === undefined && typeof capture.totalOutputTokens === "number") {
+		if (isMissingOrEmpty(existingMeta.totalOutputTokens) && typeof capture.totalOutputTokens === "number") {
 			missing.totalOutputTokens = capture.totalOutputTokens;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted totalOutputTokens: ${missing.totalOutputTokens}`);
 		}
-		if (existingMeta.tokensPerSecond === undefined && typeof capture.tokensPerSecond === "number") {
+		if (isMissingOrEmpty(existingMeta.tokensPerSecond) && typeof capture.tokensPerSecond === "number") {
 			missing.tokensPerSecond = capture.tokensPerSecond;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted tokensPerSecond: ${missing.tokensPerSecond}`);
 		}
-		if (existingMeta.successCount === undefined && typeof capture.successCount === "number") {
+		if (isMissingOrEmpty(existingMeta.successCount) && typeof capture.successCount === "number") {
 			missing.successCount = capture.successCount;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted successCount: ${missing.successCount}`);
 		}
-		if (existingMeta.errorCount === undefined && typeof capture.errorCount === "number") {
+		if (isMissingOrEmpty(existingMeta.errorCount) && typeof capture.errorCount === "number") {
 			missing.errorCount = capture.errorCount;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted errorCount: ${missing.errorCount}`);
 		}
-		if (existingMeta.model === undefined && (typeof capture.model === "string" || capture.model === null)) {
+		if (isMissingOrEmpty(existingMeta.model) && (typeof capture.model === "string" || capture.model === null)) {
 			missing.model = capture.model;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted model: ${missing.model}`);
 		}
