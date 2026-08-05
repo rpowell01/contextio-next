@@ -19,6 +19,8 @@ ARG VERSION
 ARG REVISION
 # CSRF secret for runtime (passed as build arg so Coolify can inject it)
 ARG CSRF_SECRET
+# Encryption key for logger plugin (passed as build arg so Coolify can inject it)
+ARG CONTEXTIO_LOGGER_ENCRYPTION_KEY
 
 # Enable corepack and configure pnpm
 RUN corepack enable && \
@@ -65,6 +67,9 @@ WORKDIR /app
 
 ARG CSRF_SECRET
 ENV CSRF_SECRET=${CSRF_SECRET}
+# Encryption key for logger plugin
+ARG CONTEXTIO_LOGGER_ENCRYPTION_KEY
+ENV CONTEXTIO_LOGGER_ENCRYPTION_KEY=${CONTEXTIO_LOGGER_ENCRYPTION_KEY}
 
 ENV NODE_ENV=production
 ENV CONTEXT_PROXY_BIND_HOST=0.0.0.0
