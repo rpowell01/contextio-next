@@ -73,6 +73,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Minimum confidence threshold for LLM-based detections (0-1). Higher values reduce false positives but may miss some entities. Applied dynamically per request.",
   rateLimiter:
     "Rate limiting configuration per provider. Controls max requests, time window, and burst capacity. Requires a proxy restart to apply.",
+  streamingRetry:
+    "Streaming retry configuration per provider. Controls retry attempts and buffer size for rate-limited streaming responses. Requires a proxy restart to apply.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
@@ -160,6 +162,18 @@ export default function SettingsPage() {
       openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    },
+    streamingRetry: {
+      anthropic: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      openai: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      chatgpt: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      gemini: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      geminiCodeAssist: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      vertex: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      unknown: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
     },
   });
   const [metadata, setMetadata] = useState<Record<
