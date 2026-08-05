@@ -545,6 +545,24 @@ export async function importRedactionMetaFromFiles(
 					encrypted: isEncrypted,
 					createdAt: typeof parsedMeta.generatedAt === "string" ? new Date(parsedMeta.generatedAt).getTime() : Date.now(),
 					updatedAt: Date.now(),
+					// Include all session fields from parsedMeta if present
+					source: typeof parsedMeta.source === "string" ? parsedMeta.source : (parsedMeta.source === null ? null : undefined),
+					provider: typeof parsedMeta.provider === "string" ? parsedMeta.provider : (parsedMeta.provider === null ? null : undefined),
+					targetUrl: typeof parsedMeta.targetUrl === "string" ? parsedMeta.targetUrl : (parsedMeta.targetUrl === null ? null : undefined),
+					requestBytes: typeof parsedMeta.requestBytes === "number" ? parsedMeta.requestBytes : undefined,
+					responseBytes: typeof parsedMeta.responseBytes === "number" ? parsedMeta.responseBytes : undefined,
+					timings: parsedMeta.timings && typeof parsedMeta.timings === "object" ? {
+						send_ms: typeof (parsedMeta.timings as Record<string, unknown>).send_ms === "number" ? (parsedMeta.timings as Record<string, unknown>).send_ms : undefined,
+						wait_ms: typeof (parsedMeta.timings as Record<string, unknown>).wait_ms === "number" ? (parsedMeta.timings as Record<string, unknown>).wait_ms : undefined,
+						receive_ms: typeof (parsedMeta.timings as Record<string, unknown>).receive_ms === "number" ? (parsedMeta.timings as Record<string, unknown>).receive_ms : undefined,
+						total_ms: typeof (parsedMeta.timings as Record<string, unknown>).total_ms === "number" ? (parsedMeta.timings as Record<string, unknown>).total_ms : undefined,
+					} : undefined,
+					totalInputTokens: typeof parsedMeta.totalInputTokens === "number" ? parsedMeta.totalInputTokens : undefined,
+					totalOutputTokens: typeof parsedMeta.totalOutputTokens === "number" ? parsedMeta.totalOutputTokens : undefined,
+					tokensPerSecond: typeof parsedMeta.tokensPerSecond === "number" ? parsedMeta.tokensPerSecond : undefined,
+					successCount: typeof parsedMeta.successCount === "number" ? parsedMeta.successCount : undefined,
+					errorCount: typeof parsedMeta.errorCount === "number" ? parsedMeta.errorCount : undefined,
+					model: typeof parsedMeta.model === "string" ? parsedMeta.model : (parsedMeta.model === null ? null : undefined),
 				};
 
 				// Extract missing fields from capture file (source, provider, targetUrl, timings, etc.)
