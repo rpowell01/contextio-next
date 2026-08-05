@@ -11,6 +11,15 @@ export interface RateLimitConfig {
   bufferCapacity: number;
 }
 
+export interface StreamingRetryConfig {
+  /** Whether streaming retry is enabled. */
+  enabled: boolean;
+  /** Maximum retry attempts for streaming responses. */
+  maxRetries: number;
+  /** Maximum buffer size in MB for streaming response buffering. */
+  maxBufferSizeMB: number;
+}
+
 export interface Settings {
   logDir: string;
   maxSessions: number;
@@ -47,6 +56,8 @@ export interface Settings {
   detectorThreshold: number;
   // Rate limiter settings per provider
   rateLimiter: Record<Provider, RateLimitConfig>;
+  // Streaming retry settings per provider
+  streamingRetry: Record<Provider, StreamingRetryConfig>;
 }
 
 export type SettingSource =
@@ -115,6 +126,10 @@ export const SETTING_ENV_MAP: Record<
     dynamic: true,
   },
   rateLimiter: {
+    envVar: "", // No direct env var - configured via settings file/UI with per-provider keys
+    dynamic: false,
+  },
+  streamingRetry: {
     envVar: "", // No direct env var - configured via settings file/UI with per-provider keys
     dynamic: false,
   },
@@ -330,6 +345,18 @@ export const DEFAULT_SETTINGS: Settings = {
     kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
   },
+  streamingRetry: {
+    anthropic: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    openai: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    chatgpt: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    gemini: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    geminiCodeAssist: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    vertex: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    unknown: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+  },
 };
 
 export function validateSettings(input: unknown): Settings {
@@ -449,6 +476,27 @@ export function validateSettings(input: unknown): Settings {
           result[provider] = { maxRequests, windowMs, bufferCapacity };
         } else {
           result[provider] = { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 };
+        }
+      }
+      return result;
+    })(),
+    streamingRetry: (() => {
+      const sr = obj.streamingRetry;
+      if (typeof sr !== "object" || sr === null) {
+        return DEFAULT_SETTINGS.streamingRetry;
+      }
+      const srObj = sr as Record<string, unknown>;
+      const result = {} as Record<Provider, StreamingRetryConfig>;
+      for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "openrouter", "kilo", "unknown"] as Provider[]) {
+        const p = srObj[provider];
+        if (typeof p === "object" && p !== null) {
+          const pObj = p as { enabled?: unknown; maxRetries?: unknown; maxBufferSizeMB?: unknown };
+          const enabled = typeof pObj.enabled === "boolean" ? pObj.enabled : true;
+          const maxRetries = Number.isInteger(pObj.maxRetries) && pObj.maxRetries as number >= 0 && (pObj.maxRetries as number) <= 10 ? pObj.maxRetries as number : 3;
+          const maxBufferSizeMB = Number.isInteger(pObj.maxBufferSizeMB) && pObj.maxBufferSizeMB as number >= 1 && (pObj.maxBufferSizeMB as number) <= 100 ? pObj.maxBufferSizeMB as number : 10;
+          result[provider] = { enabled, maxRetries, maxBufferSizeMB };
+        } else {
+          result[provider] = { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 };
         }
       }
       return result;
@@ -591,6 +639,27 @@ export function validateSettingsLenient(input: unknown): Settings {
           result[provider] = { maxRequests, windowMs, bufferCapacity };
         } else {
           result[provider] = DEFAULT_SETTINGS.rateLimiter[provider];
+        }
+      }
+      return result;
+    })(),
+    streamingRetry: (() => {
+      const sr = obj.streamingRetry;
+      if (typeof sr !== "object" || sr === null) {
+        return DEFAULT_SETTINGS.streamingRetry;
+      }
+      const srObj = sr as Record<string, unknown>;
+      const result = {} as Record<Provider, StreamingRetryConfig>;
+      for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "openrouter", "kilo", "unknown"] as Provider[]) {
+        const p = srObj[provider];
+        if (typeof p === "object" && p !== null) {
+          const pObj = p as { enabled?: unknown; maxRetries?: unknown; maxBufferSizeMB?: unknown };
+          const enabled = typeof pObj.enabled === "boolean" ? pObj.enabled : true;
+          const maxRetries = Number.isInteger(pObj.maxRetries) && pObj.maxRetries as number >= 0 && (pObj.maxRetries as number) <= 10 ? pObj.maxRetries as number : 3;
+          const maxBufferSizeMB = Number.isInteger(pObj.maxBufferSizeMB) && pObj.maxBufferSizeMB as number >= 1 && (pObj.maxBufferSizeMB as number) <= 100 ? pObj.maxBufferSizeMB as number : 10;
+          result[provider] = { enabled, maxRetries, maxBufferSizeMB };
+        } else {
+          result[provider] = DEFAULT_SETTINGS.streamingRetry[provider];
         }
       }
       return result;

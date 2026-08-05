@@ -472,8 +472,11 @@ async function extractMissingFieldsFromCapture(
 			missing.model = capture.model as string | null;
 			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted model: ${missing.model}`);
 		}
-	} catch {
-		// Ignore errors reading capture file
+	} catch (err) {
+		// Log error for diagnostics but don't fail the import - return what we have
+		console.warn(
+			`[redaction-repo] Failed to read capture file ${captureId}.json for missing field extraction: ${err instanceof Error ? err.message : String(err)}`
+		);
 	}
 
 	return missing;

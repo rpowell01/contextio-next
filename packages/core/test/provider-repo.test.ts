@@ -15,9 +15,10 @@ import {
 	getAllMergedProviders,
 	ensureDefaultProviders,
 	importProvidersFromJson,
+	closeDb,
+	initDb,
+	getDb,
 } from "../dist/db/index.js";
-
-import { closeDb, initDb, getDb } from "../dist/db/index.js";
 import type { ProviderConfig } from "@contextio/core";
 
 /**
@@ -612,3 +613,4 @@ describe("provider-repo.ts", () => {
 		});
 	});
 });
+

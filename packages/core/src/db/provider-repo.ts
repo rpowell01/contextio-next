@@ -26,6 +26,9 @@ export interface ProviderRow {
 	retry_max_delay_ms: number | null;
 	retry_retryable_statuses: string | null; // JSON array
 	retry_jitter_factor: number | null;
+	retry_max_stream_retries: number | null;
+	retry_max_response_buffer_size: number | null;
+	retry_enabled: number | null;
 	custom_headers: string | null; // JSON object
 	allow_base_url_override: number;
 	base_url_override_header: string | null;
@@ -55,7 +58,7 @@ const DEFAULT_PROVIDER_CONFIGS: Omit<ProviderConfig, "rateLimit" | "retry" | "cu
  * Default rate limit and retry configs
  */
 const DEFAULT_RATE_LIMIT: RateLimitConfig = { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 };
-const DEFAULT_RETRY: RetryConfig = { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 };
+const DEFAULT_RETRY: RetryConfig = { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true };
 const DEFAULT_AUTH_TYPE: AuthType = "none";
 const DEFAULT_API_FORMAT: ApiFormat = "unknown";
 
@@ -91,6 +94,9 @@ function rowToProviderConfig(row: ProviderRow): ProviderConfig & { source: strin
 			maxDelayMs: row.retry_max_delay_ms ?? DEFAULT_RETRY.maxDelayMs,
 			retryableStatuses: safeJsonParse(row.retry_retryable_statuses, DEFAULT_RETRY.retryableStatuses),
 			jitterFactor: row.retry_jitter_factor ?? DEFAULT_RETRY.jitterFactor,
+			maxStreamRetries: row.retry_max_stream_retries ?? DEFAULT_RETRY.maxStreamRetries,
+			maxResponseBufferSize: row.retry_max_response_buffer_size ?? DEFAULT_RETRY.maxResponseBufferSize,
+			enabled: row.retry_enabled !== null ? row.retry_enabled === 1 : DEFAULT_RETRY.enabled,
 		},
 		customHeaders: safeJsonParse(row.custom_headers, {}),
 		allowBaseUrlOverride: row.allow_base_url_override === 1,
@@ -118,6 +124,9 @@ function providerConfigToRow(config: ProviderConfig): Omit<ProviderRow, "id" | "
 		retry_max_delay_ms: config.retry.maxDelayMs,
 		retry_retryable_statuses: JSON.stringify(config.retry.retryableStatuses),
 		retry_jitter_factor: config.retry.jitterFactor,
+		retry_max_stream_retries: config.retry.maxStreamRetries,
+		retry_max_response_buffer_size: config.retry.maxResponseBufferSize,
+		retry_enabled: config.retry.enabled ? 1 : 0,
 		custom_headers: JSON.stringify(config.customHeaders),
 		allow_base_url_override: config.allowBaseUrlOverride ? 1 : 0,
 		base_url_override_header: config.baseUrlOverrideHeader,
@@ -139,9 +148,9 @@ export function createProvider(config: ProviderConfig): ProviderConfig {
 			id, name, upstream_url, api_format, auth_type, enabled,
 			rate_limit_max_requests, rate_limit_window_ms, rate_limit_buffer_capacity,
 			retry_max_retries, retry_base_delay_ms, retry_max_delay_ms,
-			retry_retryable_statuses, retry_jitter_factor, custom_headers,
+			retry_retryable_statuses, retry_jitter_factor, retry_max_stream_retries, retry_max_response_buffer_size, retry_enabled, custom_headers,
 			allow_base_url_override, base_url_override_header, source, dynamic
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`);
 
 	try {
@@ -160,6 +169,9 @@ export function createProvider(config: ProviderConfig): ProviderConfig {
 			row.retry_max_delay_ms,
 			row.retry_retryable_statuses,
 			row.retry_jitter_factor,
+			row.retry_max_stream_retries,
+			row.retry_max_response_buffer_size,
+			row.retry_enabled,
 			row.custom_headers,
 			row.allow_base_url_override,
 			row.base_url_override_header,
@@ -245,6 +257,9 @@ export function updateProvider(id: string, config: ProviderConfig): ProviderConf
 			retry_max_delay_ms = ?,
 			retry_retryable_statuses = ?,
 			retry_jitter_factor = ?,
+			retry_max_stream_retries = ?,
+			retry_max_response_buffer_size = ?,
+			retry_enabled = ?,
 			custom_headers = ?,
 			allow_base_url_override = ?,
 			base_url_override_header = ?,
@@ -267,6 +282,9 @@ export function updateProvider(id: string, config: ProviderConfig): ProviderConf
 		row.retry_max_delay_ms,
 		row.retry_retryable_statuses,
 		row.retry_jitter_factor,
+		row.retry_max_stream_retries,
+		row.retry_max_response_buffer_size,
+		row.retry_enabled,
 		row.custom_headers,
 		row.allow_base_url_override,
 		row.base_url_override_header,
@@ -440,9 +458,9 @@ function createDefaultProvider(config: ProviderConfig): void {
 			id, name, upstream_url, api_format, auth_type, enabled,
 			rate_limit_max_requests, rate_limit_window_ms, rate_limit_buffer_capacity,
 			retry_max_retries, retry_base_delay_ms, retry_max_delay_ms,
-			retry_retryable_statuses, retry_jitter_factor, custom_headers,
+			retry_retryable_statuses, retry_jitter_factor, retry_max_stream_retries, retry_max_response_buffer_size, retry_enabled, custom_headers,
 			allow_base_url_override, base_url_override_header, source, dynamic
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`);
 
 	try {
@@ -461,6 +479,9 @@ function createDefaultProvider(config: ProviderConfig): void {
 			row.retry_max_delay_ms,
 			row.retry_retryable_statuses,
 			row.retry_jitter_factor,
+			row.retry_max_stream_retries,
+			row.retry_max_response_buffer_size,
+			row.retry_enabled,
 			row.custom_headers,
 			row.allow_base_url_override,
 			row.base_url_override_header,

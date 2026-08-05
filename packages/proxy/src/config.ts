@@ -48,6 +48,14 @@ interface WebUISettings {
       bufferCapacity?: number;
     };
   };
+  // Streaming retry settings per provider
+  streamingRetry?: {
+    [provider: string]: {
+      enabled?: boolean;
+      maxRetries?: number;
+      maxBufferSizeMB?: number;
+    };
+  };
 }
 
 /** Read web UI settings from the JSON file. */
@@ -70,6 +78,7 @@ function readWebUISettings(): WebUISettings {
         oidcEnabled: parsed.oidcEnabled,
         oidcPublicUrl: parsed.oidcPublicUrl,
         rateLimiter: parsed.rateLimiter,
+        streamingRetry: parsed.streamingRetry,
       };
       console.log(`[config] read settings.json from ${settingsPath}: ${JSON.stringify(result)}`);
       return result;
@@ -397,6 +406,9 @@ export function resolveOidcConfig(
  * - `CONTEXTIO_RETRY_<PROVIDER>_MAX_DELAY_MS` - Max delay cap in ms (default: 30000)
  * - `CONTEXTIO_RETRY_<PROVIDER>_RETRYABLE_STATUSES` - Comma-separated HTTP codes (default: 429,500,502,503,504)
  * - `CONTEXTIO_RETRY_<PROVIDER>_JITTER_FACTOR` - Jitter factor 0-1 (default: 0.2)
+ * - `CONTEXTIO_RETRY_<PROVIDER>_MAX_STREAM_RETRIES` - Max streaming retry attempts (default: 3)
+ * - `CONTEXTIO_RETRY_<PROVIDER>_MAX_RESPONSE_BUFFER_SIZE` - Max streaming buffer in bytes (default: 10485760)
+ * - `CONTEXTIO_RETRY_<PROVIDER>_STREAMING_RETRY_ENABLED` - Whether streaming retry is enabled (default: true)
  *
  * Legacy (deprecated) env vars:
  * - `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_SESSION_SECRET`, `OIDC_SCOPE`
@@ -728,12 +740,78 @@ for (const upstreamKey of requiredUpstreams) {
       return parsed;
     })();
 
+    const maxStreamRetries = (() => {
+      const raw = process.env[`${prefix}_MAX_STREAM_RETRIES`];
+      const settingsStreamRetry = readWebUISettings().streamingRetry?.[provider];
+      if (raw !== undefined) {
+        const parsed = Number.parseInt(raw, 10);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > 10) {
+          throw new Error(`Invalid ${prefix}_MAX_STREAM_RETRIES="${raw}": must be an integer between 0 and 10`);
+        }
+        return parsed;
+      }
+      if (settingsStreamRetry?.maxRetries !== undefined) {
+        const parsed = Number.isInteger(settingsStreamRetry.maxRetries) && settingsStreamRetry.maxRetries >= 0 && settingsStreamRetry.maxRetries <= 10
+          ? settingsStreamRetry.maxRetries
+          : 3;
+        return parsed;
+      }
+      if (!fileConfig) {
+        if (isOptionalProvider) return 3;
+        throw new Error(`Retry config for provider "${provider}" missing maxStreamRetries (no env var ${prefix}_MAX_STREAM_RETRIES, no settings, and no file config)`);
+      }
+      return fileConfig.maxStreamRetries ?? 3;
+    })();
+
+    const maxResponseBufferSize = (() => {
+      const raw = process.env[`${prefix}_MAX_RESPONSE_BUFFER_SIZE`];
+      const settingsStreamRetry = readWebUISettings().streamingRetry?.[provider];
+      if (raw !== undefined) {
+        const parsed = Number.parseInt(raw, 10);
+        if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 100 * 1024 * 1024) {
+          throw new Error(`Invalid ${prefix}_MAX_RESPONSE_BUFFER_SIZE="${raw}": must be a positive integer up to 100 MB (104857600 bytes)`);
+        }
+        return parsed;
+      }
+      if (settingsStreamRetry?.maxBufferSizeMB !== undefined) {
+        const mb = Number.isInteger(settingsStreamRetry.maxBufferSizeMB) && settingsStreamRetry.maxBufferSizeMB >= 1 && settingsStreamRetry.maxBufferSizeMB <= 100
+          ? settingsStreamRetry.maxBufferSizeMB
+          : 10;
+        return mb * 1024 * 1024;
+      }
+      if (!fileConfig) {
+        if (isOptionalProvider) return 10 * 1024 * 1024; // 10 MB default
+        throw new Error(`Retry config for provider "${provider}" missing maxResponseBufferSize (no env var ${prefix}_MAX_RESPONSE_BUFFER_SIZE, no settings, and no file config)`);
+      }
+      return fileConfig.maxResponseBufferSize ?? (10 * 1024 * 1024);
+    })();
+
+    const enabled = (() => {
+      const raw = process.env[`${prefix}_STREAMING_RETRY_ENABLED`];
+      const settingsStreamRetry = readWebUISettings().streamingRetry?.[provider];
+      if (raw !== undefined) {
+        return raw === "true";
+      }
+      if (settingsStreamRetry?.enabled !== undefined) {
+        return settingsStreamRetry.enabled;
+      }
+      if (!fileConfig) {
+        if (isOptionalProvider) return true;
+        // Default to true if not specified
+        return true;
+      }
+      return fileConfig.enabled ?? true;
+    })();
+
     return {
       maxRetries,
       baseDelayMs,
       maxDelayMs,
       retryableStatuses,
       jitterFactor,
+      maxStreamRetries,
+      maxResponseBufferSize,
+      enabled,
     };
   }
 

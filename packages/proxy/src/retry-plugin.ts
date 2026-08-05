@@ -73,6 +73,7 @@ const DEFAULT_MAX_ENTRIES = 10_000;
 const DEFAULT_CLEANUP_INTERVAL_MS = 60_000; // 1 minute
 const DEFAULT_ENTRY_TTL_MS = 600_000; // 10 minutes
 const DEFAULT_MAX_BUFFER_SIZE = 10 * 1024 * 1024; // 10 MB
+const DEFAULT_MAX_STREAM_RETRIES = 3;
 
 /**
  * Merge global config with provider-specific overrides.
@@ -102,8 +103,9 @@ function resolveConfigForProvider(
     maxDelayMs: providerConfig.maxDelayMs ?? globalConfig.maxDelayMs,
     retryableStatuses: providerConfig.retryableStatuses ?? globalConfig.retryableStatuses,
     jitterFactor: providerConfig.jitterFactor ?? globalConfig.jitterFactor,
-    // Provider config doesn't include 'enabled', fall back to global
-    enabled: globalConfig.enabled,
+    maxStreamRetries: providerConfig.maxStreamRetries ?? globalConfig.maxStreamRetries,
+    maxResponseBufferSize: providerConfig.maxResponseBufferSize ?? globalConfig.maxResponseBufferSize,
+    enabled: providerConfig.enabled ?? globalConfig.enabled,
   };
 }
 
@@ -191,6 +193,7 @@ export class RetryPlugin implements ProxyPlugin {
     const maxDelayMs = globalConfig.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
     const retryableStatuses = globalConfig.retryableStatuses ?? DEFAULT_RETRYABLE_STATUSES;
     const jitterFactor = globalConfig.jitterFactor ?? DEFAULT_JITTER_FACTOR;
+    const maxStreamRetries = globalConfig.maxStreamRetries ?? DEFAULT_MAX_STREAM_RETRIES;
 
     if (maxRetries < 0) {
       throw new Error("maxRetries must be non-negative");
@@ -216,6 +219,9 @@ export class RetryPlugin implements ProxyPlugin {
     if (maxBufferSize !== undefined && maxBufferSize <= 0) {
       throw new Error("maxBufferSize must be positive");
     }
+    if (maxStreamRetries < 0 || maxStreamRetries > 10) {
+      throw new Error("maxStreamRetries must be between 0 and 10");
+    }
 
     // Validate provider-specific configs
     if (providers) {
@@ -234,6 +240,12 @@ export class RetryPlugin implements ProxyPlugin {
             (providerConfig.jitterFactor < 0 || providerConfig.jitterFactor > 1)) {
           throw new Error(`jitterFactor for provider "${providerKey}" must be between 0 and 1`);
         }
+        if (providerConfig.maxStreamRetries !== undefined && (providerConfig.maxStreamRetries < 0 || providerConfig.maxStreamRetries > 10)) {
+          throw new Error(`maxStreamRetries for provider "${providerKey}" must be between 0 and 10`);
+        }
+        if (providerConfig.maxResponseBufferSize !== undefined && (providerConfig.maxResponseBufferSize <= 0 || providerConfig.maxResponseBufferSize > 100 * 1024 * 1024)) {
+          throw new Error(`maxResponseBufferSize for provider "${providerKey}" must be positive and <= 100 MB`);
+        }
       }
     }
 
@@ -246,6 +258,8 @@ export class RetryPlugin implements ProxyPlugin {
       maxDelayMs,
       retryableStatuses,
       jitterFactor,
+      maxStreamRetries,
+      maxResponseBufferSize: maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE,
       enabled: enabled ?? rateLimiterEnabled ?? true,
     };
     this.providerConfigs = providers;
@@ -972,16 +986,20 @@ export class RetryPlugin implements ProxyPlugin {
       streamState.fullResponseBuffer.push(chunk);
       streamState.fullResponseBufferSize += chunk.length;
 
+      // Get provider-specific max buffer size
+      const providerConfig = this.getConfigForProvider(streamState.provider);
+      const maxBufferSize = providerConfig.maxResponseBufferSize ?? this.maxBufferSize;
+
       // Check buffer size limit and evict oldest chunks if exceeded
-      if (streamState.fullResponseBufferSize > this.maxBufferSize) {
+      if (streamState.fullResponseBufferSize > maxBufferSize) {
         // Remove oldest chunks until we're under the limit
-        while (streamState.fullResponseBufferSize > this.maxBufferSize && streamState.fullResponseBuffer.length > 0) {
+        while (streamState.fullResponseBufferSize > maxBufferSize && streamState.fullResponseBuffer.length > 0) {
           const removed = streamState.fullResponseBuffer.shift();
           if (removed) {
             streamState.fullResponseBufferSize -= removed.length;
           }
         }
-        console.debug(`[retry] Stream buffer exceeded maxBufferSize (${this.maxBufferSize}), evicted oldest chunks. Current size: ${streamState.fullResponseBufferSize}`);
+        console.debug(`[retry] Stream buffer exceeded maxBufferSize (${maxBufferSize}), evicted oldest chunks. Current size: ${streamState.fullResponseBufferSize}`);
       }
     }
 
@@ -1252,7 +1270,9 @@ export class RetryPlugin implements ProxyPlugin {
           this.incrementUpstream429Count(entry.provider);
         }
 
-        if (entry.retryCount < config.maxRetries) {
+        // Use maxStreamRetries for streaming-specific retry limit
+        const maxStreamRetries = config.maxStreamRetries ?? config.maxRetries;
+        if (entry.retryCount < maxStreamRetries) {
           // Check if this is a NVIDIA ResourceExhausted error in the SSE data
           let isNvidiaStreamingError = false;
           if (streamState.errorStatus === null && streamState.errorMessage) {
