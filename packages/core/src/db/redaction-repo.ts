@@ -280,7 +280,7 @@ export async function importRedactionMetaFromFiles(captureDir: string): Promise<
 						continue;
 					}
 					try {
-						const { decrypt } = await import("@contextio/logger");
+						const { decrypt } = await import("@contextio/core");
 						const plaintext = await decrypt(raw, keyMaterial);
 						parsedMeta = JSON.parse(plaintext) as Record<string, unknown>;
 					} catch (e) {

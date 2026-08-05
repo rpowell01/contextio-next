@@ -82,9 +82,6 @@ importers:
 
   packages/core:
     dependencies:
-      '@contextio/logger':
-        specifier: workspace:*
-        version: link:../logger
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.10.0

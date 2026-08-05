@@ -75,6 +75,14 @@ export {
 // Default OIDC scopes
 export { DEFAULT_OIDC_SCOPE } from "./types.js";
 
+// Crypto utilities: encryption/decryption for capture files and redaction metadata
+export {
+  encrypt,
+  decrypt,
+  deriveKey,
+  validateKey,
+} from "./crypto.js";
+
 // Core types used across all packages
 export type {
   ApiFormat,
