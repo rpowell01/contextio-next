@@ -10,6 +10,7 @@ import fs from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
+import { upsertRedactionMetadata } from "@contextio/core/db";
 
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
@@ -101,6 +102,7 @@ export function createProxy(
   const redactionMetaWatcher = createRedactionMetaWatcher({
     captureDir: resolved.loggerCaptureDir,
     encryption: resolved.loggerEncryption,
+    persistToSqlite: upsertRedactionMetadata,
   });
 
   // Enable log capture for admin API
