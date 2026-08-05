@@ -16,6 +16,7 @@ import { createRetryPlugin } from "./retry-plugin.js";
 import { resolveConfig } from "./config.js";
 import { createCombinedProxy } from "./combined-server.js";
 import { initDb } from "@contextio/core/db";
+import { decrypt } from "@contextio/logger";
 
 async function loadPluginsFromEnv(): Promise<ProxyPlugin[]> {
   const pluginsEnv = process.env.CONTEXT_PROXY_PLUGINS;
@@ -62,7 +63,7 @@ async function loadPluginsFromEnv(): Promise<ProxyPlugin[]> {
 
 async function main(): Promise<void> {
 	// Initialize database (runs migrations and seeds default providers)
-	initDb();
+	initDb(decrypt);
 
 	// CSRF_SECRET is provided via environment variable (set by Coolify at runtime)
   if (process.env.CSRF_SECRET) {

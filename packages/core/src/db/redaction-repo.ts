@@ -242,9 +242,13 @@ export function getRedactionAggregateStats(): {
  * This is used for one-time migration from file-based to SQLite storage.
  *
  * @param captureDir - Path to the capture directory containing .redact-meta.json files
+ * @param decryptFn - Optional decryption function (e.g., from @contextio/logger) for encrypted metadata files
  * @returns Number of metadata files imported
  */
-export async function importRedactionMetaFromFiles(captureDir: string): Promise<number> {
+export async function importRedactionMetaFromFiles(
+	captureDir: string,
+	decryptFn?: (encryptedJson: string, keyMaterial: string) => Promise<string>,
+): Promise<number> {
 	if (!fs.existsSync(captureDir)) {
 		console.log(`[redaction-repo] Capture directory not found at ${captureDir}, skipping import`);
 		return 0;
@@ -280,8 +284,10 @@ export async function importRedactionMetaFromFiles(captureDir: string): Promise<
 						continue;
 					}
 					try {
-						const { decrypt } = await import("@contextio/logger");
-						const plaintext = await decrypt(raw, keyMaterial);
+						if (!decryptFn) {
+							throw new Error("Decryption function not provided");
+						}
+						const plaintext = await decryptFn(raw, keyMaterial);
 						parsedMeta = JSON.parse(plaintext) as Record<string, unknown>;
 					} catch (e) {
 						console.warn(`[redaction-repo] Failed to decrypt ${filename}: ${e instanceof Error ? e.message : String(e)}`);

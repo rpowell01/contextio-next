@@ -74,7 +74,7 @@ export {
  * Initialize the database: open connection and run all pending migrations.
  * Call this once at application startup.
  */
-export function initDb(): void {
+export function initDb(decryptFn?: (encryptedJson: string, keyMaterial: string) => Promise<string>): void {
 	// Run all pending migrations (initConnection is called internally)
 	runMigrationsFn();
 	
@@ -87,7 +87,7 @@ export function initDb(): void {
 	
 	// Import existing .redact-meta.json sidecar files into SQLite
 	// This allows existing redaction metadata to be migrated to SQLite
-	importRedactionMetaFromFiles(getCaptureDirForRedactionImport());
+	importRedactionMetaFromFiles(getCaptureDirForRedactionImport(), decryptFn);
 }
 
 /**
