@@ -309,23 +309,10 @@ export async function importRedactionMetaFromFiles(
 				imported++;
 				console.log(`[redaction-repo] Imported redaction metadata for ${captureId}`);
 			} catch (err) {
-				// Check if it's a foreign key constraint error (capture doesn't exist in database)
-				const isForeignKeyError = err instanceof Error && 
-					(err.message.includes("FOREIGN KEY constraint failed") || 
-					 err.message.includes("foreign key constraint failed"));
 				// Check if file was deleted between listing and reading (race condition with cleanup)
 				const isNotFoundError = err instanceof Error && 
 					(err.message.includes("ENOENT") || err.message.includes("no such file or directory"));
-				if (isForeignKeyError) {
-					console.warn(`[redaction-repo] Skipping ${filename}: capture ${captureId} not found in database`);
-					// Clean up orphaned sidecar file since its capture no longer exists
-					try {
-						fs.unlinkSync(filepath);
-						console.log(`[redaction-repo] Deleted orphaned sidecar file: ${filename}`);
-					} catch (unlinkErr) {
-						console.warn(`[redaction-repo] Failed to delete orphaned sidecar ${filename}: ${unlinkErr instanceof Error ? unlinkErr.message : String(unlinkErr)}`);
-					}
-				} else if (isNotFoundError) {
+				if (isNotFoundError) {
 					console.warn(`[redaction-repo] Skipping ${filename}: file was deleted before import (likely cleaned up)`);
 				} else {
 					console.warn(`[redaction-repo] Failed to import redaction metadata from ${filename}: ${err instanceof Error ? err.message : String(err)}`);

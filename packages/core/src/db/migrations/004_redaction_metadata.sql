@@ -8,8 +8,7 @@ CREATE TABLE IF NOT EXISTS redaction_metadata (
     total_redactions  INTEGER NOT NULL DEFAULT 0,
     encrypted         INTEGER NOT NULL DEFAULT 0,
     created_at        INTEGER DEFAULT (strftime('%s','now')*1000),
-    updated_at        INTEGER DEFAULT (strftime('%s','now')*1000),
-    FOREIGN KEY (capture_id) REFERENCES captures_metadata(id) ON DELETE CASCADE
+    updated_at        INTEGER DEFAULT (strftime('%s','now')*1000)
 );
 
 -- Index for querying redaction metadata by session
