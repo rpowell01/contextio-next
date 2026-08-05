@@ -64,12 +64,12 @@ async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGener
       // Push capture data directly from metadata - no readCaptureFile needed!
       rawCaptures.push({
         sessionId: meta.sessionId,
-        source: "unknown",
-        provider: "unknown",
-        targetUrl: "",
-        requestBytes: 0,
-        responseBytes: 0,
-        timings: { total_ms: 0 },
+        source: meta.source ?? "unknown",
+        provider: meta.provider ?? "unknown",
+        targetUrl: meta.targetUrl ?? "",
+        requestBytes: meta.requestBytes ?? 0,
+        responseBytes: meta.responseBytes ?? 0,
+        timings: meta.timings ?? { total_ms: 0 },
         timestamp: new Date(meta.createdAt).toISOString(),
         // No requestBody/responseBody needed for list view
         redactionStats: undefined, // We use aggregated redactionMetaBySession instead
