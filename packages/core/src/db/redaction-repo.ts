@@ -310,7 +310,15 @@ export async function importRedactionMetaFromFiles(
 				imported++;
 				console.log(`[redaction-repo] Imported redaction metadata for ${captureId}`);
 			} catch (err) {
-				console.warn(`[redaction-repo] Failed to import redaction metadata from ${filename}: ${err instanceof Error ? err.message : String(err)}`);
+				// Check if it's a foreign key constraint error (capture doesn't exist in database)
+				const isForeignKeyError = err instanceof Error && 
+					(err.message.includes("FOREIGN KEY constraint failed") || 
+					 err.message.includes("foreign key constraint failed"));
+				if (isForeignKeyError) {
+					console.warn(`[redaction-repo] Skipping ${filename}: capture ${captureId} not found in database`);
+				} else {
+					console.warn(`[redaction-repo] Failed to import redaction metadata from ${filename}: ${err instanceof Error ? err.message : String(err)}`);
+				}
 			}
 		}
 
