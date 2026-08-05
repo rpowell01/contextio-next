@@ -112,7 +112,7 @@ function buildRedactionMeta(
 
 async function handleGetCapture(
   _request: NextRequest,
-  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession },
+  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession | undefined },
 ) {
   return withRequestCache(async () => {
     const { id } = await context.params;
@@ -245,7 +245,7 @@ async function handleGetCapture(
 
 async function handlePutCapture(
   request: NextRequest,
-  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession },
+  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession | undefined },
 ) {
   const { id } = await context.params;
 
@@ -349,7 +349,7 @@ async function handlePutCapture(
 //   • action: "redact" – apply explicit redaction rules (mirrors original redact POST).
 async function handlePostCapture(
   request: NextRequest,
-  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession },
+  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession | undefined },
 ) {
   const { id } = await context.params;
 

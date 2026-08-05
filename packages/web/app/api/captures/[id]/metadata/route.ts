@@ -14,7 +14,7 @@ import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 async function handleGetMetadata(
   _request: NextRequest,
-  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession },
+  context: { params: Promise<{ id: string }>; session: import("@/lib/auth/session").AuthSession | undefined },
 ) {
   return withRequestCache(async () => {
     const { id } = await context.params;

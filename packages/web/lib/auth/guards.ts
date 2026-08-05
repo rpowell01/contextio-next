@@ -8,6 +8,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession, type AuthSession } from "./session";
 
+/** Check if OIDC is enabled via environment variable */
+function isOidcEnabled(): boolean {
+  return process.env.CONTEXTIO_OIDC_ENABLED === "true";
+}
+
 /** Options for auth guards. */
 export interface AuthGuardOptions {
   /** Custom redirect URL for unauthenticated requests (default: /login). */
@@ -34,6 +39,9 @@ type ExtractParams<T> = T extends (
  * If the user is not authenticated, returns 401 Unauthorized (JSON) by default
  * or redirects to login URL if configured.
  *
+ * If OIDC is disabled (CONTEXTIO_OIDC_ENABLED !== "true"), authentication is skipped
+ * and the handler is called directly without a session.
+ *
  * @param handler - The API route handler to protect
  * @param options - Configuration options
  * @returns Wrapped handler that validates session before calling the original handler
@@ -41,13 +49,13 @@ type ExtractParams<T> = T extends (
  * @example
  * ```typescript
  * export const GET = withAuth(async (request, { params, session }) => {
- *   // session is guaranteed to be valid here
- *   return Response.json({ user: session.email });
+ *   // session is guaranteed to be valid here (or undefined if OIDC disabled)
+ *   return Response.json({ user: session?.email });
  * });
  * ```
  */
 export function withAuth<
-  T extends (request: NextRequest, context: { params: any; session: AuthSession }) => Promise<Response>
+  T extends (request: NextRequest, context: { params: any; session: AuthSession | undefined }) => Promise<Response>
 >(
   handler: T,
   options: AuthGuardOptions = {}
@@ -55,6 +63,11 @@ export function withAuth<
   const { loginUrl = "/login", returnJson = true, errorMessage = "Unauthorized" } = options;
 
   return async (request: NextRequest, context: { params: ExtractParams<T> }) => {
+    // If OIDC is disabled, skip authentication entirely
+    if (!isOidcEnabled()) {
+      return handler(request, { ...context, session: undefined });
+    }
+
     const session = await getSession();
 
     if (!session) {
@@ -70,16 +83,18 @@ export function withAuth<
       return NextResponse.redirect(redirectUrl);
     }
 
-    // Attach session to context for the handler
-    return handler(request, { ...context, session });
+    // Attach session to context for the handler (convert null to undefined)
+    return handler(request, { ...context, session: session ?? undefined });
   };
 }
 
 /**
  * Higher-Order Function that wraps an API route handler with optional authentication.
  *
- * The handler receives the session (or null if not authenticated), allowing
+ * The handler receives the session (or undefined if not authenticated/OIDC disabled), allowing
  * different behavior based on auth state.
+ *
+ * If OIDC is disabled, session will be undefined.
  *
  * @param handler - The API route handler to wrap
  * @returns Wrapped handler that provides session if available
@@ -95,14 +110,19 @@ export function withAuth<
  * ```
  */
 export function withOptionalAuth<
-  T extends (request: NextRequest, context: { params: any; session: AuthSession | null }) => Promise<Response>
+  T extends (request: NextRequest, context: { params: any; session: AuthSession | undefined }) => Promise<Response>
 >(
   handler: T
 ): (request: NextRequest, context: { params: ExtractParams<T> }) => Promise<Response> {
   return async (request: NextRequest, context: { params: ExtractParams<T> }) => {
+    // If OIDC is disabled, skip authentication entirely
+    if (!isOidcEnabled()) {
+      return handler(request, { ...context, session: undefined });
+    }
+
     const session = await getSession();
 
-    return handler(request, { ...context, session });
+    return handler(request, { ...context, session: session ?? undefined });
   };
 }
 
@@ -111,7 +131,7 @@ export function withOptionalAuth<
  */
 export type WithAuthContext<TParams extends Record<string, string> = Record<string, string>> = {
   params: Promise<TParams>;
-  session: AuthSession;
+  session: AuthSession | undefined;
 };
 
 /**
@@ -119,5 +139,5 @@ export type WithAuthContext<TParams extends Record<string, string> = Record<stri
  */
 export type WithOptionalAuthContext<TParams extends Record<string, string> = Record<string, string>> = {
   params: Promise<TParams>;
-  session: AuthSession | null;
+  session: AuthSession | undefined;
 };

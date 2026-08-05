@@ -120,7 +120,7 @@ function extractSource(filename: string): string | null {
 
 async function handleGetCaptures(
   request: Request,
-  _context: { params: Promise<Record<string, string>>; session: import("@/lib/auth/session").AuthSession },
+  _context: { params: Promise<Record<string, string>>; session: import("@/lib/auth/session").AuthSession | undefined },
 ) {
   return withRequestCache(async () => {
     try {
@@ -268,7 +268,7 @@ async function handleGetCaptures(
 
 async function handleClearCaptures(
   request: Request,
-  _context: { params: Promise<Record<string, string>>; session: import("@/lib/auth/session").AuthSession },
+  _context: { params: Promise<Record<string, string>>; session: import("@/lib/auth/session").AuthSession | undefined },
 ) {
   return withRequestCache(async () => {
     try {
