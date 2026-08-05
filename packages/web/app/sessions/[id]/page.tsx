@@ -124,6 +124,8 @@ function SessionContent({
   useEffect(() => {
     if (!id) return;
 
+    const controller = new AbortController();
+
     const fetchSession = async () => {
       registerPageLoad();
       setLoading(true);
@@ -131,9 +133,12 @@ function SessionContent({
       setProgress({ current: 0, total: 0, message: "Starting..." });
 
       try {
-        const stream = await apiClient.getSessionStream(id);
+        const stream = await apiClient.getSessionStream(id, controller.signal);
 
         for await (const update of stream) {
+          // Check if the request was aborted before processing update
+          if (controller.signal.aborted) return;
+
           if (update.type === "progress") {
             setProgress({
               current: update.current || 0,
@@ -197,6 +202,12 @@ function SessionContent({
           }
         }
       } catch (e) {
+        // Ignore aborted requests (both Error and DOMException from fetch)
+        if (
+          (e instanceof Error && e.name === "AbortError") ||
+          (e instanceof DOMException && e.name === "AbortError")
+        )
+          return;
         setError(e instanceof Error ? e.message : "Unknown error");
         setLoading(false);
         registerPageReady();
@@ -204,6 +215,10 @@ function SessionContent({
     };
 
     fetchSession();
+
+    return () => {
+      controller.abort();
+    };
   }, [id, registerPageLoad, registerPageReady]);
 
   useEffect(() => {
@@ -326,7 +341,7 @@ function SessionContent({
           </div>
         )}
 
-        {(captureDetailLoading || captureDetail) ? (
+        {(captureDetailLoading || captureDetail || captureDetailError) ? (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
