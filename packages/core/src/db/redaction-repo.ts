@@ -318,6 +318,13 @@ export async function importRedactionMetaFromFiles(
 					(err.message.includes("ENOENT") || err.message.includes("no such file or directory"));
 				if (isForeignKeyError) {
 					console.warn(`[redaction-repo] Skipping ${filename}: capture ${captureId} not found in database`);
+					// Clean up orphaned sidecar file since its capture no longer exists
+					try {
+						fs.unlinkSync(filepath);
+						console.log(`[redaction-repo] Deleted orphaned sidecar file: ${filename}`);
+					} catch (unlinkErr) {
+						console.warn(`[redaction-repo] Failed to delete orphaned sidecar ${filename}: ${unlinkErr instanceof Error ? unlinkErr.message : String(unlinkErr)}`);
+					}
 				} else if (isNotFoundError) {
 					console.warn(`[redaction-repo] Skipping ${filename}: file was deleted before import (likely cleaned up)`);
 				} else {
