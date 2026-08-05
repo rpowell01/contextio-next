@@ -353,6 +353,72 @@ export function getRedactionAggregateStats(): {
 }
 
 /**
+ * Extract missing session fields from the capture file.
+ * Reads the capture JSON file and extracts source, provider, targetUrl, timings, etc.
+ */
+async function extractMissingFieldsFromCapture(
+	captureDir: string,
+	captureId: string,
+	existingMeta: Record<string, unknown>
+): Promise<Partial<RedactionMetadata>> {
+	const captureFilepath = join(captureDir, `${captureId}.json`);
+	const missing: Partial<RedactionMetadata> = {};
+
+	try {
+		const raw = fs.readFileSync(captureFilepath, "utf8");
+		const capture = JSON.parse(raw) as Record<string, unknown>;
+
+		// Extract fields from capture if missing in sidecar
+		if (existingMeta.source === undefined && typeof capture.source === "string") {
+			missing.source = capture.source;
+		}
+		if (existingMeta.provider === undefined && typeof capture.provider === "string") {
+			missing.provider = capture.provider;
+		}
+		if (existingMeta.targetUrl === undefined && typeof capture.targetUrl === "string") {
+			missing.targetUrl = capture.targetUrl;
+		}
+		if (existingMeta.requestBytes === undefined && typeof capture.requestBytes === "number") {
+			missing.requestBytes = capture.requestBytes;
+		}
+		if (existingMeta.responseBytes === undefined && typeof capture.responseBytes === "number") {
+			missing.responseBytes = capture.responseBytes;
+		}
+		if (existingMeta.timings === undefined && capture.timings && typeof capture.timings === "object") {
+			const t = capture.timings as Record<string, unknown>;
+			missing.timings = {
+				send_ms: typeof t.send_ms === "number" ? t.send_ms : undefined,
+				wait_ms: typeof t.wait_ms === "number" ? t.wait_ms : undefined,
+				receive_ms: typeof t.receive_ms === "number" ? t.receive_ms : undefined,
+				total_ms: typeof t.total_ms === "number" ? t.total_ms : undefined,
+			};
+		}
+		if (existingMeta.totalInputTokens === undefined && typeof capture.totalInputTokens === "number") {
+			missing.totalInputTokens = capture.totalInputTokens;
+		}
+		if (existingMeta.totalOutputTokens === undefined && typeof capture.totalOutputTokens === "number") {
+			missing.totalOutputTokens = capture.totalOutputTokens;
+		}
+		if (existingMeta.tokensPerSecond === undefined && typeof capture.tokensPerSecond === "number") {
+			missing.tokensPerSecond = capture.tokensPerSecond;
+		}
+		if (existingMeta.successCount === undefined && typeof capture.successCount === "number") {
+			missing.successCount = capture.successCount;
+		}
+		if (existingMeta.errorCount === undefined && typeof capture.errorCount === "number") {
+			missing.errorCount = capture.errorCount;
+		}
+		if (existingMeta.model === undefined && (typeof capture.model === "string" || capture.model === null)) {
+			missing.model = capture.model;
+		}
+	} catch {
+		// Ignore errors reading capture file
+	}
+
+	return missing;
+}
+
+/**
  * Import existing .redact-meta.json sidecar files into the SQLite database.
  * This is used for one-time migration from file-based to SQLite storage.
  *
@@ -419,6 +485,10 @@ export async function importRedactionMetaFromFiles(
 					createdAt: typeof parsedMeta.generatedAt === "string" ? new Date(parsedMeta.generatedAt).getTime() : Date.now(),
 					updatedAt: Date.now(),
 				};
+
+				// Extract missing fields from capture file (source, provider, targetUrl, timings, etc.)
+				const missingFields = await extractMissingFieldsFromCapture(captureDir, captureId, parsedMeta);
+				Object.assign(metadata, missingFields);
 
 				upsertRedactionMetadata(metadata);
 				imported++;
