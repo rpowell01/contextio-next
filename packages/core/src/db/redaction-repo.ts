@@ -154,8 +154,8 @@ const UPSERT_REDACTION_METADATA_SQL = `
 		source, provider, target_url, request_bytes, response_bytes,
 		timings_send_ms, timings_wait_ms, timings_receive_ms, timings_total_ms,
 		total_input_tokens, total_output_tokens, tokens_per_second,
-		success_count, error_count, model, created_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		success_count, error_count, model, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(capture_id) DO UPDATE SET
 		session_id = excluded.session_id,
 		rule_counts = excluded.rule_counts,
@@ -211,6 +211,7 @@ export function upsertRedactionMetadata(metadata: RedactionMetadata): void {
 		row.error_count,
 		row.model,
 		metadata.createdAt,
+		metadata.updatedAt ?? Date.now(),
 	);
 }
 
@@ -249,6 +250,7 @@ export function upsertRedactionMetadataBulk(metadataArray: RedactionMetadata[]):
 				row.error_count,
 				row.model,
 				metadata.createdAt,
+				metadata.updatedAt ?? Date.now(),
 			);
 		}
 	});
