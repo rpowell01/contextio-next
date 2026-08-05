@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 /**
  * Database row type for redaction_metadata table.
- * Matches the schema in 002_redaction_metadata.sql
+ * Matches the schema with all session fields.
  */
 export interface RedactionMetadataRow {
 	capture_id: string;
@@ -17,6 +17,21 @@ export interface RedactionMetadataRow {
 	rule_counts: string; // JSON: rule_name -> count
 	total_redactions: number;
 	encrypted: number;
+	source: string | null;
+	provider: string | null;
+	target_url: string | null;
+	request_bytes: number | null;
+	response_bytes: number | null;
+	timings_send_ms: number | null;
+	timings_wait_ms: number | null;
+	timings_receive_ms: number | null;
+	timings_total_ms: number | null;
+	total_input_tokens: number | null;
+	total_output_tokens: number | null;
+	tokens_per_second: number | null;
+	success_count: number | null;
+	error_count: number | null;
+	model: string | null;
 	created_at: number;
 	updated_at: number;
 }
@@ -32,6 +47,23 @@ export interface RedactionMetadata {
 	encrypted: boolean;
 	createdAt: number;
 	updatedAt: number;
+	source?: string | null;
+	provider?: string | null;
+	targetUrl?: string | null;
+	requestBytes?: number;
+	responseBytes?: number;
+	timings?: {
+		send_ms?: number;
+		wait_ms?: number;
+		receive_ms?: number;
+		total_ms?: number;
+	};
+	totalInputTokens?: number;
+	totalOutputTokens?: number;
+	tokensPerSecond?: number;
+	successCount?: number;
+	errorCount?: number;
+	model?: string | null;
 }
 
 export interface SessionRedactionAggregate {
@@ -53,6 +85,23 @@ function rowToRedactionMetadata(row: RedactionMetadataRow): RedactionMetadata {
 		encrypted: row.encrypted === 1,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
+		source: row.source ?? null,
+		provider: row.provider ?? null,
+		targetUrl: row.target_url ?? null,
+		requestBytes: row.request_bytes ?? undefined,
+		responseBytes: row.response_bytes ?? undefined,
+		timings: row.timings_total_ms !== null ? {
+			send_ms: row.timings_send_ms ?? undefined,
+			wait_ms: row.timings_wait_ms ?? undefined,
+			receive_ms: row.timings_receive_ms ?? undefined,
+			total_ms: row.timings_total_ms ?? undefined,
+		} : undefined,
+		totalInputTokens: row.total_input_tokens ?? undefined,
+		totalOutputTokens: row.total_output_tokens ?? undefined,
+		tokensPerSecond: row.tokens_per_second ?? undefined,
+		successCount: row.success_count ?? undefined,
+		errorCount: row.error_count ?? undefined,
+		model: row.model ?? undefined,
 	};
 }
 
@@ -80,19 +129,53 @@ function redactionMetadataToRow(
 		rule_counts: JSON.stringify(metadata.ruleCounts),
 		total_redactions: metadata.totalRedactions,
 		encrypted: metadata.encrypted ? 1 : 0,
+		source: metadata.source ?? null,
+		provider: metadata.provider ?? null,
+		target_url: metadata.targetUrl ?? null,
+		request_bytes: metadata.requestBytes ?? null,
+		response_bytes: metadata.responseBytes ?? null,
+		timings_send_ms: metadata.timings?.send_ms ?? null,
+		timings_wait_ms: metadata.timings?.wait_ms ?? null,
+		timings_receive_ms: metadata.timings?.receive_ms ?? null,
+		timings_total_ms: metadata.timings?.total_ms ?? null,
+		total_input_tokens: metadata.totalInputTokens ?? null,
+		total_output_tokens: metadata.totalOutputTokens ?? null,
+		tokens_per_second: metadata.tokensPerSecond ?? null,
+		success_count: metadata.successCount ?? null,
+		error_count: metadata.errorCount ?? null,
+		model: metadata.model ?? null,
 	};
 }
 
 /** Prepared statement for upserting a single redaction metadata entry. */
 const UPSERT_REDACTION_METADATA_SQL = `
 	INSERT INTO redaction_metadata (
-		capture_id, session_id, rule_counts, total_redactions, encrypted, created_at
-	) VALUES (?, ?, ?, ?, ?, ?)
+		capture_id, session_id, rule_counts, total_redactions, encrypted,
+		source, provider, target_url, request_bytes, response_bytes,
+		timings_send_ms, timings_wait_ms, timings_receive_ms, timings_total_ms,
+		total_input_tokens, total_output_tokens, tokens_per_second,
+		success_count, error_count, model, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(capture_id) DO UPDATE SET
 		session_id = excluded.session_id,
 		rule_counts = excluded.rule_counts,
 		total_redactions = excluded.total_redactions,
 		encrypted = excluded.encrypted,
+		source = excluded.source,
+		provider = excluded.provider,
+		target_url = excluded.target_url,
+		request_bytes = excluded.request_bytes,
+		response_bytes = excluded.response_bytes,
+		timings_send_ms = excluded.timings_send_ms,
+		timings_wait_ms = excluded.timings_wait_ms,
+		timings_receive_ms = excluded.timings_receive_ms,
+		timings_total_ms = excluded.timings_total_ms,
+		total_input_tokens = excluded.total_input_tokens,
+		total_output_tokens = excluded.total_output_tokens,
+		tokens_per_second = excluded.tokens_per_second,
+		success_count = excluded.success_count,
+		error_count = excluded.error_count,
+		model = excluded.model,
 		updated_at = strftime('%s','now') * 1000
 `;
 
@@ -112,6 +195,21 @@ export function upsertRedactionMetadata(metadata: RedactionMetadata): void {
 		row.rule_counts,
 		row.total_redactions,
 		row.encrypted,
+		row.source,
+		row.provider,
+		row.target_url,
+		row.request_bytes,
+		row.response_bytes,
+		row.timings_send_ms,
+		row.timings_wait_ms,
+		row.timings_receive_ms,
+		row.timings_total_ms,
+		row.total_input_tokens,
+		row.total_output_tokens,
+		row.tokens_per_second,
+		row.success_count,
+		row.error_count,
+		row.model,
 		metadata.createdAt,
 	);
 }
@@ -135,6 +233,21 @@ export function upsertRedactionMetadataBulk(metadataArray: RedactionMetadata[]):
 				row.rule_counts,
 				row.total_redactions,
 				row.encrypted,
+				row.source,
+				row.provider,
+				row.target_url,
+				row.request_bytes,
+				row.response_bytes,
+				row.timings_send_ms,
+				row.timings_wait_ms,
+				row.timings_receive_ms,
+				row.timings_total_ms,
+				row.total_input_tokens,
+				row.total_output_tokens,
+				row.tokens_per_second,
+				row.success_count,
+				row.error_count,
+				row.model,
 				metadata.createdAt,
 			);
 		}

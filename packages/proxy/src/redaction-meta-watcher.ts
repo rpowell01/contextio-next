@@ -683,6 +683,18 @@ async function mergeExistingMetadata(
             encrypted: opts.encryption?.enabled ?? false,
             createdAt: new Date(metadata.generatedAt).getTime(),
             updatedAt: Date.now(),
+            source: metadata.source,
+            provider: metadata.provider,
+            targetUrl: metadata.targetUrl,
+            requestBytes: metadata.requestBytes,
+            responseBytes: metadata.responseBytes,
+            timings: metadata.timings,
+            totalInputTokens: metadata.totalInputTokens,
+            totalOutputTokens: metadata.totalOutputTokens,
+            tokensPerSecond: metadata.tokensPerSecond,
+            successCount: metadata.successCount,
+            errorCount: metadata.errorCount,
+            model: metadata.model,
           };
           opts.persistToSqlite(sqliteMetadata);
         } catch (sqliteErr) {
