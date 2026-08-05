@@ -52,6 +52,13 @@ export interface RetryConfig extends Partial<CoreRetryConfig> {
    * @default 600000 (10 minutes)
    */
   entryTtlMs?: number;
+
+  /**
+   * Maximum buffer size in bytes for streaming response buffering.
+   * When exceeded, oldest chunks are discarded to prevent OOM.
+   * @default 10485760 (10 MB)
+   */
+  maxBufferSize?: number;
 }
 
 /**
@@ -65,6 +72,7 @@ const DEFAULT_JITTER_FACTOR = 0.1;
 const DEFAULT_MAX_ENTRIES = 10_000;
 const DEFAULT_CLEANUP_INTERVAL_MS = 60_000; // 1 minute
 const DEFAULT_ENTRY_TTL_MS = 600_000; // 10 minutes
+const DEFAULT_MAX_BUFFER_SIZE = 10 * 1024 * 1024; // 10 MB
 
 /**
  * Merge global config with provider-specific overrides.
@@ -132,6 +140,9 @@ interface StreamState {
   inDataField: boolean;
   dataBuffer: string;
   hasErrorEvent: boolean;
+  // Full response buffer for streaming retry - accumulates all SSE chunks
+  fullResponseBuffer: Buffer[];
+  fullResponseBufferSize: number;
   // Pending retry signal for streaming responses
   pendingRetry?: {
     retryId: string;
@@ -155,6 +166,7 @@ export class RetryPlugin implements ProxyPlugin {
   private readonly maxEntries: number;
   private readonly cleanupIntervalMs: number;
   private readonly entryTtlMs: number;
+  private readonly maxBufferSize: number;
 
   // Map of captureId (or requestId fallback) to RequestStoreEntry
   private readonly requestStore = new Map<string, RequestStoreEntry>();
@@ -172,7 +184,7 @@ export class RetryPlugin implements ProxyPlugin {
   private upstream429Counts = new Map<string, number>();
 
   constructor(config: RetryConfig = {}) {
-    const { providers, enabled, maxEntries, cleanupIntervalMs, entryTtlMs, ...globalConfig } = config;
+    const { providers, enabled, maxEntries, cleanupIntervalMs, entryTtlMs, maxBufferSize, ...globalConfig } = config;
 
     const maxRetries = globalConfig.maxRetries ?? DEFAULT_MAX_RETRIES;
     const baseDelayMs = globalConfig.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
@@ -200,6 +212,9 @@ export class RetryPlugin implements ProxyPlugin {
     }
     if (entryTtlMs !== undefined && entryTtlMs <= 0) {
       throw new Error("entryTtlMs must be positive");
+    }
+    if (maxBufferSize !== undefined && maxBufferSize <= 0) {
+      throw new Error("maxBufferSize must be positive");
     }
 
     // Validate provider-specific configs
@@ -237,6 +252,7 @@ export class RetryPlugin implements ProxyPlugin {
     this.maxEntries = maxEntries ?? DEFAULT_MAX_ENTRIES;
     this.cleanupIntervalMs = cleanupIntervalMs ?? DEFAULT_CLEANUP_INTERVAL_MS;
     this.entryTtlMs = entryTtlMs ?? DEFAULT_ENTRY_TTL_MS;
+    this.maxBufferSize = maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE;
 
     this.startCleanupTimer();
   }
@@ -714,6 +730,8 @@ export class RetryPlugin implements ProxyPlugin {
           inDataField: false,
           dataBuffer: "",
           hasErrorEvent: false,
+          fullResponseBuffer: [],
+          fullResponseBufferSize: 0,
         });
       }
     }
@@ -948,6 +966,25 @@ export class RetryPlugin implements ProxyPlugin {
       return chunk;
     }
 
+    // Buffer the chunk for potential retry
+    // Only buffer if we haven't detected an error yet (no point buffering after error)
+    if (!streamState.errorDetected) {
+      streamState.fullResponseBuffer.push(chunk);
+      streamState.fullResponseBufferSize += chunk.length;
+
+      // Check buffer size limit and evict oldest chunks if exceeded
+      if (streamState.fullResponseBufferSize > this.maxBufferSize) {
+        // Remove oldest chunks until we're under the limit
+        while (streamState.fullResponseBufferSize > this.maxBufferSize && streamState.fullResponseBuffer.length > 0) {
+          const removed = streamState.fullResponseBuffer.shift();
+          if (removed) {
+            streamState.fullResponseBufferSize -= removed.length;
+          }
+        }
+        console.debug(`[retry] Stream buffer exceeded maxBufferSize (${this.maxBufferSize}), evicted oldest chunks. Current size: ${streamState.fullResponseBufferSize}`);
+      }
+    }
+
     // Combine any partial field content from previous chunk with new chunk
     // If there's a partial field, prepend its prefix (data: , event: , etc.)
     const prefix = streamState.partialField ? streamState.partialField + ": " : "";
@@ -1097,8 +1134,8 @@ export class RetryPlugin implements ProxyPlugin {
   /**
    * Handle streaming response end.
    * Detects SSE errors in the final chunk and cleans up state.
-   * Note: The proxy architecture doesn't support transparent streaming retries.
-   * SSE error detection is provided for monitoring/observability purposes.
+   * If no error detected, flushes the buffered response to client.
+   * If error detected and retry is possible, signals retry and discards buffer.
    */
   onStreamEnd(sessionId: string | null): Buffer | null {
     if (!sessionId) {
@@ -1258,15 +1295,24 @@ export class RetryPlugin implements ProxyPlugin {
           
           // Don't clean up state yet - forward.ts will consume the pending retry
           // and we clean up after the retry is handled
+          // Discard the buffered response since we're retrying
+          streamState.fullResponseBuffer = [];
+          streamState.fullResponseBufferSize = 0;
           return null;
         }
       }
     }
 
-    // No retry needed - clean up stream state and request store
+    // No retry needed - stream completed successfully
+    // Forward.ts already buffers the stream in streamBufferChunks
+    // We just clean up our internal buffer
+    streamState.fullResponseBuffer = [];
+    streamState.fullResponseBufferSize = 0;
+
+    // Clean up stream state and request store
     this.cleanupAllState(streamState, sessionId);
     
-    // Return null - no extra data to flush
+    // Return null - forward.ts handles sending the buffered response
     return null;
   }
 
@@ -1428,6 +1474,63 @@ export class RetryPlugin implements ProxyPlugin {
       this.cleanupTimer = null;
     }
   }
+
+  /**
+   * Get the buffered streaming response for a session (for testing/inspection).
+   * Returns the concatenated buffer or null if no buffer exists.
+   */
+  getStreamBufferForTesting(sessionId: string): Buffer | null {
+    const streamState = this.streamState.get(sessionId);
+    if (!streamState || streamState.fullResponseBuffer.length === 0) {
+      return null;
+    }
+    return Buffer.concat(streamState.fullResponseBuffer);
+  }
+
+  /**
+   * Get the current buffer size for a streaming session (for testing/inspection).
+   */
+  getStreamBufferSizeForTesting(sessionId: string): number {
+    const streamState = this.streamState.get(sessionId);
+    return streamState?.fullResponseBufferSize ?? 0;
+  }
+}
+
+/**
+ * Error detection result from provider-specific checkers.
+ */
+interface ErrorDetectionResult {
+  isError: boolean;
+  status: number | null;
+  message: string | null;
+  provider?: string;
+  retryable?: boolean;
+}
+
+/**
+ * Interface for provider-specific error detection.
+ * Implement this to add support for new provider error formats.
+ */
+interface ProviderErrorDetector {
+  /**
+   * Unique identifier for this detector (e.g., "nvidia", "openai", "anthropic").
+   */
+  name: string;
+
+  /**
+   * Check if the response body/data contains a rate limit error.
+   * @param data - The raw response data (string or Buffer)
+   * @returns ErrorDetectionResult if error detected, null otherwise
+   */
+  detect(data: string | Buffer): ErrorDetectionResult | null;
+
+  /**
+   * Optional: Create a modified request body for retry.
+   * For NVIDIA ResourceExhausted, this appends "continue" to messages.
+   * @param originalBodyJson - The original request body as JSON
+   * @returns Modified body buffer, or null if not applicable
+   */
+  createRetryBody?: (originalBodyJson: JsonValue | null) => Buffer | null;
 }
 
 /**
@@ -1474,6 +1577,8 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     incrementUpstream429Count: (provider: string) => plugin.incrementUpstream429Count(provider),
     getStreamError: (sessionId: string) => plugin.getStreamErrorForTesting(sessionId),
     getAndConsumePendingStreamRetry: (sessionId: string | null) => plugin.getAndConsumePendingStreamRetry(sessionId),
+    getStreamBuffer: (sessionId: string) => plugin.getStreamBufferForTesting(sessionId),
+    getStreamBufferSize: (sessionId: string) => plugin.getStreamBufferSizeForTesting(sessionId),
     clear: () => plugin.clearForTesting(),
     shutdown: () => plugin.shutdown(),
   };

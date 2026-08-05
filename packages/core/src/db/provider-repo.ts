@@ -542,10 +542,13 @@ export function importProvidersFromJson(filePath?: string): number {
 				if (existingProvider.source === "default") {
 					console.log(`[provider-repo] Provider "${finalKey}" exists as default, updating with providers.json values`);
 					try {
-						updateProvider(finalKey, providerConfig);
-						// updateProvider preserves source/dynamic, so we need a direct UPDATE to reclassify
 						const db = getDb();
-						db.prepare("UPDATE providers SET source = 'file', dynamic = 1 WHERE id = ?").run(finalKey);
+						// Wrap both updateProvider and reclassify UPDATE in a transaction for atomicity
+						db.transaction(() => {
+							updateProvider(finalKey, providerConfig);
+							// updateProvider preserves source/dynamic, so we need a direct UPDATE to reclassify
+							db.prepare("UPDATE providers SET source = 'file', dynamic = 1 WHERE id = ?").run(finalKey);
+						})();
 						imported++;
 						console.log(`[provider-repo] Updated provider "${finalKey}" from providers.json`);
 					} catch (err) {

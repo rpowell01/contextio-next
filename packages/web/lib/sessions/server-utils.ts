@@ -3,8 +3,18 @@
  * This module uses Node.js built-in modules and should NOT be imported by client-side code.
  */
 
-import { decryptCapture } from "@contextio/logger";
+import "server-only";
 import type { Session, Capture } from "@/types/api";
+
+// Dynamic import for Node.js-only logger module to avoid client-side bundling issues
+let loggerModule: typeof import("@contextio/logger") | null = null;
+
+async function getLoggerModule() {
+  if (!loggerModule) {
+    loggerModule = await import("@contextio/logger");
+  }
+  return loggerModule;
+}
 
 // Re-export types
 export type { Session, Capture } from "@/types/api";
@@ -440,7 +450,8 @@ export async function readCaptureFile(
 
   let result: Record<string, unknown> | null = null;
   try {
-    const capture = await decryptCapture(filepath, resolvedKey || null);
+    const logger = await getLoggerModule();
+    const capture = await logger.decryptCapture(filepath, resolvedKey || null);
     result = capture as Record<string, unknown> | null;
   } catch (error) {
     console.error(`Error reading capture file ${filepath}:`, error);
@@ -530,7 +541,8 @@ export async function readRedactionMetaFile(
 ): Promise<Record<string, unknown> | null> {
   const resolvedKey = keyMaterial ?? process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
   try {
-    const capture = await decryptCapture(filepath, resolvedKey || null);
+    const logger = await getLoggerModule();
+    const capture = await logger.decryptCapture(filepath, resolvedKey || null);
     return capture as Record<string, unknown> | null;
   } catch (error) {
     console.error(`Error reading redaction meta file ${filepath}:`, error);

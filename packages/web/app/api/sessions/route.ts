@@ -10,6 +10,10 @@ import {
   listRedactionMetaFiles,
   loadRedactionMeta,
 } from "@/lib/sessions/server-utils";
+import {
+  aggregateRedactionMetaBySessionFromDb,
+  getAllRedactionMetadataFromDb,
+} from "@/lib/sessions/db-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import { groupCapturesIntoSessions, type RawCaptureData } from "@/lib/sessions/grouping";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
@@ -240,73 +244,33 @@ async function handleGet(request: Request): Promise<Response> {
 
   // Return grouped summaries if requested
   if (groupBySourceDest) {
-    // Load pre-aggregated redaction metadata from .redact-meta.json files
-    // Include ALL captures per session to accurately count captures per session
-    // (skip title-* sessions only, no deduping by sessionId)
-    const metaFiles = await listRedactionMetaFiles();
-    metaFiles.sort();
+    // Load pre-aggregated redaction metadata from SQLite (much faster than file scanning)
+    const redactionMetaBySession = await aggregateRedactionMetaBySessionFromDb();
 
-    const redactionMetaBySession = new Map<
-      string,
-      { totalRedactions: number; byRule: Record<string, number> }
-    >();
+    // Get all redaction metadata from SQLite for building rawCaptures
+    const allMeta = await getAllRedactionMetadataFromDb();
 
     const rawCaptures: RawCaptureData[] = [];
 
-    for (const filename of metaFiles) {
-      try {
-        const meta = await loadRedactionMeta(filename);
-        if (!meta) continue;
+    for (const meta of allMeta) {
+      // Skip title-* sessions (match Redactions page behavior)
+      if (meta.sessionId?.startsWith("title-")) continue;
 
-        // Skip title-* sessions (match Redactions page behavior)
-        if (meta.sessionId?.startsWith("title-")) continue;
+      // Extract timings - default to 0 if not present
+      const timings = { total_ms: 0 }; // SQLite doesn't store timings yet
 
-        // Store redaction metadata for this session - use byRule (rule names) for consistency
-        // Accumulate across all captures for the same session
-        if (meta.sessionId) {
-          const byRule = (meta.byRule as Record<string, number>) ?? {};
-
-          const existing = redactionMetaBySession.get(meta.sessionId);
-          if (existing) {
-            // Accumulate redaction counts across all captures in this session
-            existing.totalRedactions += meta.totalRedactions ?? 0;
-            for (const [rule, count] of Object.entries(byRule)) {
-              if (typeof count === "number") {
-                existing.byRule[rule] = (existing.byRule[rule] ?? 0) + count;
-              }
-            }
-          } else {
-            redactionMetaBySession.set(meta.sessionId, {
-              totalRedactions: meta.totalRedactions ?? 0,
-              byRule: { ...byRule },
-            });
-          }
-        }
-
-        // Extract timings - default to 0 if not present
-        const timings = meta.timings
-          ? { total_ms: meta.timings.total_ms ?? 0 }
-          : { total_ms: 0 };
-
-        rawCaptures.push({
-          sessionId: meta.sessionId,
-          source: meta.source ?? "unknown",
-          provider: meta.provider ?? "unknown",
-          targetUrl: meta.targetUrl ?? "",
-          requestBytes: meta.requestBytes ?? 0,
-          responseBytes: meta.responseBytes ?? 0,
-          timings,
-          timestamp: meta.timestamp ?? new Date().toISOString(),
-          requestBody: undefined,
-          responseBody: undefined,
-        });
-      } catch (error) {
-        console.error(
-          `Error reading metadata for grouped sessions ${filename}:`,
-          error,
-        );
-        continue;
-      }
+      rawCaptures.push({
+        sessionId: meta.sessionId,
+        source: "unknown", // Not stored in SQLite currently
+        provider: "unknown", // Not stored in SQLite currently
+        targetUrl: "", // Not stored in SQLite currently
+        requestBytes: 0,
+        responseBytes: 0,
+        timings,
+        timestamp: new Date(meta.createdAt).toISOString(),
+        requestBody: undefined,
+        responseBody: undefined,
+      });
     }
 
     const { summaries, metrics } = groupCapturesIntoSessions(

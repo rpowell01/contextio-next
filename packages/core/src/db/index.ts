@@ -8,6 +8,7 @@ import {
 	ensureDefaultProviders,
 	importProvidersFromJson,
 } from "./provider-repo.js";
+import { importRedactionMetaFromFiles } from "./redaction-repo.js";
 
 export {
 	getDb,
@@ -54,6 +55,21 @@ export {
 	type CaptureMetadata,
 } from "./capture-repo.js";
 
+export {
+	upsertRedactionMetadata,
+	upsertRedactionMetadataBulk,
+	getRedactionMetadataByCaptureId,
+	getRedactionMetadataBySessionId,
+	aggregateRedactionMetadataBySession,
+	deleteRedactionMetadataByCaptureId,
+	getRedactionAggregateStats,
+	importRedactionMetaFromFiles,
+	redactionMetadataExists,
+	type RedactionMetadata,
+	type RedactionMetadataRow,
+	type SessionRedactionAggregate,
+} from "./redaction-repo.js";
+
 /**
  * Initialize the database: open connection and run all pending migrations.
  * Call this once at application startup.
@@ -68,6 +84,24 @@ export function initDb(): void {
 	// Import providers from providers.json for backward compatibility
 	// This allows existing providers.json configurations to be migrated to SQLite
 	importProvidersFromJson();
+	
+	// Import existing .redact-meta.json sidecar files into SQLite
+	// This allows existing redaction metadata to be migrated to SQLite
+	importRedactionMetaFromFiles(getCaptureDirForRedactionImport());
+}
+
+/**
+ * Get the capture directory for redaction metadata import.
+ * Uses the same resolution logic as the proxy/web packages.
+ */
+function getCaptureDirForRedactionImport(): string {
+	const envPath = process.env.LOGGER_CAPTURE_DIR;
+	if (envPath) {
+		return envPath;
+	}
+	const { homedir } = require("os");
+	const home = homedir();
+	return `${home}/.contextio/captures`;
 }
 
 /**

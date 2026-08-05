@@ -24,6 +24,10 @@ import { join } from "node:path";
 import type { EncryptionAtRestConfig } from "@contextio/core";
 import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
 import { encrypt, decrypt } from "@contextio/logger";
+import {
+	upsertRedactionMetadata,
+	type RedactionMetadata,
+} from "@contextio/core/db";
 
 
 
@@ -120,6 +124,12 @@ export interface RedactionMetaWatcherOptions {
    * using the same key derivation as capture files.
    */
   encryption?: EncryptionAtRestConfig;
+  /**
+   * Optional callback to persist redaction metadata to SQLite.
+   * When provided, the watcher will also write metadata to the database
+   * in addition to the sidecar file.
+   */
+  persistToSqlite?: (metadata: RedactionMetadata) => void;
 }
 
 export interface RedactionMatch {
@@ -661,6 +671,29 @@ async function mergeExistingMetadata(
       );
 
       await atomicWriteMetadata(metaPath, metadata, opts.encryption);
+      
+      // Also persist to SQLite if callback is provided
+      if (opts.persistToSqlite) {
+        try {
+          const sqliteMetadata: RedactionMetadata = {
+            captureId: metadata.captureId,
+            sessionId: metadata.sessionId ?? null,
+            ruleCounts: metadata.byRule,
+            totalRedactions: metadata.totalRedactions,
+            encrypted: opts.encryption?.enabled ?? false,
+            createdAt: new Date(metadata.generatedAt).getTime(),
+            updatedAt: Date.now(),
+          };
+          opts.persistToSqlite(sqliteMetadata);
+        } catch (sqliteErr) {
+          console.error(
+            `[redaction-meta-watcher] Failed to persist to SQLite for ${captureFilename}:`,
+            sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr),
+          );
+          // Don't re-schedule for SQLite errors - sidecar file was written successfully
+        }
+      }
+      
       if (opts.onMetadataReady) {
         opts.onMetadataReady(metadata);
       }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withRequestCache } from "@/lib/request-cache";
-import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/server-utils";
+import { getAllRedactionMetadataFromDb } from "@/lib/sessions/db-utils";
 import { groupCapturesIntoSessions } from "@/lib/sessions/grouping";
 
 interface ProgressUpdate {
@@ -25,11 +25,10 @@ async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGener
   // Send initial progress
   yield { type: "progress", current: 0, total: 0, message: "Loading session metadata..." };
 
-  // Load redaction metadata files - these are small and contain all needed info
-  const metaFiles = await listRedactionMetaFiles();
-  metaFiles.sort();
+  // Load redaction metadata from SQLite (much faster than file scanning)
+  const allMeta = await getAllRedactionMetadataFromDb();
 
-  if (metaFiles.length === 0) {
+  if (allMeta.length === 0) {
     yield { type: "progress", current: 0, total: 0, message: "No sessions found" };
     yield {
       type: "complete",
@@ -47,49 +46,39 @@ async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGener
 
   const rawCaptures: any[] = [];
 
-  for (let i = 0; i < metaFiles.length; i++) {
-    const filename = metaFiles[i];
-    try {
-      const meta = await loadRedactionMeta(filename);
-      if (!meta) continue;
-      if (meta.sessionId?.startsWith("title-")) continue;
+  for (let i = 0; i < allMeta.length; i++) {
+    const meta = allMeta[i];
+    // Skip title-* sessions
+    if (meta.sessionId?.startsWith("title-")) continue;
 
-      if (meta.sessionId) {
-        // Build raw capture data directly from metadata (fast - no full file reads!)
-        const byPlaceholder = meta.matches && Array.isArray(meta.matches)
-          ? {}
-          : meta.byRule ? Object.fromEntries(
-              Object.entries(meta.byRule).map(([rule, count]) => [rule, count])
-            )
-          : {};
+    if (meta.sessionId) {
+      // Build raw capture data directly from SQLite metadata
+      const byRule = meta.ruleCounts;
 
-        const existing = redactionMetaBySession.get(meta.sessionId);
-        redactionMetaBySession.set(meta.sessionId, {
-          totalRedactions: (existing?.totalRedactions || 0) + (meta.totalRedactions || 0),
-          byRule: { ...existing?.byRule, ...byPlaceholder },
-        });
+      const existing = redactionMetaBySession.get(meta.sessionId);
+      redactionMetaBySession.set(meta.sessionId, {
+        totalRedactions: (existing?.totalRedactions || 0) + meta.totalRedactions,
+        byRule: { ...existing?.byRule, ...byRule },
+      });
 
-        // Push capture data directly from metadata - no readCaptureFile needed!
-        rawCaptures.push({
-          sessionId: meta.sessionId,
-          source: meta.source ?? "unknown",
-          provider: meta.provider ?? "unknown",
-          targetUrl: meta.targetUrl ?? "",
-          requestBytes: meta.requestBytes ?? 0,
-          responseBytes: meta.responseBytes ?? 0,
-          timings: meta.timings ? { total_ms: meta.timings.total_ms ?? 0 } : { total_ms: 0 },
-          timestamp: meta.timestamp ?? new Date().toISOString(),
-          // No requestBody/responseBody needed for list view
-          redactionStats: undefined, // We use aggregated redactionMetaBySession instead
-        });
-      }
-    } catch (error) {
-      console.error(`Error reading metadata ${filename}:`, error);
+      // Push capture data directly from metadata - no readCaptureFile needed!
+      rawCaptures.push({
+        sessionId: meta.sessionId,
+        source: "unknown",
+        provider: "unknown",
+        targetUrl: "",
+        requestBytes: 0,
+        responseBytes: 0,
+        timings: { total_ms: 0 },
+        timestamp: new Date(meta.createdAt).toISOString(),
+        // No requestBody/responseBody needed for list view
+        redactionStats: undefined, // We use aggregated redactionMetaBySession instead
+      });
     }
 
     // Yield progress periodically
-    if (i % 10 === 0 || i === metaFiles.length - 1) {
-      yield { type: "progress", current: i + 1, total: metaFiles.length, message: `Loading metadata ${i + 1}/${metaFiles.length}` };
+    if (i % 10 === 0 || i === allMeta.length - 1) {
+      yield { type: "progress", current: i + 1, total: allMeta.length, message: `Loading metadata ${i + 1}/${allMeta.length}` };
     }
   }
 
@@ -97,7 +86,7 @@ async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGener
   rawCaptures.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   // Group into sessions
-  yield { type: "progress", current: metaFiles.length, total: metaFiles.length, message: "Grouping sessions..." };
+  yield { type: "progress", current: allMeta.length, total: allMeta.length, message: "Grouping sessions..." };
   const { summaries, metrics } = groupCapturesIntoSessions(rawCaptures, redactionMetaBySession);
 
   // Paginate
@@ -110,8 +99,8 @@ async function* processSessionsWithProgress(page = 1, pageSize = 20): AsyncGener
   // Send final result
   yield {
     type: "complete",
-    current: metaFiles.length,
-    total: metaFiles.length,
+    current: allMeta.length,
+    total: allMeta.length,
     data: {
       summaries: paginatedSummaries,
       metrics,
