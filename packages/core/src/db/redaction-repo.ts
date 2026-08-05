@@ -313,8 +313,13 @@ export async function importRedactionMetaFromFiles(
 				const isForeignKeyError = err instanceof Error && 
 					(err.message.includes("FOREIGN KEY constraint failed") || 
 					 err.message.includes("foreign key constraint failed"));
+				// Check if file was deleted between listing and reading (race condition with cleanup)
+				const isNotFoundError = err instanceof Error && 
+					(err.message.includes("ENOENT") || err.message.includes("no such file or directory"));
 				if (isForeignKeyError) {
 					console.warn(`[redaction-repo] Skipping ${filename}: capture ${captureId} not found in database`);
+				} else if (isNotFoundError) {
+					console.warn(`[redaction-repo] Skipping ${filename}: file was deleted before import (likely cleaned up)`);
 				} else {
 					console.warn(`[redaction-repo] Failed to import redaction metadata from ${filename}: ${err instanceof Error ? err.message : String(err)}`);
 				}
