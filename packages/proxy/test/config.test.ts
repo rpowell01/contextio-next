@@ -3,10 +3,48 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { readProvidersConfig, resolveConfig } from "../dist/config.js";
+import { closeDb, initDb, Database } from "@contextio/core/db";
 
 function makeTempHome(): string {
 	return path.join(tmpdir(), `contextio-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+}
+
+// Test database setup for DB isolation
+let testDbDir: string;
+let testDbPath: string;
+
+function setupTestDb(): void {
+	testDbDir = mkdtempSync(join(tmpdir(), "contextio-proxy-test-"));
+	testDbPath = join(testDbDir, "test.db");
+	process.env.CONTEXTIO_DB_PATH = testDbPath;
+	closeDb();
+	initDb();
+
+	// Verify providers table exists
+	const db = new Database(testDbPath);
+	const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='providers'").get();
+	if (!tables) {
+		db.close();
+		throw new Error("providers table not created - migrations not applied correctly!");
+	}
+	db.close();
+}
+
+function clearProvidersTable(): void {
+	const db = new Database(testDbPath);
+	db.prepare("DELETE FROM providers").run();
+	db.close();
+}
+
+function teardownTestDb(): void {
+	closeDb();
+	if (testDbDir) {
+		rmSync(testDbDir, { recursive: true, force: true });
+	}
+	delete process.env.CONTEXTIO_DB_PATH;
 }
 
 function settingsPathFromHome(home: string): string {
@@ -57,6 +95,7 @@ describe("resolveConfig", () => {
 	let providersPath: string | undefined;
 
 	before(() => {
+		setupTestDb();
 		tempHome = makeTempHome();
 		fs.mkdirSync(tempHome, { recursive: true });
 		process.env.HOME = tempHome;
@@ -87,14 +126,16 @@ describe("resolveConfig", () => {
 			}
 		}
 		delete process.env.PROVIDERS_FILE;
+		teardownTestDb();
 	});
 
-	before(() => {
+	beforeEach(() => {
 		// Per-test env isolation
 		delete process.env.LOGGER_CAPTURE_MAX_AGE;
 		delete process.env.LOGGER_CAPTURE_CLEANUP_INTERVAL;
 		delete process.env.LOGGER_CAPTURE_CLEANUP_ENABLED;
 		removeSettings(tempHome!);
+		clearProvidersTable();
 	});
 
 	after(() => {
@@ -292,6 +333,7 @@ describe("readProvidersConfig", () => {
 	let tempDir: string | undefined;
 
 	before(() => {
+		setupTestDb();
 		tempDir = makeTempHome();
 		fs.mkdirSync(tempDir!, { recursive: true });
 	});
@@ -304,6 +346,7 @@ describe("readProvidersConfig", () => {
 				// best-effort cleanup
 			}
 		}
+		teardownTestDb();
 	});
 
 	beforeEach(() => {
@@ -311,6 +354,7 @@ describe("readProvidersConfig", () => {
 		delete process.env.UPSTREAM_OPENAI_URL;
 		delete process.env.CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS;
 		delete process.env.CONTEXTIO_RETRY_OPENAI_MAX_RETRIES;
+		clearProvidersTable();
 	});
 
 	it("throws when file is missing", () => {
