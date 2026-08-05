@@ -128,5 +128,22 @@ export async function getAllRedactionMetadataFromDb(): Promise<import("@contexti
     encrypted: row.encrypted === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    source: row.source ?? null,
+    provider: row.provider ?? null,
+    targetUrl: row.target_url ?? null,
+    requestBytes: row.request_bytes ?? undefined,
+    responseBytes: row.response_bytes ?? undefined,
+    timings: row.timings_total_ms !== null ? {
+      send_ms: row.timings_send_ms ?? undefined,
+      wait_ms: row.timings_wait_ms ?? undefined,
+      receive_ms: row.timings_receive_ms ?? undefined,
+      total_ms: row.timings_total_ms ?? undefined,
+    } : undefined,
+    totalInputTokens: row.total_input_tokens ?? undefined,
+    totalOutputTokens: row.total_output_tokens ?? undefined,
+    tokensPerSecond: row.tokens_per_second ?? undefined,
+    successCount: row.success_count ?? undefined,
+    errorCount: row.error_count ?? undefined,
+    model: row.model ?? undefined,
   }));
 }

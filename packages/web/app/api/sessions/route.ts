@@ -256,16 +256,18 @@ async function handleGet(request: Request): Promise<Response> {
       // Skip title-* sessions (match Redactions page behavior)
       if (meta.sessionId?.startsWith("title-")) continue;
 
-      // Extract timings - default to 0 if not present
-      const timings = { total_ms: 0 }; // SQLite doesn't store timings yet
+      // Use actual data from database instead of hardcoded "unknown"
+      const timings = meta.timings
+        ? { total_ms: meta.timings.total_ms ?? 0 }
+        : { total_ms: 0 };
 
       rawCaptures.push({
         sessionId: meta.sessionId,
-        source: "unknown", // Not stored in SQLite currently
-        provider: "unknown", // Not stored in SQLite currently
-        targetUrl: "", // Not stored in SQLite currently
-        requestBytes: 0,
-        responseBytes: 0,
+        source: meta.source ?? "unknown",
+        provider: meta.provider ?? "unknown",
+        targetUrl: meta.targetUrl ?? "",
+        requestBytes: meta.requestBytes ?? 0,
+        responseBytes: meta.responseBytes ?? 0,
         timings,
         timestamp: new Date(meta.createdAt).toISOString(),
         requestBody: undefined,
