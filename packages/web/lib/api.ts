@@ -92,6 +92,11 @@ export interface CaptureMetadataSidecar {
   };
   totalInputTokens?: number;
   totalOutputTokens?: number;
+  totalTokens?: {
+    input: number;
+    output: number;
+    total: number;
+  };
   tokensPerSecond?: number;
   successCount?: number;
   errorCount?: number;

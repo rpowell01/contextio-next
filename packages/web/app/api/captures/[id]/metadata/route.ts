@@ -1,9 +1,11 @@
+import fs from "fs/promises";
+import { join } from "path";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
   getRedactionMetadataByCaptureIdFromDb,
 } from "@/lib/sessions/db-utils";
-import { isValidFilename } from "@/lib/sessions/server-utils";
+import { getCaptureDir, isValidFilename, MAX_FILE_SIZE } from "@/lib/sessions/server-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import { withAuth } from "@/lib/auth/guards";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
@@ -18,6 +20,23 @@ async function handleGetMetadata(
     try {
       if (!isValidFilename(id)) {
         return NextResponse.json(createErrorResponse({ message: "Invalid capture id", status: 400 }), { status: 400 });
+      }
+
+      // Check if the capture file exists and its size is within limits
+      const captureDir = await getCaptureDir();
+      const filepath = join(captureDir, id);
+      const stats = await fs.stat(filepath).catch(() => null);
+      if (!stats) {
+        return NextResponse.json(
+          createErrorResponse({ message: "Capture not found", status: 404, details: { captureId: id } }),
+          { status: 404 },
+        );
+      }
+      if (stats.size > MAX_FILE_SIZE) {
+        return NextResponse.json(
+          createErrorResponse({ message: "Capture file too large", status: 413 }),
+          { status: 413 },
+        );
       }
 
       // Capture ID from route params always has .json extension (validated by isValidFilename)

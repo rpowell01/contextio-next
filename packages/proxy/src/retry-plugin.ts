@@ -143,8 +143,11 @@ interface StreamState {
   dataBuffer: string;
   hasErrorEvent: boolean;
   // Full response buffer for streaming retry - accumulates all SSE chunks
-  fullResponseBuffer: Buffer[];
-  fullResponseBufferSize: number;
+  fullResponseBuffer: Buffer;
+  maxBufferSize: number;
+  bufferOverflow: boolean;
+  // Original request body for retry
+  originalRequestBody: Buffer | null;
   // Pending retry signal for streaming responses
   pendingRetry?: {
     retryId: string;
@@ -790,6 +793,8 @@ export class RetryPlugin implements ProxyPlugin {
       // Also initialize streaming state if we have a sessionId (for streaming responses)
       // The sessionId is used to track streaming state across chunks
       if (ctx.sessionId) {
+        const providerConfig = this.getConfigForProvider(ctx.provider);
+        const maxBufferSize = providerConfig.maxResponseBufferSize ?? this.maxBufferSize;
         this.streamState.set(ctx.sessionId, {
           errorDetected: false,
           errorStatus: null,
@@ -803,8 +808,10 @@ export class RetryPlugin implements ProxyPlugin {
           inDataField: false,
           dataBuffer: "",
           hasErrorEvent: false,
-          fullResponseBuffer: [],
-          fullResponseBufferSize: 0,
+          fullResponseBuffer: Buffer.alloc(0),
+          maxBufferSize,
+          bufferOverflow: false,
+          originalRequestBody: ctx.rawBody,
           streamRetryCount: 0,
         });
       }
@@ -1043,23 +1050,16 @@ export class RetryPlugin implements ProxyPlugin {
     // Buffer the chunk for potential retry
     // Only buffer if we haven't detected an error yet (no point buffering after error)
     if (!streamState.errorDetected) {
-      streamState.fullResponseBuffer.push(chunk);
-      streamState.fullResponseBufferSize += chunk.length;
-
-      // Get provider-specific max buffer size
-      const providerConfig = this.getConfigForProvider(streamState.provider);
-      const maxBufferSize = providerConfig.maxResponseBufferSize ?? this.maxBufferSize;
-
-      // Check buffer size limit and evict oldest chunks if exceeded
-      if (streamState.fullResponseBufferSize > maxBufferSize) {
-        // Remove oldest chunks until we're under the limit
-        while (streamState.fullResponseBufferSize > maxBufferSize && streamState.fullResponseBuffer.length > 0) {
-          const removed = streamState.fullResponseBuffer.shift();
-          if (removed) {
-            streamState.fullResponseBufferSize -= removed.length;
-          }
-        }
-        console.debug(`[retry] Stream buffer exceeded maxBufferSize (${maxBufferSize}), evicted oldest chunks. Current size: ${streamState.fullResponseBufferSize}`);
+      // Check if adding this chunk would exceed max buffer size
+      const newSize = streamState.fullResponseBuffer.length + chunk.length;
+      
+      if (newSize > streamState.maxBufferSize) {
+        // Buffer overflow - mark it and don't add this chunk
+        streamState.bufferOverflow = true;
+        console.debug(`[retry] Stream buffer overflow detected (max: ${streamState.maxBufferSize}, would be: ${newSize}). Buffering disabled.`);
+      } else {
+        // Append chunk to buffer
+        streamState.fullResponseBuffer = Buffer.concat([streamState.fullResponseBuffer, chunk]);
       }
     }
 
@@ -1402,18 +1402,16 @@ export class RetryPlugin implements ProxyPlugin {
           // Don't clean up state yet - forward.ts will consume the pending retry
           // and we clean up after the retry is handled
           // Discard the buffered response since we're retrying
-          streamState.fullResponseBuffer = [];
-          streamState.fullResponseBufferSize = 0;
+          streamState.fullResponseBuffer = Buffer.alloc(0);
           return null;
         }
       }
     }
 
     // No retry needed - stream completed successfully
-    // Forward.ts already buffers the stream in streamBufferChunks
+    // forward.ts already buffers the stream in streamBufferChunks and sends it to the client
     // We just clean up our internal buffer
-    streamState.fullResponseBuffer = [];
-    streamState.fullResponseBufferSize = 0;
+    streamState.fullResponseBuffer = Buffer.alloc(0);
 
     // Clean up stream state and request store
     this.cleanupAllState(streamState, sessionId);
@@ -1548,6 +1546,10 @@ export class RetryPlugin implements ProxyPlugin {
     streamState.partialContent = "";
     streamState.inDataField = false;
     streamState.dataBuffer = "";
+    // Reset bufferOverflow flag for the retry attempt
+    streamState.bufferOverflow = false;
+    // Reset fullResponseBuffer for the retry attempt
+    streamState.fullResponseBuffer = Buffer.alloc(0);
     
     // Refresh requestStore entry timestamp to prevent premature eviction during retry delay
     const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
@@ -1590,7 +1592,7 @@ export class RetryPlugin implements ProxyPlugin {
     if (!streamState || streamState.fullResponseBuffer.length === 0) {
       return null;
     }
-    return Buffer.concat(streamState.fullResponseBuffer);
+    return streamState.fullResponseBuffer;
   }
 
   /**
@@ -1598,7 +1600,7 @@ export class RetryPlugin implements ProxyPlugin {
    */
   getStreamBufferSizeForTesting(sessionId: string): number {
     const streamState = this.streamState.get(sessionId);
-    return streamState?.fullResponseBufferSize ?? 0;
+    return streamState?.fullResponseBuffer.length ?? 0;
   }
 }
 

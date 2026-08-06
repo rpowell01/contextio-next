@@ -1,9 +1,15 @@
 import {
   getAllRedactionMetadataFromDb,
 } from "@/lib/sessions/db-utils";
+import {
+  loadRedactionMeta,
+  metaFilenameFor,
+} from "@/lib/sessions/server-utils";
 import { consumeToken } from "@/lib/csrf";
 import { unstable_cache } from "next/cache";
-import { convertByRuleToByPlaceholder } from "@/lib/sessions/placeholder-map";
+import {
+  ruleNameToPlaceholder,
+} from "@/lib/sessions/placeholder-map";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 interface RedactionSummary {
@@ -53,13 +59,40 @@ const getRedactionsSummary = unstable_cache(
         // Skip title generation captures
         if (sessionId.startsWith("title-")) continue;
 
-        // Get placeholder counts from ruleCounts (byRule)
-        const byPlaceholder: Record<string, number> = {};
-        if (meta.ruleCounts && typeof meta.ruleCounts === "object") {
-          const converted = convertByRuleToByPlaceholder(meta.ruleCounts);
-          Object.assign(byPlaceholder, converted);
+        // Load sidecar meta file for authoritative counts and placeholder names
+        const captureIdBase = meta.captureId.endsWith(".json") ? meta.captureId.slice(0, -5) : meta.captureId;
+        const captureId = captureIdBase + ".json";
+        const metaFileName = metaFilenameFor(captureId);
+        const metaFile = await loadRedactionMeta(metaFileName);
+
+        // Determine authoritative byRule and totalRedactions:
+        // 1. Prefer sidecar metaFile.byRule (complete per-rule counts)
+        // 2. Fall back to SQLite meta.ruleCounts
+        const byRule = metaFile?.byRule ?? meta.ruleCounts ?? {};
+        const totalRedactions = metaFile?.totalRedactions ?? meta.totalRedactions ?? 0;
+
+        // Build ruleId -> placeholder name map from matches (if available)
+        // Matches are truncated samples but give accurate placeholder names for custom rules
+        const ruleToPlaceholder = new Map<string, string>();
+        if (metaFile?.matches && metaFile.matches.length > 0) {
+          for (const match of metaFile.matches) {
+            // postValue contains the placeholder (e.g., "[API_KEY_REDACTED]")
+            const rawPlaceholder = match.postValue;
+            if (rawPlaceholder) {
+              const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
+              ruleToPlaceholder.set(match.ruleId, placeholder);
+            }
+          }
         }
-        const totalRedactions = meta.totalRedactions ?? 0;
+
+        // Convert byRule to byPlaceholder using matches for placeholder names when available
+        // Fall back to preset-based conversion for rules not in matches
+        const byPlaceholder: Record<string, number> = {};
+        for (const [rule, count] of Object.entries(byRule)) {
+          if (typeof count !== "number" || count <= 0) continue;
+          const placeholder = ruleToPlaceholder.get(rule) ?? ruleNameToPlaceholder(rule);
+          byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + count;
+        }
 
         // Track max total redactions per session
         const existingMax = maxRedactionsBySession.get(sessionId) ?? 0;
@@ -125,16 +158,38 @@ async function getRedactionDetailsFromDb(
       // Use createdAt from DB for timestamp
       const timestamp = meta.createdAt ? new Date(meta.createdAt).toISOString() : new Date().toISOString();
 
-      // Use ruleCounts (byRule) to compute placeholder breakdown
-      // SQLite doesn't store matches array, so we convert from ruleCounts
-      const byPlaceholder: Record<string, number> = {};
-      if (meta.ruleCounts && typeof meta.ruleCounts === "object") {
-        const converted = convertByRuleToByPlaceholder(meta.ruleCounts);
-        Object.assign(byPlaceholder, converted);
+      // Load sidecar meta file for authoritative counts and placeholder names
+      const metaFileName = metaFilenameFor(captureId);
+      const metaFile = await loadRedactionMeta(metaFileName);
+
+      // Determine authoritative byRule and totalRedactions:
+      // 1. Prefer sidecar metaFile.byRule (complete per-rule counts)
+      // 2. Fall back to SQLite meta.ruleCounts
+      const byRule = metaFile?.byRule ?? meta.ruleCounts ?? {};
+      const totalRedactions = metaFile?.totalRedactions ?? meta.totalRedactions ?? 0;
+
+      // Build ruleId -> placeholder name map from matches (if available)
+      // Matches are truncated samples but give accurate placeholder names for custom rules
+      const ruleToPlaceholder = new Map<string, string>();
+      if (metaFile?.matches && metaFile.matches.length > 0) {
+        for (const match of metaFile.matches) {
+          // postValue contains the placeholder (e.g., "[API_KEY_REDACTED]")
+          const rawPlaceholder = match.postValue;
+          if (rawPlaceholder) {
+            const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
+            ruleToPlaceholder.set(match.ruleId, placeholder);
+          }
+        }
       }
 
-      // Fallback: compute totalRedactions from byPlaceholder if not set
-      const totalRedactions = meta.totalRedactions ?? Object.values(byPlaceholder).reduce((a, b) => a + b, 0);
+      // Convert byRule to byPlaceholder using matches for placeholder names when available
+      // Fall back to preset-based conversion for rules not in matches
+      const byPlaceholder: Record<string, number> = {};
+      for (const [rule, count] of Object.entries(byRule)) {
+        if (typeof count !== "number" || count <= 0) continue;
+        const placeholder = ruleToPlaceholder.get(rule) ?? ruleNameToPlaceholder(rule);
+        byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + count;
+      }
 
       allRows.push({
         captureId,

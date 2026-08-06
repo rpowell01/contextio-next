@@ -40,6 +40,11 @@ export async function getRedactionMetadataByCaptureIdFromDb(
   };
   totalInputTokens?: number;
   totalOutputTokens?: number;
+  totalTokens?: {
+    input: number;
+    output: number;
+    total: number;
+  };
   tokensPerSecond?: number;
   successCount?: number;
   errorCount?: number;
@@ -64,6 +69,14 @@ export async function getRedactionMetadataByCaptureIdFromDb(
     timings: meta.timings ?? undefined,
     totalInputTokens: meta.totalInputTokens ?? undefined,
     totalOutputTokens: meta.totalOutputTokens ?? undefined,
+    totalTokens:
+      meta.totalInputTokens !== undefined && meta.totalOutputTokens !== undefined
+        ? {
+            input: meta.totalInputTokens,
+            output: meta.totalOutputTokens,
+            total: meta.totalInputTokens + meta.totalOutputTokens,
+          }
+        : undefined,
     tokensPerSecond: meta.tokensPerSecond ?? undefined,
     successCount: meta.successCount ?? undefined,
     errorCount: meta.errorCount ?? undefined,
