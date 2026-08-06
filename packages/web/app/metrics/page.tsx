@@ -317,12 +317,12 @@ function MetricsContent() {
   }, [fetchRateLimiterMetrics, activeTab]);
 
   // Fetch main metrics when time range, maxDataPoints, or page changes
-  // Only fetch if traffic tab is active or on initial load
+  // Only fetch if traffic tab is active
   useEffect(() => {
-    if (activeTab === "traffic" || loading) {
+    if (activeTab === "traffic") {
       fetchMetrics();
     }
-  }, [fetchMetrics, activeTab, loading]);
+  }, [fetchMetrics, activeTab]);
 
   // Cleanup on unmount
   useEffect(() => {
