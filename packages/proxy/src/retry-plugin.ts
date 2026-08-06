@@ -479,6 +479,16 @@ export class RetryPlugin implements ProxyPlugin {
         state.errorStatus = 429; // NVIDIA ResourceExhausted is a rate limit error
         state.errorMessage = nvidiaCheck.message;
       }
+      // Also check for rate limit indicators in data buffer (for bare event: error with rate limit data)
+      // Only run if we don't already have a numeric status
+      if (state.errorStatus === null) {
+        const rateLimitCheck = this.checkRateLimitInData(state.dataBuffer);
+        if (rateLimitCheck.isRateLimit) {
+          state.errorDetected = true;
+          state.errorStatus = null; // No numeric status
+          state.errorMessage = rateLimitCheck.message;
+        }
+      }
       state.dataBuffer = "";
       state.inDataField = false;
     }
@@ -506,6 +516,11 @@ export class RetryPlugin implements ProxyPlugin {
       const result = this.checkDataForError(state.dataBuffer);
       if (result.isError) {
         return { isError: true, status: result.status, message: result.message };
+      }
+      // Also check for rate limit indicators in buffered data
+      const rateLimitCheck = this.checkRateLimitInData(state.dataBuffer);
+      if (rateLimitCheck.isRateLimit) {
+        return { isError: true, status: null, message: rateLimitCheck.message };
       }
     }
 
@@ -1322,6 +1337,17 @@ export class RetryPlugin implements ProxyPlugin {
             streamState.errorMessage = nvidiaCheck.message;
           }
         }
+        // Also check for rate limit indicators in partial content (for bare event: error with rate limit data)
+        const rateLimitCheck = this.checkRateLimitInData(streamState.partialContent);
+        if (rateLimitCheck.isRateLimit) {
+          const shouldUpdate = !streamState.errorDetected ||
+            (streamState.errorStatus === null);
+          if (shouldUpdate) {
+            streamState.errorDetected = true;
+            streamState.errorStatus = null; // No numeric status
+            streamState.errorMessage = rateLimitCheck.message;
+          }
+        }
       }
       // Clear the partial content
       streamState.partialField = null;
@@ -1354,6 +1380,18 @@ export class RetryPlugin implements ProxyPlugin {
           streamState.errorDetected = true;
           streamState.errorStatus = 429; // NVIDIA ResourceExhausted is a rate limit error
           streamState.errorMessage = nvidiaCheck.message;
+        }
+      }
+      // Check for rate limit indicators in data buffer (for bare event: error with rate limit data)
+      // This handles cases like: event: error\ndata: {"message":"Rate limit exceeded"}
+      const rateLimitCheck = this.checkRateLimitInData(streamState.dataBuffer);
+      if (rateLimitCheck.isRateLimit) {
+        const shouldUpdate = !streamState.errorDetected ||
+          (streamState.errorStatus === null);
+        if (shouldUpdate) {
+          streamState.errorDetected = true;
+          streamState.errorStatus = null; // No numeric status
+          streamState.errorMessage = rateLimitCheck.message;
         }
       }
       streamState.dataBuffer = "";
@@ -1410,6 +1448,17 @@ export class RetryPlugin implements ProxyPlugin {
         // For other retryable errors, use provider-specific
         if (!errorType && streamState.errorStatus && config.retryableStatuses.includes(streamState.errorStatus)) {
           errorType = 'provider-specific';
+        }
+
+// Fallback: if error was detected but no specific type matched, inspect error message
+        // for rate limit indicators (handles Anthropic SSE errors, bare 'event: error', etc.)
+        // Only rate limit errors should trigger streaming retry per requirement 4 of q3kan.6
+        if (!errorType && streamState.errorDetected && streamState.errorMessage) {
+          const rateLimitCheck = this.checkRateLimitInData(streamState.errorMessage);
+          if (rateLimitCheck.isRateLimit) {
+            errorType = 'provider-specific';
+            console.debug(`[retry] Detected rate limit error via message inspection for streaming retry: ${rateLimitCheck.message}`);
+          }
         }
 
         // Use maxStreamRetries for streaming-specific retry limit

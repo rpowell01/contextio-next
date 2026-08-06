@@ -39,9 +39,7 @@ async function handleGetMetadata(
         );
       }
 
-      // Capture ID from route params always has .json extension (validated by isValidFilename)
-      // Strip it for database lookup since SQLite stores IDs without extension
-      const captureId = id.slice(0, -5);
+      const captureId = id.replace(/\.json$/, "");
       const meta = await getRedactionMetadataByCaptureIdFromDb(captureId);
 
       if (!meta) {

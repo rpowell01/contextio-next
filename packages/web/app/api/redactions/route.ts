@@ -153,7 +153,7 @@ async function getRedactionDetailsFromDb(
       // Safely construct captureId - ensure we don't double-append .json
       const captureIdBase = meta.captureId.endsWith(".json") ? meta.captureId.slice(0, -5) : meta.captureId;
       const captureId = captureIdBase + ".json";
-      const sessionIdOut = meta.sessionId ?? null;
+      const sessionIdOut = meta.sessionId;
       const source = meta.source ?? null;
       const provider = meta.provider ?? "unknown";
       const targetUrl = meta.targetUrl ?? "";
