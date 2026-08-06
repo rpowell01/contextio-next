@@ -546,8 +546,12 @@ export async function importRedactionMetaFromFiles(
 				Object.assign(metadata, missingFields);
 				
 				upsertRedactionMetadata(metadata);
+				
+				// Delete the metadata file after successful import to prevent reprocessing on container restart
+				fs.unlinkSync(filepath);
+				
 				imported++;
-				console.log(`[redaction-repo] Imported redaction metadata for ${captureId}`);
+				console.log(`[redaction-repo] Imported redaction metadata for ${captureId} and removed source file`);
 			} catch (err) {
 				// Check if file was deleted between listing and reading (race condition with cleanup)
 				const isNotFoundError = err instanceof Error && 
