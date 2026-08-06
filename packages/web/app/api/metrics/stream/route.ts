@@ -269,8 +269,8 @@ async function* processMetricsWithProgress(
 
   yield {
     type: "complete",
-    current: metaFiles.length,
-    total: metaFiles.length,
+    current: allMeta.length,
+    total: allMeta.length,
     data: createSuccessResponse({
       traffic: finalTraffic,
       providers,
