@@ -46,7 +46,7 @@ async function handleGetMetadata(
 
       if (!meta) {
         return NextResponse.json(
-          createErrorResponse({ message: "Metadata not found", status: 404, details: { captureId: id } }),
+          createErrorResponse({ message: "Capture not found", status: 404, details: { captureId: id } }),
           { status: 404 },
         );
       }

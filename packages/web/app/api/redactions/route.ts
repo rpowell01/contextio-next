@@ -66,13 +66,15 @@ const getRedactionsSummary = unstable_cache(
         const metaFile = await loadRedactionMeta(metaFileName);
 
         // Determine authoritative byRule and totalRedactions:
-        // 1. Prefer sidecar metaFile.byRule (complete per-rule counts)
-        // 2. Fall back to SQLite meta.ruleCounts
+        // 1. Prefer sidecar metaFile.byRule and metaFile.totalRedactions (complete counts from redact plugin)
+        // 2. Fall back to SQLite meta.ruleCounts and meta.totalRedactions (computed by watcher from full capture scan)
+        // NEVER recompute from metaFile.matches which is truncated to 20 entries (MATCHES_LIMIT=20)
         const byRule = metaFile?.byRule ?? meta.ruleCounts ?? {};
         const totalRedactions = metaFile?.totalRedactions ?? meta.totalRedactions ?? 0;
 
         // Build ruleId -> placeholder name map from matches (if available)
-        // Matches are truncated samples but give accurate placeholder names for custom rules
+        // Matches are truncated samples (max 20) but give accurate placeholder names for custom rules
+        // This is ONLY used for placeholder name resolution, NOT for counting
         const ruleToPlaceholder = new Map<string, string>();
         if (metaFile?.matches && metaFile.matches.length > 0) {
           for (const match of metaFile.matches) {
@@ -163,13 +165,15 @@ async function getRedactionDetailsFromDb(
       const metaFile = await loadRedactionMeta(metaFileName);
 
       // Determine authoritative byRule and totalRedactions:
-      // 1. Prefer sidecar metaFile.byRule (complete per-rule counts)
-      // 2. Fall back to SQLite meta.ruleCounts
+      // 1. Prefer sidecar metaFile.byRule and metaFile.totalRedactions (complete counts from redact plugin)
+      // 2. Fall back to SQLite meta.ruleCounts and meta.totalRedactions (computed by watcher from full capture scan)
+      // NEVER recompute from metaFile.matches which is truncated to 20 entries (MATCHES_LIMIT=20)
       const byRule = metaFile?.byRule ?? meta.ruleCounts ?? {};
       const totalRedactions = metaFile?.totalRedactions ?? meta.totalRedactions ?? 0;
 
       // Build ruleId -> placeholder name map from matches (if available)
-      // Matches are truncated samples but give accurate placeholder names for custom rules
+      // Matches are truncated samples (max 20) but give accurate placeholder names for custom rules
+      // This is ONLY used for placeholder name resolution, NOT for counting
       const ruleToPlaceholder = new Map<string, string>();
       if (metaFile?.matches && metaFile.matches.length > 0) {
         for (const match of metaFile.matches) {

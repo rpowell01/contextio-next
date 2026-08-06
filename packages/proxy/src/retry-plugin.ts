@@ -609,6 +609,64 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Check if a data field string contains rate limit indicators.
+   * This handles cases where SSE stream has event: error with rate limit data
+   * but no numeric HTTP status code.
+   * Returns { isRateLimit: boolean, message: string | null }
+   */
+  private checkRateLimitInData(dataStr: string): { isRateLimit: boolean; message: string | null } {
+    if (!dataStr) return { isRateLimit: false, message: null };
+
+    try {
+      const parsed = JSON.parse(dataStr);
+
+      // Check for explicit rate limit error type (Anthropic style: { type: "rate_limit_error", ... })
+      if (parsed.type && typeof parsed.type === 'string') {
+        const type = parsed.type.toLowerCase();
+        if (type.includes('rate_limit') || type.includes('ratelimit') || type.includes('rate-limit')) {
+          return { isRateLimit: true, message: parsed.message ?? JSON.stringify(parsed) };
+        }
+      }
+
+      // Check for error object with rate limit type (Anthropic: { error: { type: "rate_limit_error", ... } })
+      if (parsed.error && parsed.error.type) {
+        const type = parsed.error.type.toLowerCase();
+        if (type.includes('rate_limit') || type.includes('ratelimit') || type.includes('rate-limit')) {
+          return { isRateLimit: true, message: parsed.error.message ?? JSON.stringify(parsed.error) };
+        }
+      }
+
+      // Check for rate limit indicators in message field
+      if (parsed.message && typeof parsed.message === 'string') {
+        const msg = parsed.message.toLowerCase();
+        if (msg.includes('rate limit') || msg.includes('ratelimit') || msg.includes('rate-limit') ||
+            msg.includes('too many requests') || msg.includes('quota exceeded') || msg.includes('throttle')) {
+          return { isRateLimit: true, message: parsed.message };
+        }
+      }
+
+      // Check for generic error object with code/message
+      if (parsed.code && parsed.message) {
+        const msg = parsed.message.toLowerCase();
+        if (msg.includes('rate limit') || msg.includes('ratelimit') || msg.includes('rate-limit') ||
+            msg.includes('too many requests') || msg.includes('quota exceeded') || msg.includes('throttle')) {
+          return { isRateLimit: true, message: parsed.message };
+        }
+      }
+
+    } catch {
+      // Not valid JSON, check raw string
+      const rawLower = dataStr.toLowerCase();
+      if (rawLower.includes('rate limit') || rawLower.includes('ratelimit') || rawLower.includes('rate-limit') ||
+          rawLower.includes('too many requests') || rawLower.includes('quota exceeded') || rawLower.includes('throttle')) {
+        return { isRateLimit: true, message: dataStr };
+      }
+    }
+
+    return { isRateLimit: false, message: null };
+  }
+
+  /**
    * Append "continue" message to the request body's messages array for NVIDIA retry.
    * Returns the modified body as a Buffer, or null if the body structure is not compatible.
    */
