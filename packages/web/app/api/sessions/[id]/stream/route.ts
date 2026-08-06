@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withRequestCache } from "@/lib/request-cache";
-import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/server-utils";
+import { getRedactionMetadataBySessionIdFromDb } from "@/lib/sessions/db-utils";
 import { groupCapturesIntoSessions, type RawCaptureData } from "@/lib/sessions/grouping";
 import type { SessionSummary, SessionMetrics } from "@/types/api";
 
@@ -48,10 +48,9 @@ async function* processSessionDetailWithProgress(
 ): AsyncGenerator<ProgressUpdate> {
   yield { type: "progress", current: 0, total: 0, message: "Loading session metadata..." };
 
-  const metaFiles = await listRedactionMetaFiles();
-  metaFiles.sort();
+  const sessionMeta = await getRedactionMetadataBySessionIdFromDb(sessionId);
 
-  if (metaFiles.length === 0) {
+  if (sessionMeta.length === 0) {
     yield {
       type: "progress",
       current: 0,
@@ -73,13 +72,12 @@ async function* processSessionDetailWithProgress(
   const rawCaptures: RawCaptureData[] = [];
   let matchedCaptures = 0;
 
-  for (let i = 0; i < metaFiles.length; i++) {
-    const filename = metaFiles[i];
-    try {
-      const meta = await loadRedactionMeta(filename);
-      if (!meta) continue;
-      if (meta.sessionId?.startsWith("title-")) continue;
+  for (let i = 0; i < sessionMeta.length; i++) {
+    const meta = sessionMeta[i];
+    if (!meta) continue;
+    if (meta.sessionId?.startsWith("title-")) continue;
 
+    try {
       if (meta.sessionId === sessionId || (meta.sessionId === null && sessionId === "unsorted")) {
         const timings = meta.timings
           ? { total_ms: meta.timings.total_ms ?? 0 }
@@ -94,14 +92,14 @@ async function* processSessionDetailWithProgress(
           requestBytes: meta.requestBytes ?? 0,
           responseBytes: meta.responseBytes ?? 0,
           timings,
-          timestamp: meta.timestamp ?? new Date().toISOString(),
+          timestamp: meta.createdAt != null ? new Date(meta.createdAt).toISOString() : new Date().toISOString(),
           requestBody: undefined,
           responseBody: undefined,
           responseStatus: 200,
           responseIsStreaming: false,
           redactionStats: {
             totalRedactions: meta.totalRedactions ?? 0,
-            byRule: meta.byRule ?? {},
+            byRule: meta.ruleCounts ?? {},
           },
           // Token metrics from metadata
           totalInputTokens: meta.totalInputTokens ?? 0,
@@ -110,29 +108,29 @@ async function* processSessionDetailWithProgress(
           successCount: meta.successCount ?? 0,
           errorCount: meta.errorCount ?? 0,
           model: meta.model ?? null,
-          filename,
+          filename: meta.captureId ? `${meta.captureId}.json` : undefined,
         });
 
         if (meta.sessionId && meta.totalRedactions) {
           const existing = redactionMetaBySession.get(meta.sessionId);
           redactionMetaBySession.set(meta.sessionId, {
             totalRedactions: (existing?.totalRedactions || 0) + (meta.totalRedactions || 0),
-            byRule: { ...existing?.byRule, ...meta.byRule },
+            byRule: { ...existing?.byRule, ...meta.ruleCounts },
           });
         }
 
         matchedCaptures++;
       }
     } catch (error) {
-      console.error(`Error reading metadata ${filename}:`, error);
+      console.error(`Error processing session metadata for capture ${meta.captureId}:`, error);
     }
 
-    if (i % 10 === 0 || i === metaFiles.length - 1) {
+    if (i % 10 === 0 || i === sessionMeta.length - 1) {
       yield {
         type: "progress",
         current: i + 1,
-        total: metaFiles.length,
-        message: `Loading metadata ${i + 1}/${metaFiles.length}${matchedCaptures > 0 ? ` (${matchedCaptures} matches)` : ""}`,
+        total: sessionMeta.length,
+        message: `Loading metadata ${i + 1}/${sessionMeta.length}${matchedCaptures > 0 ? ` (${matchedCaptures} matches)` : ""}`,
       };
     }
   }
@@ -148,16 +146,16 @@ async function* processSessionDetailWithProgress(
   // Sort by timestamp descending
   rawCaptures.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-  yield { type: "progress", current: metaFiles.length, total: metaFiles.length, message: "Grouping session..." };
+  yield { type: "progress", current: sessionMeta.length, total: sessionMeta.length, message: "Grouping session..." };
 
   const { summaries, metrics } = groupCapturesIntoSessions(rawCaptures, redactionMetaBySession);
 
   const summary = summaries[0];
   const sessionMetrics = metrics[sessionId];
 
-  // Convert metadata filename (e.g., foo.redact-meta.json) to capture filename (foo.json)
-  const metaToCaptureFilename = (metaFilename: string): string => {
-    return metaFilename.replace(/\.redact-meta\.json$/, ".json");
+  // Convert capture filename (already in captureId.json format from SQLite)
+  const metaToCaptureFilename = (captureFilename: string): string => {
+    return captureFilename;
   };
 
   const captures = rawCaptures.map((c) => ({
@@ -194,8 +192,8 @@ async function* processSessionDetailWithProgress(
 
   yield {
     type: "complete",
-    current: metaFiles.length,
-    total: metaFiles.length,
+    current: sessionMeta.length,
+    total: sessionMeta.length,
     data: {
       session: summary,
       metrics: sessionMetrics,

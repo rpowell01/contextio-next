@@ -1,10 +1,9 @@
 import {
-  listRedactionMetaFiles,
-  loadRedactionMeta,
-} from "@/lib/sessions/server-utils";
+  getAllRedactionMetadataFromDb,
+} from "@/lib/sessions/db-utils";
 import { consumeToken } from "@/lib/csrf";
 import { unstable_cache } from "next/cache";
-import { computePlaceholderCounts, convertByRuleToByPlaceholder } from "@/lib/sessions/placeholder-map";
+import { convertByRuleToByPlaceholder } from "@/lib/sessions/placeholder-map";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 interface RedactionSummary {
@@ -40,42 +39,25 @@ interface PaginatedRedactionResponse {
 // Cached summary computation - revalidates every 30 seconds
 const getRedactionsSummary = unstable_cache(
   async (): Promise<RedactionSummary> => {
-    const metaFiles = await listRedactionMetaFiles();
+    const allMeta = await getAllRedactionMetadataFromDb();
 
     // Track max redactions per session (to match metrics page behavior)
     const maxRedactionsBySession = new Map<string, number>();
-    // Track placeholder counts by session (max per session)
+    // Track placeholder counts by session (from the max capture)
     const placeholderBySession = new Map<string, Record<string, number>>();
 
-    for (const filename of metaFiles) {
+    for (const meta of allMeta) {
       try {
-        const meta = await loadRedactionMeta(filename);
-        if (!meta) continue;
-
-        const sessionId = (meta.sessionId as string | null) ?? "_no_session";
+        const sessionId = meta.sessionId ?? "_no_session";
 
         // Skip title generation captures
         if (sessionId.startsWith("title-")) continue;
 
-        // Get placeholder counts from matches or fallback to byRule
-        const matches = (meta.matches as Array<{
-          ruleId: string;
-          preValue: string;
-          postValue: string;
-          path: string;
-        }> | undefined) ?? [];
-
-        let counts: Record<string, number>;
-        if (matches.length > 0) {
-          counts = computePlaceholderCounts(matches);
-        } else if (meta.byRule && typeof meta.byRule === "object") {
-          // Fallback: convert from byRule (rule names) to byPlaceholder (placeholder names)
-          // This handles meta files created by web UI which don't have matches array
-          counts = convertByRuleToByPlaceholder(
-            meta.byRule as Record<string, number>
-          );
-        } else {
-          counts = {};
+        // Get placeholder counts from ruleCounts (byRule)
+        const byPlaceholder: Record<string, number> = {};
+        if (meta.ruleCounts && typeof meta.ruleCounts === "object") {
+          const converted = convertByRuleToByPlaceholder(meta.ruleCounts);
+          Object.assign(byPlaceholder, converted);
         }
         const totalRedactions = meta.totalRedactions ?? 0;
 
@@ -84,10 +66,10 @@ const getRedactionsSummary = unstable_cache(
         if (totalRedactions > existingMax) {
           maxRedactionsBySession.set(sessionId, totalRedactions);
           // Also update placeholder breakdown to match the max capture
-          placeholderBySession.set(sessionId, counts);
+          placeholderBySession.set(sessionId, byPlaceholder);
         }
       } catch (error) {
-        console.error(`Error reading redaction meta ${filename}:`, error);
+        console.error(`Error processing redaction meta for ${meta.captureId}:`, error);
         continue;
       }
     }
@@ -114,93 +96,70 @@ const getRedactionsSummary = unstable_cache(
   { revalidate: 30, tags: ["redactions-summary"] },
 );
 
-// Get paginated detail rows from meta files - ALL captures (not deduplicated by session)
-async function getRedactionDetailsFromMeta(
+// Get paginated detail rows from SQLite - ALL captures (not deduplicated by session)
+async function getRedactionDetailsFromDb(
   page: number,
   pageSize: number,
   filters: Record<string, string>,
   sortKey: string | null,
   sortDir: "asc" | "desc" | null,
 ): Promise<PaginatedRedactionResponse> {
-  const metaFiles = await listRedactionMetaFiles();
+  const allMeta = await getAllRedactionMetadataFromDb();
 
-  // Collect ALL meta files (not deduplicated by session) to show full detail
-  const allMeta: Array<{ filename: string; meta: Record<string, unknown> }> = [];
-
-  for (const filename of metaFiles) {
+  // Filter out title-* sessions and build rows with per-row error handling
+  let allRows: RedactionCaptureRow[] = [];
+  for (const meta of allMeta) {
     try {
-      const meta = await loadRedactionMeta(filename);
-      if (!meta) continue;
-
-      const sessionId = (meta.sessionId as string | null) ?? "_no_session";
+      const sessionId = meta.sessionId ?? "_no_session";
 
       // Skip title generation captures
       if (sessionId.startsWith("title-")) continue;
 
-      allMeta.push({ filename, meta });
-    } catch {
+      // Safely construct captureId - ensure we don't double-append .json
+      const captureIdBase = meta.captureId.endsWith(".json") ? meta.captureId.slice(0, -5) : meta.captureId;
+      const captureId = captureIdBase + ".json";
+      const sessionIdOut = meta.sessionId ?? null;
+      const source = meta.source ?? null;
+      const provider = meta.provider ?? "unknown";
+      const targetUrl = meta.targetUrl ?? "";
+      // Use createdAt from DB for timestamp
+      const timestamp = meta.createdAt ? new Date(meta.createdAt).toISOString() : new Date().toISOString();
+
+      // Use ruleCounts (byRule) to compute placeholder breakdown
+      // SQLite doesn't store matches array, so we convert from ruleCounts
+      const byPlaceholder: Record<string, number> = {};
+      if (meta.ruleCounts && typeof meta.ruleCounts === "object") {
+        const converted = convertByRuleToByPlaceholder(meta.ruleCounts);
+        Object.assign(byPlaceholder, converted);
+      }
+
+      // Fallback: compute totalRedactions from byPlaceholder if not set
+      const totalRedactions = meta.totalRedactions ?? Object.values(byPlaceholder).reduce((a, b) => a + b, 0);
+
+      allRows.push({
+        captureId,
+        sessionId: sessionIdOut,
+        timestamp,
+        requestSource: source,
+        requestProvider: provider,
+        requestTarget: targetUrl,
+        redactionSummary: Object.entries(byPlaceholder)
+          .map(([placeholder, count]) => `[${placeholder}] (${count})`)
+          .join(", "),
+        totalRedactions,
+        byPlaceholder,
+      });
+    } catch (error) {
+      console.error(`Error processing redaction meta for ${meta.captureId}:`, error);
       continue;
     }
   }
 
   // Sort by timestamp descending (newest first)
-  allMeta.sort((a, b) => {
-    const tsA = (a.meta.generatedAt as string) ?? (a.meta.timestamp as string) ?? "";
-    const tsB = (b.meta.generatedAt as string) ?? (b.meta.timestamp as string) ?? "";
+  allRows.sort((a, b) => {
+    const tsA = a.timestamp;
+    const tsB = b.timestamp;
     return new Date(tsB).getTime() - new Date(tsA).getTime();
-  });
-
-  // Build rows from ALL meta files (each capture is a row)
-  let allRows: RedactionCaptureRow[] = allMeta.map(({ filename, meta }) => {
-    const captureId = filename.replace(/\.redact-meta\.json$/, "") + ".json";
-    const sessionId = (meta.sessionId as string | null) ?? "_no_session";
-    const source = (meta.source as string | null) ?? null;
-    const provider = (meta.provider as string) ?? "unknown";
-    const targetUrl = (meta.targetUrl as string) ?? "";
-    const timestamp =
-      (meta.generatedAt as string) ?? (meta.timestamp as string) ?? new Date().toISOString();
-
-    // Get matches from meta - use postValue which contains the placeholder
-    const matches =
-      (meta.matches as
-        | Array<{
-            ruleId: string;
-            preValue: string;
-            postValue: string;
-            path: string;
-          }>
-        | undefined) ?? [];
-
-    const byPlaceholder: Record<string, number> = {};
-    if (matches.length > 0) {
-      // Prefer matches array (from logger plugin) for accurate placeholder names
-      for (const match of matches) {
-        const rawPlaceholder = match.postValue ?? "unknown";
-        const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
-        byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + 1;
-      }
-    } else if (meta.byRule && typeof meta.byRule === "object") {
-      // Fallback: convert from byRule (rule names) to byPlaceholder (placeholder names)
-      // This handles meta files created by web UI which don't have matches array
-      const converted = convertByRuleToByPlaceholder(
-        meta.byRule as Record<string, number>
-      );
-      Object.assign(byPlaceholder, converted);
-    }
-
-    return {
-      captureId,
-      sessionId: sessionId === "_no_session" ? null : sessionId,
-      timestamp,
-      requestSource: source,
-      requestProvider: provider,
-      requestTarget: targetUrl,
-      redactionSummary: Object.entries(byPlaceholder)
-        .map(([placeholder, count]) => `[${placeholder}] (${count})`)
-        .join(", "),
-      totalRedactions: (meta.totalRedactions as number) ?? (matches.length || Object.values(byPlaceholder).reduce((a, b) => a + b, 0)),
-      byPlaceholder,
-    };
   });
 
   // Apply filters
@@ -321,7 +280,7 @@ export async function GET(request: Request): Promise<Response> {
       }
     }
 
-    const result = await getRedactionDetailsFromMeta(
+    const result = await getRedactionDetailsFromDb(
       page,
       pageSize,
       filters,

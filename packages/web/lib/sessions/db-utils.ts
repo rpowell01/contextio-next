@@ -44,6 +44,7 @@ export async function getRedactionMetadataByCaptureIdFromDb(
   successCount?: number;
   errorCount?: number;
   model?: string | null;
+  captureId: string;
 } | null> {
   const db = await getDbModule();
   const meta = db.getRedactionMetadataByCaptureId(captureId);
@@ -67,16 +68,48 @@ export async function getRedactionMetadataByCaptureIdFromDb(
     successCount: meta.successCount ?? undefined,
     errorCount: meta.errorCount ?? undefined,
     model: meta.model ?? undefined,
+    captureId,
   };
 }
 
 /**
  * Get all redaction metadata for a specific session from SQLite.
+ * Use sessionId "unsorted" to query for captures with NULL session_id.
  */
 export async function getRedactionMetadataBySessionIdFromDb(
   sessionId: string,
 ): Promise<import("@contextio/core/db").RedactionMetadata[]> {
   const db = await getDbModule();
+  if (sessionId === "unsorted") {
+    const dbInstance = db.getDb();
+    const rows = dbInstance.prepare("SELECT * FROM redaction_metadata WHERE session_id IS NULL ORDER BY created_at ASC").all() as import("@contextio/core/db").RedactionMetadataRow[];
+    return rows.map((row) => ({
+      captureId: row.capture_id,
+      sessionId: null,
+      ruleCounts: JSON.parse(row.rule_counts || "{}"),
+      totalRedactions: row.total_redactions,
+      encrypted: row.encrypted === 1,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      source: row.source ?? null,
+      provider: row.provider ?? null,
+      targetUrl: row.target_url ?? null,
+      requestBytes: row.request_bytes ?? undefined,
+      responseBytes: row.response_bytes ?? undefined,
+      timings: row.timings_total_ms !== null ? {
+        send_ms: row.timings_send_ms ?? undefined,
+        wait_ms: row.timings_wait_ms ?? undefined,
+        receive_ms: row.timings_receive_ms ?? undefined,
+        total_ms: row.timings_total_ms ?? undefined,
+      } : undefined,
+      totalInputTokens: row.total_input_tokens ?? undefined,
+      totalOutputTokens: row.total_output_tokens ?? undefined,
+      tokensPerSecond: row.tokens_per_second ?? undefined,
+      successCount: row.success_count ?? undefined,
+      errorCount: row.error_count ?? undefined,
+      model: row.model ?? undefined,
+    }));
+  }
   return db.getRedactionMetadataBySessionId(sessionId);
 }
 

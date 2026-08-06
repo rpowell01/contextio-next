@@ -7,12 +7,11 @@ import {
   getCaptureDir,
   MAX_FILE_SIZE,
   readCaptureFile,
-  listRedactionMetaFiles,
-  loadRedactionMeta,
 } from "@/lib/sessions/server-utils";
 import {
   aggregateRedactionMetaBySessionFromDb,
   getAllRedactionMetadataFromDb,
+  getRedactionMetadataBySessionIdFromDb,
 } from "@/lib/sessions/db-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import { groupCapturesIntoSessions, type RawCaptureData } from "@/lib/sessions/grouping";
@@ -40,47 +39,54 @@ async function handleGet(request: Request): Promise<Response> {
   ) {
     const sessionId = pathParts[2];
 
-    // Get all captures for this session from metadata files (much faster!)
-    const metaFiles = await listRedactionMetaFiles();
+    // Get all captures for this session from SQLite (much faster!)
+    const sessionMeta = await getRedactionMetadataBySessionIdFromDb(sessionId);
+
+    if (sessionMeta.length === 0) {
+      return Response.json(createErrorResponse({ message: "Session not found", status: 404 }), { status: 404 });
+    }
+
     const sessionCaptures: RawCaptureData[] = [];
 
-    for (const filename of metaFiles) {
+    for (const meta of sessionMeta) {
       try {
-        const meta = await loadRedactionMeta(filename);
-        if (!meta) continue;
-
         // Skip title-* sessions
         if (meta.sessionId?.startsWith("title-")) continue;
 
-        // Check if this file belongs to the requested session
-        if (meta.sessionId === sessionId || (meta.sessionId === null && sessionId === "unsorted")) {
-          // Build raw capture data from metadata - no full file reads needed!
-          const timings = meta.timings
-            ? { total_ms: meta.timings.total_ms ?? 0 }
-            : { total_ms: 0 };
+        // Build raw capture data from metadata - no full file reads needed!
+        const timings = meta.timings
+          ? { total_ms: meta.timings.total_ms ?? 0 }
+          : { total_ms: 0 };
 
-          sessionCaptures.push({
-            sessionId: meta.sessionId,
-            source: meta.source ?? "unknown",
-            provider: meta.provider ?? "unknown",
-            apiFormat: "unknown", // Not in metadata
-            targetUrl: meta.targetUrl ?? "",
-            requestBytes: meta.requestBytes ?? 0,
-            responseBytes: meta.responseBytes ?? 0,
-            timings,
-            timestamp: meta.timestamp ?? new Date().toISOString(),
-            requestBody: undefined, // We don't have full bodies in metadata
-            responseBody: undefined,
-            responseStatus: 200,
-            responseIsStreaming: false,
-            redactionStats: {
-              totalRedactions: meta.totalRedactions ?? 0,
-              byRule: meta.byRule ?? {},
-            },
-          });
-        }
+        sessionCaptures.push({
+          sessionId: meta.sessionId,
+          source: meta.source ?? "unknown",
+          provider: meta.provider ?? "unknown",
+          apiFormat: "unknown", // Not in metadata
+          targetUrl: meta.targetUrl ?? "",
+          requestBytes: meta.requestBytes ?? 0,
+          responseBytes: meta.responseBytes ?? 0,
+          timings,
+          timestamp: meta.createdAt != null ? new Date(meta.createdAt).toISOString() : new Date().toISOString(),
+          requestBody: undefined, // We don't have full bodies in metadata
+          responseBody: undefined,
+          responseStatus: 200,
+          responseIsStreaming: false,
+          redactionStats: {
+            totalRedactions: meta.totalRedactions ?? 0,
+            byRule: meta.ruleCounts ?? {},
+          },
+          // Token metrics from metadata
+          totalInputTokens: meta.totalInputTokens ?? 0,
+          totalOutputTokens: meta.totalOutputTokens ?? 0,
+          tokensPerSecond: meta.tokensPerSecond ?? 0,
+          successCount: meta.successCount ?? 0,
+          errorCount: meta.errorCount ?? 0,
+          model: meta.model ?? null,
+          filename: meta.captureId ? `${meta.captureId}.json` : undefined,
+        });
       } catch (error) {
-        console.error(`Error processing session metadata ${filename}:`, error);
+        console.error(`Error processing session metadata for capture ${meta.captureId}:`, error);
         continue;
       }
     }
@@ -169,15 +175,17 @@ async function handleGet(request: Request): Promise<Response> {
         timings: c.timings,
         source: c.source,
         metrics: {
-          successCount: 0,
-          errorCount: 0,
-          errorRate: 0,
+          successCount: c.successCount ?? 0,
+          errorCount: c.errorCount ?? 0,
+          errorRate: (c.successCount ?? 0) + (c.errorCount ?? 0) > 0
+            ? (c.errorCount ?? 0) / ((c.successCount ?? 0) + (c.errorCount ?? 0))
+            : 0,
           totalContextValues: 0,
-          totalInputTokens: 0,
-          totalOutputTokens: 0,
-          tokensPerSecond: 0,
+          totalInputTokens: c.totalInputTokens ?? 0,
+          totalOutputTokens: c.totalOutputTokens ?? 0,
+          tokensPerSecond: c.tokensPerSecond ?? 0,
           totalRedactions: c.redactionStats?.totalRedactions ?? 0,
-          model: null,
+          model: c.model ?? null,
         },
         redactionStats: c.redactionStats
           ? {

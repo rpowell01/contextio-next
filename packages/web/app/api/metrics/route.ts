@@ -1,5 +1,5 @@
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
-import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/server-utils";
+import { getAllRedactionMetadataFromDb } from "@/lib/sessions/db-utils";
 import { withRequestCache } from "@/lib/request-cache";
 import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 import { createSuccessResponse } from "@contextio/core";
@@ -238,9 +238,8 @@ export async function GET(request: Request): Promise<Response> {
     const now = new Date();
     const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
 
-    const metaFiles = await listRedactionMetaFiles();
-    // Sort for deterministic ordering
-    metaFiles.sort();
+    // Load all redaction metadata from SQLite
+    const allMeta = await getAllRedactionMetadataFromDb();
 
     const captures: Array<{
       traffic: TrafficMetric | null;
@@ -249,19 +248,17 @@ export async function GET(request: Request): Promise<Response> {
       totalRedactions: number;
       provider: string;
       sessionId: string | null;
+      byRule?: Record<string, number>;
     }> = [];
 
-    for (const filename of metaFiles) {
+    for (const meta of allMeta) {
       try {
-        const meta = await loadRedactionMeta(filename);
-        if (!meta) continue;
-
         // Skip title-* sessions
         if (meta.sessionId?.startsWith("title-")) continue;
 
         // Filter by timestamp on the server side
-        if (meta.timestamp) {
-          const ts = new Date(meta.timestamp);
+        if (meta.createdAt) {
+          const ts = new Date(meta.createdAt);
           if (ts < cutoff) {
             continue;
           }
@@ -269,27 +266,26 @@ export async function GET(request: Request): Promise<Response> {
 
         // For traffic and provider usage: include ALL captures (not deduplicated)
         // For redactions: we need both deduplicated and sum, so we track sessionId
-        const parsed = parseCaptureMeta(meta);
+        const parsed = parseCaptureMeta({
+          timestamp: meta.createdAt ? new Date(meta.createdAt).toISOString() : undefined,
+          provider: meta.provider ?? undefined,
+          requestBytes: meta.requestBytes,
+          responseBytes: meta.responseBytes,
+          totalRedactions: meta.totalRedactions,
+          byRule: meta.ruleCounts,
+        });
 
         captures.push({
           traffic: parsed.traffic,
           providerUsage: parsed.providerUsage,
           redaction: parsed.redaction,
           totalRedactions: meta.totalRedactions ?? 0,
-          byRule: meta.byRule,
+          byRule: meta.ruleCounts,
           provider: meta.provider ?? "unknown",
           sessionId: meta.sessionId ?? null,
-        } as {
-          traffic: TrafficMetric | null;
-          providerUsage: ProviderUsage | null;
-          redaction: RedactionMetric | null;
-          totalRedactions: number;
-          byRule?: Record<string, number>;
-          provider: string;
-          sessionId: string | null;
         });
       } catch (error) {
-        console.error(`Error processing metadata ${filename}:`, error);
+        console.error(`Error processing metadata ${meta.captureId}:`, error);
         continue;
       }
     }

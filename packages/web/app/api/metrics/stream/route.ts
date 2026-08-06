@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withRequestCache } from "@/lib/request-cache";
-import { listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/server-utils";
+import { getAllRedactionMetadataFromDb } from "@/lib/sessions/db-utils";
 import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
 import { createSuccessResponse } from "@contextio/core";
@@ -84,10 +84,9 @@ async function* processMetricsWithProgress(
 ): AsyncGenerator<ProgressUpdate> {
   yield { type: "progress", current: 0, total: 0, message: "Loading metadata files..." };
 
-  const metaFiles = await listRedactionMetaFiles();
-  metaFiles.sort();
+  const allMeta = await getAllRedactionMetadataFromDb();
 
-  if (metaFiles.length === 0) {
+  if (allMeta.length === 0) {
     yield {
       type: "progress",
       current: 0,
@@ -141,21 +140,26 @@ async function* processMetricsWithProgress(
   const redactionByPlaceholderDeduped: Record<string, Map<string, number>> = {};
   const redactionByPlaceholderSum: Record<string, number> = {};
 
-  for (let i = 0; i < metaFiles.length; i++) {
-    const filename = metaFiles[i];
+  for (let i = 0; i < allMeta.length; i++) {
+    const meta = allMeta[i];
     try {
-      const meta = await loadRedactionMeta(filename);
-      if (!meta) continue;
       if (meta.sessionId?.startsWith("title-")) continue;
 
-      if (meta.timestamp) {
-        const ts = new Date(meta.timestamp);
+      if (meta.createdAt) {
+        const ts = new Date(meta.createdAt);
         if (ts < cutoff) {
           continue;
         }
       }
 
-      const parsed = parseCaptureMeta(meta);
+      const parsed = parseCaptureMeta({
+        timestamp: meta.createdAt ? new Date(meta.createdAt).toISOString() : undefined,
+        provider: meta.provider ?? undefined,
+        requestBytes: meta.requestBytes,
+        responseBytes: meta.responseBytes,
+        totalRedactions: meta.totalRedactions,
+        byRule: meta.ruleCounts,
+      });
 
       if (parsed.traffic) {
         const key = parsed.traffic.timestamp;
@@ -185,8 +189,8 @@ async function* processMetricsWithProgress(
 
       totalRedactionsSum += meta.totalRedactions ?? 0;
 
-      if (meta.byRule && typeof meta.byRule === "object") {
-        for (const [rule, count] of Object.entries(meta.byRule)) {
+      if (meta.ruleCounts && typeof meta.ruleCounts === "object") {
+        for (const [rule, count] of Object.entries(meta.ruleCounts)) {
           if (typeof count === "number") {
             const placeholder = ruleNameToPlaceholder(rule);
             redactionByPlaceholderSum[placeholder] = (redactionByPlaceholderSum[placeholder] ?? 0) + count;
@@ -204,8 +208,8 @@ async function* processMetricsWithProgress(
         }
       }
 
-      if (meta.sessionId && meta.byRule && typeof meta.byRule === "object") {
-        for (const [rule, count] of Object.entries(meta.byRule)) {
+      if (meta.sessionId && meta.ruleCounts && typeof meta.ruleCounts === "object") {
+        for (const [rule, count] of Object.entries(meta.ruleCounts)) {
           if (typeof count === "number") {
             const placeholder = ruleNameToPlaceholder(rule);
             if (!redactionByPlaceholderDeduped[placeholder]) {
@@ -220,11 +224,11 @@ async function* processMetricsWithProgress(
         }
       }
     } catch (error) {
-      console.error(`Error processing metadata ${filename}:`, error);
+      console.error(`Error processing metadata ${meta.captureId}:`, error);
     }
 
-    if (i % 10 === 0 || i === metaFiles.length - 1) {
-      yield { type: "progress", current: i + 1, total: metaFiles.length, message: `Processing metadata ${i + 1}/${metaFiles.length}` };
+    if (i % 10 === 0 || i === allMeta.length - 1) {
+      yield { type: "progress", current: i + 1, total: allMeta.length, message: `Processing metadata ${i + 1}/${allMeta.length}` };
     }
   }
 
