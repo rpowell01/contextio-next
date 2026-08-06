@@ -5,6 +5,7 @@
 
 import { getDb } from "./connection.js";
 import type { ProviderConfig, Provider, AuthType, ApiFormat, RateLimitConfig, RetryConfig } from "../types.js";
+import { validateProviderConfig } from "../types.js";
 import fs from "node:fs";
 
 /**
@@ -41,17 +42,17 @@ export interface ProviderRow {
 /**
  * Default provider configurations (matching DEFAULT_PROVIDERS in web/lib/providers.ts)
  */
-const DEFAULT_PROVIDER_CONFIGS: Omit<ProviderConfig, "rateLimit" | "retry" | "customHeaders" | "authType" | "apiFormat" | "enabled">[] = [
-	{ id: "openai", name: "OpenAI", upstreamUrl: "https://api.openai.com", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openai-baseurl" },
-	{ id: "anthropic", name: "Anthropic", upstreamUrl: "https://api.anthropic.com", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-anthropic-baseurl" },
-	{ id: "chatgpt", name: "ChatGPT", upstreamUrl: "https://chatgpt.com", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-chatgpt-baseurl" },
-	{ id: "gemini", name: "Gemini", upstreamUrl: "https://generativelanguage.googleapis.com", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-gemini-baseurl" },
-	{ id: "vertex", name: "Vertex AI", upstreamUrl: "https://us-central1-aiplatform.googleapis.com", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-vertex-baseurl" },
-	{ id: "nvidia", name: "NVIDIA", upstreamUrl: "https://integrate.api.nvidia.com", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-nvidia-baseurl" },
-	{ id: "openrouter", name: "OpenRouter", upstreamUrl: "https://openrouter.ai/api", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openrouter-baseurl" },
-	{ id: "kilo", name: "Kilo", upstreamUrl: "https://api.kilo.ai/api/gateway", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-kilo-baseurl" },
-	{ id: "geminiCodeAssist", name: "Gemini Code Assist", upstreamUrl: "https://generativelanguage.googleapis.com", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-gemini-code-assist-baseurl" },
-	{ id: "unknown", name: "Unknown", upstreamUrl: "https://unknown.provider", allowBaseUrlOverride: false, baseUrlOverrideHeader: "x-unknown-baseurl" },
+const DEFAULT_PROVIDER_CONFIGS: Omit<ProviderConfig, "rateLimit" | "retry" | "customHeaders" | "enabled">[] = [
+	{ id: "openai", name: "OpenAI", upstreamUrl: "https://api.openai.com", apiFormat: "chat-completions", authType: "bearer", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openai-baseurl" },
+	{ id: "anthropic", name: "Anthropic", upstreamUrl: "https://api.anthropic.com", apiFormat: "anthropic-messages", authType: "bearer", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-anthropic-baseurl" },
+	{ id: "chatgpt", name: "ChatGPT", upstreamUrl: "https://chatgpt.com", apiFormat: "chatgpt-backend", authType: "bearer", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-chatgpt-baseurl" },
+	{ id: "gemini", name: "Gemini", upstreamUrl: "https://generativelanguage.googleapis.com", apiFormat: "gemini", authType: "api-key", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-gemini-baseurl" },
+	{ id: "vertex", name: "Vertex AI", upstreamUrl: "https://us-central1-aiplatform.googleapis.com", apiFormat: "gemini", authType: "api-key", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-vertex-baseurl" },
+	{ id: "nvidia", name: "NVIDIA", upstreamUrl: "https://integrate.api.nvidia.com", apiFormat: "chat-completions", authType: "bearer", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-nvidia-baseurl" },
+	{ id: "openrouter", name: "OpenRouter", upstreamUrl: "https://openrouter.ai/api", apiFormat: "chat-completions", authType: "bearer", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openrouter-baseurl" },
+	{ id: "kilo", name: "Kilo", upstreamUrl: "https://api.kilo.ai/api/gateway", apiFormat: "chat-completions", authType: "bearer", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-kilo-baseurl" },
+	{ id: "geminiCodeAssist", name: "Gemini Code Assist", upstreamUrl: "https://generativelanguage.googleapis.com", apiFormat: "gemini", authType: "api-key", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-gemini-code-assist-baseurl" },
+	{ id: "unknown", name: "Unknown", upstreamUrl: "https://unknown.provider", apiFormat: "unknown", authType: "none", allowBaseUrlOverride: false, baseUrlOverrideHeader: "x-unknown-baseurl" },
 ];
 
 /**
@@ -150,7 +151,7 @@ export function createProvider(config: ProviderConfig): ProviderConfig {
 			retry_max_retries, retry_base_delay_ms, retry_max_delay_ms,
 			retry_retryable_statuses, retry_jitter_factor, retry_max_stream_retries, retry_max_response_buffer_size, retry_enabled, custom_headers,
 			allow_base_url_override, base_url_override_header, source, dynamic
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`);
 
 	try {
@@ -383,12 +384,10 @@ export function getAllMergedProviders(): MergedProvider[] {
 	const dbProviders = getAllProvidersFromDb();
 	const merged = new Map<string, MergedProvider>();
 
-	// 1. Default providers (lowest priority) - hardcoded defaults
+	// 1. Default providers (lowest priority) - hardcoded defaults with provider-specific apiFormat/authType
 	for (const def of DEFAULT_PROVIDER_CONFIGS) {
 		merged.set(def.id, {
 			...def,
-			apiFormat: DEFAULT_API_FORMAT,
-			authType: DEFAULT_AUTH_TYPE,
 			enabled: true,
 			rateLimit: DEFAULT_RATE_LIMIT,
 			retry: DEFAULT_RETRY,
@@ -419,82 +418,6 @@ export function getAllMergedProviders(): MergedProvider[] {
 	}
 
 	return Array.from(merged.values());
-}
-
-/**
- * Initialize default providers in the database if they don't exist.
- * This ensures the database has baseline providers even if providers.json was never migrated.
- */
-export function ensureDefaultProviders(): void {
-	const db = getDb();
-	const existing = getAllProvidersFromDb();
-
-	for (const def of DEFAULT_PROVIDER_CONFIGS) {
-		if (!existing.has(def.id)) {
-			const config: ProviderConfig = {
-				...def,
-				apiFormat: DEFAULT_API_FORMAT,
-				authType: DEFAULT_AUTH_TYPE,
-				enabled: true,
-				rateLimit: DEFAULT_RATE_LIMIT,
-				retry: DEFAULT_RETRY,
-				customHeaders: {},
-			};
-			createDefaultProvider(config);
-		}
-	}
-}
-
-/**
- * Create a default provider in the database with source="default" and dynamic=false.
- * Used by ensureDefaultProviders() to seed baseline providers.
- */
-function createDefaultProvider(config: ProviderConfig): void {
-	const db = getDb();
-	const row = providerConfigToRow(config);
-
-	const stmt = db.prepare(`
-		INSERT INTO providers (
-			id, name, upstream_url, api_format, auth_type, enabled,
-			rate_limit_max_requests, rate_limit_window_ms, rate_limit_buffer_capacity,
-			retry_max_retries, retry_base_delay_ms, retry_max_delay_ms,
-			retry_retryable_statuses, retry_jitter_factor, retry_max_stream_retries, retry_max_response_buffer_size, retry_enabled, custom_headers,
-			allow_base_url_override, base_url_override_header, source, dynamic
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`);
-
-	try {
-		stmt.run(
-			config.id,
-			row.name,
-			row.upstream_url,
-			row.api_format,
-			row.auth_type,
-			row.enabled,
-			row.rate_limit_max_requests,
-			row.rate_limit_window_ms,
-			row.rate_limit_buffer_capacity,
-			row.retry_max_retries,
-			row.retry_base_delay_ms,
-			row.retry_max_delay_ms,
-			row.retry_retryable_statuses,
-			row.retry_jitter_factor,
-			row.retry_max_stream_retries,
-			row.retry_max_response_buffer_size,
-			row.retry_enabled,
-			row.custom_headers,
-			row.allow_base_url_override,
-			row.base_url_override_header,
-			"default", // source
-			0        // dynamic
-		);
-	} catch (err) {
-		if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
-			// Already exists, ignore
-		} else {
-			throw err;
-		}
-	}
 }
 
 /**
@@ -546,6 +469,14 @@ export function importProvidersFromJson(filePath?: string): number {
 				allowBaseUrlOverride: (config.allowBaseUrlOverride as boolean) ?? true,
 				baseUrlOverrideHeader: config.baseUrlOverrideHeader as string || `x-${finalKey}-baseurl`,
 			};
+			
+			// Validate the provider config
+			try {
+				validateProviderConfig(providerConfig);
+			} catch (validationError) {
+				console.warn(`[provider-repo] Skipping provider "${finalKey}": validation failed - ${validationError instanceof Error ? validationError.message : String(validationError)}`);
+				continue;
+			}
 			
 			// Validate required fields
 			if (!providerConfig.upstreamUrl) {

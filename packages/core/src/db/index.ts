@@ -3,9 +3,9 @@
  * Provides SQLite connection management, migrations, and schema initialization.
  */
 
+import { homedir } from "os";
 import { runMigrations as runMigrationsFn } from "./migrations.js";
 import {
-	ensureDefaultProviders,
 	importProvidersFromJson,
 } from "./provider-repo.js";
 import { importRedactionMetaFromFiles } from "./redaction-repo.js";
@@ -34,7 +34,6 @@ export {
 	deleteProvider,
 	providerExists,
 	getAllMergedProviders,
-	ensureDefaultProviders,
 	importProvidersFromJson,
 	type ProviderRow,
 	type MergedProvider,
@@ -78,9 +77,6 @@ export function initDb(decryptFn?: (encryptedJson: string, keyMaterial: string) 
 	// Run all pending migrations (initConnection is called internally)
 	runMigrationsFn();
 	
-	// Ensure default providers are seeded in the database
-	ensureDefaultProviders();
-	
 	// Import providers from providers.json for backward compatibility
 	// This allows existing providers.json configurations to be migrated to SQLite
 	importProvidersFromJson();
@@ -99,7 +95,6 @@ function getCaptureDirForRedactionImport(): string {
 	if (envPath) {
 		return envPath;
 	}
-	const { homedir } = require("os");
 	const home = homedir();
 	return `${home}/.contextio/captures`;
 }

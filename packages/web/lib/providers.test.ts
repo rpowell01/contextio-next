@@ -78,7 +78,7 @@ function createProviderInput(overrides: Partial<ProviderConfigInput> = {}): Prov
 		authType: "bearer",
 		enabled: true,
 		rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-		retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+		retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 		customHeaders: {},
 	};
 	return { ...base, ...overrides };
@@ -103,7 +103,7 @@ describe("migrateProvidersArray", () => {
 				authType: "bearer",
 				enabled: true,
 				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500], jitterFactor: 0.2 },
+				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 				customHeaders: {},
 			},
 		];
@@ -136,7 +136,7 @@ describe("migrateProvidersArray", () => {
 				authType: "bearer",
 				enabled: true,
 				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500], jitterFactor: 0.2 },
+				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 				customHeaders: {},
 			},
 			{
@@ -150,7 +150,7 @@ describe("migrateProvidersArray", () => {
 				authType: "bearer",
 				enabled: true,
 				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500], jitterFactor: 0.2 },
+				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 				customHeaders: {},
 			},
 		];
@@ -175,7 +175,7 @@ describe("migrateProvidersArray", () => {
 				authType: "bearer",
 				enabled: true,
 				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500], jitterFactor: 0.2 },
+				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 				customHeaders: {},
 			},
 			{
@@ -189,7 +189,7 @@ describe("migrateProvidersArray", () => {
 				authType: "bearer",
 				enabled: true,
 				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500], jitterFactor: 0.2 },
+				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 				customHeaders: {},
 			},
 		];
@@ -211,7 +211,7 @@ describe("migrateProvidersArray", () => {
 				authType: "bearer",
 				enabled: true,
 				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500], jitterFactor: 0.2 },
+				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 				customHeaders: {},
 			},
 		];
@@ -232,7 +232,7 @@ describe("migrateProvidersArray", () => {
 				authType: "bearer",
 				enabled: true,
 				rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500], jitterFactor: 0.2 },
+				retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 				customHeaders: { "X-Custom": "value" },
 			},
 		];
@@ -254,7 +254,7 @@ describe("migrateProvidersArray", () => {
 				authType: "api-key",
 				enabled: false,
 				rateLimit: { maxRequests: 20, windowMs: 60000, bufferCapacity: 5 },
-				retry: { maxRetries: 1, baseDelayMs: 500, maxDelayMs: 5000, retryableStatuses: [502], jitterFactor: 0.5 },
+				retry: { maxRetries: 1, baseDelayMs: 500, maxDelayMs: 5000, retryableStatuses: [502], jitterFactor: 0.5, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 				customHeaders: { Authorization: "Bearer test" },
 			},
 		];

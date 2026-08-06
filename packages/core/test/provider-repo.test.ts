@@ -13,7 +13,6 @@ import {
 	deleteProvider,
 	providerExists,
 	getAllMergedProviders,
-	ensureDefaultProviders,
 	importProvidersFromJson,
 	closeDb,
 	initDb,
@@ -89,7 +88,7 @@ function createProviderConfig(overrides: Partial<TestProviderConfig> = {}): Test
 		authType: "bearer",
 		enabled: true,
 		rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-		retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+		retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 		customHeaders: {},
 		allowBaseUrlOverride: true,
 		baseUrlOverrideHeader: "x-test-baseurl",
@@ -419,41 +418,13 @@ describe("provider-repo.ts", () => {
 				// Env should still win over DB default
 				assert.equal(openai.upstreamUrl, "https://env.openai.com");
 				assert.equal(openai.source, "env");
-			} finally {
-				delete process.env.UPSTREAM_OPENAI_URL;
-			}
-		});
+} finally {
+			delete process.env.UPSTREAM_OPENAI_URL;
+		}
 	});
+});
 
-	describe("ensureDefaultProviders", () => {
-		it("creates default providers when database is empty", () => {
-			clearProvidersTable();
-			clearSchemaVersionTable();
-			closeDb();
-			initDb(); // Re-run migrations and ensureDefaultProviders
-
-			const dbProviders = getAllProvidersFromDb();
-			assert.ok(dbProviders.size >= 10);
-
-			const openai = dbProviders.get("openai")!;
-			assert.equal(openai.source, "default");
-			assert.equal(openai.dynamic, false);
-		});
-
-		it("does not duplicate default providers if they already exist", () => {
-			// First call creates defaults
-			ensureDefaultProviders();
-			const countAfterFirst = getAllProvidersFromDb().size;
-			assert.ok(countAfterFirst >= 10);
-
-			// Second call should not duplicate
-			ensureDefaultProviders();
-			const countAfterSecond = getAllProvidersFromDb().size;
-			assert.equal(countAfterSecond, countAfterFirst);
-		});
-	});
-
-	describe("importProvidersFromJson", () => {
+describe("importProvidersFromJson", () => {
 		it("returns 0 when providers.json does not exist", () => {
 			const count = importProvidersFromJson("/non/existent/path/providers.json");
 			assert.equal(count, 0);
@@ -470,7 +441,7 @@ describe("provider-repo.ts", () => {
 					authType: "bearer",
 					enabled: true,
 					rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 					customHeaders: {},
 					allowBaseUrlOverride: true,
 					baseUrlOverrideHeader: "x-imported1-baseurl",
@@ -483,7 +454,7 @@ describe("provider-repo.ts", () => {
 					authType: "api-key",
 					enabled: true,
 					rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 					customHeaders: { "X-Imported": "true" },
 					allowBaseUrlOverride: true,
 					baseUrlOverrideHeader: "x-imported2-baseurl",
@@ -505,8 +476,7 @@ describe("provider-repo.ts", () => {
 		});
 
 		it("updates existing default providers with file source", () => {
-			// First ensure default providers exist
-			ensureDefaultProviders();
+			// Default providers are created by migrations during initDb()
 			const initialCount = getAllProvidersFromDb().size;
 
 			const jsonPath = join(testDbDir, "providers.json");
@@ -519,7 +489,7 @@ describe("provider-repo.ts", () => {
 					authType: "bearer",
 					enabled: true,
 					rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 					customHeaders: { "X-From-JSON": "true" },
 					allowBaseUrlOverride: true,
 					baseUrlOverrideHeader: "x-openai-baseurl",
@@ -554,7 +524,7 @@ describe("provider-repo.ts", () => {
 					authType: "bearer",
 					enabled: true,
 					rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 					customHeaders: {},
 					allowBaseUrlOverride: true,
 					baseUrlOverrideHeader: "x-skip-baseurl",
@@ -581,7 +551,7 @@ describe("provider-repo.ts", () => {
 					authType: "bearer",
 					enabled: true,
 					rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 					customHeaders: {},
 					allowBaseUrlOverride: true,
 					baseUrlOverrideHeader: "x-array1-baseurl",
@@ -594,7 +564,7 @@ describe("provider-repo.ts", () => {
 					authType: "api-key",
 					enabled: true,
 					rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+					retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10 * 1024 * 1024, enabled: true },
 					customHeaders: {},
 					allowBaseUrlOverride: true,
 					baseUrlOverrideHeader: "x-array2-baseurl",

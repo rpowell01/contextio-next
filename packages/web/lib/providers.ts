@@ -2,7 +2,7 @@
 // Replaces file-based providers.json with database operations.
 
 import { z } from "zod";
-import type { ProviderConfig as CoreProviderConfig, Provider, ApiFormat, AuthType } from "@contextio/core";
+import type { ProviderConfig as CoreProviderConfig, Provider, ApiFormat, AuthType, RetryConfig } from "@contextio/core";
 import { KNOWN_API_FORMATS, KNOWN_AUTH_TYPES, validateProviderConfig } from "@contextio/core";
 import type { ProviderMetadata } from "../types/api.ts";
 import {
@@ -85,6 +85,9 @@ export const ProviderConfigSchema = z.object({
 		maxDelayMs: z.number().int().min(0),
 		retryableStatuses: z.array(z.number().int().min(100).max(599)),
 		jitterFactor: z.number().min(0).max(1),
+		maxStreamRetries: z.number().int().min(0).max(10).optional(),
+maxResponseBufferSize: z.number().int().positive().max(100 * 1024 * 1024).optional(),
+		enabled: z.boolean().optional(),
 	}).optional(),
 	customHeaders: z.record(z.string()).optional(),
 });
@@ -94,6 +97,8 @@ export type ProviderConfigOutput = z.output<typeof ProviderConfigSchema>;
 
 // Map web UI field names to core field names
 function toCoreProviderConfig(input: ProviderConfigOutput, existing?: CoreProviderConfig & { models?: string[] }): CoreProviderConfig & { models?: string[] } {
+	const existingRetry = existing?.retry;
+	const inputRetry = input.retry;
 	const coreConfig: CoreProviderConfig & { models?: string[] } = {
 		id: input.id as Provider,
 		name: input.name,
@@ -102,7 +107,45 @@ function toCoreProviderConfig(input: ProviderConfigOutput, existing?: CoreProvid
 		authType: input.authType ?? existing?.authType ?? "none",
 		enabled: input.enabled ?? existing?.enabled ?? true,
 		rateLimit: input.rateLimit ?? existing?.rateLimit ?? { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-		retry: input.retry ?? existing?.retry ?? { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2 },
+		retry: (() => {
+			// If input provides retry config, merge with existing (partial updates supported)
+			if (inputRetry) {
+				return {
+					maxRetries: inputRetry.maxRetries ?? existingRetry?.maxRetries ?? 3,
+					baseDelayMs: inputRetry.baseDelayMs ?? existingRetry?.baseDelayMs ?? 1000,
+					maxDelayMs: inputRetry.maxDelayMs ?? existingRetry?.maxDelayMs ?? 30000,
+					retryableStatuses: inputRetry.retryableStatuses ?? existingRetry?.retryableStatuses ?? [429, 500, 502, 503, 504],
+					jitterFactor: inputRetry.jitterFactor ?? existingRetry?.jitterFactor ?? 0.2,
+					maxStreamRetries: inputRetry.maxStreamRetries ?? existingRetry?.maxStreamRetries ?? 3,
+					maxResponseBufferSize: inputRetry.maxResponseBufferSize ?? existingRetry?.maxResponseBufferSize ?? 10 * 1024 * 1024,
+					enabled: inputRetry.enabled ?? existingRetry?.enabled ?? true,
+				} as RetryConfig;
+			}
+			// No input retry config - use existing or defaults
+			if (existingRetry) {
+				return {
+					maxRetries: existingRetry.maxRetries,
+					baseDelayMs: existingRetry.baseDelayMs,
+					maxDelayMs: existingRetry.maxDelayMs,
+					retryableStatuses: existingRetry.retryableStatuses,
+					jitterFactor: existingRetry.jitterFactor,
+					maxStreamRetries: existingRetry.maxStreamRetries ?? 3,
+					maxResponseBufferSize: existingRetry.maxResponseBufferSize ?? 10 * 1024 * 1024,
+					enabled: existingRetry.enabled ?? true,
+				} as RetryConfig;
+			}
+			// Defaults
+			return {
+				maxRetries: 3,
+				baseDelayMs: 1000,
+				maxDelayMs: 30000,
+				retryableStatuses: [429, 500, 502, 503, 504],
+				jitterFactor: 0.2,
+				maxStreamRetries: 3,
+				maxResponseBufferSize: 10 * 1024 * 1024,
+				enabled: true,
+			} as RetryConfig;
+		})(),
 		customHeaders: input.customHeaders ?? existing?.customHeaders ?? {},
 		allowBaseUrlOverride: input.allowBaseUrlOverride ?? existing?.allowBaseUrlOverride ?? true,
 		baseUrlOverrideHeader: input.baseUrlOverrideHeader ?? existing?.baseUrlOverrideHeader ?? `x-${input.id}-baseurl`,
@@ -143,7 +186,7 @@ function toProviderMetadata(provider: {
 	authType: AuthType;
 	enabled: boolean;
 	rateLimit: { maxRequests: number; windowMs: number; bufferCapacity: number };
-	retry: { maxRetries: number; baseDelayMs: number; maxDelayMs: number; retryableStatuses: number[]; jitterFactor: number };
+	retry: { maxRetries: number; baseDelayMs: number; maxDelayMs: number; retryableStatuses: number[]; jitterFactor: number; maxStreamRetries: number; maxResponseBufferSize: number; enabled: boolean };
 	customHeaders: Record<string, string>;
 	allowBaseUrlOverride: boolean;
 	baseUrlOverrideHeader: string;
@@ -250,3 +293,4 @@ export function migrateProvidersArray(
 	}
 	return migrated;
 }
+

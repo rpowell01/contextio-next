@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS providers (
     retry_max_delay_ms       INTEGER,
     retry_retryable_statuses TEXT,          -- JSON array of integers
     retry_jitter_factor      REAL,
+    retry_max_stream_retries INTEGER,
+    retry_max_response_buffer_size INTEGER,
+    retry_enabled            INTEGER,
     custom_headers           TEXT,          -- JSON object
     allow_base_url_override  INTEGER DEFAULT 1,
     base_url_override_header TEXT,

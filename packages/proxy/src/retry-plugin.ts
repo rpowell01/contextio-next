@@ -152,7 +152,11 @@ interface StreamState {
     originalBodyBuffer: Buffer;
     originalBodyJson: JsonValue | null;
     delayMs: number;
+    modifiedBodyBuffer?: Buffer;
+    detectedErrorType: 'nvidia' | 'http429' | 'provider-specific' | null;
   };
+  // Streaming-specific retry count (separate from non-streaming retry count)
+  streamRetryCount: number;
 }
 
 /**
@@ -629,6 +633,61 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Registry for provider-specific streaming retry body modifiers.
+   * Key: provider name, Value: function that takes original body and returns modified body.
+   */
+  private streamRetryModifiers = new Map<string, (originalBodyJson: JsonValue | null) => Buffer | null>();
+
+  /**
+   * Register a custom streaming retry body modifier for a provider.
+   * This allows extensible provider-specific retry logic.
+   * 
+   * @param provider - Provider identifier (e.g., "nvidia", "openai", "anthropic")
+   * @param modifier - Function that takes original body JSON and returns modified body Buffer
+   */
+  registerStreamRetryModifier(provider: string, modifier: (originalBodyJson: JsonValue | null) => Buffer | null): void {
+    this.streamRetryModifiers.set(provider.toLowerCase(), modifier);
+  }
+
+  /**
+   * Create a retry body based on the detected error type and provider.
+   * Dispatches to the appropriate modification strategy:
+   * - NVIDIA ResourceExhausted: appends "continue" message
+   * - HTTP 429: returns original body (standard backoff)
+   * - Provider-specific: uses registered custom modifier
+   * 
+   * @param originalBodyJson - Original request body as JSON
+   * @param errorType - Type of error detected: 'nvidia', 'http429', or 'provider-specific'
+   * @param provider - Provider identifier
+   * @returns Modified body Buffer, or null if no modification needed/applicable
+   */
+  private createRetryBody(
+    originalBodyJson: JsonValue | null,
+    errorType: 'nvidia' | 'http429' | 'provider-specific',
+    provider: string,
+    originalBodyBuffer?: Buffer
+  ): Buffer | null {
+    switch (errorType) {
+      case 'nvidia':
+        return this.appendContinueMessage(originalBodyJson);
+      
+      case 'http429':
+        // For HTTP 429, retry with original body (no modification) - reuse buffer to avoid re-serialization
+        return originalBodyBuffer ?? (originalBodyJson ? Buffer.from(JSON.stringify(originalBodyJson), "utf8") : null);
+      
+      case 'provider-specific': {
+        // Check for registered custom modifier
+        const modifier = this.streamRetryModifiers.get(provider.toLowerCase());
+        if (modifier) {
+          return modifier(originalBodyJson);
+        }
+        // No custom modifier registered - fall back to original body
+        return originalBodyBuffer ?? (originalBodyJson ? Buffer.from(JSON.stringify(originalBodyJson), "utf8") : null);
+      }
+    }
+  }
+
+  /**
    * Get the storage key for a request (captureId or requestId).
    */
   private getStorageKey(captureId: string | undefined, requestId: string): string {
@@ -746,6 +805,7 @@ export class RetryPlugin implements ProxyPlugin {
           hasErrorEvent: false,
           fullResponseBuffer: [],
           fullResponseBufferSize: 0,
+          streamRetryCount: 0,
         });
       }
     }
@@ -1270,25 +1330,41 @@ export class RetryPlugin implements ProxyPlugin {
           this.incrementUpstream429Count(entry.provider);
         }
 
+        // Determine error type for provider-aware retry logic
+        let errorType: 'nvidia' | 'http429' | 'provider-specific' | null = null;
+        
+        // Check for NVIDIA ResourceExhausted error FIRST (regardless of errorStatus)
+        // NVIDIA errors in streaming always set errorStatus = 429, so we must check errorMessage
+        let isNvidiaError = false;
+        if (streamState.errorMessage) {
+          const nvidiaCheck = this.checkNvidiaResourceExhausted(streamState.errorMessage);
+          if (nvidiaCheck.isError) {
+            isNvidiaError = true;
+            errorType = 'nvidia';
+          }
+        }
+        
+        // Check for HTTP 429 status (only if not NVIDIA)
+        if (!isNvidiaError && streamState.errorStatus === 429) {
+          errorType = 'http429';
+        }
+        
+        // For other retryable errors, use provider-specific
+        if (!errorType && streamState.errorStatus && config.retryableStatuses.includes(streamState.errorStatus)) {
+          errorType = 'provider-specific';
+        }
+
         // Use maxStreamRetries for streaming-specific retry limit
         const maxStreamRetries = config.maxStreamRetries ?? config.maxRetries;
-        if (entry.retryCount < maxStreamRetries) {
-          // Check if this is a NVIDIA ResourceExhausted error in the SSE data
-          let isNvidiaStreamingError = false;
-          if (streamState.errorStatus === null && streamState.errorMessage) {
-            // Check if the error message indicates NVIDIA ResourceExhausted
-            // Use the same detection logic as non-streaming for consistency
-            const nvidiaCheck = this.checkNvidiaResourceExhausted(streamState.errorMessage);
-            if (nvidiaCheck.isError) {
-              isNvidiaStreamingError = true;
-              // Increment NVIDIA worker retry counter (same as non-streaming path)
-              this.nvidiaWorkerRetryCount++;
-              console.debug(`[retry] NVIDIA ResourceExhausted detected in streaming for provider ${entry.provider}: ${nvidiaCheck.message} (total retries: ${this.nvidiaWorkerRetryCount})`);
-            }
+        if (errorType && streamState.streamRetryCount < maxStreamRetries) {
+          // Increment NVIDIA worker retry counter if this is a NVIDIA error (only when actually retrying)
+          if (isNvidiaError) {
+            this.nvidiaWorkerRetryCount++;
+            console.debug(`[retry] NVIDIA ResourceExhausted detected in streaming for provider ${entry.provider}: ${streamState.errorMessage} (total retries: ${this.nvidiaWorkerRetryCount})`);
           }
           
           // Calculate delay for this retry
-          let delayMs = this.calculateDelay(entry.retryCount, config);
+          let delayMs = this.calculateDelay(streamState.streamRetryCount, config);
           
           // For 429 status, check for Retry-After header (not available in streaming, but keep for consistency)
           if (streamState.errorStatus === 429) {
@@ -1296,12 +1372,20 @@ export class RetryPlugin implements ProxyPlugin {
             // Use calculated backoff
           }
           
-          // Increment retry count in request store
+          // Create modified body based on error type and provider
+          const modifiedBodyBuffer = errorType 
+            ? this.createRetryBody(entry.originalBodyJson, errorType, entry.provider, entry.originalBodyBuffer)
+            : null;
+          
+          // Increment streaming retry count in stream state
+          streamState.streamRetryCount++;
+          
+          // Also increment the non-streaming retry count in request store for compatibility
           this.setEntry(storageKey, {
             ...entry,
             retryCount: entry.retryCount + 1,
-            // @ts-ignore - adding modified body for NVIDIA streaming retry
-            modifiedBodyForRetry: isNvidiaStreamingError ? this.appendContinueMessage(entry.originalBodyJson) : undefined,
+            // @ts-ignore - adding modified body for streaming retry
+            modifiedBodyForRetry: modifiedBodyBuffer,
           });
           
           // Store pending retry info for forward.ts to consume
@@ -1311,6 +1395,8 @@ export class RetryPlugin implements ProxyPlugin {
             originalBodyBuffer: entry.originalBodyBuffer,
             originalBodyJson: entry.originalBodyJson,
             delayMs,
+            modifiedBodyBuffer: modifiedBodyBuffer ?? undefined,
+            detectedErrorType: errorType,
           };
           
           // Don't clean up state yet - forward.ts will consume the pending retry
@@ -1373,12 +1459,12 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
-   * Get the modified request body buffer for NVIDIA retry (if available).
+   * Get the modified request body buffer for streaming retry (if available).
    * Can look up by captureId or requestId.
    */
   getModifiedBodyForRetry(key: string): Buffer | undefined {
     const entry = this.requestStore.get(key);
-    // @ts-ignore - custom property for NVIDIA retry
+    // @ts-ignore - custom property for streaming retry
     return entry?.modifiedBodyForRetry;
   }
 
@@ -1439,6 +1525,7 @@ export class RetryPlugin implements ProxyPlugin {
     originalBodyJson: JsonValue | null;
     delayMs: number;
     modifiedBodyBuffer?: Buffer;
+    detectedErrorType: 'nvidia' | 'http429' | 'provider-specific' | null;
   } | null {
     if (!sessionId) return null;
     
@@ -1465,8 +1552,6 @@ export class RetryPlugin implements ProxyPlugin {
     // Refresh requestStore entry timestamp to prevent premature eviction during retry delay
     const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
     const entry = this.requestStore.get(storageKey);
-    // @ts-ignore - custom property for NVIDIA retry
-    const modifiedBodyBuffer = entry?.modifiedBodyForRetry;
     if (entry) {
       entry.lastAccessed = Date.now();
     }
@@ -1479,7 +1564,8 @@ export class RetryPlugin implements ProxyPlugin {
       originalBodyBuffer: pendingRetry.originalBodyBuffer,
       originalBodyJson: pendingRetry.originalBodyJson,
       delayMs: pendingRetry.delayMs,
-      modifiedBodyBuffer,
+      modifiedBodyBuffer: pendingRetry.modifiedBodyBuffer,
+      detectedErrorType: pendingRetry.detectedErrorType ?? null,
     };
   }
 
