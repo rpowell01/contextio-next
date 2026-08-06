@@ -142,8 +142,9 @@ interface StreamState {
   inDataField: boolean;
   dataBuffer: string;
   hasErrorEvent: boolean;
-  // Full response buffer for streaming retry - accumulates all SSE chunks
-  fullResponseBuffer: Buffer;
+  // Total size of buffered streaming response (for buffer overflow detection only).
+  // Production buffering is handled by forward.ts streamBufferChunks.
+  totalBufferSize: number;
   maxBufferSize: number;
   bufferOverflow: boolean;
   // Original request body for retry
@@ -881,7 +882,7 @@ export class RetryPlugin implements ProxyPlugin {
           inDataField: false,
           dataBuffer: "",
           hasErrorEvent: false,
-          fullResponseBuffer: Buffer.alloc(0),
+          totalBufferSize: 0,
           maxBufferSize,
           bufferOverflow: false,
           originalRequestBody: ctx.rawBody,
@@ -1124,15 +1125,15 @@ export class RetryPlugin implements ProxyPlugin {
     // Only buffer if we haven't detected an error yet (no point buffering after error)
     if (!streamState.errorDetected) {
       // Check if adding this chunk would exceed max buffer size
-      const newSize = streamState.fullResponseBuffer.length + chunk.length;
+      const newSize = streamState.totalBufferSize + chunk.length;
       
       if (newSize > streamState.maxBufferSize) {
         // Buffer overflow - mark it and don't add this chunk
         streamState.bufferOverflow = true;
         console.debug(`[retry] Stream buffer overflow detected (max: ${streamState.maxBufferSize}, would be: ${newSize}). Buffering disabled.`);
       } else {
-        // Append chunk to buffer
-        streamState.fullResponseBuffer = Buffer.concat([streamState.fullResponseBuffer, chunk]);
+        // Track buffer size (O(1) instead of O(n²) Buffer.concat)
+        streamState.totalBufferSize = newSize;
       }
     }
 
@@ -1420,7 +1421,7 @@ export class RetryPlugin implements ProxyPlugin {
       // forward.ts already has the complete stream data, so we should not retry.
       if (streamState.bufferOverflow) {
         console.debug(`[retry] Buffer overflow occurred for session ${sessionId}, skipping retry despite error. forward.ts has complete data.`);
-        streamState.fullResponseBuffer = Buffer.alloc(0);
+        streamState.totalBufferSize = 0;
         this.cleanupAllState(streamState, sessionId);
         return null;
       }
@@ -1518,7 +1519,7 @@ export class RetryPlugin implements ProxyPlugin {
           // Don't clean up state yet - forward.ts will consume the pending retry
           // and we clean up after the retry is handled
           // Discard the buffered response since we're retrying
-          streamState.fullResponseBuffer = Buffer.alloc(0);
+          streamState.totalBufferSize = 0;
           return null;
         }
       }
@@ -1527,7 +1528,7 @@ export class RetryPlugin implements ProxyPlugin {
     // No retry needed - stream completed successfully
     // forward.ts already buffers the stream in streamBufferChunks and sends it to the client
     // We just clean up our internal buffer
-    streamState.fullResponseBuffer = Buffer.alloc(0);
+    streamState.totalBufferSize = 0;
 
     // Log if buffer overflow occurred for observability
     if (streamState.bufferOverflow) {
@@ -1669,8 +1670,8 @@ export class RetryPlugin implements ProxyPlugin {
     streamState.dataBuffer = "";
     // Reset bufferOverflow flag for the retry attempt
     streamState.bufferOverflow = false;
-    // Reset fullResponseBuffer for the retry attempt
-    streamState.fullResponseBuffer = Buffer.alloc(0);
+    // Reset totalBufferSize for the retry attempt
+    streamState.totalBufferSize = 0;
     
     // Refresh requestStore entry timestamp to prevent premature eviction during retry delay
     const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
@@ -1706,14 +1707,13 @@ export class RetryPlugin implements ProxyPlugin {
 
   /**
    * Get the buffered streaming response for a session (for testing/inspection).
-   * Returns the concatenated buffer or null if no buffer exists.
+   * Note: The actual buffer content is no longer accumulated (O(n²) fix).
+   * This method returns null since we only track buffer size, not content.
+   * Use getStreamBufferSizeForTesting to get the size.
    */
   getStreamBufferForTesting(sessionId: string): Buffer | null {
-    const streamState = this.streamState.get(sessionId);
-    if (!streamState || streamState.fullResponseBuffer.length === 0) {
-      return null;
-    }
-    return streamState.fullResponseBuffer;
+    // Buffer content is not stored (production buffering is in forward.ts)
+    return null;
   }
 
   /**
@@ -1721,7 +1721,7 @@ export class RetryPlugin implements ProxyPlugin {
    */
   getStreamBufferSizeForTesting(sessionId: string): number {
     const streamState = this.streamState.get(sessionId);
-    return streamState?.fullResponseBuffer.length ?? 0;
+    return streamState?.totalBufferSize ?? 0;
   }
 }
 
