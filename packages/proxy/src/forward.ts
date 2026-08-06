@@ -821,7 +821,34 @@ export function createProxyHandler(
             // When buffering streaming for retry, we still need to run onStreamChunk for error detection
             // but we don't write to client until we know no retry is needed
             const shouldBufferStreamForRetry = hasRetryPlugin && isStreaming;
+            
+            // Get max buffer size for streaming retry from provider config (default 10MB)
+            const providerConfig = opts.providers[provider];
+            const maxStreamBufferSize = providerConfig?.retry?.maxResponseBufferSize ?? 10 * 1024 * 1024;
+            
             const streamBufferChunks: Buffer[] = [];
+            let streamBufferSize = 0;
+            let streamBufferOverflow = false;
+
+            // Helper to flush buffered chunks and start streaming directly to client
+            const flushBufferAndStream = (chunkToWrite: Buffer): void => {
+              if (res.headersSent || res.destroyed) return;
+              const headers = {
+                ...proxyRes.headers,
+                ...(captureId ? { "x-contextio-capture-id": captureId } : {}),
+              };
+              // Strip content-length and transfer-encoding since we're now streaming with unknown total length
+              delete headers["content-length"];
+              delete headers["transfer-encoding"];
+              res.writeHead(proxyRes.statusCode!, headers);
+              for (const bufferedChunk of streamBufferChunks) {
+                res.write(bufferedChunk);
+              }
+              res.write(chunkToWrite);
+              // Clear the buffer to release memory
+              streamBufferChunks.length = 0;
+              streamBufferSize = 0;
+            };
 
             if (!shouldBufferResponse) {
               // Stream directly to client
@@ -835,7 +862,10 @@ export function createProxyHandler(
             proxyRes.on("data", (chunk: Buffer) => {
               if (!firstByteTime) firstByteTime = performance.now();
               respBytes += chunk.length;
-              respChunks.push(chunk);
+              // Only buffer respChunks for non-streaming-retry paths (respBody is not used when streaming for retry)
+              if (!shouldBufferStreamForRetry) {
+                respChunks.push(chunk);
+              }
 
               // Extract session ID from streaming response (fallback for all providers)
               // Many LLM providers include an "id" field in their streaming responses
@@ -908,11 +938,36 @@ export function createProxyHandler(
                     true, // isStreaming
                   );
                   const outBuffer = Buffer.concat(result.processedParts);
-                  streamBufferChunks.push(outBuffer);
+                  
+                  // Check buffer size limit
+                  const newSize = streamBufferSize + outBuffer.length;
+                  if (!streamBufferOverflow && newSize > maxStreamBufferSize) {
+                    streamBufferOverflow = true;
+                    console.debug(`[forward] Stream buffer overflow detected (max: ${maxStreamBufferSize}, would be: ${newSize}). Disabling buffering, streaming directly to client.`);
+                    flushBufferAndStream(outBuffer);
+                  } else if (!streamBufferOverflow) {
+                    streamBufferChunks.push(outBuffer);
+                    streamBufferSize = newSize;
+                  } else if (!res.destroyed) {
+                    // Already overflowed, write directly to client
+                    res.write(outBuffer);
+                  }
+                  
                   jsonBuffer = result.remainingBuffer;
                 } else {
                   // No stream plugins, just buffer the raw chunk
-                  streamBufferChunks.push(chunk);
+                  const newSize = streamBufferSize + chunk.length;
+                  if (!streamBufferOverflow && newSize > maxStreamBufferSize) {
+                    streamBufferOverflow = true;
+                    console.debug(`[forward] Stream buffer overflow detected (max: ${maxStreamBufferSize}, would be: ${newSize}). Disabling buffering, streaming directly to client.`);
+                    flushBufferAndStream(chunk);
+                  } else if (!streamBufferOverflow) {
+                    streamBufferChunks.push(chunk);
+                    streamBufferSize = newSize;
+                  } else if (!res.destroyed) {
+                    // Already overflowed, write directly to client
+                    res.write(chunk);
+                  }
                 }
               }
             });
@@ -928,9 +983,18 @@ export function createProxyHandler(
                   try {
                     const flushed = plugin.onStreamEnd(sessionId);
                     if (flushed && flushed.length > 0) {
-                      if (shouldBufferStreamForRetry) {
-                        streamBufferChunks.push(flushed);
-                      } else {
+                      if (shouldBufferStreamForRetry && !streamBufferOverflow) {
+                        const newSize = streamBufferSize + flushed.length;
+                        if (newSize > maxStreamBufferSize) {
+                          streamBufferOverflow = true;
+                          console.debug(`[forward] Stream buffer overflow on flush (max: ${maxStreamBufferSize}, would be: ${newSize}). Disabling buffering, streaming directly to client.`);
+                          flushBufferAndStream(flushed);
+                        } else {
+                          streamBufferChunks.push(flushed);
+                          streamBufferSize = newSize;
+                        }
+                      } else if (!res.destroyed) {
+                        // Already overflowed or not buffering for retry
                         res.write(flushed);
                       }
                     }
@@ -945,7 +1009,8 @@ export function createProxyHandler(
 
               // Check for streaming retry signal from retry plugin
               // This allows retrying SSE responses that ended with an error event
-              if (shouldBufferStreamForRetry && !res.destroyed) {
+              // But only if we haven't overflowed the buffer
+              if (shouldBufferStreamForRetry && !streamBufferOverflow && !res.destroyed) {
                 const retryPlugin = plugins.find((p) => p.name === "retry");
                 const pendingRetry =
                   retryPlugin &&
@@ -1004,7 +1069,8 @@ export function createProxyHandler(
                 }
               }
 
-              const respBody = Buffer.concat(respChunks).toString("utf8");
+              // respBody is only used for non-streaming-retry paths
+              const respBody = shouldBufferStreamForRetry ? "" : Buffer.concat(respChunks).toString("utf8");
 
               // finishResponse is called once the response body is final:
               // either immediately after the upstream ends (non-buffered path)
@@ -1097,14 +1163,77 @@ export function createProxyHandler(
 
               // Handle response based on buffering mode
               if (shouldBufferStreamForRetry) {
-                // Streaming response was buffered for retry, but no retry was needed
-                // Delegate to finishResponse to write headers/body and run capture
-                const streamBody = Buffer.concat(streamBufferChunks);
-                const streamHeaders: HeaderMap = {
-                  ...(proxyRes.headers as HeaderMap),
-                  ...(captureId ? { "x-contextio-capture-id": captureId } : {}),
-                };
-                finishResponse(streamBody, streamHeaders, proxyRes.statusCode || 0);
+                if (streamBufferOverflow) {
+                  // Buffer overflowed - we already streamed directly to client
+                  // Just end the response and run capture plugins
+                  if (!res.destroyed) {
+                    res.end();
+                  }
+                  // Run capture plugins manually since we bypassed finishResponse
+                  if (hasCapturePlugins) {
+                    const timings: CaptureData["timings"] = {
+                      send_ms: Math.round(
+                        Math.max(
+                          0,
+                          (requestSentTime || firstByteTime) - startTime,
+                        ),
+                      ),
+                      wait_ms: Math.round(
+                        Math.max(
+                          0,
+                          firstByteTime - (requestSentTime || startTime),
+                        ),
+                      ),
+                      receive_ms: Math.round(endTime - firstByteTime),
+                      total_ms: Math.round(endTime - startTime),
+                    };
+
+                    // Skip capture for title-generation requests (internal UI feature)
+                    if (!sessionId?.startsWith("title-")) {
+                      const finalBodyStr = ""; // We don't have the full body when streaming
+                      const reclassified = reclassifyProviderFromResponse(
+                        provider,
+                        proxyRes,
+                        finalBodyStr,
+                        opts.logTraffic,
+                      );
+                      const captureProvider: Provider = reclassified.reclassified
+                        ? (reclassified.provider as Provider)
+                        : provider;
+                      const captureApiFormat: ApiFormat = reclassified.reclassified
+                        ? (reclassified.apiFormat as ApiFormat)
+                        : apiFormat;
+
+                      const capture = buildCaptureData({
+                        sessionId,
+                        req,
+                        cleanPath,
+                        source,
+                        provider: captureProvider,
+                        apiFormat: captureApiFormat,
+                        targetUrl,
+                        ctx: ctx,
+                        originalBody: bodyJson,
+                        reqBytes,
+                        proxyRes,
+                        finalBody: finalBodyStr,
+                        isStreaming: !!isStreaming,
+                        respBytes,
+                        timings,
+                      });
+                      runCapturePlugins(plugins, capture);
+                    }
+                  }
+                } else {
+                  // Streaming response was buffered for retry, but no retry was needed
+                  // Delegate to finishResponse to write headers/body and run capture
+                  const streamBody = Buffer.concat(streamBufferChunks);
+                  const streamHeaders: HeaderMap = {
+                    ...(proxyRes.headers as HeaderMap),
+                    ...(captureId ? { "x-contextio-capture-id": captureId } : {}),
+                  };
+                  finishResponse(streamBody, streamHeaders, proxyRes.statusCode || 0);
+                }
               } else if (shouldBufferResponse) {
                 const retryId = currentCtx.headers["x-retry-id"];
                 const respCtx: ResponseContext = {

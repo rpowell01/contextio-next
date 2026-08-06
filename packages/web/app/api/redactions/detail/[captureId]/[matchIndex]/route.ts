@@ -135,8 +135,8 @@ export async function GET(
           preRedactionValue,
           postRedactionValue,
           matches: allMatches,
-          // Use meta.generatedAt with fallback to capture timestamp (consistent with list API)
-          timestamp: (meta.generatedAt as string) ?? (meta.timestamp as string) ?? (captureData.timestamp as string) ?? new Date().toISOString(),
+          // Use meta.timestamp (consistent with list API using createdAt)
+          timestamp: (meta.timestamp as string) ?? (captureData.timestamp as string) ?? new Date().toISOString(),
         };
 
         // Include full original/redacted values where available
@@ -158,8 +158,8 @@ export async function GET(
           captureId,
           preRedactionValue: "",
           postRedactionValue: "",
-          // Use meta.generatedAt with fallback to capture timestamp
-          timestamp: (meta.generatedAt as string) ?? (meta.timestamp as string) ?? (captureData.timestamp as string) ?? new Date().toISOString(),
+          // Use meta.timestamp (consistent with list API using createdAt)
+          timestamp: (meta.timestamp as string) ?? (captureData.timestamp as string) ?? new Date().toISOString(),
         };
 
         // Build synthetic match for full body response logic

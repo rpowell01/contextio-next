@@ -1416,6 +1416,15 @@ export class RetryPlugin implements ProxyPlugin {
 
     // If an error was detected, check if we should retry
     if (streamState.errorDetected) {
+      // If bufferOverflow occurred, our buffer is incomplete.
+      // forward.ts already has the complete stream data, so we should not retry.
+      if (streamState.bufferOverflow) {
+        console.debug(`[retry] Buffer overflow occurred for session ${sessionId}, skipping retry despite error. forward.ts has complete data.`);
+        streamState.fullResponseBuffer = Buffer.alloc(0);
+        this.cleanupAllState(streamState, sessionId);
+        return null;
+      }
+
       const storageKey = this.getStorageKey(streamState.captureId, streamState.requestId);
       const entry = this.requestStore.get(storageKey);
       if (entry) {
@@ -1519,6 +1528,11 @@ export class RetryPlugin implements ProxyPlugin {
     // forward.ts already buffers the stream in streamBufferChunks and sends it to the client
     // We just clean up our internal buffer
     streamState.fullResponseBuffer = Buffer.alloc(0);
+
+    // Log if buffer overflow occurred for observability
+    if (streamState.bufferOverflow) {
+      console.debug(`[retry] Buffer overflow occurred for session ${sessionId}, forward.ts has complete data.`);
+    }
 
     // Clean up stream state and request store
     this.cleanupAllState(streamState, sessionId);

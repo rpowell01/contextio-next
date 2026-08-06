@@ -657,6 +657,65 @@ describe("retry plugin - unit tests", () => {
       const pendingRetry = (plugin as any)._internal.getAndConsumePendingStreamRetry("test-session-123");
       assert.equal(pendingRetry, null, "Should not retry after max retries exceeded");
     });
+
+    it("signals retry for Anthropic-style SSE error without numeric code (fallback path)", async () => {
+      const ctx = createMockRequestContext();
+      const requestCtx = await plugin.onRequest!(ctx);
+      
+      // Send Anthropic-style SSE error WITHOUT numeric code
+      // Format: {type: "error", error: {type: "rate_limit_error", message: "Rate limit exceeded"}}
+      const errorChunk = Buffer.from(
+        'data: {"type":"error","error":{"type":"rate_limit_error","message":"Rate limit exceeded"}}\n\n'
+      );
+      plugin.onStreamChunk!(errorChunk, "test-session-123");
+      
+      // End stream - should signal retry via fallback path (checkRateLimitInData)
+      plugin.onStreamEnd!("test-session-123");
+      
+      // Check if pending retry was set via fallback path
+      const pendingRetry = (plugin as any)._internal.getAndConsumePendingStreamRetry("test-session-123");
+      assert.ok(pendingRetry, "Should have pending retry for Anthropic rate_limit_error without numeric code");
+      assert.equal(pendingRetry.retryId, requestCtx.headers["x-retry-id"]);
+      assert.ok(pendingRetry.originalBodyBuffer);
+      assert.ok(pendingRetry.delayMs > 0);
+      // The error type should be 'provider-specific' since it was detected via message inspection
+      assert.equal(pendingRetry.detectedErrorType, "provider-specific");
+    });
+
+    it("does not signal retry for non-rate-limit error without numeric code (authentication_error)", async () => {
+      const ctx = createMockRequestContext();
+      await plugin.onRequest!(ctx);
+      
+      // Send Anthropic-style SSE error that is NOT a rate limit error
+      // Format: {type: "error", error: {type: "authentication_error", message: "Invalid API key"}}
+      const errorChunk = Buffer.from(
+        'data: {"type":"error","error":{"type":"authentication_error","message":"Invalid API key"}}\n\n'
+      );
+      plugin.onStreamChunk!(errorChunk, "test-session-123");
+      
+      // End stream - should NOT signal retry (pass-through per requirement 4 of q3kan.6)
+      plugin.onStreamEnd!("test-session-123");
+      
+      // Check that NO pending retry was set
+      const pendingRetry = (plugin as any)._internal.getAndConsumePendingStreamRetry("test-session-123");
+      assert.equal(pendingRetry, null, "Should not have pending retry for non-rate-limit error (authentication_error)");
+    });
+
+    it("does not signal retry for bare 'event: error' SSE event (no data)", async () => {
+      const ctx = createMockRequestContext();
+      await plugin.onRequest!(ctx);
+      
+      // Send bare 'event: error' SSE event with no data payload
+      const errorChunk = Buffer.from('event: error\n\n');
+      plugin.onStreamChunk!(errorChunk, "test-session-123");
+      
+      // End stream - should NOT signal retry (pass-through)
+      plugin.onStreamEnd!("test-session-123");
+      
+      // Check that NO pending retry was set
+      const pendingRetry = (plugin as any)._internal.getAndConsumePendingStreamRetry("test-session-123");
+      assert.equal(pendingRetry, null, "Should not have pending retry for bare 'event: error' with no data");
+    });
   });
 
   describe("request body buffering and replay", () => {

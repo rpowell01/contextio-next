@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist-test-proxy",
+    "rootDir": ".",
+    "types": ["node"],
+    "baseUrl": ".",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  },
+  "include": [
+    "packages/proxy/src/config.ts",
+    "packages/proxy/test/config.test.ts",
+    "packages/proxy/test/rate-limiter.test.ts",
+    "packages/proxy/test/retry-plugin.test.ts",
+    "packages/proxy/test/proxy.test.ts"
+  ]
+}

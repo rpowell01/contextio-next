@@ -10,9 +10,11 @@ import type {
 } from "@/types/api";
 import { TrafficChart } from "@/components/traffic-chart";
 import { RateLimiterChart } from "@/components/rate-limiter-chart";
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
 import { usePageLoad } from "@/components/page-load-context";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Gauge, TrendingUp } from "lucide-react";
 
 /**
  * Checks if an error is a connection error that should stop polling.
@@ -43,11 +45,22 @@ const MAX_DATA_POINTS_OPTIONS = [
   { value: "0", label: "Unlimited" },
 ];
 
+// Tab configuration
+type MetricsTab = "rateLimiter" | "traffic";
+
+const tabs: { id: MetricsTab; label: string; icon: React.ReactNode }[] = [
+  { id: "rateLimiter", label: "Rate Limiter", icon: <Gauge className="h-4 w-4" /> },
+  { id: "traffic", label: "Traffic", icon: <TrendingUp className="h-4 w-4" /> },
+];
+
 /**
- * Inner content component that uses usePageLoad.
- * Must be rendered inside MainLayout (which provides PageLoadProvider).
+ * Inner content component that uses usePageLoad and useSearchParams.
+ * Must be rendered inside a Suspense boundary.
  */
 function MetricsContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [rateLimiterMetrics, setRateLimiterMetrics] = useState<RateLimiterMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +72,39 @@ function MetricsContent() {
   const [pageSize] = useState<number>(50);
   const [rateLimiterError, setRateLimiterError] = useState<string | null>(null);
   const [rateLimiterLoading, setRateLimiterLoading] = useState(true);
+
+  // Tab state - initialize to default, then sync from URL/localStorage
+  const [activeTab, setActiveTab] = useState<MetricsTab>("rateLimiter");
+  const [tabInitialized, setTabInitialized] = useState(false);
+
+  // Sync tab from URL/localStorage after initial render
+  useEffect(() => {
+    if (tabInitialized) return;
+
+    // Check URL param first
+    const urlTab = searchParams.get("tab");
+    const isValidTab = (tab: string): tab is MetricsTab => tabs.some((t) => t.id === tab);
+
+    if (urlTab && isValidTab(urlTab)) {
+      setActiveTab(urlTab);
+    } else {
+      // Fall back to localStorage
+      const saved = localStorage.getItem("metrics-active-tab");
+      if (saved && isValidTab(saved)) {
+        setActiveTab(saved);
+      }
+    }
+    setTabInitialized(true);
+  }, [searchParams, tabInitialized]);
+
+  // Persist active tab to localStorage and URL (without searchParams in deps to avoid infinite loop)
+  useEffect(() => {
+    localStorage.setItem("metrics-active-tab", activeTab);
+    // Read current params from window to avoid depending on searchParams
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", activeTab);
+    router.replace(`/metrics?${params.toString()}`, { scroll: false });
+  }, [activeTab, router]);
 
   // Memoized sorted buckets for the table to avoid re-sorting on every render
   // Sort by provider name, then by utilization (most constrained first)
@@ -85,7 +131,7 @@ function MetricsContent() {
   const { registerPageLoad, registerPageReady } = usePageLoad();
 
   // Refs for polling
-  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rateLimiterAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const requestIdRef = useRef(0);
@@ -111,7 +157,7 @@ function MetricsContent() {
 
       for await (const update of stream) {
         if (!isMountedRef.current) break;
-        
+
         if (update.type === "progress") {
           setProgress({
             current: update.current || 0,
@@ -207,8 +253,24 @@ function MetricsContent() {
     }
   }, []);
 
-  // Poll for rate limiter metrics
+  // Poll for rate limiter metrics (only when rate limiter tab is active or on initial load)
   useEffect(() => {
+    // Only poll if rate limiter tab is active or we're doing initial load
+    const shouldPoll = activeTab === "rateLimiter";
+
+    if (!shouldPoll) {
+      // Clear any existing polling when not on rate limiter tab
+      if (pollingIntervalRef.current) {
+        clearTimeout(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      if (rateLimiterAbortControllerRef.current) {
+        rateLimiterAbortControllerRef.current.abort();
+        rateLimiterAbortControllerRef.current = null;
+      }
+      return;
+    }
+
     let cancelled = false;
     let isFirstPoll = true;
 
@@ -252,11 +314,15 @@ function MetricsContent() {
         rateLimiterAbortControllerRef.current = null;
       }
     };
-  }, [fetchRateLimiterMetrics]);
+  }, [fetchRateLimiterMetrics, activeTab]);
 
+  // Fetch main metrics when time range, maxDataPoints, or page changes
+  // Only fetch if traffic tab is active or on initial load
   useEffect(() => {
-    fetchMetrics();
-  }, [fetchMetrics]);
+    if (activeTab === "traffic" || loading) {
+      fetchMetrics();
+    }
+  }, [fetchMetrics, activeTab, loading]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -264,6 +330,41 @@ function MetricsContent() {
       isMountedRef.current = false;
     };
   }, []);
+
+  // Keyboard navigation for tabs
+  const handleTabKeyDown = (event: React.KeyboardEvent, _tabId: MetricsTab, index: number) => {
+    let newIndex = index;
+    switch (event.key) {
+      case "ArrowRight":
+        event.preventDefault();
+        newIndex = (index + 1) % tabs.length;
+        break;
+      case "ArrowLeft":
+        event.preventDefault();
+        newIndex = (index - 1 + tabs.length) % tabs.length;
+        break;
+      case "Home":
+        event.preventDefault();
+        newIndex = 0;
+        break;
+      case "End":
+        event.preventDefault();
+        newIndex = tabs.length - 1;
+        break;
+      default:
+        return;
+    }
+    setActiveTab(tabs[newIndex].id);
+  };
+
+  // Focus the active tab when it changes (handles keyboard navigation focus)
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  useEffect(() => {
+    const activeIndex = tabs.findIndex((t) => t.id === activeTab);
+    if (activeIndex >= 0 && tabRefs.current[activeIndex]) {
+      tabRefs.current[activeIndex]?.focus();
+    }
+  }, [activeTab]);
 
   return (
     <div className="space-y-6">
@@ -274,8 +375,40 @@ function MetricsContent() {
         </p>
       </div>
 
-      {/* Progress Bar */}
-      {(loading || progress) && (
+      {/* Tab Navigation */}
+      <div className="rounded-lg border">
+        <nav aria-label="Metrics sections" className="border-b">
+          <ul role="tablist" aria-orientation="horizontal" className="flex flex-wrap gap-1 p-1 bg-muted/50">
+            {tabs.map((tab, index) => (
+              <li key={tab.id} role="presentation">
+                <button
+                  ref={(el) => {
+                    tabRefs.current[index] = el;
+                  }}
+                  role="tab"
+                  id={`tab-${tab.id}`}
+                  aria-selected={activeTab === tab.id}
+                  aria-controls={`panel-${tab.id}`}
+                  tabIndex={activeTab === tab.id ? 0 : -1}
+                  onClick={() => setActiveTab(tab.id)}
+                  onKeyDown={(e) => handleTabKeyDown(e, tab.id, index)}
+                  className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+                    activeTab === tab.id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background"
+                  }`}
+                >
+                  <span aria-hidden="true">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
+
+      {/* Progress Bar - only show for traffic tab since rate limiter has its own loading state */}
+      {(activeTab === "traffic" && (loading || progress)) && (
         <div className="space-y-2">
           <ProgressBar
             value={loading ? progressPercent : 100}
@@ -298,126 +431,131 @@ function MetricsContent() {
         </div>
       )}
 
-      {/* Rate Limiter Metrics - rendered independently of main metrics */}
-      <div className="rounded-lg border p-4">
-        <h3 className="text-lg font-semibold mb-4">Rate Limiter Status</h3>
-        {rateLimiterError && (
-          <div className="rounded-lg border border-destructive bg-destructive/10 p-4 mb-4">
-            <p className="text-destructive">{rateLimiterError}</p>
-          </div>
-        )}
-        {rateLimiterMetrics && !rateLimiterMetrics.config.enabled && (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground">
-              Rate limiter is not enabled. Enable it in the proxy configuration to see metrics.
-            </p>
-          </div>
-        )}
-        {!rateLimiterMetrics && rateLimiterError && (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground">
-              Unable to load rate limiter metrics. Check the proxy connection and try again.
-            </p>
-          </div>
-        )}
-        {rateLimiterMetrics && rateLimiterMetrics.config.enabled && (
+      {/* Rate Limiter Tab Panel */}
+      {activeTab === "rateLimiter" && (
+        <div className="rounded-lg border p-4" role="tabpanel" id="panel-rateLimiter" aria-labelledby="tab-rateLimiter">
           <div className="space-y-4">
-            {/* Chart */}
-            <div className="rounded-lg border p-4">
-              <h4 className="text-md font-medium mb-3">Request Bucket States</h4>
-              <RateLimiterChart
-                buckets={rateLimiterMetrics.buckets}
-                loading={rateLimiterLoading}
-                maxDataPoints={maxDataPoints}
-              />
-            </div>
-
-            {/* Bucket Details Table */}
-            {sortedBuckets.length > 0 && (
-              <div className="rounded-lg border p-4">
-                <h4 className="text-md font-medium mb-3">Bucket Details</h4>
-                <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-2 font-medium">Key</th>
-                        <th className="text-right p-2 font-medium">Requests Used / Window</th>
-                        <th className="text-right p-2 font-medium">Requests Remaining (Window)</th>
-                        <th className="text-right p-2 font-medium">Max Requests</th>
-                        <th className="text-right p-2 font-medium">Buffer Capacity</th>
-                        <th className="text-right p-2 font-medium">Queue</th>
-                        <th className="text-left p-2 font-medium">Provider</th>
-                        <th className="text-left p-2 font-medium">Scope</th>
-                        <th className="text-right p-2 font-medium">Upstream 429s</th>
-                        <th className="text-right p-2 font-medium">NVIDIA Worker Retries</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedBuckets.map((bucket) => (
-                          <tr key={bucket.key} className="border-b last:border-0">
-                            <td className="p-2 font-mono text-xs truncate max-w-xs" title={bucket.key}>
-                              {bucket.key}
-                            </td>
-                            <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.requestsInWindow ?? 0)}</td>
-                            <td className="p-2 text-right">
-                              <span className={bucket.maxTokens - (bucket.requestsInWindow ?? 0) < 5 ? "text-destructive font-medium" : ""}>
-                                {formatNumber(Math.max(0, bucket.maxTokens - (bucket.requestsInWindow ?? 0)))}
-                              </span>
-                            </td>
-                            <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.maxTokens)}</td>
-                            <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.bufferCapacity)}</td>
-                            <td className="p-2 text-right">
-                              <span className={bucket.queueLength > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>
-                                {formatNumber(bucket.queueLength)}
-                              </span>
-                            </td>
-                            <td className="p-2 text-muted-foreground">{bucket.provider ?? "unknown"}</td>
-                            <td className="p-2 text-muted-foreground">
-                              {bucket.sessionId === "all" ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">
-                                  <span>🔗</span>
-                                  Shared
-                                </span>
-                              ) : (
-                                bucket.sessionId ?? "unknown"
-                              )}
-                            </td>
-                            <td className="p-2 text-right">
-                              {(rateLimiterMetrics.upstream429Counts?.[bucket.provider ?? ""] ?? 0) > 0 ? (
-                                <span className="font-mono font-bold text-red-700">
-                                  {formatNumber(rateLimiterMetrics.upstream429Counts?.[bucket.provider ?? ""] ?? 0)}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">0</span>
-                              )}
-                            </td>
-                            <td className="p-2 text-right">
-                              {bucket.provider === "nvidia" && (rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0) > 0 ? (
-                                <span className="font-mono font-bold text-amber-700">
-                                  {rateLimiterMetrics.nvidiaWorkerRetryCount}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">0</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
+            <h3 className="text-lg font-semibold mb-4">Rate Limiter Status</h3>
+            {rateLimiterError && (
+              <div className="rounded-lg border border-destructive bg-destructive/10 p-4 mb-4">
+                <p className="text-destructive">{rateLimiterError}</p>
+              </div>
+            )}
+            {rateLimiterMetrics && !rateLimiterMetrics.config.enabled && (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">
+                  Rate limiter is not enabled. Enable it in the proxy configuration to see metrics.
+                </p>
+              </div>
+            )}
+            {!rateLimiterMetrics && rateLimiterError && (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">
+                  Unable to load rate limiter metrics. Check the proxy connection and try again.
+                </p>
+              </div>
+            )}
+            {rateLimiterMetrics && rateLimiterMetrics.config.enabled && (
+              <div className="space-y-4">
+                {/* Chart */}
+                <div className="rounded-lg border p-4">
+                  <h4 className="text-md font-medium mb-3">Request Bucket States</h4>
+                  <RateLimiterChart
+                    buckets={rateLimiterMetrics.buckets}
+                    loading={rateLimiterLoading}
+                    maxDataPoints={maxDataPoints}
+                  />
                 </div>
+
+                {/* Bucket Details Table */}
+                {sortedBuckets.length > 0 && (
+                  <div className="rounded-lg border p-4">
+                    <h4 className="text-md font-medium mb-3">Bucket Details</h4>
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left p-2 font-medium">Key</th>
+                            <th className="text-right p-2 font-medium">Requests Used / Window</th>
+                            <th className="text-right p-2 font-medium">Requests Remaining (Window)</th>
+                            <th className="text-right p-2 font-medium">Max Requests</th>
+                            <th className="text-right p-2 font-medium">Buffer Capacity</th>
+                            <th className="text-right p-2 font-medium">Queue</th>
+                            <th className="text-left p-2 font-medium">Provider</th>
+                            <th className="text-left p-2 font-medium">Scope</th>
+                            <th className="text-right p-2 font-medium">Upstream 429s</th>
+                            <th className="text-right p-2 font-medium">NVIDIA Worker Retries</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedBuckets.map((bucket) => (
+                              <tr key={bucket.key} className="border-b last:border-0">
+                                <td className="p-2 font-mono text-xs truncate max-w-xs" title={bucket.key}>
+                                  {bucket.key}
+                                </td>
+                                <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.requestsInWindow ?? 0)}</td>
+                                <td className="p-2 text-right">
+                                  <span className={bucket.maxTokens - (bucket.requestsInWindow ?? 0) < 5 ? "text-destructive font-medium" : ""}>
+                                    {formatNumber(Math.max(0, bucket.maxTokens - (bucket.requestsInWindow ?? 0)))}
+                                  </span>
+                                </td>
+                                <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.maxTokens)}</td>
+                                <td className="p-2 text-right text-muted-foreground">{formatNumber(bucket.bufferCapacity)}</td>
+                                <td className="p-2 text-right">
+                                  <span className={bucket.queueLength > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>
+                                    {formatNumber(bucket.queueLength)}
+                                  </span>
+                                </td>
+                                <td className="p-2 text-muted-foreground">{bucket.provider ?? "unknown"}</td>
+                                <td className="p-2 text-muted-foreground">
+                                  {bucket.sessionId === "all" ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">
+                                      <span>🔗</span>
+                                      Shared
+                                    </span>
+                                  ) : (
+                                    bucket.sessionId ?? "unknown"
+                                  )}
+                                </td>
+                                <td className="p-2 text-right">
+                                  {(rateLimiterMetrics.upstream429Counts?.[bucket.provider ?? ""] ?? 0) > 0 ? (
+                                    <span className="font-mono font-bold text-red-700">
+                                      {formatNumber(rateLimiterMetrics.upstream429Counts?.[bucket.provider ?? ""] ?? 0)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">0</span>
+                                  )}
+                                </td>
+                                <td className="p-2 text-right">
+                                  {bucket.provider === "nvidia" && (rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0) > 0 ? (
+                                    <span className="font-mono font-bold text-amber-700">
+                                      {rateLimiterMetrics.nvidiaWorkerRetryCount}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">0</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {!rateLimiterMetrics && !rateLimiterError && (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">Loading rate limiter metrics...</p>
               </div>
             )}
           </div>
-        )}
-        {!rateLimiterMetrics && !rateLimiterError && (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground">Loading rate limiter metrics...</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {metrics && (
-        <div>
+      {/* Traffic Tab Panel */}
+      {activeTab === "traffic" && metrics && (
+        <div role="tabpanel" id="panel-traffic" aria-labelledby="tab-traffic">
           {/* Filter Controls */}
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
@@ -625,16 +763,6 @@ function MetricsContent() {
           {/* Provider Usage */}
           <div className="rounded-lg border p-4">
             <h3 className="text-lg font-semibold mb-4">Provider Usage</h3>
-            {!metrics && !error && (
-              <div className="text-sm text-muted-foreground">
-                Loading provider data...
-              </div>
-            )}
-            {metrics && metrics.providers.length === 0 && (
-              <div className="text-sm text-muted-foreground">
-                No provider usage recorded.
-              </div>
-            )}
             <div className="space-y-2">
               {metrics?.providers.map((provider) => (
                 <div
@@ -654,6 +782,20 @@ function MetricsContent() {
           </div>
         </div>
       )}
+
+      {/* Traffic tab loading state */}
+      {activeTab === "traffic" && loading && (
+        <div role="tabpanel" id="panel-traffic" aria-labelledby="tab-traffic" className="text-center py-8">
+          <p className="text-muted-foreground">Loading traffic metrics...</p>
+        </div>
+      )}
+
+      {/* Traffic tab empty state */}
+      {activeTab === "traffic" && !loading && !metrics && !error && (
+        <div role="tabpanel" id="panel-traffic" aria-labelledby="tab-traffic" className="text-center py-8">
+          <p className="text-muted-foreground">No traffic data available.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -661,7 +803,9 @@ function MetricsContent() {
 export default function MetricsPage() {
   return (
     <MainLayout>
-      <MetricsContent />
+      <Suspense fallback={<div className="flex items-center justify-center py-12"><p className="text-muted-foreground">Loading metrics...</p></div>}>
+        <MetricsContent />
+      </Suspense>
     </MainLayout>
   );
 }
