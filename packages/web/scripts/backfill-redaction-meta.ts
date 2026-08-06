@@ -9,6 +9,7 @@ import {
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
 import { computeTokenUsage, type TokenUsageResult } from "@/lib/sessions/utils";
+import { upsertRedactionMetadata, type RedactionMetadata, runMigrations } from "@contextio/core/db";
 
 interface BackfillStats {
   total: number;
@@ -62,15 +63,23 @@ function processCapture(
       data.originalRequestBody,
     );
 
+    const leanStats = toLeanStats(counts);
+
     // Compute token usage from response body
     const responseBody = typeof data.responseBody === "string" ? data.responseBody : null;
     const tokenUsage: TokenUsageResult = responseBody
-      ? computeTokenUsage(responseBody, typeof data.provider === "string" ? data.provider : undefined)
-      : { inputTokens: 0, outputTokens: 0, tokensPerSecond: 0, model: null, successCount: 0, errorCount: 0 };
+      ? computeTokenUsage(responseBody, typeof data.requestBody === "string" ? data.requestBody : undefined)
+      : { input: 0, output: 0, model: null };
 
-    const leanStats = toLeanStats(counts);
+    // Compute additional metrics (tokensPerSecond, successCount, errorCount)
+    const timeSec = ((data.timings as Record<string, unknown>)?.total_ms as number || 0) / 1000 || 1;
+    const tokensPerSecond = timeSec > 0 ? tokenUsage.output / timeSec : 0;
+    const responseStatus = typeof data.responseStatus === "number" ? data.responseStatus : 200;
+    const isSuccess = responseStatus >= 200 && responseStatus < 300;
+    const successCount = isSuccess ? 1 : 0;
+    const errorCount = isSuccess ? 0 : 1;
 
-    atomicWriteJson(metaPath, {
+    const metaData = {
       captureId: captureBasename,
       sessionId:
         typeof data.sessionId === "string" ? data.sessionId : null,
@@ -78,20 +87,54 @@ function processCapture(
       provider: typeof data.provider === "string" ? data.provider : null,
       targetUrl: typeof data.targetUrl === "string" ? data.targetUrl : null,
       source: typeof data.source === "string" ? data.source : null,
-      timings: data.timings
-        ? { total_ms: data.timings.total_ms ?? 0 }
+      timings: data.timings && typeof data.timings === "object"
+        ? { total_ms: typeof (data.timings as Record<string, unknown>).total_ms === "number" ? (data.timings as Record<string, unknown>).total_ms as number : 0 }
         : { total_ms: 0 },
       requestBytes: typeof data.requestBytes === "number" ? data.requestBytes : 0,
       responseBytes: typeof data.responseBytes === "number" ? data.responseBytes : 0,
       ...leanStats,
       // Token metrics
-      totalInputTokens: tokenUsage.inputTokens,
-      totalOutputTokens: tokenUsage.outputTokens,
-      tokensPerSecond: tokenUsage.tokensPerSecond,
-      successCount: tokenUsage.successCount,
-      errorCount: tokenUsage.errorCount,
+      totalInputTokens: tokenUsage.input,
+      totalOutputTokens: tokenUsage.output,
+      tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+      successCount,
+      errorCount,
       model: tokenUsage.model,
-    });
+    };
+
+    atomicWriteJson(metaPath, metaData);
+
+    // Also persist to SQLite
+    const sqliteMetadata: RedactionMetadata = {
+      captureId: captureBasename,
+      sessionId: typeof data.sessionId === "string" ? data.sessionId : null,
+      ruleCounts: leanStats.byRule,
+      totalRedactions: leanStats.totalRedactions,
+      encrypted: false,
+      createdAt: typeof data.timestamp === "string" ? new Date(data.timestamp).getTime() : Date.now(),
+      updatedAt: Date.now(),
+      source: typeof data.source === "string" ? data.source : null,
+      provider: typeof data.provider === "string" ? data.provider : null,
+      targetUrl: typeof data.targetUrl === "string" ? data.targetUrl : null,
+      requestBytes: typeof data.requestBytes === "number" ? data.requestBytes : 0,
+      responseBytes: typeof data.responseBytes === "number" ? data.responseBytes : 0,
+      timings: data.timings && typeof data.timings === "object"
+        ? { total_ms: typeof (data.timings as Record<string, unknown>).total_ms === "number" ? (data.timings as Record<string, unknown>).total_ms as number : 0 }
+        : { total_ms: 0 },
+      totalInputTokens: tokenUsage.input,
+      totalOutputTokens: tokenUsage.output,
+      tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+      successCount,
+      errorCount,
+      model: tokenUsage.model,
+    };
+    try {
+      upsertRedactionMetadata(sqliteMetadata);
+    } catch (sqliteErr) {
+      // SQLite upsert failed after JSON file was written.
+      // Log the error but don't fail the backfill - the JSON sidecar is the source of truth.
+      console.error(`  SQLite upsert failed for ${captureBasename}: ${sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr)}`);
+    }
 
     stats.processed++;
     stats.totalRedactions += counts.totalRedactions;
@@ -111,6 +154,10 @@ function usage(): void {
 }
 
 async function runBackfill(): Promise<void> {
+  // Ensure database schema is initialized before any SQLite operations
+  // Use runMigrations() instead of initDb() to avoid deleting .redact-meta.json files
+  runMigrations();
+
   const resolvedCaptureDir = process.argv[2] ?? await getCaptureDir();
 
   if (process.argv[2] === "--help" || process.argv[2] === "-h") {

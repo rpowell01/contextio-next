@@ -7,6 +7,7 @@ import {
 import { computeTokenUsage } from "@/lib/sessions/utils";
 import { decryptCapture } from "@contextio/logger";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
+import { upsertRedactionMetadata, type RedactionMetadata, runMigrations } from "@contextio/core/db";
 
 async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
   const fs = await import("fs/promises");
@@ -38,6 +39,10 @@ function toLeanStats(counts: {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    // Ensure database schema is initialized before any SQLite operations
+    // Use runMigrations() instead of initDb() to avoid deleting .redact-meta.json files
+    runMigrations();
+
     const captureDir = await getCaptureDir();
     const captureFiles = await listCaptureFiles();
     const encryptionKey = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
@@ -123,6 +128,38 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           model: tokenUsage.model,
           ...leanStats,
         });
+
+        // Also persist to SQLite
+        const sqliteMetadata: RedactionMetadata = {
+          captureId: filename,
+          sessionId: typeof data.sessionId === "string" ? data.sessionId : null,
+          ruleCounts: leanStats.byRule,
+          totalRedactions: leanStats.totalRedactions,
+          encrypted: false,
+          createdAt: typeof data.timestamp === "string" ? new Date(data.timestamp).getTime() : Date.now(),
+          updatedAt: Date.now(),
+          source: typeof data.source === "string" ? data.source : null,
+          provider: typeof data.provider === "string" ? data.provider : null,
+          targetUrl: typeof data.targetUrl === "string" ? data.targetUrl : null,
+          requestBytes: typeof data.requestBytes === "number" ? data.requestBytes : 0,
+          responseBytes: typeof data.responseBytes === "number" ? data.responseBytes : 0,
+          timings: data.timings && typeof data.timings === "object"
+            ? { total_ms: typeof (data.timings as Record<string, unknown>).total_ms === "number" ? (data.timings as Record<string, unknown>).total_ms as number : 0 }
+            : { total_ms: 0 },
+          totalInputTokens: tokenUsage.input,
+          totalOutputTokens: tokenUsage.output,
+          tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+          successCount,
+          errorCount,
+          model: tokenUsage.model,
+        };
+        try {
+          upsertRedactionMetadata(sqliteMetadata);
+        } catch (sqliteErr) {
+          // SQLite upsert failed after JSON file was written.
+          // Log the error but don't fail the request - the JSON sidecar is the source of truth.
+          console.error(`SQLite upsert failed for ${filename}: ${sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr)}`);
+        }
 
         processed++;
         totalRedactions += counts.totalRedactions;

@@ -102,15 +102,15 @@ export default function RedactionsPage() {
   );
 
   const fetchSummary = useCallback(async () => {
-    console.log("[Redactions] fetchSummary called, current refreshing:", refreshing);
+    console.log("[Redactions] fetchSummary called");
     setRefreshing(true);
-    console.log("[Redactions] setRefreshing(true) called");
     // Safety timeout: force refreshing to false after 15 seconds no matter what
     const safetyTimeout = setTimeout(() => {
       console.warn("[Redactions] Safety timeout triggered, forcing refreshing to false");
       setRefreshing(false);
     }, 15000);
     try {
+      let cancelled = false;
       const fetchPromise = fetch("/api/redactions?summary=true");
       const timeoutPromise = new Promise<Response>((_, reject) =>
         setTimeout(() => reject(new Error("Fetch timeout")), 30000)
@@ -120,7 +120,9 @@ export default function RedactionsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       console.log("[Redactions] Data received:", data);
-      _setSummary(data.summary);
+      if (!cancelled) {
+        _setSummary(data.summary);
+      }
     } catch (err) {
       console.error("Summary fetch failed:", err);
     } finally {
@@ -128,8 +130,9 @@ export default function RedactionsPage() {
       clearTimeout(safetyTimeout);
       setRefreshing(false);
     }
-  }, [refreshing]);
+  }, []);
 
+  // Fetch summary data on mount
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
@@ -202,35 +205,6 @@ export default function RedactionsPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [selectedRedactionType]);
-
-  // Fetch summary data
-  useEffect(() => {
-    let cancelled = false;
-    const fetchSummaryData = async () => {
-      try {
-        const fetchPromise = fetch("/api/redactions?summary=true");
-        const timeoutPromise = new Promise<Response>((_, reject) =>
-          setTimeout(() => reject(new Error("Fetch timeout")), 30000)
-        );
-        const res = await Promise.race([fetchPromise, timeoutPromise]);
-        if (!res.ok) throw new Error("Failed to fetch summary");
-        const data = await res.json();
-        if (!cancelled) {
-          _setSummary(data.summary);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          _setError(err instanceof Error ? err.message : "Failed to load summary");
-        }
-      } finally {
-        if (!cancelled) {
-          _setLoadingSummary(false);
-        }
-      }
-    };
-    fetchSummaryData();
-    return () => { cancelled = true; };
-  }, []);
 
   // Fetch detail data with pagination
   useEffect(() => {
