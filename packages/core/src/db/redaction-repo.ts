@@ -367,8 +367,6 @@ async function extractMissingFieldsFromCapture(
 	const captureFilepath = join(captureDir, `${captureId}.json`);
 	const missing: Partial<RedactionMetadata> = {};
 
-	console.log(`[redaction-repo] DEBUG: Extracting missing fields for ${captureId}`);
-
 	try {
 		let capture: Record<string, unknown>;
 		const raw = fs.readFileSync(captureFilepath, "utf8");
@@ -379,8 +377,6 @@ async function extractMissingFieldsFromCapture(
 			typeof parsed.ciphertext === "string" &&
 			typeof parsed.salt === "string" &&
 			typeof parsed.iv === "string";
-
-		console.log(`[redaction-repo] DEBUG: ${captureId} - isEncrypted: ${isEncrypted}, hasKeyMaterial: ${!!keyMaterial}, hasDecryptFn: ${!!decryptFn}`);
 
 		if (isEncrypted) {
 			// Decrypt the capture file using the same key as the logger plugin
@@ -395,48 +391,31 @@ async function extractMissingFieldsFromCapture(
 			try {
 				const plaintext = await decryptFn(raw, keyMaterial);
 				capture = JSON.parse(plaintext) as Record<string, unknown>;
-				console.log(`[redaction-repo] DEBUG: ${captureId} - successfully decrypted capture`);
 			} catch (e) {
 				console.warn(`[redaction-repo] Failed to decrypt capture file ${captureId}.json: ${e instanceof Error ? e.message : String(e)}`);
 				return missing;
 			}
 		} else {
 			capture = parsed;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - capture file is plaintext`);
 		}
-
-		console.log(`[redaction-repo] DEBUG: ${captureId} - capture keys: ${Object.keys(capture).join(", ")}`);
-		console.log(`[redaction-repo] DEBUG: ${captureId} - existingMeta keys: ${Object.keys(existingMeta).join(", ")}`);
-		// Log actual values for debugging
-		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.source: ${JSON.stringify(capture.source)}, existingMeta.source: ${JSON.stringify(existingMeta.source)}`);
-		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.provider: ${JSON.stringify(capture.provider)}, existingMeta.provider: ${JSON.stringify(existingMeta.provider)}`);
-		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.targetUrl: ${JSON.stringify(capture.targetUrl)}, existingMeta.targetUrl: ${JSON.stringify(existingMeta.targetUrl)}`);
-		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.timings: ${JSON.stringify(capture.timings)}, existingMeta.timings: ${JSON.stringify(existingMeta.timings)}`);
-		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.requestBytes: ${JSON.stringify(capture.requestBytes)}, existingMeta.requestBytes: ${JSON.stringify(existingMeta.requestBytes)}`);
-		console.log(`[redaction-repo] DEBUG: ${captureId} - capture.responseBytes: ${JSON.stringify(capture.responseBytes)}, existingMeta.responseBytes: ${JSON.stringify(existingMeta.responseBytes)}`);
 
 		// Extract fields from capture if missing in sidecar
 		const isMissingOrEmpty = (val: unknown) => val === undefined || val === null || val === "";
 		const hasValue = (val: unknown) => val !== undefined && val !== null && val !== "";
 		if (isMissingOrEmpty(existingMeta.source) && hasValue(capture.source)) {
 			missing.source = capture.source as string | null;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted source: ${missing.source}`);
 		}
 		if (isMissingOrEmpty(existingMeta.provider) && hasValue(capture.provider)) {
 			missing.provider = capture.provider as string | null;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted provider: ${missing.provider}`);
 		}
 		if (isMissingOrEmpty(existingMeta.targetUrl) && hasValue(capture.targetUrl)) {
 			missing.targetUrl = capture.targetUrl as string | null;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted targetUrl: ${missing.targetUrl}`);
 		}
 		if (isMissingOrEmpty(existingMeta.requestBytes) && hasValue(capture.requestBytes)) {
 			missing.requestBytes = capture.requestBytes as number;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted requestBytes: ${missing.requestBytes}`);
 		}
 		if (isMissingOrEmpty(existingMeta.responseBytes) && hasValue(capture.responseBytes)) {
 			missing.responseBytes = capture.responseBytes as number;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted responseBytes: ${missing.responseBytes}`);
 		}
 		if (isMissingOrEmpty(existingMeta.timings) && capture.timings && typeof capture.timings === "object") {
 			const t = capture.timings as Record<string, unknown>;
@@ -446,31 +425,24 @@ async function extractMissingFieldsFromCapture(
 				receive_ms: typeof t.receive_ms === "number" ? t.receive_ms : undefined,
 				total_ms: typeof t.total_ms === "number" ? t.total_ms : undefined,
 			};
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted timings: ${JSON.stringify(missing.timings)}`);
 		}
 		if (isMissingOrEmpty(existingMeta.totalInputTokens) && hasValue(capture.totalInputTokens)) {
 			missing.totalInputTokens = capture.totalInputTokens as number;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted totalInputTokens: ${missing.totalInputTokens}`);
 		}
 		if (isMissingOrEmpty(existingMeta.totalOutputTokens) && hasValue(capture.totalOutputTokens)) {
 			missing.totalOutputTokens = capture.totalOutputTokens as number;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted totalOutputTokens: ${missing.totalOutputTokens}`);
 		}
 		if (isMissingOrEmpty(existingMeta.tokensPerSecond) && hasValue(capture.tokensPerSecond)) {
 			missing.tokensPerSecond = capture.tokensPerSecond as number;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted tokensPerSecond: ${missing.tokensPerSecond}`);
 		}
 		if (isMissingOrEmpty(existingMeta.successCount) && hasValue(capture.successCount)) {
 			missing.successCount = capture.successCount as number;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted successCount: ${missing.successCount}`);
 		}
 		if (isMissingOrEmpty(existingMeta.errorCount) && hasValue(capture.errorCount)) {
 			missing.errorCount = capture.errorCount as number;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted errorCount: ${missing.errorCount}`);
 		}
 		if (isMissingOrEmpty(existingMeta.model) && hasValue(capture.model)) {
 			missing.model = capture.model as string | null;
-			console.log(`[redaction-repo] DEBUG: ${captureId} - extracted model: ${missing.model}`);
 		}
 	} catch (err) {
 		// Log error for diagnostics but don't fail the import - return what we have
@@ -571,11 +543,8 @@ export async function importRedactionMetaFromFiles(
 				// Extract missing fields from capture file (source, provider, targetUrl, timings, etc.)
 				const keyMaterial = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY;
 				const missingFields = await extractMissingFieldsFromCapture(captureDir, captureId, parsedMeta, decryptFn, keyMaterial);
-				console.log(`[redaction-repo] DEBUG: ${captureId} - missingFields extracted: ${JSON.stringify(Object.keys(missingFields))}`);
 				Object.assign(metadata, missingFields);
 				
-				console.log(`[redaction-repo] DEBUG: ${captureId} - final metadata: source=${metadata.source}, provider=${metadata.provider}, targetUrl=${metadata.targetUrl}, timings=${JSON.stringify(metadata.timings)}, requestBytes=${metadata.requestBytes}, responseBytes=${metadata.responseBytes}`);
-
 				upsertRedactionMetadata(metadata);
 				imported++;
 				console.log(`[redaction-repo] Imported redaction metadata for ${captureId}`);
