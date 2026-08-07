@@ -68,8 +68,6 @@ function MetricsContent() {
   const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>(TIME_RANGES[2]); // default 24h
   const [maxDataPoints, setMaxDataPoints] = useState<number>(50);
-  const [page, setPage] = useState<number>(1);
-  const [pageSize] = useState<number>(50);
   const [rateLimiterError, setRateLimiterError] = useState<string | null>(null);
   const [rateLimiterLoading, setRateLimiterLoading] = useState(true);
 
@@ -143,8 +141,7 @@ function MetricsContent() {
     ? Math.round((progress.current / progress.total) * 100)
     : 0;
 
-  // Fetch traffic metrics - ALWAYS fetches page 1 (latest data for chart/summary)
-  // The table uses pagination from the response, but chart always shows latest
+  // Fetch traffic metrics - fetches downsampled data for chart/summary
   const fetchTrafficMetrics = useCallback(async (
     signal?: AbortSignal,
     requestId?: number,
@@ -159,12 +156,13 @@ function MetricsContent() {
       console.log("[metrics] Polling for traffic metrics...");
     }
     try {
-      // Always use page=1 for chart/summary to get latest data
+      // Omit page parameter to trigger server-side downsampling on the full dataset
+      // maxDataPoints controls the downsampling resolution
       const data = await apiClient.getMetrics(
         timeRange.hours,
         maxDataPoints || undefined,
-        1,  // Always page 1 for chart/summary
-        pageSize,
+        undefined,  // No page - triggers server downsampling
+        undefined,  // No pageSize - not needed for downsampling
         signal,
       );
       // Only update if this request is still the latest one
@@ -203,7 +201,7 @@ function MetricsContent() {
       }
       return false;
     }
-  }, [timeRange, maxDataPoints, pageSize, registerPageReady]);
+  }, [timeRange, maxDataPoints, registerPageReady]);
 
   // Fetch rate limiter metrics
   const fetchRateLimiterMetrics = useCallback(async (signal?: AbortSignal, requestId?: number, isInitialLoad = false): Promise<boolean> => {
@@ -810,42 +808,6 @@ function MetricsContent() {
               </div>
             </div>
           </div>
-
-          {/* Pagination Controls */}
-          {metrics.pagination && metrics.pagination.totalPages > 1 && (
-            <div className="rounded-lg border p-4">
-              <h3 className="text-lg font-semibold mb-4">Pagination</h3>
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">
-                  Page {metrics.pagination.page} of {metrics.pagination.totalPages} ({metrics.pagination.totalItems} total items)
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                    className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    &larr; Previous
-                  </button>
-                  <button
-                    onClick={() =>
-                      setPage((p) =>
-                        metrics.pagination && p >= metrics.pagination.totalPages
-                          ? p
-                          : p + 1,
-                      )
-                    }
-                    disabled={
-                      metrics.pagination && page >= metrics.pagination.totalPages
-                    }
-                    className="rounded-md border px-3 py-1 text-sm hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next &rarr;
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Provider Usage */}
           <div className="rounded-lg border p-4">
