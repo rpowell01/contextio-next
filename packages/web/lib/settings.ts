@@ -343,7 +343,6 @@ export const DEFAULT_SETTINGS: Settings = {
     nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-    unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
   },
   streamingRetry: {
     anthropic: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
@@ -355,7 +354,6 @@ export const DEFAULT_SETTINGS: Settings = {
     nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
     openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
     kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
-    unknown: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
   },
 };
 
