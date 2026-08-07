@@ -143,8 +143,58 @@ function MetricsContent() {
     ? Math.round((progress.current / progress.total) * 100)
     : 0;
 
-  // Fetch traffic metrics (non-streaming, for polling + initial load when filters haven't changed)
+  // Fetch traffic metrics (non-streaming, for initial load when filters change - uses current page)
   const fetchTrafficMetrics = useCallback(async (
+    signal?: AbortSignal,
+    requestId?: number,
+    isInitialLoad = false
+  ): Promise<boolean> => {
+    if (!isMountedRef.current) return false;
+    if (isInitialLoad) {
+      setLoading(true);
+      setError(null);
+      setProgress({ current: 0, total: 0, message: "Loading..." });
+    }
+    try {
+      const data = await apiClient.getMetrics(
+        timeRange.hours,
+        maxDataPoints || undefined,
+        page,
+        pageSize,
+        signal,
+      );
+      // Only update if this request is still the latest one
+      if (isMountedRef.current && (requestId === undefined || requestId === metricsRequestIdRef.current)) {
+        setMetrics(data);
+        setError(null);
+        setLoading(false);
+        setProgress({ current: 1, total: 1, message: "Complete" });
+        registerPageReady();
+      }
+      return true;
+    } catch (e) {
+      // Ignore aborted requests
+      if (e instanceof RequestAbortedError) {
+        return false;
+      }
+      // On any other error, clear metrics to avoid stale data
+      if (isMountedRef.current && (requestId === undefined || requestId === metricsRequestIdRef.current)) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        setMetrics(null);
+        setError(`Failed to fetch metrics: ${errorMessage}`);
+        setLoading(false);
+        registerPageReady();
+      }
+      // Re-throw connection errors so polling can stop
+      if (isConnectionError(e)) {
+        throw e;
+      }
+      return false;
+    }
+  }, [timeRange, maxDataPoints, page, pageSize, registerPageReady]);
+
+  // Fetch traffic metrics for polling - ALWAYS fetches page 1 (latest data) regardless of pagination state
+  const fetchTrafficMetricsForPolling = useCallback(async (
     signal?: AbortSignal,
     requestId?: number,
     isInitialLoad = false
@@ -158,10 +208,11 @@ function MetricsContent() {
       console.log("[metrics] Polling for traffic metrics...");
     }
     try {
+      // Always use page=1 for polling to get latest data for the chart
       const data = await apiClient.getMetrics(
         timeRange.hours,
         maxDataPoints || undefined,
-        page,
+        1,  // Always page 1 for polling
         pageSize,
         signal,
       );
@@ -201,7 +252,7 @@ function MetricsContent() {
       }
       return false;
     }
-  }, [timeRange, maxDataPoints, page, pageSize, registerPageReady]);
+  }, [timeRange, maxDataPoints, pageSize, registerPageReady]);
 
   // Fetch rate limiter metrics
   const fetchRateLimiterMetrics = useCallback(async (signal?: AbortSignal, requestId?: number, isInitialLoad = false): Promise<boolean> => {
@@ -371,7 +422,7 @@ function MetricsContent() {
       const abortController = new AbortController();
       metricsAbortControllerRef.current = abortController;
       try {
-        await fetchTrafficMetrics(abortController.signal, requestId, isFirstPoll);
+        await fetchTrafficMetricsForPolling(abortController.signal, requestId, isFirstPoll);
       } catch (e) {
         // Connection error - stop polling to avoid infinite failed requests
         if (isConnectionError(e)) {
@@ -399,7 +450,7 @@ function MetricsContent() {
         metricsAbortControllerRef.current = null;
       }
     };
-  }, [fetchTrafficMetrics, activeTab]);
+  }, [fetchTrafficMetricsForPolling, activeTab]);
 
   // Fetch main metrics when time range, maxDataPoints, or page changes
   // Only fetch if traffic tab is active
