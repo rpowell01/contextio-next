@@ -1330,7 +1330,6 @@ export default function SettingsPage() {
           "nvidia",
           "openrouter",
           "kilo",
-          "unknown",
         ];
         return (
           <div className="space-y-4">
