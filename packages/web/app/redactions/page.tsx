@@ -200,11 +200,14 @@ export default function RedactionsPage() {
       if (selectedRedactionType) {
         newFilters.redactionType = selectedRedactionType;
       }
+      if (hideZeroRedactions) {
+        newFilters.hideZeroRedactions = "true";
+      }
       console.log("[RedactionFilter] Setting debouncedFilters:", newFilters);
       setDebouncedFilters(newFilters);
     }, 300);
     return () => clearTimeout(timer);
-  }, [selectedRedactionType]);
+  }, [selectedRedactionType, hideZeroRedactions]);
 
   // Fetch detail data with pagination
   useEffect(() => {
@@ -559,10 +562,7 @@ export default function RedactionsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Filter to only show rows with positive redactions when checkbox is checked */}
-                  {details
-                    .filter((row) => (hideZeroRedactions ? row.totalRedactions > 0 : true))
-                    .map((row, index) => {
+                  {details.map((row, index) => {
                     const rowKey = `${row.captureId}-${index}`;
                     return (
                       <tr key={rowKey} className="border-b hover:bg-accent/50">
@@ -581,7 +581,7 @@ export default function RedactionsPage() {
                       </tr>
                     );
                   })}
-                  {(!details || details.filter((row) => (hideZeroRedactions ? row.totalRedactions > 0 : true)).length === 0) && (
+                  {(!details || details.length === 0) && (
                     <tr>
                       <td colSpan={columnOrder.length} className="py-12 text-center text-muted-foreground">
                         No redaction details found

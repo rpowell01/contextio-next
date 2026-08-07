@@ -226,6 +226,10 @@ async function getRedactionDetailsFromDb(
     allRows = allRows.filter((row) => {
       return Object.entries(filters).every(([key, val]) => {
         if (!val) return true;
+        // Special handling for hideZeroRedactions filter
+        if (key === "hideZeroRedactions") {
+          return val === "true" ? row.totalRedactions > 0 : true;
+        }
         // Special handling for redactionType filter - check if the placeholder exists in byPlaceholder
         if (key === "redactionType") {
           return Object.keys(row.byPlaceholder).some(
@@ -322,6 +326,7 @@ export async function GET(request: Request): Promise<Response> {
     // Parse filters (only valid keys)
     const validFilterKeys = [
       "redactionType",
+      "hideZeroRedactions",
       "requestSource",
       "requestProvider",
       "requestTarget",
