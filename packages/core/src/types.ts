@@ -77,7 +77,6 @@ export const KNOWN_PROVIDERS = [
   "nvidia",
   "openrouter",
   "kilo",
-  "unknown",
 ] as const satisfies readonly Provider[];
 
 /** Exhaustiveness check: ensures KNOWN_PROVIDERS includes all Provider values. */

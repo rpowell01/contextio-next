@@ -418,7 +418,6 @@ const qs = search || "";
             // - targetUrl doesn't match the classified provider's upstream (different upstream used)
             const shouldOverride =
               targetUrlFromHeader ||
-              provider === "unknown" ||
               !matchesClassifiedUpstream;
 
             if (shouldOverride) {
