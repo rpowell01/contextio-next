@@ -454,16 +454,30 @@ export function DiffDialog({
     if (isPre && matches.length > 0) {
       // Use exact preValues from matches for precise highlighting
       // Build a combined pattern from all preValues
-      const preValues = matches.map(m => m.preValue).filter(Boolean);
+      const preValues = matches
+        .map(m => m.preValue)
+        .filter((v): v is string => typeof v === "string" && v.length > 0)
+        // Limit each preValue to a reasonable length to avoid massive regex patterns
+        // and limit total number of alternatives to avoid regex complexity limits
+        .slice(0, 20)
+        .map(v => v.slice(0, 500));
+
       if (preValues.length > 0) {
-        // Escape special regex characters in each preValue
-        const escapedValues = preValues.map(v => v.replace(/[.*+?^${}()|\[\]\\]/g, '\\$&'));
-        // Create a pattern that matches any of the preValues (non-capturing group to avoid split including matches)
-        const combinedPattern = new RegExp(`(?:${escapedValues.join('|')})`, 'g');
+        let combinedPattern: RegExp | null = null;
+        try {
+          // Escape special regex characters in each preValue
+          const escapedValues = preValues.map(v => v.replace(/[.*+?^${}()|\[\]\\]/g, '\\$&'));
+          // Create a pattern that matches any of the preValues (non-capturing group to avoid split including matches)
+          combinedPattern = new RegExp(`(?:${escapedValues.join('|')})`, 'g');
+        } catch (e) {
+          // If regex construction fails (e.g., pattern too complex), fall through to PII patterns
+          console.debug("Failed to construct combined regex for preValues, falling back to PII patterns:", e);
+        }
 
-        const patternMatches = safeValue.match(combinedPattern) || [];
+        if (combinedPattern) {
+          const patternMatches = safeValue.match(combinedPattern) || [];
 
-        if (patternMatches.length > 0) {
+          if (patternMatches.length > 0) {
           const result: (string | React.ReactElement)[] = [];
           let lastIndex = 0;
 
@@ -504,6 +518,7 @@ export function DiffDialog({
           return <code className="font-mono text-xs">{result}</code>;
         }
       }
+    }
 
       // Fallback to generic PII patterns if no matches provided or no exact matches found
       const piiPatterns = [
