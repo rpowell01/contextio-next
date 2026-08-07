@@ -362,12 +362,14 @@ describe("retry plugin - integration tests", () => {
       const response = await makeStreamingRequest(proxy.port, {
         path: "/v1/messages",
         body: JSON.stringify({ model: "claude-3", messages: [] }),
+        headers: { "x-kilo-session": "test-session-1" },
       });
       const elapsed = Date.now() - startTime;
 
       // Should succeed on retry
       assert.equal(response.status, 200);
-      assert.ok(response.body.includes("Success response"), `Should receive successful stream, got: ${response.body}`);
+      assert.ok(response.body.includes("Success "), `Should receive "Success " in stream, got: ${response.body}`);
+      assert.ok(response.body.includes("response"), `Should receive "response" in stream, got: ${response.body}`);
 
       // Should have made 2 requests (initial + 1 retry)
       assert.equal(requestCount, 2);
@@ -409,6 +411,7 @@ describe("retry plugin - integration tests", () => {
       const response = await makeStreamingRequest(proxy.port, {
         path: "/v1/messages",
         body: JSON.stringify({ model: "claude-3", messages: [] }),
+        headers: { "x-kilo-session": "test-session-2" },
       });
 
       assert.equal(response.status, 200);
@@ -448,6 +451,7 @@ describe("retry plugin - integration tests", () => {
       const response = await makeStreamingRequest(proxy.port, {
         path: "/v1/messages",
         body: JSON.stringify({ model: "claude-3", messages: [] }),
+        headers: { "x-kilo-session": "test-session-3" },
       });
 
       assert.equal(response.status, 200);

@@ -4,6 +4,10 @@ export const runtime = "nodejs";
 const SETTINGS_DIR = "/app/custom-policy";
 const SETTINGS_FILE = "/app/custom-policy/settings.json";
 
+// Periodic sync interval for importing redaction metadata from .redact-meta.json files to SQLite
+// Runs every 5 minutes to catch any files that the watcher might have missed
+const REDACTION_META_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+
 async function getNodeModules() {
   const [os, path, fs] = await Promise.all([
     import("os"),
@@ -39,7 +43,9 @@ async function applyPersistedSettings(): Promise<void> {
 }
 
 let cleanupTimer: NodeJS.Timeout | null = null;
+let syncTimer: NodeJS.Timeout | null = null;
 let schedulerStarted = false;
+let syncStarted = false;
 
 function defaultSettings() {
   return {
@@ -53,6 +59,51 @@ async function getCaptureDir(): Promise<string> {
   const { homedir, join } = await getNodeModules();
   const captureDir = process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
   return captureDir;
+}
+
+async function runRedactionMetaSync(): Promise<void> {
+  try {
+    const { importRedactionMetaFromFiles } = await import("@contextio/core/db");
+    const { decrypt } = await import("@contextio/logger");
+    const captureDir = await getCaptureDir();
+    
+    // Import any .redact-meta.json files that aren't in SQLite yet
+    // Pass decrypt function to handle encrypted sidecar files
+    const imported = await importRedactionMetaFromFiles(captureDir, decrypt);
+    if (imported > 0) {
+      console.log(`[redaction-meta-sync] Imported ${imported} redaction metadata files to SQLite`);
+    }
+  } catch (error) {
+    console.error("[redaction-meta-sync] Failed to sync redaction metadata:", error);
+  }
+}
+
+function runSyncWithCatch(): void {
+  runRedactionMetaSync().catch((error) => {
+    console.error("Scheduled redaction metadata sync failed:", error);
+  });
+}
+
+async function startSyncScheduler(): Promise<NodeJS.Timeout | null> {
+  if (syncStarted) return syncTimer;
+  syncStarted = true;
+
+  // Ensure database schema is initialized (runs once at startup)
+  try {
+    const { runMigrations } = await import("@contextio/core/db");
+    runMigrations();
+  } catch (error) {
+    console.error("[redaction-meta-sync] Failed to run migrations:", error);
+  }
+
+  syncTimer = setInterval(runSyncWithCatch, REDACTION_META_SYNC_INTERVAL_MS);
+  if (syncTimer && typeof syncTimer.unref === "function") {
+    syncTimer.unref();
+  }
+  // Run an initial sync at startup
+  runSyncWithCatch();
+
+  return syncTimer;
 }
 
 async function listCaptureFiles(): Promise<string[]> {
@@ -162,4 +213,7 @@ export async function register(): Promise<void> {
 
   // Start the capture cleanup scheduler
   await startCleanupScheduler();
+
+  // Start the redaction metadata sync scheduler (periodic import of .redact-meta.json to SQLite)
+  await startSyncScheduler();
 }
