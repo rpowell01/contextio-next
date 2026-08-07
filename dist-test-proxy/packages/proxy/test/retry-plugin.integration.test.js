@@ -7,6 +7,10 @@
 import { describe, it, before, after, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { tmpdir } from "node:os";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createProxy } from "../dist/proxy.js";
 import { createRetryPlugin } from "../dist/retry-plugin.js";
 function getServerPort(server) {
@@ -74,7 +78,35 @@ async function makeStreamingRequest(port, options) {
 describe("retry plugin - integration tests", () => {
     let proxy;
     let retryPlugin;
+    let tempDir;
+    let providersPath;
     before(async () => {
+        // Create temporary directory and providers.json for config resolution
+        tempDir = mkdtempSync(path.join(tmpdir(), "contextio-proxy-test-"));
+        providersPath = path.join(tempDir, "providers.json");
+        process.env.PROVIDERS_FILE = providersPath;
+        process.env.HOME = tempDir;
+        process.env.USERPROFILE = tempDir;
+        // Write minimal providers.json
+        const defaultProviders = {
+            anthropic: { id: "anthropic", name: "Anthropic", upstreamUrl: "https://api.anthropic.com", apiFormat: "anthropic-messages", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-anthropic-baseurl" },
+            openai: { id: "openai", name: "OpenAI", upstreamUrl: "https://api.openai.com", apiFormat: "chat-completions", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openai-baseurl" },
+            chatgpt: { id: "chatgpt", name: "ChatGPT", upstreamUrl: "https://chatgpt.com", apiFormat: "chatgpt-backend", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-chatgpt-baseurl" },
+            gemini: { id: "gemini", name: "Gemini", upstreamUrl: "https://generativelanguage.googleapis.com", apiFormat: "gemini", authType: "api-key", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-gemini-baseurl" },
+            geminiCodeAssist: { id: "geminiCodeAssist", name: "Gemini Code Assist", upstreamUrl: "https://cloudcode-pa.googleapis.com", apiFormat: "gemini", authType: "api-key", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-gemini-code-assist-baseurl" },
+            vertex: { id: "vertex", name: "Vertex AI", upstreamUrl: "https://us-central1-aiplatform.googleapis.com", apiFormat: "gemini", authType: "api-key", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-vertex-baseurl" },
+            nvidia: { id: "nvidia", name: "NVIDIA", upstreamUrl: "https://integrate.api.nvidia.com", apiFormat: "chat-completions", authType: "bearer", enabled: true, rateLimit: { maxRequests: 20, windowMs: 60000, bufferCapacity: 5 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-nvidia-baseurl" },
+            kilo: { id: "kilo", name: "Kilo", upstreamUrl: "https://api.kilo.ai/api/gateway", apiFormat: "chat-completions", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-kilo-baseurl" },
+            openrouter: { id: "openrouter", name: "OpenRouter", upstreamUrl: "https://openrouter.ai/api", apiFormat: "chat-completions", authType: "bearer", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openrouter-baseurl" },
+            unknown: { id: "unknown", name: "Unknown", upstreamUrl: "https://unknown.provider", apiFormat: "unknown", authType: "none", enabled: true, rateLimit: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 }, retry: { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000, retryableStatuses: [429, 500, 502, 503, 504], jitterFactor: 0.2, maxStreamRetries: 3, maxResponseBufferSize: 10485760, enabled: true }, customHeaders: {}, allowBaseUrlOverride: false, baseUrlOverrideHeader: "x-unknown-baseurl" },
+        };
+        fs.writeFileSync(providersPath, JSON.stringify(defaultProviders, null, 2));
+        // Set required upstream URLs for config resolution (override providers.json)
+        process.env.UPSTREAM_ANTHROPIC_URL = "http://localhost:1";
+        process.env.UPSTREAM_OPENAI_URL = "http://localhost:1";
+        process.env.UPSTREAM_CHATGPT_URL = "http://localhost:1";
+        process.env.UPSTREAM_GEMINI_URL = "http://localhost:1";
+        process.env.UPSTREAM_GEMINI_CODE_ASSIST_URL = "http://localhost:1";
         retryPlugin = createRetryPlugin({
             maxRetries: 3,
             baseDelayMs: 50, // Fast for tests
@@ -99,6 +131,23 @@ describe("retry plugin - integration tests", () => {
     after(async () => {
         await proxy.stop();
         retryPlugin._internal.shutdown();
+        // Clean up environment variables
+        delete process.env.UPSTREAM_ANTHROPIC_URL;
+        delete process.env.UPSTREAM_OPENAI_URL;
+        delete process.env.UPSTREAM_CHATGPT_URL;
+        delete process.env.UPSTREAM_GEMINI_URL;
+        delete process.env.UPSTREAM_GEMINI_CODE_ASSIST_URL;
+        delete process.env.PROVIDERS_FILE;
+        delete process.env.HOME;
+        delete process.env.USERPROFILE;
+        if (tempDir) {
+            try {
+                rmSync(tempDir, { recursive: true, force: true });
+            }
+            catch {
+                // best-effort cleanup
+            }
+        }
     });
     describe("429 with Retry-After header", () => {
         let upstreamServer;
@@ -302,7 +351,7 @@ describe("retry plugin - integration tests", () => {
             const response = await makeStreamingRequest(proxy.port, {
                 path: "/v1/messages",
                 body: JSON.stringify({ model: "claude-3", messages: [] }),
-                headers: { "x-kilo-session": "test-session-1" },
+                headers: { "x-kilo-session": "overflow-test-session" },
             });
             const elapsed = Date.now() - startTime;
             // Should succeed on retry
@@ -683,6 +732,7 @@ describe("retry plugin - integration tests", () => {
             const response = await makeStreamingRequest(proxy.port, {
                 path: "/v1/messages",
                 body: JSON.stringify({ model: "claude-3", messages: [] }),
+                headers: { "x-kilo-session": "overflow-test-session" },
             });
             // Should return the error response (not retry) because overflow disables retry
             assert.equal(response.status, 200); // SSE streams return 200 even with error events

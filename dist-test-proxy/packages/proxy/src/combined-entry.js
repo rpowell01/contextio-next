@@ -52,8 +52,12 @@ async function loadPluginsFromEnv() {
     return plugins;
 }
 async function main() {
+    // Resolve config first to get encryption key material for database initialization
+    const config = resolveConfig();
     // Initialize database (runs migrations and seeds default providers)
-    initDb(decrypt);
+    // Pass keyMaterial for encrypted capture auto-migration on fresh databases
+    const keyMaterial = config.loggerEncryption.staticKey ?? process.env[config.loggerEncryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
+    initDb(decrypt, keyMaterial);
     // CSRF_SECRET is provided via environment variable (set by Coolify at runtime)
     if (process.env.CSRF_SECRET) {
         console.log("CSRF_SECRET found in environment");
@@ -61,8 +65,6 @@ async function main() {
     else {
         console.warn("CSRF_SECRET not found - CSRF protection will fail in production");
     }
-    // Resolve config first to get per-provider rate limit settings
-    const config = resolveConfig();
     // Load plugins from env
     const plugins = await loadPluginsFromEnv();
     // Check if rate limiter is globally disabled via environment variable

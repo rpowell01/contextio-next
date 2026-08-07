@@ -110,9 +110,11 @@ function buildLoggerPlugin(encryption) {
     }
 }
 async function main() {
-    // Initialize database (runs migrations and seeds default providers)
-    initDb(decrypt);
     const resolved = resolveConfig();
+    // Initialize database (runs migrations and seeds default providers)
+    // Pass keyMaterial for encrypted capture auto-migration on fresh databases
+    const keyMaterial = resolved.loggerEncryption.staticKey ?? process.env[resolved.loggerEncryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
+    initDb(decrypt, keyMaterial);
     const plugins = [];
     // Create rate-limiter plugin with resolved per-provider config
     // The config.rateLimiter has per-provider settings from database + env overrides

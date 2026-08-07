@@ -7,6 +7,7 @@
  * - *             → Next.js app (web UI + /api/* endpoints)
  */
 import http from "node:http";
+import { upsertRedactionMetadata } from "@contextio/core/db";
 import { lookup } from "mime-types";
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
@@ -175,6 +176,7 @@ export function createCombinedProxy(config) {
     const redactionMetaWatcher = createRedactionMetaWatcher({
         captureDir: resolved.loggerCaptureDir,
         encryption: resolved.loggerEncryption,
+        persistToSqlite: upsertRedactionMetadata,
     });
     // Enable log capture for admin API
     enableLogCapture();
