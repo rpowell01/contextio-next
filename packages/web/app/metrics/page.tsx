@@ -128,7 +128,7 @@ function MetricsContent() {
   );
 
   // Page load tracking for footer
-  const { registerPageLoad, registerPageReady } = usePageLoad();
+  const { registerPageReady } = usePageLoad();
 
   // Refs for polling
   const rateLimiterPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,46 +143,79 @@ function MetricsContent() {
     ? Math.round((progress.current / progress.total) * 100)
     : 0;
 
-  const fetchMetrics = useCallback(async () => {
-    // Signal that page loading has started
-    registerPageLoad();
-    setLoading(true);
-    setError(null);
-    setProgress({ current: 0, total: 0, message: "Starting..." });
-
+  // Fetch traffic metrics (non-streaming, for polling + initial load when filters haven't changed)
+  const fetchTrafficMetrics = useCallback(async (
+    signal?: AbortSignal,
+    requestId?: number,
+    isInitialLoad = false
+  ): Promise<boolean> => {
+    if (!isMountedRef.current) return false;
+    if (isInitialLoad) {
+      setLoading(true);
+      setError(null);
+      setProgress({ current: 0, total: 0, message: "Loading..." });
+    }
     try {
-      const stream = await apiClient.getMetricsStream(
+      const data = await apiClient.getMetrics(
         timeRange.hours,
         maxDataPoints || undefined,
         page,
         pageSize,
+        signal,
       );
-
-      for await (const update of stream) {
-        if (!isMountedRef.current) break;
-
-        if (update.type === "progress") {
-          setProgress({
-            current: update.current || 0,
-            total: update.total || 0,
-            message: update.message || "",
-          });
-        } else if (update.type === "complete" && update.data) {
-          setMetrics(update.data as MetricsData);
-          setProgress({ current: update.total || 0, total: update.total || 0, message: "Complete" });
-          setLoading(false);
-          registerPageReady();
-        } else if (update.type === "error") {
-          throw new Error(update.error || "Streaming error");
-        }
+      // Only update if this request is still the latest one
+      if (isMountedRef.current && (requestId === undefined || requestId === metricsRequestIdRef.current)) {
+        // Only update state if data actually changed to avoid unnecessary re-renders
+        setMetrics(prev => {
+          if (!prev) return data;
+          // Compare traffic array length and timestamps to detect changes
+          const prevTraffic = prev.traffic || [];
+          const newTraffic = data.traffic || [];
+          if (prevTraffic.length !== newTraffic.length) return data;
+          // Check if any traffic point changed
+          for (let i = 0; i < newTraffic.length; i++) {
+            if (prevTraffic[i]?.timestamp !== newTraffic[i]?.timestamp ||
+                prevTraffic[i]?.requestBytes !== newTraffic[i]?.requestBytes ||
+                prevTraffic[i]?.responseBytes !== newTraffic[i]?.responseBytes) {
+              return data;
+            }
+          }
+          // Also check providers and redaction stats
+          if (JSON.stringify(prev.providers) !== JSON.stringify(data.providers) ||
+              prev.totalRequestBytes !== data.totalRequestBytes ||
+              prev.totalResponseBytes !== data.totalResponseBytes ||
+              prev.totalRedactionsDeduped !== data.totalRedactionsDeduped ||
+              prev.totalRedactionsSum !== data.totalRedactionsSum) {
+            return data;
+          }
+          return prev; // Data unchanged
+        });
+        setError(null);
+        setLoading(false);
+        setProgress({ current: 1, total: 1, message: "Complete" });
+        registerPageReady();
       }
+      return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-      setMetrics(null);
-      setLoading(false);
-      registerPageReady();
+      // Ignore aborted requests
+      if (e instanceof RequestAbortedError) {
+        return false;
+      }
+      // On any other error, clear metrics to avoid stale data
+      if (isMountedRef.current && (requestId === undefined || requestId === metricsRequestIdRef.current)) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        setMetrics(null);
+        setError(`Failed to fetch metrics: ${errorMessage}`);
+        setLoading(false);
+        registerPageReady();
+      }
+      // Re-throw connection errors so polling can stop
+      if (isConnectionError(e)) {
+        throw e;
+      }
+      return false;
     }
-  }, [timeRange, maxDataPoints, page, pageSize, registerPageLoad, registerPageReady]);
+  }, [timeRange, maxDataPoints, page, pageSize, registerPageReady]);
 
   // Fetch rate limiter metrics
   const fetchRateLimiterMetrics = useCallback(async (signal?: AbortSignal, requestId?: number, isInitialLoad = false): Promise<boolean> => {
@@ -338,6 +371,7 @@ function MetricsContent() {
     }
 
     let cancelled = false;
+    let isFirstPoll = true;
 
     const runPoll = async () => {
       if (cancelled) return;
@@ -351,48 +385,21 @@ function MetricsContent() {
       const abortController = new AbortController();
       metricsAbortControllerRef.current = abortController;
       try {
-        // Fetch metrics without the streaming progress (for polling)
-        // We'll use the standard fetch instead of stream for polling
-        const data = await apiClient.getMetrics(
-          timeRange.hours,
-          maxDataPoints || undefined,
-          page,
-          pageSize,
-          abortController.signal,
-        );
-        // Only update if this request is still the latest one
-        if (isMountedRef.current && requestId === metricsRequestIdRef.current) {
-          setMetrics(data);
-          setError(null);
-          setLoading(false);
-          registerPageReady();
-        }
+        await fetchTrafficMetrics(abortController.signal, requestId, isFirstPoll);
       } catch (e) {
-        // Ignore aborted requests
-        if (e instanceof RequestAbortedError) {
-          return;
-        }
-        // On any other error, clear metrics to avoid stale data
-        if (isMountedRef.current && requestId === metricsRequestIdRef.current) {
-          const errorMessage = e instanceof Error ? e.message : String(e);
-          setMetrics(null);
-          setError(`Failed to fetch metrics: ${errorMessage}`);
-          setLoading(false);
-          registerPageReady();
-        }
-        // Re-throw connection errors so polling can stop
+        // Connection error - stop polling to avoid infinite failed requests
         if (isConnectionError(e)) {
           console.error("[metrics] Traffic polling stopped due to connection error:", e.message);
           return;
         }
       }
+      isFirstPoll = false;
       // Schedule next poll after current one completes (60 seconds)
       if (!cancelled) {
         metricsPollingIntervalRef.current = setTimeout(runPoll, 60000);
       }
     };
 
-    // Initial fetch on tab switch
     runPoll();
 
     return () => {
@@ -406,15 +413,15 @@ function MetricsContent() {
         metricsAbortControllerRef.current = null;
       }
     };
-  }, [fetchMetrics, activeTab, timeRange, maxDataPoints, page, pageSize, registerPageReady]);
+  }, [fetchTrafficMetrics, activeTab]);
 
   // Fetch main metrics when time range, maxDataPoints, or page changes
   // Only fetch if traffic tab is active
   useEffect(() => {
     if (activeTab === "traffic") {
-      fetchMetrics();
+      fetchTrafficMetrics(undefined, undefined, true);
     }
-  }, [fetchMetrics, activeTab]);
+  }, [fetchTrafficMetrics, activeTab]);
 
   // Cleanup on unmount
   useEffect(() => {
