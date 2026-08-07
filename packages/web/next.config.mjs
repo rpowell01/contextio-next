@@ -31,6 +31,7 @@ const nextConfig = {
     },
   },
   serverExternalPackages: [
+    "@contextio/core",
     "@contextio/logger",
     "@contextio/redact",
     "onnxruntime-node",
@@ -115,6 +116,7 @@ const nextConfig = {
       // Ensure native modules are treated as external on server
       config.externals = config.externals || [];
       config.externals.push({
+        "@contextio/core": "commonjs @contextio/core",
         "@contextio/logger": "commonjs @contextio/logger",
         "@contextio/redact": "commonjs @contextio/redact",
         "onnxruntime-node": "commonjs onnxruntime-node",
