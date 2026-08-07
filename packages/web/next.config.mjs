@@ -121,6 +121,13 @@ const nextConfig = {
         "@contextio/redact": "commonjs @contextio/redact",
         "onnxruntime-node": "commonjs onnxruntime-node",
       });
+      // Externalize all @contextio/core submodules
+      config.externals.push((context, request, callback) => {
+        if (request.startsWith("@contextio/core")) {
+          return callback(null, `commonjs ${request}`);
+        }
+        callback();
+      });
       nativeModules.forEach((mod) => {
         config.externals.push({
           [mod]: `commonjs ${mod}`,
