@@ -143,7 +143,8 @@ export function initDb(
 			console.log("[initDb] Found capture directory, scheduling capture indexing in background...");
 			// Run capture indexing asynchronously (non-blocking)
 			// Pass decryptFn and keyMaterial for encrypted captures
-			setImmediate(async () => {
+setImmediate(() => {
+			(async () => {
 				try {
 					if (decryptFn && keyMaterial) {
 						// Use async version with decryption support
@@ -154,7 +155,11 @@ export function initDb(
 				} catch (err) {
 					console.warn(`[initDb] Capture auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
 				}
+			})().catch((err) => {
+				// Handle any promise rejection that escapes the async IIFE
+				console.warn(`[initDb] Capture auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
 			});
+		});
 		}
 	}
 	

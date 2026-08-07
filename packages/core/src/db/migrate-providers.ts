@@ -260,13 +260,9 @@ export function migrateProviders(options: MigrateProvidersOptions = {}): Migrate
 				}
 			} else {
 				if (existingProvider) {
-					if (existingProvider.source === "default" || force) {
-						// Default providers or force=true: would update
-						result.updated++;
-					} else {
-						// Already exists as file/env without force - count as skipped
-						result.skipped++;
-					}
+					// In dry-run, we only reach here if existingProvider.source === "default" or force=true
+					// (other cases continue earlier in the function)
+					result.updated++;
 				} else {
 					result.imported++;
 				}
