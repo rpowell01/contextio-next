@@ -14,11 +14,13 @@
     },
     "./server": {
       "types": "./dist/server.d.ts",
-      "import": "./dist/server.js"
+      "import": "./dist/server.js",
+      "default": "./dist/server.js"
     },
     "./db": {
       "types": "./dist/db/index.d.ts",
-      "import": "./dist/db/index.js"
+      "import": "./dist/db/index.js",
+      "default": "./dist/db/index.js"
     }
   },
   "files": [
