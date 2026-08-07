@@ -569,7 +569,10 @@ describe("retry plugin - integration tests", () => {
       });
       await proxyWithOverflow.start();
 
-      // Set tiny buffer size on provider config (Forward.ts reads from opts.providers[provider].retry.maxResponseBufferSize)
+      // Set tiny buffer size on provider config (Forward.ts reads from opts.providers[provider].retry.maxResponseBufferSize
+      // which comes from the proxy's resolved providers config. Mutate AFTER createProxy() since
+      // createProxy() passes a shallow copy of resolved.providers to the handler, and proxyWithOverflow.providers
+      // is the same object reference that Forward.ts reads as opts.providers).
       proxyWithOverflow.providers.anthropic = {
         ...proxyWithOverflow.providers.anthropic,
         retry: {
@@ -796,13 +799,8 @@ describe("retry plugin - integration tests", () => {
         baseDelayMs: 50,
         maxDelayMs: 500,
         jitterFactor: 0,
-        providers: {
-          anthropic: {
-            maxResponseBufferSize: 100,
-            maxStreamRetries: 3,
-            enabled: true,
-          },
-        },
+        retryableStatuses: [429, 500, 502, 503, 504],
+        enabled: true,
       });
 
       const testProxy = createProxy({
@@ -817,6 +815,18 @@ describe("retry plugin - integration tests", () => {
         plugins: [testRetryPlugin, capturePlugin],
       });
       await testProxy.start();
+
+      // Set tiny buffer size on provider config (Forward.ts reads from opts.providers[provider].retry.maxResponseBufferSize
+      // which comes from the proxy's resolved providers config. Mutate AFTER createProxy() since
+      // createProxy() passes a shallow copy of resolved.providers to the handler, and testProxy.providers
+      // is the same object reference that Forward.ts reads as opts.providers).
+      testProxy.providers.anthropic = {
+        ...testProxy.providers.anthropic,
+        retry: {
+          ...testProxy.providers.anthropic?.retry,
+          maxResponseBufferSize: 100,
+        },
+      };
 
       upstreamServer = http.createServer((req, res) => {
         requestCount++;
