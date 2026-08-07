@@ -555,6 +555,118 @@ describe("retry plugin - unit tests", () => {
             const pendingRetry = plugin._internal.getAndConsumePendingStreamRetry("test-session-123");
             assert.equal(pendingRetry, null, "Should not have pending retry for bare 'event: error' with no data");
         });
+        it("skips retry when bufferOverflow is true and errorDetected is true", async () => {
+            // Create plugin with very small maxBufferSize to trigger bufferOverflow
+            const smallBufferPlugin = createRetryPlugin({
+                maxRetries: 3,
+                baseDelayMs: 10,
+                maxDelayMs: 100,
+                maxBufferSize: 1, // 1 byte - any chunk will overflow
+                jitterFactor: 0,
+            });
+            const ctx = createMockRequestContext();
+            const requestCtx = await smallBufferPlugin.onRequest(ctx);
+            // Use the sessionId from the context (set in createMockRequestContext)
+            const sessionId = ctx.sessionId;
+            // Send an error chunk - this will exceed 1 byte buffer
+            const errorChunk = Buffer.from('data: {"error":{"message":"Rate limit","type":"rate_limit_error","code":429}}\n\n');
+            smallBufferPlugin.onStreamChunk(errorChunk, sessionId);
+            // End stream - should NOT signal retry due to bufferOverflow
+            const flushed = smallBufferPlugin.onStreamEnd(sessionId);
+            // onStreamEnd should return null
+            assert.equal(flushed, null, "onStreamEnd should return null when bufferOverflow and error detected");
+            // Check that NO pending retry was set (retry skipped)
+            const pendingRetry = smallBufferPlugin._internal.getAndConsumePendingStreamRetry(sessionId);
+            assert.equal(pendingRetry, null, "Should NOT have pending retry when bufferOverflow and error detected");
+            // Verify stream state is cleaned up (streamState should be gone)
+            const streamError = smallBufferPlugin._internal.getStreamError(sessionId);
+            assert.equal(streamError, undefined, "Stream state should be cleaned up");
+            // Verify request store is cleaned up
+            const internal = smallBufferPlugin._internal;
+            const storedBody = internal.getRequestBody(ctx.captureId);
+            assert.equal(storedBody, undefined, "Request store should be cleaned up");
+            smallBufferPlugin._internal.shutdown();
+        });
+        it("cleans up state when bufferOverflow is true and no error is detected", async () => {
+            // Create plugin with very small maxBufferSize to trigger bufferOverflow
+            const smallBufferPlugin = createRetryPlugin({
+                maxRetries: 3,
+                baseDelayMs: 10,
+                maxDelayMs: 100,
+                maxBufferSize: 1, // 1 byte - any chunk will overflow
+                jitterFactor: 0,
+            });
+            const ctx = createMockRequestContext();
+            await smallBufferPlugin.onRequest(ctx);
+            const sessionId = ctx.sessionId;
+            // Send a normal (non-error) chunk - this will exceed 1 byte buffer
+            const normalChunk = Buffer.from('data: {"type":"content_block_delta","delta":{"text":"Hello"}}\n\n');
+            smallBufferPlugin.onStreamChunk(normalChunk, sessionId);
+            // End stream - should return null and clean up state
+            const flushed = smallBufferPlugin.onStreamEnd(sessionId);
+            // onStreamEnd should return null
+            assert.equal(flushed, null, "onStreamEnd should return null when bufferOverflow but no error");
+            // Check that NO pending retry was set
+            const pendingRetry = smallBufferPlugin._internal.getAndConsumePendingStreamRetry(sessionId);
+            assert.equal(pendingRetry, null, "Should not have pending retry for successful stream with bufferOverflow");
+            // Verify stream state is cleaned up
+            const streamError = smallBufferPlugin._internal.getStreamError(sessionId);
+            assert.equal(streamError, undefined, "Stream state should be cleaned up");
+            // Verify request store is cleaned up
+            const internal = smallBufferPlugin._internal;
+            const storedBody = internal.getRequestBody(ctx.captureId);
+            assert.equal(storedBody, undefined, "Request store should be cleaned up");
+            smallBufferPlugin._internal.shutdown();
+        });
+        it("forward.ts streamBufferChunks retains complete data when bufferOverflow occurs (no data loss)", async () => {
+            // This test simulates the forward.ts behavior where it buffers all chunks
+            // in streamBufferChunks regardless of the retry plugin's bufferOverflow.
+            // The retry plugin's bufferOverflow only affects its internal buffering,
+            // not the forward.ts streamBufferChunks.
+            const smallBufferPlugin = createRetryPlugin({
+                maxRetries: 3,
+                baseDelayMs: 10,
+                maxDelayMs: 100,
+                maxBufferSize: 1, // 1 byte - any chunk will overflow
+                jitterFactor: 0,
+            });
+            const ctx = createMockRequestContext();
+            await smallBufferPlugin.onRequest(ctx);
+            const sessionId = ctx.sessionId;
+            // Simulate forward.ts streamBufferChunks - it collects ALL chunks
+            const forwardStreamBufferChunks = [];
+            // Send multiple chunks - forward.ts buffers all of them
+            const chunk1 = Buffer.from('data: {"type":"content_block_start"}\n\n');
+            const chunk2 = Buffer.from('data: {"type":"content_block_delta","delta":{"text":"Hel"}}\n\n');
+            const chunk3 = Buffer.from('data: {"type":"content_block_delta","delta":{"text":"lo"}}\n\n');
+            const chunk4 = Buffer.from('data: {"type":"message_stop"}\n\n');
+            // Each chunk goes to BOTH retry plugin and forward.ts buffer
+            smallBufferPlugin.onStreamChunk(chunk1, sessionId);
+            forwardStreamBufferChunks.push(chunk1);
+            smallBufferPlugin.onStreamChunk(chunk2, sessionId);
+            forwardStreamBufferChunks.push(chunk2);
+            smallBufferPlugin.onStreamChunk(chunk3, sessionId);
+            forwardStreamBufferChunks.push(chunk3);
+            smallBufferPlugin.onStreamChunk(chunk4, sessionId);
+            forwardStreamBufferChunks.push(chunk4);
+            // End stream
+            smallBufferPlugin.onStreamEnd(sessionId);
+            // Verify forward.ts has ALL chunks (no data loss)
+            const forwardCompleteData = Buffer.concat(forwardStreamBufferChunks);
+            const expectedData = Buffer.concat([chunk1, chunk2, chunk3, chunk4]);
+            assert.equal(forwardCompleteData.length, expectedData.length, "forward.ts should have all data");
+            assert.ok(forwardCompleteData.equals(expectedData), "forward.ts data should match original chunks exactly");
+            // Verify retry plugin's internal buffer is empty (cleared due to bufferOverflow or cleanup)
+            const retryPluginBuffer = smallBufferPlugin._internal.getStreamBuffer(sessionId);
+            assert.equal(retryPluginBuffer?.length ?? 0, 0, "Retry plugin internal buffer should be empty/cleared");
+            // Verify no pending retry (successful stream)
+            const pendingRetry = smallBufferPlugin._internal.getAndConsumePendingStreamRetry(sessionId);
+            assert.equal(pendingRetry, null, "Should not have pending retry");
+            // Verify state is cleaned up
+            const streamError = smallBufferPlugin._internal.getStreamError(sessionId);
+            assert.equal(streamError, undefined, "Stream state should be cleaned up");
+            smallBufferPlugin._internal.shutdown();
+        });
     });
     describe("request body buffering and replay", () => {
         it("buffers and replays original request body on retry", async () => {

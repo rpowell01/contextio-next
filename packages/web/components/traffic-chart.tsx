@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { formatBytes } from "@/lib/utils";
 import type { TrafficMetric } from "@/types/api";
 import {
-  BarChart,
-  Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -56,13 +56,23 @@ function downsampleData(data: ChartDataPoint[], maxPoints: number): ChartDataPoi
     const maxRequest = Math.max(...chunk.map((d) => d.requestBytes));
     const maxResponse = Math.max(...chunk.map((d) => d.responseBytes));
     // Use the timestamp from the last item in the chunk for labeling
+    // Since data is chronological (oldest first), the last item is the newest in the chunk
     const timestamp = chunk[chunk.length - 1].timestamp;
-    // Use the originalTimestamp from the last item for tooltip
     const originalTimestamp = chunk[chunk.length - 1].originalTimestamp;
     result.push({ timestamp, originalTimestamp, requestBytes: maxRequest, responseBytes: maxResponse });
   }
 
   return result;
+}
+
+function formatBytesWithUnit(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${bytes} B`;
 }
 
 export function TrafficChart({
@@ -74,23 +84,28 @@ export function TrafficChart({
   const [copied, setCopied] = useState(false);
 
   const chartData = useMemo(() => {
-    const raw = data.map((item) => {
-      const date = new Date(item.timestamp);
-      // For short time ranges (≤24h), show time; otherwise show date
-      const timestamp = timeRangeHours <= 24
-        ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : date.toLocaleDateString();
-      return {
-        timestamp,
-        originalTimestamp: item.timestamp, // Keep original ISO string for tooltip
-        requestBytes: item.requestBytes,
-        responseBytes: item.responseBytes,
-      };
-    });
+    // API returns data sorted newest-first (reverse chronological).
+    // For a time-series area chart, we need oldest-first (chronological).
+    // So we reverse the array.
+    const raw = [...data]
+      .reverse()
+      .map((item) => {
+        const date = new Date(item.timestamp);
+        // For short time ranges (≤24h), show time; otherwise show date
+        const timestamp = timeRangeHours <= 24
+          ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : date.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+        return {
+          timestamp,
+          originalTimestamp: item.timestamp, // Keep original ISO string for tooltip
+          requestBytes: item.requestBytes,
+          responseBytes: item.responseBytes,
+        };
+      });
     return downsampleData(raw, maxDataPoints);
   }, [data, maxDataPoints, timeRangeHours]);
 
-  const copyToClipboard = async () => {
+  const copyToClipboard = useCallback(async () => {
     try {
       const dataToCopy = chartData.map(
         ({ timestamp, requestBytes, responseBytes }) => ({
@@ -105,7 +120,7 @@ export function TrafficChart({
     } catch {
       // Silently fail
     }
-  };
+  }, [chartData]);
 
   // Show a note if data was downsampled
   const isDownsampled = chartData.length < data.length;
@@ -119,6 +134,12 @@ export function TrafficChart({
       </div>
     );
   }
+
+  // Find max value for Y-axis domain to leave some headroom
+  const maxBytes = Math.max(
+    chartData.length > 0 ? Math.max(...chartData.map((d) => d.requestBytes)) : 0,
+    chartData.length > 0 ? Math.max(...chartData.map((d) => d.responseBytes)) : 0,
+  );
 
   return (
     <div className="w-full">
@@ -146,71 +167,80 @@ export function TrafficChart({
         id="traffic-chart-description"
         className="sr-only"
       >
-        Bar chart displaying request and response bytes over time. Each bar
-        represents a time period with blue indicating request bytes and green
-        indicating response bytes. Hover bars for exact values.
+        Filled area chart displaying request and response bytes over time. The shaded
+        areas represent the volume of bytes, with blue for requests and green for
+        responses. The x-axis shows time progressing left to right. Hover for exact values.
       </div>
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart
+        <AreaChart
           data={chartData}
           aria-labelledby="traffic-chart-description"
           role="img"
-          layout="vertical"
+          margin={{ top: 10, right: 30, left: 60, bottom: 60 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
-          {/* With layout="vertical" (horizontal bars): XAxis is the value axis at the bottom, YAxis is the category axis on the left */}
-          <XAxis
-            type="number"
-            label={{
-              // XAxis is the value axis at the bottom in vertical layout
-              value: "Bytes",
-              position: "outsideBottom",
-              offset: 80,
-              style: { textAnchor: "middle", fill: "#333" },
-            }}
-            tick={{ fill: "#333", fontSize: 12 }}
-            tickLine={{ stroke: "#666" }}
-            axisLine={{ stroke: "#666" }}
-            tickFormatter={(value) => formatBytes(value)}
+          <defs>
+            <linearGradient id="requestBytesGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4} />
+              <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
+            </linearGradient>
+            <linearGradient id="responseBytesGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity={0.4} />
+              <stop offset="100%" stopColor="#10b981" stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="#e2e8f0"
+            vertical={true}
+            horizontal={true}
           />
-          <YAxis
+          <XAxis
             dataKey="timestamp"
             type="category"
-            width={160}
+            tick={{ fill: "#333", fontSize: 11 }}
+            tickLine={{ stroke: "#94a3b8" }}
+            axisLine={{ stroke: "#94a3b8" }}
+            tickCount={chartData.length > 0 ? Math.min(chartData.length, 8) : 0}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            type="number"
             label={{
-              // YAxis is horizontal on the BOTTOM in vertical layout
-              value: "Date",
-              position: "outsideBottom",
-              offset: 30,
-              style: { textAnchor: "middle", fill: "#333" },
+              value: "Bytes",
+              position: "insideLeft",
+              offset: -40,
+              style: { textAnchor: "middle", fill: "#64748b", fontSize: 12 },
             }}
             tick={{ fill: "#333", fontSize: 11 }}
-            tickLine={{ stroke: "#666" }}
-            axisLine={{ stroke: "#666" }}
+            tickLine={{ stroke: "#94a3b8" }}
+            axisLine={{ stroke: "#94a3b8" }}
+            tickFormatter={formatBytesWithUnit}
+            domain={maxBytes > 0 ? [0, Math.ceil(maxBytes * 1.15)] : [0, 1000]}
           />
           <Tooltip
             formatter={(value: number, name: string) => [formatBytes(value), name]}
             labelFormatter={(label, payload) => {
-              // payload contains the data for the hovered bar, including originalTimestamp
               if (payload && payload.length > 0 && payload[0].payload?.originalTimestamp) {
                 const originalTs = payload[0].payload.originalTimestamp;
                 const date = new Date(originalTs);
-                return date.toLocaleString([], { 
-                  year: 'numeric', 
-                  month: '2-digit', 
-                  day: '2-digit', 
-                  hour: '2-digit', 
+                return date.toLocaleString([], {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
                   minute: '2-digit',
-                  second: '2-digit'
+                  second: '2-digit',
                 });
               }
               return `Time: ${label}`;
             }}
             contentStyle={{
               backgroundColor: "rgba(255, 255, 255, 0.95)",
-              border: "1px solid #ccc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "6px",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
             }}
-            cursor={{ fill: "rgba(0, 0, 0, 0.1)" }}
+            cursor={{ fill: "rgba(59, 130, 246, 0.1)" }}
           />
           <Legend
             verticalAlign="top"
@@ -218,29 +248,27 @@ export function TrafficChart({
             iconSize={12}
             wrapperStyle={{ fontSize: 12, fontWeight: 500 }}
           />
-          <Bar
+          <Area
+            type="monotone"
             dataKey="requestBytes"
             name="Request Bytes"
-            fill="#3b82f6"
-            stroke="#1d4ed8"
-            strokeDasharray="4 4"
-            strokeWidth={1}
-            opacity={0.85}
-            radius={[0, 4, 4, 0]}
-            aria-label="Request bytes"
+            stroke="#3b82f6"
+            strokeWidth={2}
+            fillOpacity={1}
+            fill="url(#requestBytesGradient)"
+            opacity={0.9}
           />
-          <Bar
+          <Area
+            type="monotone"
             dataKey="responseBytes"
             name="Response Bytes"
-            fill="#10b981"
-            stroke="#059669"
-            strokeDasharray="8 2"
-            strokeWidth={1}
-            opacity={0.85}
-            radius={[0, 4, 4, 0]}
-            aria-label="Response bytes"
+            stroke="#10b981"
+            strokeWidth={2}
+            fillOpacity={1}
+            fill="url(#responseBytesGradient)"
+            opacity={0.9}
           />
-        </BarChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );

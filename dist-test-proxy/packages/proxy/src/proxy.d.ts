@@ -6,6 +6,10 @@
  */
 import type { ProxyConfig } from "@contextio/core";
 export interface ProxyInstance {
+    /** The upstream URLs (mutable for testing). */
+    upstreams: Record<string, string>;
+    /** The provider configs (mutable for testing). */
+    providers: Record<string, any>;
     /** Start listening. Resolves when the server is ready. */
     start: () => Promise<void>;
     /** Stop the server. Resolves when all connections are closed. */

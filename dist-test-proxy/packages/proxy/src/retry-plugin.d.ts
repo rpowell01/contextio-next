@@ -278,7 +278,9 @@ export declare class RetryPlugin implements ProxyPlugin {
     clearForTesting(): void;
     /**
      * Get the buffered streaming response for a session (for testing/inspection).
-     * Returns the concatenated buffer or null if no buffer exists.
+     * Note: The actual buffer content is no longer accumulated (O(n²) fix).
+     * This method returns null since we only track buffer size, not content.
+     * Use getStreamBufferSizeForTesting to get the size.
      */
     getStreamBufferForTesting(sessionId: string): Buffer | null;
     /**

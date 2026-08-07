@@ -9,6 +9,7 @@
 
 import http from "node:http";
 import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
+import { upsertRedactionMetadata } from "@contextio/core/db";
 import { lookup } from "mime-types";
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
@@ -219,6 +220,7 @@ export function createCombinedProxy(
   const redactionMetaWatcher = createRedactionMetaWatcher({
     captureDir: resolved.loggerCaptureDir,
     encryption: resolved.loggerEncryption,
+    persistToSqlite: upsertRedactionMetadata,
   });
 
   // Enable log capture for admin API

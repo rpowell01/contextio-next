@@ -70,13 +70,15 @@ export function createProxy(config) {
     });
     // Enable log capture for admin API
     enableLogCapture();
+    const upstreams = { ...resolved.upstreams };
+    const providers = { ...resolved.providers };
     const proxyHandler = createProxyHandler({
-        upstreams: resolved.upstreams,
+        upstreams,
         allowTargetOverride: resolved.allowTargetOverride,
         strictUrlForwarding: resolved.strictUrlForwarding,
         plugins,
         logTraffic,
-        providers: resolved.providers,
+        providers,
     });
     const adminHandler = createAdminHandler({ plugins, logTraffic, startTime });
     const authHandler = resolved.oidc
@@ -120,6 +122,8 @@ export function createProxy(config) {
     let boundPort = resolved.port;
     let started = false;
     return {
+        upstreams,
+        providers,
         get port() {
             return boundPort;
         },

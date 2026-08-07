@@ -65,11 +65,9 @@ function processCapture(
 
     const leanStats = toLeanStats(counts);
 
-    // Compute token usage from response body
+// Compute token usage from response body (unconditionally to allow requestBody fallback)
     const responseBody = typeof data.responseBody === "string" ? data.responseBody : null;
-    const tokenUsage: TokenUsageResult = responseBody
-      ? computeTokenUsage(responseBody, typeof data.requestBody === "string" ? data.requestBody : undefined)
-      : { input: 0, output: 0, model: null };
+    const tokenUsage: TokenUsageResult = computeTokenUsage(responseBody, data.requestBody);
 
     // Compute additional metrics (tokensPerSecond, successCount, errorCount)
     const timeSec = ((data.timings as Record<string, unknown>)?.total_ms as number || 0) / 1000 || 1;

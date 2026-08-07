@@ -1,6 +1,15 @@
 // Use Node.js runtime for instrumentation to support Node.js built-ins
 export const runtime = "nodejs";
 
+/**
+ * Check if we're running in the Node.js runtime (not Edge).
+ * In Next.js 15, instrumentation can be bundled for both runtimes.
+ * This check allows graceful degradation in Edge runtime.
+ */
+function isNodeRuntime(): boolean {
+  return typeof process !== "undefined" && !!process.versions?.node;
+}
+
 const SETTINGS_DIR = "/app/custom-policy";
 const SETTINGS_FILE = "/app/custom-policy/settings.json";
 
@@ -62,11 +71,15 @@ async function getCaptureDir(): Promise<string> {
 }
 
 async function runRedactionMetaSync(): Promise<void> {
+  // Skip in Edge runtime as an additional safety measure
+  if (!isNodeRuntime()) {
+    return;
+  }
   try {
     const { importRedactionMetaFromFiles } = await import("@contextio/core/db");
     const { decrypt } = await import("@contextio/logger");
     const captureDir = await getCaptureDir();
-    
+
     // Import any .redact-meta.json files that aren't in SQLite yet
     // Pass decrypt function to handle encrypted sidecar files
     const imported = await importRedactionMetaFromFiles(captureDir, decrypt);
@@ -85,6 +98,10 @@ function runSyncWithCatch(): void {
 }
 
 async function startSyncScheduler(): Promise<NodeJS.Timeout | null> {
+  // Skip in Edge runtime
+  if (!isNodeRuntime()) {
+    return null;
+  }
   if (syncStarted) return syncTimer;
   syncStarted = true;
 
@@ -189,6 +206,10 @@ function runWithCatch(): void {
 }
 
 async function startCleanupScheduler() {
+  // Skip in Edge runtime
+  if (!isNodeRuntime()) {
+    return null;
+  }
   if (schedulerStarted) return cleanupTimer;
   schedulerStarted = true;
 
@@ -205,6 +226,15 @@ async function startCleanupScheduler() {
 }
 
 export async function register(): Promise<void> {
+  // Skip Node.js-specific initialization in Edge runtime
+  if (!isNodeRuntime()) {
+    console.log("[instrumentation] Running in Edge runtime, skipping Node.js-specific initialization");
+    // Still validate CSRF secret in Edge runtime
+    validateCsrfSecret();
+    await applyPersistedSettings();
+    return;
+  }
+
   // Validate CSRF secret in ALL runtimes (including Edge) before middleware runs
   validateCsrfSecret();
 
