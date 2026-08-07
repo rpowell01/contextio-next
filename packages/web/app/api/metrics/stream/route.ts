@@ -126,7 +126,7 @@ async function* processMetricsWithProgress(
   const now = new Date();
   const cutoff = new Date(now.getTime() - hours * 60 * 60 * 1000);
 
-  const trafficMap = new Map<string, TrafficMetric>();
+  const traffic: TrafficMetric[] = [];
   const providerMap = new Map<string, ProviderUsage>();
   const redactions: RedactionMetric[] = [];
 
@@ -162,8 +162,7 @@ async function* processMetricsWithProgress(
       });
 
       if (parsed.traffic) {
-        const key = parsed.traffic.timestamp;
-        trafficMap.set(key, parsed.traffic);
+        traffic.push(parsed.traffic);
         totalRequestBytes += parsed.traffic.requestBytes;
         totalResponseBytes += parsed.traffic.responseBytes;
       }
@@ -249,8 +248,6 @@ async function* processMetricsWithProgress(
     }
   }
 
-  // Convert traffic map to array
-  const traffic = Array.from(trafficMap.values());
   traffic.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   const totalTrafficPoints = traffic.length;
