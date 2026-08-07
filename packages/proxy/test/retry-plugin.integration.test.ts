@@ -111,8 +111,6 @@ describe("retry plugin - integration tests", () => {
     tempDir = mkdtempSync(path.join(tmpdir(), "contextio-proxy-test-"));
     providersPath = path.join(tempDir, "providers.json");
     process.env.PROVIDERS_FILE = providersPath;
-    process.env.HOME = tempDir;
-    process.env.USERPROFILE = tempDir;
 
     // Write minimal providers.json
     const defaultProviders = {
@@ -155,6 +153,7 @@ describe("retry plugin - integration tests", () => {
         geminiCodeAssist: "http://127.0.0.1:1",
       },
       plugins: [retryPlugin],
+      loggerCaptureDir: tempDir,
     });
 
     await proxy.start();
@@ -170,8 +169,6 @@ describe("retry plugin - integration tests", () => {
     delete process.env.UPSTREAM_GEMINI_URL;
     delete process.env.UPSTREAM_GEMINI_CODE_ASSIST_URL;
     delete process.env.PROVIDERS_FILE;
-    delete process.env.HOME;
-    delete process.env.USERPROFILE;
     if (tempDir) {
       try {
         rmSync(tempDir, { recursive: true, force: true });

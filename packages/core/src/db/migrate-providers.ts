@@ -236,7 +236,7 @@ export function migrateProviders(options: MigrateProvidersOptions = {}): Migrate
 				if (existingProvider) {
 					// Update existing provider (default, file, or env)
 					// For default providers, also change source to 'file' and dynamic to true
-					// updateProvider preserves source/dynamic; default providers are reclassified to file
+					// updateProvider preserves source/dynamic; default providers are reclassified to file via direct UPDATE below
 					const db = getDb();
 					db.transaction(() => {
 						updateProvider(providerId, providerConfig);

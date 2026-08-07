@@ -56,6 +56,39 @@ let syncTimer: NodeJS.Timeout | null = null;
 let schedulerStarted = false;
 let syncStarted = false;
 
+function stopSyncScheduler(): void {
+  if (syncTimer) {
+    clearInterval(syncTimer);
+    syncTimer = null;
+    syncStarted = false;
+  }
+}
+
+function stopCleanupScheduler(): void {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+    schedulerStarted = false;
+  }
+}
+
+let cleanupHandlersRegistered = false;
+
+function registerCleanupHandlers(): void {
+  if (cleanupHandlersRegistered || !isNodeRuntime()) return;
+  cleanupHandlersRegistered = true;
+  const cleanup = () => {
+    stopSyncScheduler();
+    stopCleanupScheduler();
+  };
+  process.on("SIGTERM", cleanup);
+  process.on("SIGINT", cleanup);
+  process.on("beforeExit", cleanup);
+  process.on("exit", cleanup);
+}
+
+registerCleanupHandlers();
+
 function defaultSettings() {
   return {
     enabled: true,
