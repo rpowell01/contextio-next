@@ -52,7 +52,6 @@ const DEFAULT_PROVIDER_CONFIGS: Omit<ProviderConfig, "rateLimit" | "retry" | "cu
 	{ id: "openrouter", name: "OpenRouter", upstreamUrl: "https://openrouter.ai/api", apiFormat: "chat-completions", authType: "bearer", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-openrouter-baseurl" },
 	{ id: "kilo", name: "Kilo", upstreamUrl: "https://api.kilo.ai/api/gateway", apiFormat: "chat-completions", authType: "bearer", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-kilo-baseurl" },
 	{ id: "geminiCodeAssist", name: "Gemini Code Assist", upstreamUrl: "https://generativelanguage.googleapis.com", apiFormat: "gemini", authType: "api-key", allowBaseUrlOverride: true, baseUrlOverrideHeader: "x-gemini-code-assist-baseurl" },
-	{ id: "unknown", name: "Unknown", upstreamUrl: "https://unknown.provider", apiFormat: "unknown", authType: "none", allowBaseUrlOverride: false, baseUrlOverrideHeader: "x-unknown-baseurl" },
 ];
 
 /**

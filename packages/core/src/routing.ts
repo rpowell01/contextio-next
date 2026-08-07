@@ -216,7 +216,8 @@ export function classifyRequest(
   if (headers.authorization?.startsWith("Bearer sk-"))
     return { provider: "openai", apiFormat: "unknown" };
 
-  return { provider: "unknown", apiFormat: "unknown" };
+  // Default to openai for unrecognized paths (many are OpenAI-compatible)
+  return { provider: "openai", apiFormat: "unknown" };
 }
 
 /** Check if a string looks like a session ID (8 lowercase hex chars). */

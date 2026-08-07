@@ -23,8 +23,7 @@ export type Provider =
   | "vertex"
   | "nvidia"
   | "openrouter"
-  | "kilo"
-  | "unknown";
+  | "kilo";
 
 /**
  * Wire format of the API request.

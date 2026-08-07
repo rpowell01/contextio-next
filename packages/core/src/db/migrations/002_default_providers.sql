@@ -122,21 +122,6 @@ INSERT OR IGNORE INTO providers (
     1, 'x-kilo-baseurl', 'default', 0
 );
 
--- Unknown (fallback)
-INSERT OR IGNORE INTO providers (
-    id, name, upstream_url, api_format, auth_type, enabled,
-    rate_limit_max_requests, rate_limit_window_ms, rate_limit_buffer_capacity,
-    retry_max_retries, retry_base_delay_ms, retry_max_delay_ms,
-    retry_retryable_statuses, retry_jitter_factor, custom_headers,
-    allow_base_url_override, base_url_override_header, source, dynamic
-) VALUES (
-    'unknown', 'Unknown', 'https://unknown.provider', 'unknown', 'none', 1,
-    60, 60000, 10,
-    3, 1000, 30000,
-    '[429, 500, 502, 503, 504]', 0.2, '{}',
-    0, 'x-unknown-baseurl', 'default', 0
-);
-
 -- Gemini Code Assist
 INSERT OR IGNORE INTO providers (
     id, name, upstream_url, api_format, auth_type, enabled,
