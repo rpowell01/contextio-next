@@ -229,13 +229,14 @@ export function migrateProviders(options: MigrateProvidersOptions = {}): Migrate
 						continue;
 					}
 				}
-				// If force=true, we'll update the existing provider regardless of source
+				// If force=true, we'll update the existing provider regardless of source (file, env, or default)
 			}
 			
 			if (!dryRun) {
 				if (existingProvider) {
 					// Update existing provider (default, file, or env)
 					// For default providers, also change source to 'file' and dynamic to true
+					// updateProvider preserves source/dynamic; default providers are reclassified to file
 					const db = getDb();
 					db.transaction(() => {
 						updateProvider(providerId, providerConfig);
@@ -249,7 +250,7 @@ export function migrateProviders(options: MigrateProvidersOptions = {}): Migrate
 						console.log(`[migrate-providers] Updated provider "${providerId}" from providers.json (default->file)`);
 					} else {
 						result.updated++;
-						console.log(`[migrate-providers] Updated provider "${providerId}" from providers.json`);
+						console.log(`[migrate-providers] Updated provider "${providerId}" from providers.json (source=${existingProvider.source})`);
 					}
 				} else {
 					// Create new provider
@@ -259,10 +260,11 @@ export function migrateProviders(options: MigrateProvidersOptions = {}): Migrate
 				}
 			} else {
 				if (existingProvider) {
-					if (existingProvider.source === "default") {
+					if (existingProvider.source === "default" || force) {
+						// Default providers or force=true: would update
 						result.updated++;
 					} else {
-						// Already exists as file/env - count as skipped
+						// Already exists as file/env without force - count as skipped
 						result.skipped++;
 					}
 				} else {

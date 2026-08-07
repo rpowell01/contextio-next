@@ -9,9 +9,11 @@ import {
 	migrateCaptures, 
 	migrateCapturesSync, 
 	type MigrateCapturesOptions,
+	type MigrateCapturesResult,
 	migrateProviders, 
 	previewProvidersMigration, 
 	type MigrateProvidersOptions,
+	type MigrateProvidersResult,
 	initDb
 } from "@contextio/core/db";
 
@@ -120,7 +122,7 @@ export async function runMigrateAll(captureOptions: CaptureMigrationOptions, pro
 /**
  * Print migration result summary.
  */
-function printMigrationResult(type: string, result: any): void {
+function printMigrationResult(type: string, result: MigrateCapturesResult | MigrateProvidersResult): void {
 	console.log(`\n[migrate] ${type} migration complete:`);
 	console.log(`  ${type === "Capture" ? "Files" : "Providers"} scanned: ${result.totalFiles ?? result.totalProviders}`);
 	console.log(`  ${type === "Capture" ? "Indexed" : "Imported"}: ${result.indexed ?? result.imported}`);

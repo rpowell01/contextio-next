@@ -570,6 +570,11 @@ Examples:
 		.option("--no-backup", "Skip creating backup of providers.json")
 		.option("--max-files <number>", "Maximum capture files to process (for testing)")
 		.action((opts) => {
+			const maxFiles = opts.maxFiles ? parseInt(opts.maxFiles, 10) : undefined;
+			if (maxFiles !== undefined && (isNaN(maxFiles) || maxFiles < 1)) {
+				onResult({ error: `--max-files must be a positive integer` });
+				return;
+			}
 			onResult({
 				command: "migrate",
 				subcommand: "all",
@@ -579,14 +584,7 @@ Examples:
 				force: opts.force,
 				keyMaterial: opts.keyMaterial,
 				noBackup: opts.noBackup,
-				maxFiles: (() => {
-					const val = opts.maxFiles ? parseInt(opts.maxFiles, 10) : undefined;
-					if (val !== undefined && (isNaN(val) || val < 1)) {
-						onResult({ error: `--max-files must be a positive integer` });
-						return undefined;
-					}
-					return val;
-				})(),
+				maxFiles,
 			});
 		});
 

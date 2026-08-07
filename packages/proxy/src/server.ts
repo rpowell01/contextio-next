@@ -130,10 +130,12 @@ console.log("[startup] Encryption at rest configuration:");
 }
 
 async function main(): Promise<void> {
-	// Initialize database (runs migrations and seeds default providers)
-	initDb(decrypt);
-
 	const resolved = resolveConfig();
+
+	// Initialize database (runs migrations and seeds default providers)
+	// Pass keyMaterial for encrypted capture auto-migration on fresh databases
+	const keyMaterial = resolved.loggerEncryption.staticKey ?? process.env[resolved.loggerEncryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
+	initDb(decrypt, keyMaterial);
 	const plugins: ProxyPlugin[] = [];
 
 	// Create rate-limiter plugin with resolved per-provider config

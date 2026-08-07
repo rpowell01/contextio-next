@@ -77,7 +77,7 @@ function formatBytesWithUnit(bytes: number): string {
 
 export function TrafficChart({
   data,
-  maxDataPoints = 50,
+  maxDataPoints,
   loading = false,
   timeRangeHours = 24,
 }: TrafficChartProps) {
@@ -102,7 +102,12 @@ export function TrafficChart({
           responseBytes: item.responseBytes,
         };
       });
-    return downsampleData(raw, maxDataPoints);
+    // Only downsample if maxDataPoints is a positive number
+    // 0, negative, or undefined = no downsampling (unlimited)
+    if (maxDataPoints && maxDataPoints > 0) {
+      return downsampleData(raw, maxDataPoints);
+    }
+    return raw;
   }, [data, maxDataPoints, timeRangeHours]);
 
   const copyToClipboard = useCallback(async () => {

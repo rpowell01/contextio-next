@@ -173,7 +173,7 @@ export async function migrateCaptures(options: MigrateCapturesOptions = {}): Pro
 
 	// Process files in batches for better performance
 	const BATCH_SIZE = 100;
-	const batches: any[][] = [];
+	const batches: string[][] = [];
 
 	for (let i = 0; i < files.length; i += BATCH_SIZE) {
 		batches.push(files.slice(i, i + BATCH_SIZE));
