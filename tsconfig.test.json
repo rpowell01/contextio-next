@@ -21,6 +21,7 @@
     "packages/proxy/test/config.test.ts",
     "packages/proxy/test/rate-limiter.test.ts",
     "packages/proxy/test/retry-plugin.test.ts",
+    "packages/proxy/test/retry-plugin.integration.test.ts",
     "packages/proxy/test/proxy.test.ts"
   ]
 }

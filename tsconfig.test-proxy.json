@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist-test-proxy",
+    "rootDir": ".",
+    "types": ["node"],
+    "baseUrl": ".",
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ES2022",
+    "paths": {
+      "@contextio/core": ["packages/core/dist/index.js"],
+      "@contextio/core/*": ["packages/core/dist/*"]
+    }
+  },
+  "include": [
+    "packages/proxy/src/**/*.ts",
+    "packages/proxy/test/*.test.ts"
+  ]
+}

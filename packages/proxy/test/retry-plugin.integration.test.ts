@@ -525,4 +525,428 @@ describe("retry plugin - integration tests", () => {
       assert.equal(requestCount, 2);
     });
   });
+
+  describe("stream buffer overflow protection", () => {
+    let upstreamServer: http.Server;
+    let upstreamPort: number;
+    let requestCount: number;
+    let capturedData: any = null;
+    let overflowRetryPlugin: ReturnType<typeof createRetryPlugin>;
+    let proxyWithOverflow: any;
+
+    beforeEach(async () => {
+      requestCount = 0;
+      capturedData = null;
+
+      // Create a capture plugin to verify capture data on overflow
+      const capturePlugin: any = {
+        name: "test-capture",
+        onCapture(capture: any) {
+          capturedData = capture;
+        },
+      };
+
+      // Create retry plugin for internal retry plugin overflow
+      overflowRetryPlugin = createRetryPlugin({
+        maxRetries: 3,
+        baseDelayMs: 50,
+        maxDelayMs: 500,
+        jitterFactor: 0,
+        retryableStatuses: [429, 500, 502, 503, 504],
+        enabled: true,
+      });
+
+      proxyWithOverflow = createProxy({
+        port: 0,
+        upstreams: {
+          anthropic: "http://127.0.0.1:1", // Will be overridden per test
+          openai: "http://127.0.0.1:1",
+          gemini: "http://127.0.0.1:1",
+          chatgpt: "http://127.0.0.1:1",
+          geminiCodeAssist: "http://127.0.0.1:1",
+        },
+        plugins: [overflowRetryPlugin, capturePlugin],
+      });
+      await proxyWithOverflow.start();
+
+      // Set tiny buffer size on provider config (Forward.ts reads from opts.providers[provider].retry.maxResponseBufferSize)
+      proxyWithOverflow.providers.anthropic = {
+        ...proxyWithOverflow.providers.anthropic,
+        retry: {
+          ...proxyWithOverflow.providers.anthropic?.retry,
+          maxResponseBufferSize: 100,
+        },
+      };
+
+      // Store original proxy and replace
+      (global as any).originalProxy = proxy;
+      (global as any).originalRetryPlugin = retryPlugin;
+      proxy = proxyWithOverflow;
+      retryPlugin = overflowRetryPlugin;
+    });
+
+    afterEach(async () => {
+      upstreamServer?.close();
+      const origProxy = (global as any).originalProxy;
+      const origPlugin = (global as any).originalRetryPlugin;
+      if (origProxy) proxy = origProxy;
+      if (origPlugin) retryPlugin = origPlugin;
+      if (overflowRetryPlugin) (overflowRetryPlugin as any)._internal.shutdown();
+      if (proxyWithOverflow) await proxyWithOverflow.stop();
+    });
+
+    it("does not overflow with small streaming responses (existing behavior preserved)", async () => {
+      // Small response that fits in 100 bytes buffer
+      upstreamServer = http.createServer((req, res) => {
+        requestCount++;
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        // Small SSE response (~80 bytes total)
+        res.write('data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}\n\n');
+        res.write('data: {"type":"message_stop"}\n\n');
+        setTimeout(() => res.end(), 50);
+      });
+      await new Promise<void>((resolve) => upstreamServer.listen(0, resolve));
+      upstreamPort = getServerPort(upstreamServer);
+      (proxy as any).upstreams.anthropic = `http://127.0.0.1:${upstreamPort}`;
+
+      const response = await makeStreamingRequest(proxy.port, {
+        path: "/v1/messages",
+        body: JSON.stringify({ model: "claude-3", messages: [] }),
+      });
+
+      assert.equal(response.status, 200);
+      assert.ok(response.body.includes("Hi"), "Should receive small stream");
+      assert.equal(requestCount, 1, "Should not retry for successful small response");
+      
+      // Verify capture was called with streaming info
+      assert.ok(capturedData, "Capture plugin should have been called");
+      assert.equal(capturedData.responseIsStreaming, true, "Should be marked as streaming");
+      assert.ok(capturedData.responseBytes > 0, "Should have response bytes recorded");
+    });
+
+    it("overflows buffer with large streaming responses and streams directly to client", async () => {
+      // Large response that exceeds 100 bytes buffer
+      upstreamServer = http.createServer((req, res) => {
+        requestCount++;
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        // Send many chunks that will exceed 100 bytes
+        for (let i = 0; i < 10; i++) {
+          res.write(`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Chunk ${i} with more data to exceed buffer "}}\n\n`);
+        }
+        res.write('data: {"type":"message_stop"}\n\n');
+        setTimeout(() => res.end(), 50);
+      });
+      await new Promise<void>((resolve) => upstreamServer.listen(0, resolve));
+      upstreamPort = getServerPort(upstreamServer);
+      (proxy as any).upstreams.anthropic = `http://127.0.0.1:${upstreamPort}`;
+
+      const chunks: Buffer[] = [];
+      const response = await new Promise<{ status: number }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: proxy.port,
+            method: "POST",
+            path: "/v1/messages",
+            headers: {
+              "Content-Type": "application/json",
+              "anthropic-version": "2023-06-01",
+            },
+          },
+          (res) => {
+            res.on("data", (chunk: Buffer) => chunks.push(chunk));
+            res.on("end", () => resolve({ status: res.statusCode! }));
+            res.on("error", reject);
+          },
+        );
+        req.on("error", reject);
+        req.write(JSON.stringify({ model: "claude-3", messages: [] }));
+        req.end();
+      });
+
+      const body = Buffer.concat(chunks).toString();
+      assert.equal(response.status, 200);
+      assert.ok(body.includes("Chunk 0"), "Should receive first chunk");
+      assert.ok(body.includes("Chunk 9"), "Should receive all chunks despite overflow");
+      assert.equal(requestCount, 1, "Should not retry for successful large response");
+      
+      // Verify capture was called with streaming info
+      assert.ok(capturedData, "Capture plugin should have been called on overflow");
+      assert.equal(capturedData.responseIsStreaming, true, "Should be marked as streaming on overflow");
+      assert.ok(capturedData.responseBytes > 100, "Should have full response bytes recorded (exceeding buffer)");
+    });
+
+    it("strips content-length header on buffer overflow", async () => {
+      let responseHeaders: http.IncomingHttpHeaders = {};
+      
+      upstreamServer = http.createServer((req, res) => {
+        requestCount++;
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Content-Length": "5000", // This should be stripped on overflow
+        });
+        // Send large response to trigger overflow
+        for (let i = 0; i < 20; i++) {
+          res.write(`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Overflow chunk ${i} "}}\n\n`);
+        }
+        res.write('data: {"type":"message_stop"}\n\n');
+        setTimeout(() => res.end(), 50);
+      });
+      await new Promise<void>((resolve) => upstreamServer.listen(0, resolve));
+      upstreamPort = getServerPort(upstreamServer);
+      (proxy as any).upstreams.anthropic = `http://127.0.0.1:${upstreamPort}`;
+
+      await new Promise<void>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: proxy.port,
+            method: "POST",
+            path: "/v1/messages",
+            headers: {
+              "Content-Type": "application/json",
+              "anthropic-version": "2023-06-01",
+            },
+          },
+          (res) => {
+            responseHeaders = res.headers;
+            res.on("data", () => {});
+            res.on("end", resolve);
+            res.on("error", reject);
+          },
+        );
+        req.on("error", reject);
+        req.write(JSON.stringify({ model: "claude-3", messages: [] }));
+        req.end();
+      });
+
+      // Content-length should be stripped when overflow occurs (since total length is unknown)
+      // transfer-encoding will be "chunked" from Node.js since we're streaming
+      assert.equal(responseHeaders["content-length"], undefined, "content-length should be stripped on overflow");
+      assert.equal(responseHeaders["transfer-encoding"], "chunked", "transfer-encoding should be chunked for streaming response");
+    });
+
+    it("skips retry logic when buffer overflows", async () => {
+      upstreamServer = http.createServer((req, res) => {
+        requestCount++;
+        if (requestCount === 1) {
+          // First attempt: SSE stream with error event AND large enough to overflow
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          });
+          // Send enough data to overflow buffer before error
+          for (let i = 0; i < 10; i++) {
+            res.write(`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Large chunk ${i} to overflow buffer "}}\n\n`);
+          }
+          // Then send error event
+          res.write('event: error\n');
+          res.write('data: {"error":{"message":"Rate limit exceeded","type":"rate_limit_error","code":429}}\n\n');
+          setTimeout(() => res.end(), 50);
+        } else {
+          // Should NOT reach here - retry should be skipped on overflow
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          });
+          res.write('data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Retry succeeded"}}\n\n');
+          res.write('data: {"type":"message_stop"}\n\n');
+          setTimeout(() => res.end(), 50);
+        }
+      });
+      await new Promise<void>((resolve) => upstreamServer.listen(0, resolve));
+      upstreamPort = getServerPort(upstreamServer);
+      (proxy as any).upstreams.anthropic = `http://127.0.0.1:${upstreamPort}`;
+
+      const response = await makeStreamingRequest(proxy.port, {
+        path: "/v1/messages",
+        body: JSON.stringify({ model: "claude-3", messages: [] }),
+      });
+
+      // Should return the error response (not retry) because overflow disables retry
+      assert.equal(response.status, 200); // SSE streams return 200 even with error events
+      assert.ok(response.body.includes("Rate limit exceeded"), "Should receive error event from first attempt");
+      assert.equal(requestCount, 1, "Should NOT retry when buffer overflows");
+    });
+
+    it("clears streamBufferChunks after flushBufferAndStream", async () => {
+      let capturedOnOverflow: any = null;
+      const capturePlugin: any = {
+        name: "overflow-capture",
+        onCapture(capture: any) {
+          capturedOnOverflow = capture;
+        },
+      };
+
+      // Create a fresh proxy with capture plugin for this test
+      const testRetryPlugin = createRetryPlugin({
+        maxRetries: 3,
+        baseDelayMs: 50,
+        maxDelayMs: 500,
+        jitterFactor: 0,
+        providers: {
+          anthropic: {
+            maxResponseBufferSize: 100,
+            maxStreamRetries: 3,
+            enabled: true,
+          },
+        },
+      });
+
+      const testProxy = createProxy({
+        port: 0,
+        upstreams: {
+          anthropic: "http://127.0.0.1:1",
+          openai: "http://127.0.0.1:1",
+          gemini: "http://127.0.0.1:1",
+          chatgpt: "http://127.0.0.1:1",
+          geminiCodeAssist: "http://127.0.0.1:1",
+        },
+        plugins: [testRetryPlugin, capturePlugin],
+      });
+      await testProxy.start();
+
+      upstreamServer = http.createServer((req, res) => {
+        requestCount++;
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        // Large response to trigger overflow
+        for (let i = 0; i < 20; i++) {
+          res.write(`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Chunk ${i} "}}\n\n`);
+        }
+        res.write('data: {"type":"message_stop"}\n\n');
+        setTimeout(() => res.end(), 50);
+      });
+      await new Promise<void>((resolve) => upstreamServer.listen(0, resolve));
+      upstreamPort = getServerPort(upstreamServer);
+      (testProxy as any).upstreams.anthropic = `http://127.0.0.1:${upstreamPort}`;
+
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: testProxy.port,
+            method: "POST",
+            path: "/v1/messages",
+            headers: {
+              "Content-Type": "application/json",
+              "anthropic-version": "2023-06-01",
+            },
+          },
+          (res) => {
+            res.on("data", (chunk: Buffer) => chunks.push(chunk));
+            res.on("end", resolve);
+            res.on("error", reject);
+          },
+        );
+        req.on("error", reject);
+        req.write(JSON.stringify({ model: "claude-3", messages: [] }));
+        req.end();
+      });
+
+      const body = Buffer.concat(chunks).toString();
+      assert.ok(body.includes("Chunk 0"), "Should receive all chunks");
+      assert.ok(body.includes("Chunk 19"), "Should receive all chunks");
+
+      // Give capture plugin time to fire
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Verify capture was called - the buffer should have been cleared after flush
+      assert.ok(capturedOnOverflow, "Capture should have been called");
+      assert.equal(capturedOnOverflow.responseIsStreaming, true);
+      // The response bytes should reflect the full response, not just buffered portion
+      assert.ok(capturedOnOverflow.responseBytes > 100);
+
+      await testProxy.stop();
+      (testRetryPlugin as any)._internal.shutdown();
+    });
+
+    it("handles client disconnect during overflow gracefully", async () => {
+      // Test that proxy handles client disconnect during overflow without crashing
+      upstreamServer = http.createServer((req, res) => {
+        requestCount++;
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        // Send large response slowly to allow client disconnect during overflow
+        const chunks = [
+          `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Chunk 0 "}}\n\n`,
+          `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Chunk 1 "}}\n\n`,
+          `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Chunk 2 "}}\n\n`,
+        ];
+        let idx = 0;
+        const interval = setInterval(() => {
+          if (idx < chunks.length) {
+            res.write(chunks[idx++]);
+          } else {
+            res.write('data: {"type":"message_stop"}\n\n');
+            res.end();
+            clearInterval(interval);
+          }
+        }, 10);
+      });
+      await new Promise<void>((resolve) => upstreamServer.listen(0, resolve));
+      upstreamPort = getServerPort(upstreamServer);
+      (proxy as any).upstreams.anthropic = `http://127.0.0.1:${upstreamPort}`;
+
+      // Make request but close client early during streaming
+      await new Promise<void>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: proxy.port,
+            method: "POST",
+            path: "/v1/messages",
+            headers: {
+              "Content-Type": "application/json",
+              "anthropic-version": "2023-06-01",
+            },
+          },
+          (res) => {
+            let chunkCount = 0;
+            res.on("data", (chunk: Buffer) => {
+              chunkCount++;
+              // Close connection after receiving first chunk (during overflow)
+              if (chunkCount === 1) {
+                req.destroy();
+              }
+            });
+            res.on("close", resolve);
+            // ECONNRESET is expected when client destroys connection
+            res.on("error", (err) => {
+              if ((err as any).code === "ECONNRESET") resolve();
+              else reject(err);
+            });
+          },
+        );
+        // Ignore ECONNRESET on request socket
+        req.on("error", (err) => {
+          if ((err as any).code !== "ECONNRESET") reject(err);
+        });
+        req.write(JSON.stringify({ model: "claude-3", messages: [] }));
+        req.end();
+      });
+
+      // Test passes if we reach here without unhandled errors
+      // (Proxy handled client disconnect gracefully)
+    });
+  });
 });

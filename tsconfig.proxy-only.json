@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist-test-proxy-only",
+    "rootDir": ".",
+    "types": ["node"],
+    "baseUrl": ".",
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ES2022"
+  },
+  "include": [
+    "packages/core/dist/**/*.d.ts",
+    "packages/proxy/src/**/*.ts",
+    "packages/proxy/test/*.test.ts"
+  ]
+}

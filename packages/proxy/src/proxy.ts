@@ -67,6 +67,10 @@ function startCaptureCleanup(config: {
 }
 
 export interface ProxyInstance {
+  /** The upstream URLs (mutable for testing). */
+  upstreams: Record<string, string>;
+  /** The provider configs (mutable for testing). */
+  providers: Record<string, any>;
   /** Start listening. Resolves when the server is ready. */
   start: () => Promise<void>;
   /** Stop the server. Resolves when all connections are closed. */
@@ -108,13 +112,16 @@ export function createProxy(
   // Enable log capture for admin API
   enableLogCapture();
 
+  const upstreams = { ...resolved.upstreams };
+  const providers = { ...resolved.providers };
+
   const proxyHandler = createProxyHandler({
-    upstreams: resolved.upstreams,
+    upstreams,
     allowTargetOverride: resolved.allowTargetOverride,
     strictUrlForwarding: resolved.strictUrlForwarding,
     plugins,
     logTraffic,
-    providers: resolved.providers,
+    providers,
   });
 
   const adminHandler = createAdminHandler({ plugins, logTraffic, startTime });
@@ -164,6 +171,8 @@ let boundPort = resolved.port;
 let started = false;
 
   return {
+    upstreams,
+    providers,
     get port() {
       return boundPort;
     },
