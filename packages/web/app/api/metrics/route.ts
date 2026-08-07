@@ -4,6 +4,9 @@ import { withRequestCache } from "@/lib/request-cache";
 import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 import { createSuccessResponse } from "@contextio/core";
 
+// Force dynamic rendering - metrics must always be fresh
+export const dynamic = "force-dynamic";
+
 /**
  * Parse a single capture metadata and extract metrics.
  */
@@ -329,6 +332,10 @@ export async function GET(request: Request): Promise<Response> {
         totalItems: totalTrafficPoints,
       },
     }));
+    // Prevent any caching - metrics should always be fresh
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    response.headers.set("Pragma", "no-cache");
+    response.headers.set("Expires", "0");
     if (maxPoints) {
       response.headers.set(
         "X-Data-Points-Total",

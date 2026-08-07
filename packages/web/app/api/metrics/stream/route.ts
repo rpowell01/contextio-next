@@ -5,6 +5,9 @@ import { ruleNameToPlaceholder } from "@/lib/sessions/placeholder-map";
 import type { MetricsData, TrafficMetric, ProviderUsage, RedactionMetric } from "@/types/api";
 import { createSuccessResponse } from "@contextio/core";
 
+// Force dynamic rendering - metrics must always be fresh
+export const dynamic = "force-dynamic";
+
 interface ProgressUpdate {
   type: "progress" | "complete" | "error";
   current?: number;
@@ -326,7 +329,9 @@ export async function GET(request: NextRequest) {
   return new NextResponse(stream, {
     headers: {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
       "Connection": "keep-alive",
     },
   });
