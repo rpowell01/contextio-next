@@ -409,7 +409,7 @@ function MetricsContent() {
     if (activeTab === "traffic") {
       fetchTrafficMetrics(undefined, undefined, true);
     }
-  }, [fetchTrafficMetrics, activeTab]);
+  }, [fetchTrafficMetrics, activeTab, timeRange, maxDataPoints]);
 
   // Cleanup on unmount
   useEffect(() => {
