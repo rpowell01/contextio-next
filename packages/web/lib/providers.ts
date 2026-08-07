@@ -14,6 +14,8 @@ import {
 	initDb,
 	getDb,
 } from "@contextio/core/db";
+import { readSettingsFile, writeSettingsFile, getSettingsFilePath } from "./node-utils";
+import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults } from "./settings";
 
 let dbInitialized = false;
 let dbInitError: Error | null = null;
@@ -269,6 +271,50 @@ export async function deleteProvider(id: string): Promise<void> {
 	}
 
 	dbDeleteProvider(id);
+
+	// Also remove the provider's rateLimiter and streamingRetry settings from settings.json
+	await removeProviderSettings(id);
+}
+
+/**
+ * Removes a provider's rateLimiter and streamingRetry settings from settings.json
+ */
+async function removeProviderSettings(providerId: string): Promise<void> {
+	try {
+		const raw = await readSettingsFile();
+		if (!raw) return;
+		
+		const parsed = JSON.parse(raw);
+		if (typeof parsed !== "object" || parsed === null) return;
+		
+		const settings = parsed as Record<string, unknown>;
+		let modified = false;
+		
+		// Remove from rateLimiter
+		if (settings.rateLimiter && typeof settings.rateLimiter === "object") {
+			const rl = settings.rateLimiter as Record<string, unknown>;
+			if (providerId in rl) {
+				delete rl[providerId];
+				modified = true;
+			}
+		}
+		
+		// Remove from streamingRetry
+		if (settings.streamingRetry && typeof settings.streamingRetry === "object") {
+			const sr = settings.streamingRetry as Record<string, unknown>;
+			if (providerId in sr) {
+				delete sr[providerId];
+				modified = true;
+			}
+		}
+		
+		if (modified) {
+			await writeSettingsFile(settings);
+		}
+	} catch (error) {
+		// Log but don't throw - provider deletion should still succeed even if settings cleanup fails
+		console.warn(`[providers] Failed to remove settings for deleted provider "${providerId}":`, error);
+	}
 }
 
 /**
