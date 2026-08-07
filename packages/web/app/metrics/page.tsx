@@ -131,7 +131,8 @@ function MetricsContent() {
   const { registerPageLoad, registerPageReady } = usePageLoad();
 
   // Refs for polling
-  const pollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rateLimiterPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const metricsPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rateLimiterAbortControllerRef = useRef<AbortController | null>(null);
   const metricsAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
@@ -262,9 +263,9 @@ function MetricsContent() {
 
     if (!shouldPoll) {
       // Clear any existing polling when not on rate limiter tab
-      if (pollingIntervalRef.current) {
-        clearTimeout(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
+      if (rateLimiterPollingIntervalRef.current) {
+        clearTimeout(rateLimiterPollingIntervalRef.current);
+        rateLimiterPollingIntervalRef.current = null;
       }
       if (rateLimiterAbortControllerRef.current) {
         rateLimiterAbortControllerRef.current.abort();
@@ -299,7 +300,7 @@ function MetricsContent() {
       isFirstPoll = false;
       // Schedule next poll after current one completes
       if (!cancelled) {
-        pollingIntervalRef.current = setTimeout(runPoll, 5000);
+        rateLimiterPollingIntervalRef.current = setTimeout(runPoll, 5000);
       }
     };
 
@@ -307,9 +308,9 @@ function MetricsContent() {
 
     return () => {
       cancelled = true;
-      if (pollingIntervalRef.current) {
-        clearTimeout(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
+      if (rateLimiterPollingIntervalRef.current) {
+        clearTimeout(rateLimiterPollingIntervalRef.current);
+        rateLimiterPollingIntervalRef.current = null;
       }
       if (rateLimiterAbortControllerRef.current) {
         rateLimiterAbortControllerRef.current.abort();
@@ -325,9 +326,9 @@ function MetricsContent() {
 
     if (!shouldPoll) {
       // Clear any existing polling when not on traffic tab
-      if (pollingIntervalRef.current) {
-        clearTimeout(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
+      if (metricsPollingIntervalRef.current) {
+        clearTimeout(metricsPollingIntervalRef.current);
+        metricsPollingIntervalRef.current = null;
       }
       if (metricsAbortControllerRef.current) {
         metricsAbortControllerRef.current.abort();
@@ -387,7 +388,7 @@ function MetricsContent() {
       }
       // Schedule next poll after current one completes (60 seconds)
       if (!cancelled) {
-        pollingIntervalRef.current = setTimeout(runPoll, 60000);
+        metricsPollingIntervalRef.current = setTimeout(runPoll, 60000);
       }
     };
 
@@ -396,9 +397,9 @@ function MetricsContent() {
 
     return () => {
       cancelled = true;
-      if (pollingIntervalRef.current) {
-        clearTimeout(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
+      if (metricsPollingIntervalRef.current) {
+        clearTimeout(metricsPollingIntervalRef.current);
+        metricsPollingIntervalRef.current = null;
       }
       if (metricsAbortControllerRef.current) {
         metricsAbortControllerRef.current.abort();
