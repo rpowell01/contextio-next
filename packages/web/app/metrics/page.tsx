@@ -133,8 +133,10 @@ function MetricsContent() {
   // Refs for polling
   const pollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rateLimiterAbortControllerRef = useRef<AbortController | null>(null);
+  const metricsAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const requestIdRef = useRef(0);
+  const metricsRequestIdRef = useRef(0);
 
   const progressPercent = progress && progress.total > 0
     ? Math.round((progress.current / progress.total) * 100)
@@ -315,6 +317,95 @@ function MetricsContent() {
       }
     };
   }, [fetchRateLimiterMetrics, activeTab]);
+
+  // Poll for traffic metrics (only when traffic tab is active) - every 60 seconds
+  useEffect(() => {
+    // Only poll if traffic tab is active
+    const shouldPoll = activeTab === "traffic";
+
+    if (!shouldPoll) {
+      // Clear any existing polling when not on traffic tab
+      if (pollingIntervalRef.current) {
+        clearTimeout(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      if (metricsAbortControllerRef.current) {
+        metricsAbortControllerRef.current.abort();
+        metricsAbortControllerRef.current = null;
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    const runPoll = async () => {
+      if (cancelled) return;
+      // Abort any in-flight request from previous poll
+      if (metricsAbortControllerRef.current) {
+        metricsAbortControllerRef.current.abort();
+      }
+      // Increment request ID to track this request
+      const requestId = ++metricsRequestIdRef.current;
+      // Create new abort controller for this request
+      const abortController = new AbortController();
+      metricsAbortControllerRef.current = abortController;
+      try {
+        // Fetch metrics without the streaming progress (for polling)
+        // We'll use the standard fetch instead of stream for polling
+        const data = await apiClient.getMetrics(
+          timeRange.hours,
+          maxDataPoints || undefined,
+          page,
+          pageSize,
+          abortController.signal,
+        );
+        // Only update if this request is still the latest one
+        if (isMountedRef.current && requestId === metricsRequestIdRef.current) {
+          setMetrics(data);
+          setError(null);
+          setLoading(false);
+          registerPageReady();
+        }
+      } catch (e) {
+        // Ignore aborted requests
+        if (e instanceof RequestAbortedError) {
+          return;
+        }
+        // On any other error, clear metrics to avoid stale data
+        if (isMountedRef.current && requestId === metricsRequestIdRef.current) {
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          setMetrics(null);
+          setError(`Failed to fetch metrics: ${errorMessage}`);
+          setLoading(false);
+          registerPageReady();
+        }
+        // Re-throw connection errors so polling can stop
+        if (isConnectionError(e)) {
+          console.error("[metrics] Traffic polling stopped due to connection error:", e.message);
+          return;
+        }
+      }
+      // Schedule next poll after current one completes (60 seconds)
+      if (!cancelled) {
+        pollingIntervalRef.current = setTimeout(runPoll, 60000);
+      }
+    };
+
+    // Initial fetch on tab switch
+    runPoll();
+
+    return () => {
+      cancelled = true;
+      if (pollingIntervalRef.current) {
+        clearTimeout(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      if (metricsAbortControllerRef.current) {
+        metricsAbortControllerRef.current.abort();
+        metricsAbortControllerRef.current = null;
+      }
+    };
+  }, [fetchMetrics, activeTab, timeRange, maxDataPoints, page, pageSize, registerPageReady]);
 
   // Fetch main metrics when time range, maxDataPoints, or page changes
   // Only fetch if traffic tab is active

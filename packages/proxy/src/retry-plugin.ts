@@ -147,8 +147,6 @@ interface StreamState {
   totalBufferSize: number;
   maxBufferSize: number;
   bufferOverflow: boolean;
-  // Original request body for retry
-  originalRequestBody: Buffer | null;
   // Pending retry signal for streaming responses
   pendingRetry?: {
     retryId: string;
@@ -885,7 +883,6 @@ export class RetryPlugin implements ProxyPlugin {
           totalBufferSize: 0,
           maxBufferSize,
           bufferOverflow: false,
-          originalRequestBody: ctx.rawBody,
           streamRetryCount: 0,
         });
       }
