@@ -15,7 +15,6 @@ import {
 	getDb,
 } from "@contextio/core/db";
 import { readSettingsFile, writeSettingsFile } from "./node-utils";
-import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults } from "./settings";
 
 let dbInitialized = false;
 let dbInitError: Error | null = null;
