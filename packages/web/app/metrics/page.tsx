@@ -154,6 +154,8 @@ function MetricsContent() {
       setLoading(true);
       setError(null);
       setProgress({ current: 0, total: 0, message: "Loading..." });
+    } else {
+      console.log("[metrics] Polling for traffic metrics...");
     }
     try {
       const data = await apiClient.getMetrics(
@@ -165,31 +167,14 @@ function MetricsContent() {
       );
       // Only update if this request is still the latest one
       if (isMountedRef.current && (requestId === undefined || requestId === metricsRequestIdRef.current)) {
-        // Only update state if data actually changed to avoid unnecessary re-renders
-        setMetrics(prev => {
-          if (!prev) return data;
-          // Compare traffic array length and timestamps to detect changes
-          const prevTraffic = prev.traffic || [];
-          const newTraffic = data.traffic || [];
-          if (prevTraffic.length !== newTraffic.length) return data;
-          // Check if any traffic point changed
-          for (let i = 0; i < newTraffic.length; i++) {
-            if (prevTraffic[i]?.timestamp !== newTraffic[i]?.timestamp ||
-                prevTraffic[i]?.requestBytes !== newTraffic[i]?.requestBytes ||
-                prevTraffic[i]?.responseBytes !== newTraffic[i]?.responseBytes) {
-              return data;
-            }
-          }
-          // Also check providers and redaction stats
-          if (JSON.stringify(prev.providers) !== JSON.stringify(data.providers) ||
-              prev.totalRequestBytes !== data.totalRequestBytes ||
-              prev.totalResponseBytes !== data.totalResponseBytes ||
-              prev.totalRedactionsDeduped !== data.totalRedactionsDeduped ||
-              prev.totalRedactionsSum !== data.totalRedactionsSum) {
-            return data;
-          }
-          return prev; // Data unchanged
+        console.log("[metrics] Traffic data received:", {
+          trafficPoints: data.traffic?.length,
+          totalRequestBytes: data.totalRequestBytes,
+          totalResponseBytes: data.totalResponseBytes,
+          providers: data.providers?.length,
         });
+        // Always update - simpler and more reliable than diffing
+        setMetrics(data);
         setError(null);
         setLoading(false);
         setProgress({ current: 1, total: 1, message: "Complete" });
@@ -204,6 +189,7 @@ function MetricsContent() {
       // On any other error, clear metrics to avoid stale data
       if (isMountedRef.current && (requestId === undefined || requestId === metricsRequestIdRef.current)) {
         const errorMessage = e instanceof Error ? e.message : String(e);
+        console.error("[metrics] Traffic fetch error:", errorMessage);
         setMetrics(null);
         setError(`Failed to fetch metrics: ${errorMessage}`);
         setLoading(false);
