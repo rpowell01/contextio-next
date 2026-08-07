@@ -143,58 +143,9 @@ function MetricsContent() {
     ? Math.round((progress.current / progress.total) * 100)
     : 0;
 
-  // Fetch traffic metrics (non-streaming, for initial load when filters change - uses current page)
+  // Fetch traffic metrics - ALWAYS fetches page 1 (latest data for chart/summary)
+  // The table uses pagination from the response, but chart always shows latest
   const fetchTrafficMetrics = useCallback(async (
-    signal?: AbortSignal,
-    requestId?: number,
-    isInitialLoad = false
-  ): Promise<boolean> => {
-    if (!isMountedRef.current) return false;
-    if (isInitialLoad) {
-      setLoading(true);
-      setError(null);
-      setProgress({ current: 0, total: 0, message: "Loading..." });
-    }
-    try {
-      const data = await apiClient.getMetrics(
-        timeRange.hours,
-        maxDataPoints || undefined,
-        page,
-        pageSize,
-        signal,
-      );
-      // Only update if this request is still the latest one
-      if (isMountedRef.current && (requestId === undefined || requestId === metricsRequestIdRef.current)) {
-        setMetrics(data);
-        setError(null);
-        setLoading(false);
-        setProgress({ current: 1, total: 1, message: "Complete" });
-        registerPageReady();
-      }
-      return true;
-    } catch (e) {
-      // Ignore aborted requests
-      if (e instanceof RequestAbortedError) {
-        return false;
-      }
-      // On any other error, clear metrics to avoid stale data
-      if (isMountedRef.current && (requestId === undefined || requestId === metricsRequestIdRef.current)) {
-        const errorMessage = e instanceof Error ? e.message : String(e);
-        setMetrics(null);
-        setError(`Failed to fetch metrics: ${errorMessage}`);
-        setLoading(false);
-        registerPageReady();
-      }
-      // Re-throw connection errors so polling can stop
-      if (isConnectionError(e)) {
-        throw e;
-      }
-      return false;
-    }
-  }, [timeRange, maxDataPoints, page, pageSize, registerPageReady]);
-
-  // Fetch traffic metrics for polling - ALWAYS fetches page 1 (latest data) regardless of pagination state
-  const fetchTrafficMetricsForPolling = useCallback(async (
     signal?: AbortSignal,
     requestId?: number,
     isInitialLoad = false
@@ -208,11 +159,11 @@ function MetricsContent() {
       console.log("[metrics] Polling for traffic metrics...");
     }
     try {
-      // Always use page=1 for polling to get latest data for the chart
+      // Always use page=1 for chart/summary to get latest data
       const data = await apiClient.getMetrics(
         timeRange.hours,
         maxDataPoints || undefined,
-        1,  // Always page 1 for polling
+        1,  // Always page 1 for chart/summary
         pageSize,
         signal,
       );
@@ -422,7 +373,7 @@ function MetricsContent() {
       const abortController = new AbortController();
       metricsAbortControllerRef.current = abortController;
       try {
-        await fetchTrafficMetricsForPolling(abortController.signal, requestId, isFirstPoll);
+        await fetchTrafficMetrics(abortController.signal, requestId, isFirstPoll);
       } catch (e) {
         // Connection error - stop polling to avoid infinite failed requests
         if (isConnectionError(e)) {
@@ -450,7 +401,7 @@ function MetricsContent() {
         metricsAbortControllerRef.current = null;
       }
     };
-  }, [fetchTrafficMetricsForPolling, activeTab]);
+  }, [fetchTrafficMetrics, activeTab]);
 
   // Fetch main metrics when time range, maxDataPoints, or page changes
   // Only fetch if traffic tab is active
