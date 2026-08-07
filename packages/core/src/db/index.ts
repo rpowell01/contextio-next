@@ -4,11 +4,15 @@
  */
 
 import { homedir } from "os";
+import fs from "node:fs";
 import { runMigrations as runMigrationsFn } from "./migrations.js";
 import {
 	importProvidersFromJson,
 } from "./provider-repo.js";
 import { importRedactionMetaFromFiles } from "./redaction-repo.js";
+import { migrateCapturesSync, getDefaultCaptureDir, migrateCaptures } from "./migrate-captures.js";
+import { migrateProviders, getDefaultProvidersFile } from "./migrate-providers.js";
+import { getDb } from "./connection.js";
 
 export {
 	getDb,
@@ -69,34 +73,94 @@ export {
 	type SessionRedactionAggregate,
 } from "./redaction-repo.js";
 
+export {
+	migrateCaptures,
+	migrateCapturesSync,
+	getDefaultCaptureDir,
+	type MigrateCapturesOptions,
+	type MigrateCapturesResult,
+} from "./migrate-captures.js";
+
+export {
+	migrateProviders,
+	previewProvidersMigration,
+	getDefaultProvidersFile,
+	type MigrateProvidersOptions,
+	type MigrateProvidersResult,
+} from "./migrate-providers.js";
+
 /**
- * Initialize the database: open connection and run all pending migrations.
- * Call this once at application startup.
+ * Check if the database has been initialized (schema_version table has entries).
+ * This indicates whether this is a fresh database that needs auto-migration.
  */
-export function initDb(decryptFn?: (encryptedJson: string, keyMaterial: string) => Promise<string>): void {
-	// Run all pending migrations (initConnection is called internally)
-	runMigrationsFn();
-	
-	// Import providers from providers.json for backward compatibility
-	// This allows existing providers.json configurations to be migrated to SQLite
-	importProvidersFromJson();
-	
-	// Import existing .redact-meta.json sidecar files into SQLite
-	// This allows existing redaction metadata to be migrated to SQLite
-	importRedactionMetaFromFiles(getCaptureDirForRedactionImport(), decryptFn);
+function isDatabaseInitialized(): boolean {
+	const db = getDb();
+	try {
+		const row = db.prepare("SELECT COUNT(*) as count FROM schema_version").get() as { count: number } | undefined;
+		return (row?.count ?? 0) > 0;
+	} catch {
+		// Table doesn't exist or other error - treat as not initialized
+		return false;
+	}
 }
 
 /**
- * Get the capture directory for redaction metadata import.
- * Uses the same resolution logic as the proxy/web packages.
+ * Initialize the database: open connection and run all pending migrations.
+ * Call this once at application startup.
+ * 
+ * If this is a fresh database (schema_version is empty), automatically:
+ * - Import providers from providers.json if it exists
+ * - Index existing capture files if capture directory exists (runs in background)
  */
-function getCaptureDirForRedactionImport(): string {
-	const envPath = process.env.LOGGER_CAPTURE_DIR;
-	if (envPath) {
-		return envPath;
+export function initDb(
+	decryptFn?: (encryptedJson: string, keyMaterial: string) => Promise<string>,
+	keyMaterial?: string
+): void {
+	// Check if this is a fresh database that needs auto-migration
+	// Must check BEFORE running migrations since migrations populate schema_version
+	const isFreshDb = !isDatabaseInitialized();
+	
+	// Run all pending migrations (initConnection is called internally)
+	runMigrationsFn();
+	
+	if (isFreshDb) {
+		console.log("[initDb] Fresh database detected, running auto-migration...");
+		
+		// Auto-migrate providers if providers.json exists
+		const providersFile = getDefaultProvidersFile();
+		if (fs.existsSync(providersFile)) {
+			console.log("[initDb] Found providers.json, running provider migration...");
+			try {
+				migrateProviders({ dryRun: false, createBackup: true });
+			} catch (err) {
+				console.warn(`[initDb] Provider auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
+		
+		// Auto-migrate captures if capture directory exists (run in background)
+		const captureDir = getDefaultCaptureDir();
+		if (fs.existsSync(captureDir)) {
+			console.log("[initDb] Found capture directory, scheduling capture indexing in background...");
+			// Run capture indexing asynchronously (non-blocking)
+			// Pass decryptFn and keyMaterial for encrypted captures
+			setImmediate(async () => {
+				try {
+					if (decryptFn && keyMaterial) {
+						// Use async version with decryption support
+						await migrateCaptures({ dryRun: false, decryptFn, keyMaterial });
+					} else {
+						migrateCapturesSync({ dryRun: false });
+					}
+				} catch (err) {
+					console.warn(`[initDb] Capture auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
+				}
+			});
+		}
 	}
-	const home = homedir();
-	return `${home}/.contextio/captures`;
+	
+	// Import existing .redact-meta.json sidecar files into SQLite
+	// This allows existing redaction metadata to be migrated to SQLite
+	importRedactionMetaFromFiles(getDefaultCaptureDir(), decryptFn);
 }
 
 /**

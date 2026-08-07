@@ -32,11 +32,12 @@ import { createRateLimiterPlugin } from "@contextio/proxy";
 import { createRetryPlugin } from "@contextio/proxy";
 
 import { isError, parseArgs } from "./args.js";
-import type { AttachArgs, ProxyArgs } from "./args.js";
+import type { AttachArgs, MigrateArgs, ProxyArgs } from "./args.js";
 import { getToolEnv } from "./tools.js";
 import { runMonitor } from "./monitor.js";
 import { runInspect } from "./inspect.js";
 import { dispatchCommand } from "./dispatch.js";
+import { runMigrateCaptures, runMigrateProviders, runMigrateAll } from "./commands/migrate.js";
 
 const _pkgPath = new URL("../package.json", import.meta.url);
 const _pkg = JSON.parse(fs.readFileSync(fileURLToPath(_pkgPath), "utf8")) as { version: string };
@@ -1028,6 +1029,46 @@ async function runAttach(args: AttachArgs): Promise<void> {
 	});
 }
 
+/** Handle migrate command. */
+async function runMigrate(args: MigrateArgs): Promise<void> {
+	switch (args.subcommand) {
+		case "captures":
+			await runMigrateCaptures({
+				captureDir: args.captureDir,
+				dryRun: args.dryRun,
+				force: args.force,
+				keyMaterial: args.keyMaterial,
+				maxFiles: args.maxFiles,
+			});
+			break;
+		case "providers":
+			await runMigrateProviders({
+				providersFile: args.providersFile,
+				dryRun: args.dryRun,
+				force: args.force,
+				noBackup: args.noBackup,
+			});
+			break;
+		case "all":
+			await runMigrateAll(
+				{
+					captureDir: args.captureDir,
+					dryRun: args.dryRun,
+					force: args.force,
+					keyMaterial: args.keyMaterial,
+					maxFiles: args.maxFiles,
+				},
+				{
+					providersFile: args.providersFile,
+					dryRun: args.dryRun,
+					force: args.force,
+					noBackup: args.noBackup,
+				}
+			);
+			break;
+	}
+}
+
 async function main(): Promise<void> {
 	const result = parseArgs(process.argv);
 
@@ -1046,6 +1087,7 @@ async function main(): Promise<void> {
 		},
 		runMonitor,
 		runInspect,
+		runMigrate,
 	});
 
 	if (typeof exitCode === "number") {

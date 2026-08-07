@@ -300,17 +300,24 @@ export async function GET(request: Request): Promise<Response> {
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
     const totalTrafficPoints = metrics.traffic.length;
-    const totalPages = Math.ceil(totalTrafficPoints / pageSize);
 
-    // Apply pagination
-    const startIndex = (page - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    const paginatedTraffic = metrics.traffic.slice(startIndex, endIndex);
+    // Server-side downsampling using shared function (when maxPoints is specified and no pagination)
+    // If maxPoints is not specified (unlimited), return all traffic data without downsampling or pagination
+    let totalPages: number;
+    let paginatedTraffic: TrafficMetric[];
 
-    // Server-side downsampling using shared function (only if maxPoints is specified and no pagination)
     if (maxPoints && !url.searchParams.has("page")) {
       metrics.traffic = downsampleTraffic(metrics.traffic, maxPoints);
+      totalPages = 1;
+      paginatedTraffic = metrics.traffic;
+    } else if (!maxPoints) {
+      // Unlimited - return all traffic data (already sorted newest-first)
+      // No pagination, no downsampling
+      totalPages = 1;
+      paginatedTraffic = metrics.traffic;
     } else {
+      totalPages = Math.ceil(totalTrafficPoints / pageSize);
+      paginatedTraffic = metrics.traffic.slice((page - 1) * pageSize, page * pageSize);
       metrics.traffic = paginatedTraffic;
     }
 
@@ -326,8 +333,8 @@ export async function GET(request: Request): Promise<Response> {
         byRule: metrics.redactionByPlaceholderSum,
       },
       pagination: {
-        page,
-        pageSize,
+        page: maxPoints ? 1 : page,
+        pageSize: maxPoints ? metrics.traffic.length : pageSize,
         totalPages,
         totalItems: totalTrafficPoints,
       },

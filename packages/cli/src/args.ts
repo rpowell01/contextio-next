@@ -120,13 +120,29 @@ export interface DoctorArgs {
 	command: "doctor";
 }
 
+/** Parsed arguments for `ctxio migrate`. */
+export interface MigrateArgs {
+	command: "migrate";
+	/** Subcommand: captures, providers, or all */
+	subcommand: "captures" | "providers" | "all";
+	/** Options for captures migration */
+	captureDir?: string;
+	providersFile?: string;
+	dryRun?: boolean;
+	force?: boolean;
+	keyMaterial?: string;
+	noBackup?: boolean;
+	maxFiles?: number;
+}
+
 /** Union of all successfully parsed command types. */
 export type ParsedArgs =
 	| ProxyArgs
 	| AttachArgs
 	| MonitorArgs
 	| InspectArgs
-	| DoctorArgs;
+	| DoctorArgs
+	| MigrateArgs;
 
 /** Returned when argument parsing fails. */
 export interface ParseError {
@@ -478,6 +494,100 @@ export function buildProgram(
 		.exitOverride()
 		.action(() => {
 			onResult({ command: "doctor" });
+		});
+
+	// --- migrate ---
+	const migrate = program
+		.command("migrate")
+		.description("Database migration utilities")
+		.addHelpText("after", `
+Examples:
+  $ contextio migrate captures                    # Index all capture files
+  $ contextio migrate captures --dry-run          # Preview capture migration
+  $ contextio migrate captures --force            # Re-index all captures
+  $ contextio migrate captures --max-files 100    # Limit for testing
+  $ contextio migrate providers                   # Import providers from JSON
+  $ contextio migrate providers --dry-run         # Preview provider migration
+  $ contextio migrate providers --no-backup       # Skip backup creation
+  $ contextio migrate all                         # Run both migrations
+  $ contextio migrate all --dry-run               # Preview all migrations
+		`);
+
+	// Capture migration subcommand
+	migrate
+		.command("captures")
+		.description("Index existing capture files into SQLite")
+		.option("--capture-dir <path>", "Custom capture directory (default: ~/.contextio/captures or LOGGER_CAPTURE_DIR)")
+		.option("--dry-run", "Preview changes without writing to database")
+		.option("--force", "Re-index already indexed captures")
+		.option("--key-material <key>", "Encryption key for decrypting encrypted captures")
+		.option("--max-files <number>", "Maximum files to process (for testing)")
+		.action((opts) => {
+			const maxFiles = opts.maxFiles ? parseInt(opts.maxFiles, 10) : undefined;
+			if (maxFiles !== undefined && (isNaN(maxFiles) || maxFiles < 1)) {
+				onResult({ error: `--max-files must be a positive integer` });
+				return;
+			}
+			onResult({
+				command: "migrate",
+				subcommand: "captures",
+				captureDir: opts.captureDir,
+				dryRun: opts.dryRun,
+				force: opts.force,
+				keyMaterial: opts.keyMaterial,
+				maxFiles,
+			});
+		});
+
+	// Provider migration subcommand
+	migrate
+		.command("providers")
+		.description("Import providers from providers.json into SQLite")
+		.option("--providers-file <path>", "Path to providers.json (default: /app/custom-policy/providers.json or PROVIDERS_FILE env)")
+		.option("--dry-run", "Preview changes without writing to database")
+		.option("--force", "Re-import already imported providers")
+		.option("--no-backup", "Skip creating backup of providers.json")
+		.action((opts) => {
+			onResult({
+				command: "migrate",
+				subcommand: "providers",
+				providersFile: opts.providersFile,
+				dryRun: opts.dryRun,
+				force: opts.force,
+				noBackup: opts.noBackup,
+			});
+		});
+
+	// All migrations subcommand
+	migrate
+		.command("all")
+		.description("Run both capture and provider migrations")
+		.option("--capture-dir <path>", "Custom capture directory")
+		.option("--providers-file <path>", "Path to providers.json")
+		.option("--dry-run", "Preview changes without writing to database")
+		.option("--force", "Re-index/re-import existing entries")
+		.option("--key-material <key>", "Encryption key for decrypting encrypted captures")
+		.option("--no-backup", "Skip creating backup of providers.json")
+		.option("--max-files <number>", "Maximum capture files to process (for testing)")
+		.action((opts) => {
+			onResult({
+				command: "migrate",
+				subcommand: "all",
+				captureDir: opts.captureDir,
+				providersFile: opts.providersFile,
+				dryRun: opts.dryRun,
+				force: opts.force,
+				keyMaterial: opts.keyMaterial,
+				noBackup: opts.noBackup,
+				maxFiles: (() => {
+					const val = opts.maxFiles ? parseInt(opts.maxFiles, 10) : undefined;
+					if (val !== undefined && (isNaN(val) || val < 1)) {
+						onResult({ error: `--max-files must be a positive integer` });
+						return undefined;
+					}
+					return val;
+				})(),
+			});
 		});
 
 	return program;

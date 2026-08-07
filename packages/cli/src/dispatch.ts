@@ -1,6 +1,7 @@
 import type {
   AttachArgs,
   InspectArgs,
+  MigrateArgs,
   MonitorArgs,
   ParsedArgs,
   ProxyArgs,
@@ -18,6 +19,7 @@ interface CommandHandlers {
   runProxy: ProxyHandlers;
   runMonitor: (args: MonitorArgs) => Promise<void>;
   runInspect: (args: InspectArgs) => Promise<void>;
+  runMigrate: (args: MigrateArgs) => Promise<void>;
 }
 
 export async function dispatchCommand(
@@ -48,6 +50,9 @@ export async function dispatchCommand(
       return undefined;
     case "inspect":
       await handlers.runInspect(result);
+      return undefined;
+    case "migrate":
+      await handlers.runMigrate(result);
       return undefined;
   }
 }
