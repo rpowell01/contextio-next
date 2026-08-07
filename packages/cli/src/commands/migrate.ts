@@ -122,11 +122,20 @@ export async function runMigrateAll(captureOptions: CaptureMigrationOptions, pro
 /**
  * Print migration result summary.
  */
-function printMigrationResult(type: string, result: MigrateCapturesResult | MigrateProvidersResult): void {
+function printMigrationResult(type: "Capture" | "Provider", result: MigrateCapturesResult | MigrateProvidersResult): void {
 	console.log(`\n[migrate] ${type} migration complete:`);
-	console.log(`  ${type === "Capture" ? "Files" : "Providers"} scanned: ${result.totalFiles ?? result.totalProviders}`);
-	console.log(`  ${type === "Capture" ? "Indexed" : "Imported"}: ${result.indexed ?? result.imported}`);
-	if (result.updated !== undefined) console.log(`  Updated: ${result.updated}`);
+	
+	if (type === "Capture") {
+		const r = result as MigrateCapturesResult;
+		console.log(`  Files scanned: ${r.totalFiles}`);
+		console.log(`  Indexed: ${r.indexed}`);
+	} else {
+		const r = result as MigrateProvidersResult;
+		console.log(`  Providers scanned: ${r.totalProviders}`);
+		console.log(`  Imported: ${r.imported}`);
+		console.log(`  Updated: ${r.updated}`);
+	}
+	
 	console.log(`  Skipped: ${result.skipped}`);
 	console.log(`  Failed: ${result.failed}`);
 }
