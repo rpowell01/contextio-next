@@ -2,6 +2,17 @@ import { type RedactionMetadata } from "@contextio/core/db";
 import { type TokenUsageResult } from "@/lib/sessions/utils";
 
 /**
+ * Lean statistics for redaction metadata.
+ * - Route caller (packages/web/app/api/admin/backfill-redaction-meta/route.ts): provides matches with renamed fields (preValue/postValue)
+ * - Script caller (packages/web/scripts/backfill-redaction-meta.ts): provides only totalRedactions and byRule (no matches)
+ */
+export interface LeanStats {
+  totalRedactions: number;
+  byRule: Record<string, number>;
+  matches?: Array<{ ruleId: string; preValue: string; postValue: string; path: string }>;
+}
+
+/**
  * Build the canonical RedactionMetadata object from capture data.
  * This is the single source of truth for metadata fields.
  * Returns both the RedactionMetadata for SQLite and the original timestamp string for JSON sidecar.
@@ -9,7 +20,7 @@ import { type TokenUsageResult } from "@/lib/sessions/utils";
 export function buildRedactionMetadata(params: {
   captureId: string;
   data: Record<string, unknown>;
-  leanStats: { totalRedactions: number; byRule: Record<string, number>; matches?: Array<{ ruleId: string; preValue: string; postValue: string; path: string }> };
+  leanStats: LeanStats;
   tokenUsage: TokenUsageResult;
   tokensPerSecond: number;
   successCount: number;
@@ -53,7 +64,7 @@ export function buildRedactionMetadata(params: {
  */
 export function metadataToJsonSidecar(
   metadata: RedactionMetadata,
-  leanStats: { totalRedactions: number; byRule: Record<string, number>; matches?: Array<{ ruleId: string; preValue: string; postValue: string; path: string }> },
+  leanStats: LeanStats,
   originalTimestamp: string | null
 ): Record<string, unknown> {
   return {
