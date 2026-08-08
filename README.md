@@ -1,906 +1,510 @@
 # ContextIO Next
 
-[![CI](https://github.com/larsderidder/contextio-next/actions/workflows/ci.yml/badge.svg)](https://github.com/larsderidder/contextio-next/actions/workflows/ci.yml)
-![npm](https://img.shields.io/npm/v/@contextio/cli)
+[![CI](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml/badge.svg)](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml)
+![Docker Pulls](https://img.shields.io/docker/pulls/ghcr.io/rpowell01/contextio-next)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ## MIT License and Attribution
 
-This project is forked from [contextio](https://github.com/larsderidder/contextio) by larsderidder, which is released under the MIT License. The original copyright and license are preserved in [LICENSE](LICENSE).
-
-This project is now maintained as **ContextIO Next**. All code, documentation, and references to the project identity on `github.com/larsderidder/contextio-next` reflect this fork.
-
-A local proxy that sits between your AI coding tools and the LLM APIs they call. Logs every request and response, optionally strips PII and secrets before anything leaves your machine.
-
-I built this because I get nervous sending data I don't see to LLMs. Now at least I know if they are gossiping about me.
-
-All your stuff passes through this thing, so the proxy has zero external dependencies. Read the code, it's small.
-
-**Looking for full observability?** Check out [Context Lens](https://github.com/larsderidder/context-lens), a web-based tracing and analytics platform built on top of contextio-next.
-
-## What's Included
-
-- **@contextio/cli**: CLI that wraps your tools with proxy + redaction + logging
-- **@contextio/proxy**: HTTP reverse proxy for LLM APIs with plugin system. Zero deps
-- **@contextio/redact**: Privacy and redaction plugin: presets, custom policies, reversible mode
-- **@contextio/logger**: Capture-to-disk plugin with atomic writes and session retention
-- **@contextio/core**: Shared types, routing, headers, token estimation, security scanning
-- **@contextio/web**: Next.js web UI for monitoring, inspection, and configuration (served on the same port as the proxy)
+This project is a fork of [contextio](https://github.com/larsderidder/contextio) by larsderidder, released under the MIT License. The original copyright and license are preserved in [LICENSE](LICENSE). This fork is maintained as **ContextIO Next** at `github.com/rpowell01/contextio-next`.
 
 ---
 
-## Table of Contents
+## Overview
 
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Running as a Docker Container](#running-as-a-docker-container)
-- [Docker Compose & Coolify](#docker-compose--coolify)
-- [AI Tool Configuration](#ai-tool-configuration)
-- [Proxy Commands (CLI)](#proxy-commands-cli)
-- [Environment Variables](#environment-variables)
-- [Architecture](#architecture)
-- [Tool Support](#tool-support)
-- [Redaction](#redaction)
-- [Logging](#logging)
-- [Web UI](#web-ui)
-- [Rate Limiting](#rate-limiting)
-- [Development](#development)
-- [License](#license)
+ContextIO Next is a single-port Docker proxy that sits between your AI coding tools (Claude CLI, Aider, Gemini CLI, Codex, Copilot, OpenCode, etc.) and LLM provider APIs (Anthropic, OpenAI, Google, NVIDIA, OpenRouter, etc.). It provides:
+
+- **Transparent proxy** — Zero-config routing based on request headers and paths
+- **Web UI** — Dashboard, session inspection, redaction viewer, metrics, and settings all on port 4040
+- **Redaction** — PII/secrets detection with built-in presets, custom policies, GLiNER LLM detector, and reversible mode
+- **Capture logging** — Every request/response written to disk with AES-256-GCM encryption at rest
+- **Rate limiting** — Per-session, per-provider token bucket with burst buffering
+- **Retry with backoff** — Exponential backoff for 429/5xx, plus NVIDIA `ResourceExhausted` special handling
+- **OIDC Authentication** — Optional SSO via Google, Microsoft, Okta, or any OIDC provider
+
+All configuration is via environment variables. The web UI settings persist to a SQLite database and JSON file, but **environment variables always take precedence** over settings file values.
 
 ---
 
-## Installation
-
-### CLI (recommended for local development)
+## Quick Start (Docker Compose)
 
 ```bash
-npm install -g @contextio/cli
-```
-
-### From Source
-
-```bash
-git clone https://github.com/larsderidder/contextio-next.git
+# 1. Clone and enter
+git clone https://github.com/rpowell01/contextio-next.git
 cd contextio-next
-pnpm install
-pnpm build
+
+# 2. Create environment file with required secrets
+cp .env.example .env
+# Edit .env and fill in:
+#   CSRF_SECRET=<32+ char random string>
+#   CONTEXTIO_LOGGER_ENCRYPTION_KEY=<32+ char random string>
+
+# 3. Start the stack
+docker compose up -d
+
+# 4. Access Web UI
+open http://localhost:4040
+```
+
+### Generate Required Secrets
+
+```bash
+# CSRF_SECRET (web UI session signing)
+openssl rand -base64 32
+
+# CONTEXTIO_LOGGER_ENCRYPTION_KEY (capture file encryption at rest)
+openssl rand -base64 32
 ```
 
 ---
 
-## Quick Start
+## Docker Deployment
 
-### Log everything
+### Pre-Built Images
 
-```bash
-ctxio proxy -- claude
-```
-
-### Log and redact PII
-
-```bash
-ctxio proxy --redact -- claude
-```
-
-### Log, redact, and restore originals in responses
-
-```bash
-ctxio proxy --redact-reversible -- claude
-```
-
-### Works with multiple tools at once
-
-```bash
-ctxio proxy --redact # start the proxy
-ctxio attach claude # in another terminal
-ctxio attach gemini # in another terminal
-```
-
-### Run in the background
-
-```bash
-ctxio proxy -d --redact
-ctxio attach claude
-ctxio proxy stop
-```
-
-`contextio-next` is the longer alias for `ctxio` for those who just _love_ typing.
-
----
-
-## Running as a Docker Container
-
-A pre-built Docker image is published to GitHub Container Registry.
-
-### Prerequisites
-
-- Docker 20.10+ or Docker Compose 2.0+
-- (Optional, for some tools) `pipx install mitmproxy`
-
-### Using Docker Directly
-
-```bash
-# Pull the latest image
-docker pull ghcr.io/larsderidder/contextio-next:latest
-
-# Run with default settings (logging + web UI, redaction off)
-docker run -d -p 4040:4040 \
-  ghcr.io/larsderidder/contextio-next:latest
-
-# Enable redaction (PII preset)
-docker run -d -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS=/app/redact-plugin.js,/app/logger-plugin.js \
-  -e REDACT_PRESET=pii \
-  ghcr.io/larsderidder/contextio-next:latest
-
-# Mount a volume to persist captures
-docker run -d -p 4040:4040 \
-  -v $(pwd)/captures:/app/captures \
-  -v $(pwd)/policy:/app/custom-policy \
-  ghcr.io/larsderidder/contextio-next:latest
-
-# With a custom redaction policy
-docker run -d -p 4040:4040 \
-  -e CONTEXT_PROXY_PLUGINS=/app/redact-plugin.js,/app/logger-plugin.js \
-  -e REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json \
-  -v $(pwd)/my-policy.json:/app/custom-policy/custom-policy.json:ro \
-  ghcr.io/larsderidder/contextio-next:latest
-```
-
-> **Note:** The web UI and proxy API run on the **same port (4040)**. The container exposes only port 4040.
-
-### Available Image Tags
+Images are published to GitHub Container Registry:
 
 | Tag | Description |
-|:---|:---|
-| `latest` | Latest build from `main` branch |
-| `v0.1.1` | Specific version (semver) |
-| `0.1` | Minor version (auto-updates patch) |
-| `0` | Major version (auto-updates minor/patch) |
-| `main` | Latest commit on `main` branch |
-| `main-sha-abc123` | Specific commit SHA |
+|-----|-------------|
+| `ghcr.io/rpowell01/contextio-next:main` | Latest build from `main` branch |
+| `ghcr.io/rpowell01/contextio-next:vX.Y.Z` | Specific version (semver) |
+| `ghcr.io/rpowell01/contextio-next:main-sha-<sha>` | Specific commit |
 
----
+The image includes a pre-built GLiNER ONNX model (copied from `ghcr.io/rpowell01/contextio-gliner-model:0.2.28`) for LLM-based PII detection.
 
-## Docker Compose & Coolify
+### Docker Compose (Recommended)
 
-A `docker-compose.yml` is included at the repository root.
+The included `docker-compose.yml` uses the pre-built image with named volumes for persistence:
 
-```bash
-docker compose up -d
+```yaml
+services:
+  contextio-next:
+    image: ghcr.io/rpowell01/contextio-next:main
+    ports:
+      - "4040:4040"
+    volumes:
+      - captures:/app/captures
+      - policy:/app/custom-policy
+      - settings:/home/node/.contextio-next
+    environment:
+      # See Environment Variables section below
+    restart: unless-stopped
 ```
 
-See [docker/README.md](docker/README.md) for full Docker-specific documentation.
+### Docker Run (Standalone)
+
+```bash
+docker run -d -p 4040:4040 \
+  -v captures:/app/captures \
+  -v policy:/app/custom-policy \
+  -v settings:/home/node/.contextio-next \
+  -e CSRF_SECRET=<your-secret> \
+  -e CONTEXTIO_LOGGER_ENCRYPTION_KEY=<your-key> \
+  ghcr.io/rpowell01/contextio-next:main
+```
 
 ### Coolify Deployment
 
-When deploying to Coolify, configure these **Persistent Directories** mappings:
+When deploying to Coolify, configure these **Persistent Directories**:
 
 | Source Path | Destination Path |
-|:---|:---|
+|-------------|------------------|
 | `/data/coolify/applications/contextio-next/captures` | `/app/captures` |
 | `/data/coolify/applications/contextio-next/policy` | `/app/custom-policy` |
 | `/data/coolify/applications/contextio-next/settings` | `/home/node/.contextio-next` |
 
-Set the following environment variable in Coolify:
-
-```
-CSRF_SECRET=<your-generated-secret>
-```
-
-Coolify injects `CSRF_SECRET` at runtime. Without it, CSRF protection will fail in production.
-
----
-
-## AI Tool Configuration
-
-Each tool has a specific way to point it at the proxy. The proxy classifies requests by provider and routes them accordingly.
-
-### Claude CLI
-
-```bash
-ANTHROPIC_BASE_URL=http://127.0.0.1:4040/claude ctxio proxy -- claude
-```
-
-**What ContextIO-Next does:** Sets `ANTHROPIC_BASE_URL` to `http://127.0.0.1:4040/claude`. The proxy strips the `/claude` source tag and forwards to `https://api.anthropic.com`.
-
-### Aider
-
-```bash
-ctxio proxy -- aider
-```
-
-**What ContextIO-Next does:** Sets both `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` to `http://127.0.0.1:4040/aider`.
-
-### Gemini CLI
-
-```bash
-ctxio proxy -- gemini
-```
-
-**What ContextIO-Next does:** Sets:
-- `GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:4040/gemini/`
-- `CODE_ASSIST_ENDPOINT=http://127.0.0.1:4040/gemini`
-
-### Pi
-
-Pi uses the OpenAI-compatible provider. Configure the base URL:
-
-```bash
-OPENAI_BASE_URL=http://127.0.0.1:4040/pi ctxio proxy -- pi
-```
-
-### Codex CLI (OpenAI)
-
-Codex ignores base URL env vars. It requires mitmproxy for TLS termination.
-
-```bash
-pipx install mitmproxy
-mitmdump --version # run once to generate CA cert
-
-ctxio proxy -- codex
-```
-
-**What ContextIO-Next does:** Starts mitmproxy in upstream mode and chains traffic through the ContextIO-Next proxy. No env vars needed on the child process.
-
-### Copilot CLI
-
-Same as Codex — requires mitmproxy.
-
-```bash
-pipx install mitmproxy
-ctxio proxy -- copilot
-```
-
-### OpenCode
-
-Same as Codex and Copilot — requires mitmproxy.
-
-```bash
-pipx install mitmproxy
-ctxio proxy -- opencode
-```
-
-### Other / Custom Tools
-
-For tools not explicitly listed, the CLI sets both `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` to `http://127.0.0.1:4040/<tool-name>`. This covers most tools that respect those env vars.
-
-### Manual Docker / External Tool Configuration
-
-When running the proxy in Docker, configure your AI tools to point at the proxy:
-
-```
-ANTHROPIC_BASE_URL=http://host.docker.internal:4040/claude
-OPENAI_BASE_URL=http://host.docker.internal:4040/claude
-```
-
-Replace `host.docker.internal` with your Docker host IP if on Linux.
-
-For tools using mitmproxy (Codex, Copilot, OpenCode), set:
-
-```
-HTTPS_PROXY=http://host.docker.internal:8080
-```
-
----
-
-## Proxy Commands (CLI)
-
-### Start the Proxy (Standalone)
-
-Runs until you press Ctrl+C:
-
-```bash
-ctxio proxy [--redact] [--log-dir ./captures]
-```
-
-### Wrap a Tool
-
-Starts proxy, runs tool, cleans up when tool exits:
-
-```bash
-ctxio proxy [flags] -- claude
-ctxio proxy --redact -- aider
-```
-
-### Background Mode (Detached)
-
-```bash
-ctxio proxy -d --redact # start in background
-ctxio proxy status # check if running
-ctxio proxy stop # stop background proxy
-```
-
-### Attach
-
-Connect a tool to an already-running proxy:
-
-```bash
-ctxio attach <tool>
-```
-
-Works with both standalone and background proxies. Multiple tools can attach to the same proxy.
-
-### Monitor
-
-Live view of traffic passing through the proxy:
-
-```bash
-ctxio monitor # watch all traffic
-ctxio monitor a1b2c3d4 # filter to one session ID
-```
-
-Shows request/response pairs as they arrive, with timing, token counts, and streaming status. Press Ctrl+C to exit.
-
-### Inspect
-
-Analyze captured sessions:
-
-```bash
-ctxio inspect # list all sessions
-ctxio inspect a1b2c3d4 # show session details
-ctxio inspect a1b2c3d4 --stats # token stats per request
-```
-
-### Replay
-
-Re-send a captured request to the API (experimental):
-
-```bash
-ctxio replay capture-file.json
-```
-
-Requires the correct API key for the provider. Shows the new response and highlights any differences from the original.
-
-### Export
-
-Bundle session captures into a shareable tarball (experimental):
-
-```bash
-ctxio export # export all sessions
-ctxio export a1b2c3d4 # export one session
-ctxio export --redact # strip PII before bundling
-```
-
-Creates `contextio-next-export-YYYY-MM-DD-HHMMSS.tar.gz` with all matching capture files.
-
-### Doctor
-
-Check environment and configuration:
-
-```bash
-ctxio doctor
-```
-
-Verifies:
-- mitmproxy installation and CA cert (if needed)
-- Capture directory permissions
-- Port availability (4040, 8080)
-- Lockfile state
-- Background proxy status
-
----
-
-## Environment Variables
-
-All configuration for the Docker image is via environment variables.
-
-### Required
-
-| Env Var | Description |
-|:---|:---|
-| `CSRF_SECRET` | A secret string for CSRF protection in production. **Required when running behind a public-facing load balancer or reverse proxy.** Coolify injects this automatically. Without it, CSRF validation will fail for write operations in the web UI. |
-
-### Core Proxy
-
-| Env Var | Default | Description |
-|:---|:---|:---|
-| `CONTEXT_PROXY_BIND_HOST` | `0.0.0.0` | Bind address. In CLI mode, the default is `127.0.0.1`. |
-| `CONTEXT_PROXY_PORT` | `4040` | Port the proxy (and web UI) listen on. |
-| `CONTEXT_PROXY_PLUGINS` | `/app/logger-plugin.js` | Comma-separated plugin paths to load at startup. |
-| `CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE` | `0` | Allow requests to override the target URL via `x-target-url` header. |
-| `STRICT_URL_FORWARDING` | `false` | When `true`, ignore upstream URL overrides from tool headers and use only configured upstreams. |
-| `LOG_TRAFFIC` | `false` | Log all raw traffic to stdout (debug). |
-| `DEBUG_ROUTING` | `false` | Log detailed request classification and routing decisions. |
-| `LOG_LEVEL` | `info` | Logging verbosity. |
-
-### Logging (Plugin)
-
-| Env Var | Default | Description |
-|:---|:---|:---|
-| `LOGGER_CAPTURE_DIR` | `/app/captures` | Directory where capture JSON files are written. |
-| `LOGGER_MAX_SESSIONS` | `0` | Max sessions to retain. `0` = unlimited. |
-| `LOGGER_CAPTURE_MAX_AGE` | `0` | Max age of captures in days. `0` = disabled. |
-| `LOGGER_CAPTURE_CLEANUP_INTERVAL` | `24` | Cleanup interval in hours. |
-| `LOGGER_CAPTURE_CLEANUP_ENABLED` | `true` (if maxAge > 0) | Enable automatic time-based cleanup. |
-
-### Redaction (Plugin)
-
-| Env Var | Default | Description |
-|:---|:---|:---|
-| `REDACT_PRESET` | `pii` | Preset: `secrets`, `pii`, or `strict`. |
-| `REDACT_REVERSIBLE` | `false` | Restore original values in the response stream using numbered placeholders. |
-| `REDACT_POLICY_FILE` | _(none)_ | Path to a custom policy JSON file. Overrides `REDACT_PRESET` when set. |
-| `REDACT_CAPTURE_DIR` | _(same as logger)_ | Directory for redaction metadata. Defaults to `LOGGER_CAPTURE_DIR`. |
-
-### Encryption at Rest
-
-| Env Var | Default | Description |
-|:---|:---|:---|
-| `CONTEXTIO_LOGGER_ENCRYPTION_ENABLED` | `false` | Enable AES-256 encryption for capture files on disk. |
-| `CONTEXTIO_LOGGER_ENCRYPTION_KEY` | _(none)_ | Encryption key. **Required when encryption is enabled.** |
-
-Optional encryption overrides:
-
-| Env Var | Default | Description |
-|:---|:---|:---|
-| `CONTEXTIO_LOGGER_ENCRYPTION_KEY_PROVIDER` | `env` | Key material source: `env` reads from `CONTEXTIO_LOGGER_ENCRYPTION_KEY`; `static` uses `CONTEXTIO_LOGGER_ENCRYPTION_STATIC_KEY`. |
-| `CONTEXTIO_LOGGER_ENCRYPTION_KEY_LENGTH` | `32` | Key length in bytes. |
-| `CONTEXTIO_LOGGER_ENCRYPTION_STATIC_KEY` | _(none)_ | Static key value (only when `keyProvider=static`). |
-
-### Upstream Providers
-
-| Env Var | Default | Description |
-|:---|:---|:---|
-| `UPSTREAM_OPENAI_URL` | `https://api.openai.com` | OpenAI platform API base URL. |
-| `UPSTREAM_ANTHROPIC_URL` | `https://api.anthropic.com` | Anthropic API base URL. |
-| `UPSTREAM_CHATGPT_URL` | `https://chatgpt.com` | ChatGPT backend API base URL. |
-| `UPSTREAM_GEMINI_URL` | `https://generativelanguage.googleapis.com` | Gemini API base URL. |
-| `UPSTREAM_GEMINI_CODE_ASSIST_URL` | `https://cloudcode-pa.googleapis.com` | Gemini Code Assist base URL. |
-| `UPSTREAM_VERTEX_URL` | `https://us-central1-aiplatform.googleapis.com` | Google Vertex AI base URL. |
-| `UPSTREAM_NVIDIA_URL` | `https://integrate.api.nvidia.com` | NVIDIA NIM API base URL. |
-| `UPSTREAM_KILO_URL` | `https://api.kilo.ai/api/gateway` | Kilo Code Gateway base URL. |
-| `UPSTREAM_OPENROUTER_URL` | `https://openrouter.ai/api` | OpenRouter base URL. |
-
-> **Note:** The proxy strips any trailing `/v1` from these URLs at startup to avoid double-prefixing API paths.
-
-### Web UI
-
-| Env Var | Default | Description |
-|:---|:---|:---|
-| `NEXT_PUBLIC_SITE_URL` | `http://localhost:4041` | Public URL for the web UI (used for API client connections and display). |
+Set `CSRF_SECRET` in Coolify environment variables (it injects this at runtime).
 
 ---
 
 ## Architecture
 
 ```
-Tool ─HTTP─▶ Proxy (:4040) ─HTTPS─▶ api.anthropic.com / api.openai.com / generativelanguage.googleapis.com
-│  plugin pipeline
-│  (redact → log)
-│
-│  capture files on disk
-│
-└── Web UI (Next.js) served on the same port 4040
+┌─────────────────────────────────────────────────────────────┐
+│                    ContextIO Next (port 4040)               │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ HTTP Reverse Proxy                                   │   │
+│  │  • Provider classification (Anthropic, OpenAI, etc.) │   │
+│  │  • Request/Response routing                          │   │
+│  │  • Plugin pipeline: redact → logger → rate-limiter   │   │
+│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Next.js Web UI (same port, path-based routing)      │   │
+│  │  /admin/*    → Proxy admin API                      │   │
+│  │  /chat/*     → Proxy streaming endpoints            │   │
+│  │  /v1/*       → Proxy OpenAI-compat endpoints        │   │
+│  │  /*          → Next.js app (Dashboard, Sessions,    │   │
+│  │                Redactions, Metrics, Settings)       │   │
+│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ SQLite Database (/app/custom-policy/contextio.db)   │   │
+│  │  • Provider configurations (API keys, base URLs)    │   │
+│  │  • Capture metadata index                           │   │
+│  │  • Redaction placeholder mappings (reversible mode) │   │
+│  │  • Settings persistence                             │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+   anthrophic.com      api.openai.com      generativelanguage.googleapis.com
+   integrate.api.nvidia.com  openrouter.ai/api  ...etc
 ```
 
-The proxy is a single Node.js process combining:
-1. **HTTP reverse proxy** — classifies requests by provider (Anthropic, OpenAI, Gemini, etc.) and forwards them
-2. **Plugin pipeline** — runs `onRequest`, `onResponse`, and `onCapture` hooks
-3. **Next.js web UI** — served on the same port via path-based routing:
-   - `/admin/*` → Proxy admin API
-   - `/chat/*`, `/v1/*` → Proxy routing
-   - Everything else → Next.js app (`/api/*` endpoints and UI)
-
-The proxy has zero npm dependencies (Node.js built-ins + `@contextio/core` only). Plugins like redact and logger are separate packages that hook into the proxy's request/response lifecycle.
-
-### Packages
-
-| Package | Description |
-|:---|:---|
-| [`@contextio/cli`](packages/cli) | CLI that wraps your tools with proxy + redaction + logging |
-| [`@contextio/proxy`](packages/proxy) | HTTP reverse proxy for LLM APIs with plugin system. Zero deps |
-| [`@contextio/redact`](packages/redact) | Privacy and redaction plugin: presets, custom policies, reversible mode |
-| [`@contextio/logger`](packages/logger) | Capture-to-disk plugin with atomic writes and session retention |
-| [`@contextio/core`](packages/core) | Shared types, routing, headers, token estimation, security scanning |
-| [`@contextio/web`](packages/web) | Next.js web UI for monitoring, inspection, and configuration |
+Single Node.js process. Zero npm dependencies in the proxy core. Plugins are separate packages loaded at startup.
 
 ---
 
-## Tool Support
+## Environment Variables
 
-| Tool | Method | Redaction | Logging |
-|:---|:---|:---|:---|
-| Claude CLI | `ANTHROPIC_BASE_URL` | ✓ | ✓ |
-| Aider | `ANTHROPIC_BASE_URL` + `OPENAI_BASE_URL` | ✓ | ✓ |
-| Gemini CLI | `GOOGLE_GEMINI_BASE_URL` + `CODE_ASSIST_ENDPOINT` | ✓ | ✓ |
-| Pi | `OPENAI_BASE_URL` | ✓ | ✓ |
-| Codex CLI | mitmproxy + proxy chain | ✓ | ✓ |
-| OpenCode | mitmproxy + proxy chain | ✓ | ✓ |
-| Copilot CLI | mitmproxy + proxy chain | ✓ | ✓ |
+All configuration is via environment variables. **Environment variables always override settings file values** (`/app/custom-policy/settings.json`).
 
-Tools that accept a base URL override (Claude, Aider, Pi, Gemini) get routed through the proxy directly. Tools that don't (Codex, Copilot, OpenCode) go through mitmproxy first to terminate TLS, then chain into the ContextIO Next proxy for redaction and logging. ContextIO Next handles starting and stopping mitmproxy automatically.
+### Required Secrets (No Defaults)
 
-Codex, OpenCode, and Copilot require mitmproxy to be installed:
+| Variable | Description |
+|----------|-------------|
+| `CSRF_SECRET` | Session cookie signing secret for web UI (min 32 chars). Generate: `openssl rand -base64 32` |
+| `CONTEXTIO_LOGGER_ENCRYPTION_KEY` | AES-256-GCM encryption key for capture files at rest (min 32 chars). Generate: `openssl rand -base64 32` |
 
+### Core Proxy
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CONTEXT_PROXY_BIND_HOST` | `0.0.0.0` | Bind address |
+| `CONTEXT_PROXY_PORT` | `4040` | Port for proxy + web UI |
+| `CONTEXT_PROXY_PLUGINS` | `/app/redact-plugin.js,/app/logger-plugin.js` | Comma-separated plugin paths |
+| `CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE` | `0` | Allow `x-target-url` header to override upstream |
+| `STRICT_URL_FORWARDING` | `false` | Ignore upstream overrides from tool headers, use only configured upstreams |
+| `LOG_TRAFFIC` | `false` | Log raw traffic to stdout (debug) |
+| `DEBUG_ROUTING` | `false` | Log request classification/routing decisions |
+| `LOG_LEVEL` | `info` | Log verbosity |
+
+### Capture Logging (Logger Plugin)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOGGER_CAPTURE_DIR` | `/app/captures` | Directory for capture JSON files |
+| `LOGGER_MAX_SESSIONS` | `0` | Max sessions to retain (0 = unlimited) |
+| `LOGGER_CAPTURE_MAX_AGE` | `0` | Max age in days (0 = disabled) |
+| `LOGGER_CAPTURE_CLEANUP_INTERVAL` | `24` | Cleanup interval in hours |
+| `LOGGER_CAPTURE_CLEANUP_ENABLED` | `true` (if maxAge > 0) | Enable time-based cleanup |
+
+### Encryption at Rest
+
+When enabled, all capture files are encrypted with **AES-256-GCM** (PBKDF2, 100k iterations, per-file nonces). The encryption key is derived from `CONTEXTIO_LOGGER_ENCRYPTION_KEY`.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CONTEXTIO_LOGGER_ENCRYPTION_ENABLED` | `false` | Enable encryption |
+| `CONTEXTIO_LOGGER_ENCRYPTION_KEY` | *(required if enabled)* | Master encryption key (base64, 32+ chars) |
+| `CONTEXTIO_LOGGER_ENCRYPTION_KEY_PROVIDER` | `env` | Key source: `env` (from above), `static` (from `CONTEXTIO_LOGGER_ENCRYPTION_STATIC_KEY`) |
+| `CONTEXTIO_LOGGER_ENCRYPTION_KEY_LENGTH` | `32` | Key length in bytes |
+| `CONTEXTIO_LOGGER_ENCRYPTION_STATIC_KEY` | *(optional)* | Static key when provider=static |
+
+> **Security**: Keys **must** come from environment variables or Docker secrets — never from the web UI settings file.
+
+### Redaction (Redact Plugin)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDACT_PRESET` | `pii` | Preset: `secrets`, `pii`, or `strict` |
+| `REDACT_REVERSIBLE` | `false` | Restore originals in response stream using numbered placeholders |
+| `REDACT_POLICY_FILE` | *(none)* | Path to custom policy JSON (overrides preset) |
+| `REDACT_CAPTURE_DIR` | *(same as logger)* | Directory for redaction metadata sidecars |
+
+**Presets:**
+- `secrets` — API keys, tokens, private keys, AWS credentials
+- `pii` — Everything in `secrets` + email, SSN, credit cards, US phone numbers
+- `strict` — Everything in `pii` + IPv4 addresses, dates of birth
+
+### GLiNER LLM Redaction Detector
+
+Local ONNX model for context-aware PII detection (no external API calls).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDACT_GLINER_ENABLED` | `false` | Enable GLiNER detector |
+| `REDACT_GLINER_THRESHOLD` | `0.5` | Confidence threshold (0-1) |
+| `REDACT_GLINER_LABELS` | *(built-in)* | Comma-separated custom labels |
+| `REDACT_GLINER_MODEL_PATH` | `/app/models/gliner_model.onnx` | Model file path |
+
+Built-in labels: `person`, `organization`, `location`, `email`, `phone_number`, `credit_card`, `ssn`, `api_key`, `password`, `ip_address`, `date_of_birth`, `address`, `passport_number`, `driver_license`, `bank_account`, `crypto_wallet`, `medical_record_number`, `health_plan_beneficiary`, `national_id`, `vehicle_vin`, `license_plate`.
+
+### Rate Limiter (Built-In)
+
+Token bucket per `(sessionId, provider)` with burst buffer and request queue.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RATE_LIMITER_ENABLED` | `true` | Master enable/disable |
+| `CONTEXTIO_RATE_LIMIT_<PROVIDER>_MAX_REQUESTS` | `60` | Max requests per window |
+| `CONTEXTIO_RATE_LIMIT_<PROVIDER>_WINDOW_MS` | `60000` | Window in milliseconds |
+| `CONTEXTIO_RATE_LIMIT_<PROVIDER>_BUFFER` | `10` | Burst buffer capacity |
+
+Valid providers: `openai`, `anthropic`, `chatgpt`, `gemini`, `vertex`, `nvidia`, `openrouter`, `kilo`, `unknown`.
+
+**Example** — 100 req/min for Anthropic with 20 burst:
 ```bash
-pipx install mitmproxy
-mitmdump --version # run once to generate the CA cert
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_MAX_REQUESTS=100
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_WINDOW_MS=60000
+CONTEXTIO_RATE_LIMIT_ANTHROPIC_BUFFER=20
 ```
 
-Any tool not in this list falls through to a default that sets both `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL`, which covers most tools that respect those env vars.
+### Retry Plugin (Built-In)
+
+Exponential backoff with jitter for 429/5xx responses, plus streaming SSE error detection.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CONTEXTIO_RETRY_ENABLED` | `true` | Enable retry plugin |
+| `CONTEXTIO_RETRY_MAX_ATTEMPTS` | `3` | Max retry attempts |
+| `CONTEXTIO_RETRY_BASE_DELAY_MS` | `500` | Base delay for exponential backoff |
+| `CONTEXTIO_RETRY_MAX_DELAY_MS` | `30000` | Cap on delay |
+| `CONTEXTIO_RETRY_JITTER_FACTOR` | `0.1` | Jitter (0-1) |
+| `CONTEXTIO_RETRY_RETRYABLE_STATUS_CODES` | `429,500,502,503,504` | Status codes to retry |
+| `CONTEXTIO_RETRY_PROVIDER_OVERRIDES` | *(JSON)* | Per-provider config overrides |
+
+**NVIDIA Worker Retry**: Special handling for NVIDIA `ResourceExhausted` errors — appends a `"continue"` user message to the request body and retries (configurable via provider overrides).
+
+### Upstream Provider URLs
+
+| Variable | Default |
+|----------|---------|
+| `UPSTREAM_OPENAI_URL` | `https://api.openai.com` |
+| `UPSTREAM_ANTHROPIC_URL` | `https://api.anthropic.com` |
+| `UPSTREAM_CHATGPT_URL` | `https://chatgpt.com` |
+| `UPSTREAM_GEMINI_URL` | `https://generativelanguage.googleapis.com` |
+| `UPSTREAM_GEMINI_CODE_ASSIST_URL` | `https://cloudcode-pa.googleapis.com` |
+| `UPSTREAM_VERTEX_URL` | `https://us-central1-aiplatform.googleapis.com` |
+| `UPSTREAM_NVIDIA_URL` | `https://integrate.api.nvidia.com` |
+| `UPSTREAM_KILO_URL` | `https://api.kilo.ai/api/gateway` |
+| `UPSTREAM_OPENROUTER_URL` | `https://openrouter.ai/api` |
+
+> Trailing `/v1` is stripped at startup to avoid double-prefixing.
+
+### OIDC Authentication
+
+Optional SSO via any OIDC provider (Google, Microsoft, Okta, Auth0, Keycloak, etc.).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CONTEXTIO_OIDC_ENABLED` | `false` | Enable OIDC |
+| `CONTEXTIO_OIDC_ISSUER` | *(required)* | OIDC issuer URL (e.g., `https://accounts.google.com`) |
+| `CONTEXTIO_OIDC_CLIENT_ID` | *(required)* | OAuth2 client ID |
+| `CONTEXTIO_OIDC_CLIENT_SECRET` | *(required)* | OAuth2 client secret |
+| `CONTEXTIO_OIDC_SESSION_SECRET` | *(required)* | Session cookie signing secret (min 32 chars) |
+| `CONTEXTIO_OIDC_PUBLIC_URL` | *(required)* | Public callback URL (e.g., `https://contextio.example.com`) |
+| `CONTEXTIO_OIDC_SCOPE` | `openid profile email` | Space-separated scopes |
+
+> **Secrets** (`CLIENT_SECRET`, `SESSION_SECRET`) **must** come from environment variables — never from settings file.
+
+**Legacy vars (deprecated, all 5 required together):**
+`OIDC_ENABLED`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_SCOPE`
+
+### Web UI
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NEXT_PUBLIC_SITE_URL` | `http://localhost:4040` | Public URL for web UI (used for API client connections) |
+| `CONTEXTIO_DB_PATH` | `/app/custom-policy/contextio.db` | SQLite database path |
 
 ---
 
-## Redaction
+## Client Configuration
 
-Three built-in presets, or bring your own policy file.
+Point your AI tool at the proxy. **All tools require the `x-contextio-provider` header** (or `CONTEXT_PROXY_DEFAULT_PROVIDER` env var) to identify which upstream to route to.
 
-### Presets
+### Required Headers
 
-| Preset | What it catches |
-|:---|:---|
-| `secrets` | API keys, tokens, private keys, AWS credentials |
-| `pii` | Everything in `secrets`, plus email, SSN, credit cards, US phone numbers |
-| `strict` | Everything in `pii`, plus IPv4 addresses, dates of birth |
+| Header | Values | Description |
+|--------|--------|-------------|
+| `x-contextio-provider` | `anthropic`, `openai`, `google`, `openrouter`, `custom` | **Required** — identifies target provider |
+| `x-api-key` | `sk-...` | Provider API key (if not configured in Settings → Providers) |
 
-### Usage
+### Optional Headers
 
+| Header | Values | Description |
+|--------|--------|-------------|
+| `x-contextio-redact` | `true`, `false` | Enable/disable redaction per-request (overrides global) |
+| `x-contextio-log` | `true`, `false` | Enable/disable capture logging per-request |
+| `x-anthropic-baseurl` | `https://...` | Override Anthropic base URL per-request |
+| `x-openai-baseurl` | `https://...` | Override OpenAI base URL per-request |
+| `x-google-baseurl` | `https://...` | Override Google/Gemini base URL per-request |
+| `x-openrouter-baseurl` | `https://...` | Override OpenRouter base URL per-request |
+| `x-custom-baseurl` | `https://...` | Override custom provider base URL per-request |
+
+### Per-Tool Examples
+
+**Claude CLI:**
 ```bash
-ctxio proxy --redact # "pii" preset (default)
-ctxio proxy --redact-preset secrets # API keys and tokens only
-ctxio proxy --redact-preset strict # PII + IPs, dates of birth
-ctxio proxy --redact-policy ./my-rules.json # custom rules
+export ANTHROPIC_BASE_URL=http://localhost:4040
+export ANTHROPIC_API_KEY=x-contextio-provider:anthropic,x-api-key:sk-ant-...
+# Or use headers directly in your tool config
 ```
 
-Rules are context-gated where it makes sense. `[SSN_REDACTED]` on its own is left alone; `My SSN is [SSN_REDACTED]` gets redacted.
-
-### Reversible Mode
-
+**OpenAI / Codex / Aider:**
 ```bash
-ctxio proxy --redact-reversible -- claude
+export OPENAI_BASE_URL=http://localhost:4040/v1
+export OPENAI_API_KEY=x-contextio-provider:openai,x-api-key:sk-...
 ```
 
-Replaces values with numbered placeholders, then restores them in the response stream:
-
-```
-You: "My email is [EMAIL_REDACTED]"
-LLM sees: "My email is [EMAIL_1]"
-LLM says: "I've noted [EMAIL_1] as your contact"
-You see: "I've noted [EMAIL_REDACTED] as your contact"
-```
-
-Same value always maps to the same placeholder within a session. Works across Anthropic, OpenAI, and Gemini streaming formats.
-
-This is opt-in. It keeps originals in memory and reconstructs SSE events on the fly. Stable enough for daily use, but it hasn't had months of production mileage yet.
-
-### Custom Policies
-
-```jsonc
-{
-  "extends": "pii",
-  "rules": [
-    { "id": "employee-id", "pattern": "EMP-\\d{5,}", "replacement": "[EMPLOYEE_ID]" }
-  ],
-  "allowlist": {
-    "strings": ["support@mycompany.com"],
-    "patterns": ["test-\\d+@example\\.com"]
-  },
-  "paths": {
-    "only": ["messages[*].content", "system"],
-    "skip": ["model", "max_tokens"]
-  }
-}
-```
-
-Full reference in [docs/redaction-policy.md](docs/redaction-policy.md). Examples in [examples/](examples/).
-
-See [docs/FAQ.md](docs/FAQ.md) for common questions about redaction, troubleshooting, and usage patterns.
-
----
-
-## Logging
-
-On by default. Disable with `--no-log`.
-
+**Gemini CLI:**
 ```bash
-ctxio proxy --log-dir ./my-captures -- claude # custom directory
-ctxio proxy --log-max-sessions 10 -- claude # prune old sessions on startup
+export GOOGLE_GEMINI_BASE_URL=http://localhost:4040
+export GEMINI_API_KEY=x-contextio-provider:google,x-api-key:...
 ```
 
-### Capture Files
-
-Each capture file is a complete request/response pair:
-
-```
-claude_a1b2c3d4_1739000000000-000001.json
-```
-
-```json
-{
-  "timestamp": "2026-02-15T20:50:00.815Z",
-  "sessionId": "67bb9e8f",
-  "source": "claude",
-  "provider": "anthropic",
-  "apiFormat": "anthropic-messages",
-  "targetUrl": "https://api.anthropic.com/v1/messages",
-  "requestBody": { "model": "claude-sonnet-4-20250514", "messages": ["..."] },
-  "responseStatus": 200,
-  "responseIsStreaming": true,
-  "responseBody": "data: {\"type\":\"content_block_delta\",...}",
-  "timings": { "total_ms": 2002 }
-}
-```
-
-Actual files include headers, byte counts, and detailed timings. Sensitive headers (`Authorization`, `x-api-key`, `cookie`, `set-cookie`, etc.) are stripped before writing.
-
-### Retention
-
-Set a session retention limit:
-
+**OpenRouter:**
 ```bash
-ctxio proxy --log-max-sessions 10 -- claude
+export OPENROUTER_BASE_URL=http://localhost:4040/v1
+export OPENROUTER_API_KEY=x-contextio-provider:openrouter,x-api-key:sk-or-...
 ```
 
-On startup, the oldest sessions are pruned if the total exceeds the limit.
-
-Or delete manually:
-
+**Custom Provider:**
 ```bash
-rm -rf ~/.contextio-next/captures/
+export CUSTOM_BASE_URL=http://localhost:4040/v1
+export CUSTOM_API_KEY=x-contextio-provider:custom,x-api-key:...,x-custom-baseurl:https://my-proxy.example.com
 ```
 
-### Automated Cleanup
-
-Configure time-based retention via environment variables or via the web UI settings:
-
+**Override Provider Base URL (per-request):**
 ```bash
-LOGGER_CAPTURE_MAX_AGE=7        # Delete captures older than 7 days
-LOGGER_CAPTURE_CLEANUP_INTERVAL=24  # Run cleanup every 24 hours
-LOGGER_CAPTURE_CLEANUP_ENABLED=true # Enable cleanup
+# Example: Route Anthropic through a different upstream
+curl -H "x-contextio-provider: anthropic" \
+     -H "x-anthropic-baseurl: https://fcc.sslip.mywire.org" \
+     -H "x-api-key: sk-ant-..." \
+     http://localhost:4040/v1/messages
 ```
-
-The web UI writes settings to `/app/custom-policy/settings.json` inside the container. Environment variables take precedence over the web UI settings.
 
 ---
 
 ## Web UI
 
-The web UI is served on the same port as the proxy (default 4040). In the Docker image, it runs on Node.js with no separate frontend build server.
+Access at `http://localhost:4040` (or your configured `NEXT_PUBLIC_SITE_URL`).
 
-Access it at:
+### Dashboard
+- Proxy status and build info
+- Total redaction count (click to refresh)
+- Quick navigation to Sessions, Redactions, Metrics, Settings
+- Docker Quick Start guide
 
-```
-http://localhost:4040
-```
+### Sessions
+- List all captured sessions with request/response pairs
+- View full request/response bodies, headers, timings, token counts
+- Filter by session, provider, date range
+- Streaming response reconstruction
 
-Features:
-- **Dashboard**: Overview of proxy status and quick actions
-- **Sessions**: View and inspect captured API requests/responses
-- **Environment Variables**: View and edit proxy configuration (falls back to env defaults if proxy is unreachable)
-- **Settings**: Configure logging and redaction options
+### Redactions
+- Overview of all redactions by type
+- Per-session breakdown with placeholder mapping (reversible mode)
+- Diff dialog showing original vs redacted content
+- Pagination for large datasets
 
-The web UI connects to the ContextIO-Next proxy admin API at `http://localhost:4040/admin` by default. Configure via `NEXT_PUBLIC_SITE_URL` environment variable.
+### Metrics
+- **Rate Limiter tab**: Active buckets, tokens remaining, upstream 429s, NVIDIA retries, queue depths
+- **Traffic tab**: Request volume, latency percentiles, error rates, tokens/sec
 
-### Docker Web UI Access
+### Settings (6 Tabs)
+1. **Logging** — Capture directory, retention (max sessions, max age, cleanup interval)
+2. **Redaction** — Preset or custom policy, reversible mode, GLiNER settings
+3. **Security** — OIDC configuration, encryption at rest toggle
+4. **Rate Limiter** — Per-provider limits (max requests, window, buffer)
+5. **Appearance** — Theme (light/dark/system)
+6. **Providers** — Manage provider API keys and custom base URLs (encrypted at rest in SQLite)
 
-```bash
-docker run -d -p 4040:4040 \
-  -e NEXT_PUBLIC_SITE_URL=http://localhost:4040 \
-  -v $(pwd)/captures:/app/captures \
-  -v $(pwd)/policy:/app/custom-policy \
-  -v $(pwd)/settings:/home/node/.contextio-next \
-  ghcr.io/larsderidder/contextio-next:latest
-```
-
-Then open `http://localhost:4040`.
-
----
-
-## Rate Limiting
-
-ContextIO-Next includes a built-in **rate limiter** that protects upstream LLM APIs from excessive traffic. It uses a **token bucket algorithm** with optional burst buffering, applied **per session** and **per provider**.
-
-### How It Works
-
-- **Token bucket**: Each `(sessionId, provider)` pair gets its own bucket with `maxRequests` tokens refilling over `windowMs` milliseconds.
-- **Burst buffer**: `bufferCapacity` extra tokens allow short bursts above the steady-state rate.
-- **Queueing**: When tokens are exhausted, requests are queued (up to `bufferCapacity`) and processed as tokens refill.
-- **429 response**: When the queue is full, the proxy returns **HTTP 429** with a `Retry-After` header (seconds, per RFC 7231) and a `rateLimitInfo` JSON body.
-- **Memory bounds**: Tracks up to `maxEntries` buckets (default 10,000) with LRU eviction and TTL-based cleanup.
-
-### Configuration via Environment Variables
-
-Set limits per provider using `CONTEXTIO_RATE_LIMIT_<PROVIDER>_<SETTING>`:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CONTEXTIO_RATE_LIMIT_<PROVIDER>_MAX_REQUESTS` | Max requests per window | `60` |
-| `CONTEXTIO_RATE_LIMIT_<PROVIDER>_WINDOW_MS` | Time window in milliseconds | `60000` (1 min) |
-| `CONTEXTIO_RATE_LIMIT_<PROVIDER>_BUFFER` | Burst buffer capacity | `10` |
-| `RATE_LIMITER_ENABLED` | Master enable/disable switch for the entire rate limiter | `true` |
-
-Valid providers: `openai`, `anthropic`, `chatgpt`, `gemini`, `vertex`, `nvidia`, `openrouter`, `kilo`, `unknown`.
-
-**Example** — Allow 100 requests/minute for Anthropic with a 20-request burst buffer:
-
-```bash
-CONTEXTIO_RATE_LIMIT_ANTHROPIC_MAX_REQUESTS=100 \
-CONTEXTIO_RATE_LIMIT_ANTHROPIC_WINDOW_MS=60000 \
-CONTEXTIO_RATE_LIMIT_ANTHROPIC_BUFFER=20 \
-ctxio proxy -- claude
-```
-
-**To completely disable the rate limiter:**
-```bash
-RATE_LIMITER_ENABLED=false
-```
-
-### Configuration via Web UI
-
-The web UI (Settings page) writes to `/app/custom-policy/settings.json` inside the container. Environment variables take precedence over UI settings.
-
-**settings.json structure**:
-```json
-{
-  "rateLimiter": {
-    "anthropic": { "maxRequests": 100, "windowMs": 60000, "bufferCapacity": 20 },
-    "openai":    { "maxRequests": 60,  "windowMs": 60000, "bufferCapacity": 10 }
-  }
-}
-```
-
-### 429 Response Format
-
-When rate limited, the proxy returns:
-
-```http
-HTTP/1.1 429 Too Many Requests
-Retry-After: 60
-Content-Type: application/json
-
-{
-  "error": "Rate limit exceeded",
-  "rateLimitInfo": {
-    "limit": 60,
-    "remaining": 0,
-    "reset": 1700000000,
-    "retryAfter": 1234
-  }
-}
-```
-
-| Field | Meaning |
-|-------|---------|
-| `limit` | Configured `maxRequests` for the window |
-| `remaining` | Tokens left (always `0` on 429) |
-| `reset` | Unix timestamp (seconds) when the window resets |
-| `retryAfter` | **Milliseconds** until a token is available (from JSON body) |
-
-**Note**: The `Retry-After` header uses **seconds** (per HTTP RFC 7231). The `rateLimitInfo.retryAfter` in the JSON body uses milliseconds for finer precision.
-
-### Example Configurations
-
-**Conservative (strict per-minute limits)**:
-```bash
-CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS=30
-CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS=60000
-CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER=5
-
-CONTEXTIO_RATE_LIMIT_ANTHROPIC_MAX_REQUESTS=30
-CONTEXTIO_RATE_LIMIT_ANTHROPIC_WINDOW_MS=60000
-CONTEXTIO_RATE_LIMIT_ANTHROPIC_BUFFER=5
-```
-
-**Generous (burst-friendly for interactive coding)**:
-```bash
-CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS=200
-CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS=60000
-CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER=50
-
-CONTEXTIO_RATE_LIMIT_ANTHROPIC_MAX_REQUESTS=200
-CONTEXTIO_RATE_LIMIT_ANTHROPIC_WINDOW_MS=60000
-CONTEXTIO_RATE_LIMIT_ANTHROPIC_BUFFER=50
-```
-
-**Per-hour budget (batch workloads)**:
-```bash
-CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS=1000
-CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS=3600000
-CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER=100
-```
-
-**Disable for a provider**:
-
-```bash
-# Option 1: Use the programmatic API
-createRateLimiterPlugin({ enabled: false });
-
-# Option 2: Set very high limits (max allowed is 10000)
-CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS=10000
-CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS=100
-CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER=0
-```
-
-### Programmatic Usage
-
-```typescript
-import { createProxy, createRateLimiterPlugin } from '@contextio/proxy';
-
-const rateLimiter = createRateLimiterPlugin({
-  defaults: {
-    maxRequests: 100,
-    windowMs: 60_000,
-    bufferCapacity: 20,
-  },
-  // Optional: per-provider overrides
-  // (merged with env var config at runtime)
-});
-
-const proxy = createProxy({
-  port: 4040,
-  plugins: [rateLimiter],
-});
-
-await proxy.start();
-```
-
-### Advanced Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `maxEntries` | number | `10000` | Max unique `(session, provider)` buckets |
-| `cleanupIntervalMs` | number | `300000` | Stale bucket cleanup interval (5 min) |
-| `entryTtlMs` | number | `600000` | Inactive bucket TTL (10 min) |
-| `keyGenerator` | function | `sessionId:provider` | Custom bucket key function |
-| `onRateLimited` | function | noop | Callback when 429 is returned |
+Settings persist to `/app/custom-policy/settings.json` inside the container. **Environment variables take precedence** over these values.
 
 ---
 
-## Development
+## Features Deep Dive
 
-### Prerequisites
+### Encryption at Rest
 
-- Node.js 22+
-- pnpm 11.9.0+
-- TypeScript 5.7+
-- (Optional) pipx + mitmproxy for testing tools that require TLS interception
-
-### Build
-
-```bash
-pnpm install
-pnpm build
-pnpm test
-```
-
-### Development Mode
-
-```bash
-pnpm dev
-```
-
-### Lint
-
-```bash
-pnpm lint
-```
-
-### Project Structure
+Capture files are encrypted with **AES-256-GCM** using a key derived from `CONTEXTIO_LOGGER_ENCRYPTION_KEY` via PBKDF2 (100,000 iterations). Each file gets a unique nonce. The encrypted format:
 
 ```
-contextio-next/
-├── packages/
-│   ├── cli/         # CLI entry point (ctxio)
-│   ├── core/        # Zero-dep shared types, routing, token estimation, security
-│   ├── proxy/       # Zero-dep HTTP reverse proxy + plugin system
-│   ├── redact/      # PII/secrets redaction plugin
-│   ├── logger/      # Capture-to-disk plugin
-│   └── web/         # Next.js web UI
-├── docs/            # FAQ, redaction policy reference, performance notes
-├── examples/        # Custom redaction policy examples
-├── docker/          # Docker-specific documentation
-├── Dockerfile       # Multi-stage Docker build
-├── docker-compose.yml
-└── turbo.json       # Turborepo config
+<base64url(salt)>.<base64url(nonce)>.<base64url(ciphertext)>
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for dependency policy and guidelines.
+Files are decrypted transparently when read via the web UI or CLI. The encryption key **never** leaves the container — it only exists in memory at runtime.
+
+### GLiNER LLM Redaction
+
+Local ONNX model (quantized, ~50MB) running via ONNX Runtime Web. No external API calls, no GPU required.
+
+- **Custom labels**: Define any entity types via `REDACT_GLINER_LABELS`
+- **Threshold**: Confidence cutoff (default 0.5)
+- **NMS**: Non-maximum suppression removes overlapping spans
+- **Tokenizer offset mapping**: Accurate character-level positions for redaction
+
+Enable with `REDACT_GLINER_ENABLED=true`. Combines with rule-based detector in `hybrid` or `auto` mode.
+
+### Reversible Redaction
+
+When `REDACT_REVERSIBLE=true`:
+1. Request: Original values → numbered placeholders (`[EMAIL_1]`, `[SSN_2]`)
+2. LLM responds with placeholders
+3. Response: Placeholders → original values restored in stream
+
+Mappings stored per-session in SQLite. Works across Anthropic, OpenAI, and Gemini streaming formats (SSE, chunked, ndjson).
+
+### Rate Limiting
+
+Per `(sessionId, provider)` token bucket:
+- `maxRequests` tokens refill over `windowMs`
+- `bufferCapacity` extra tokens for bursts
+- Requests queued when exhausted (up to buffer capacity)
+- HTTP 429 with `Retry-After` header (seconds) and `rateLimitInfo` JSON (milliseconds)
+- LRU eviction + TTL cleanup (max 10,000 buckets by default)
+
+Metrics visible in Web UI → Metrics → Rate Limiter tab.
+
+### Built-In Retry with NVIDIA Special Handling
+
+Exponential backoff (base 500ms, max 30s, jitter 0.1) for:
+- HTTP 429, 500, 502, 503, 504
+- Streaming SSE `event: error` with `rate_limit_error` type
+
+**NVIDIA `ResourceExhausted`**: The retry plugin detects this error in the response body, appends a `"continue"` user message to the `messages` array, and retries the request. Configurable per-provider.
+
+### Capture Logging
+
+Each request/response pair written as JSON:
+```
+claude_a1b2c3d4_1739000000000-000001.json
+```
+
+Contains: timestamp, sessionId, source, provider, apiFormat, targetUrl, request/response bodies, status, streaming flag, timings, token estimates. Sensitive headers stripped before write.
+
+**Retention**: Time-based (`LOGGER_CAPTURE_MAX_AGE`, `LOGGER_CAPTURE_CLEANUP_INTERVAL`) or count-based (`LOGGER_MAX_SESSIONS`).
+
+### Provider Configuration
+
+Providers stored in SQLite (`/app/custom-policy/contextio.db`) with `providers.json` fallback. Configured via Web UI → Settings → Providers tab:
+
+- API keys encrypted at rest
+- Custom base URLs per provider
+- Enabled/disabled toggle
+- Priority ordering for routing
+
+---
+
+## Configuration Precedence
+
+```
+Highest: Programmatic overrides (in code)
+         ↓
+         Environment variables (CONTEXTIO_*, REDACT_*, RATE_LIMITER_*, etc.)
+         ↓
+         Web UI settings file (/app/custom-policy/settings.json)
+         ↓
+Lowest:  Defaults (hardcoded in source)
+```
+
+**Secrets** (`CSRF_SECRET`, `CONTEXTIO_LOGGER_ENCRYPTION_KEY`, `CONTEXTIO_OIDC_CLIENT_SECRET`, `CONTEXTIO_OIDC_SESSION_SECRET`) must be set via environment variables or Docker secrets — they are never read from the settings file.
 
 ---
 
 ## License
 
-MIT. Copyright (c) larsderidder and contributors.
+MIT. Copyright (c) Russell Powell and contributors.
 
 This project is forked from [contextio](https://github.com/larsderidder/contextio) by larsderidder. The original project and its authorship are acknowledged and preserved in compliance with the MIT License.
