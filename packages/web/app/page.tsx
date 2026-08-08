@@ -207,23 +207,84 @@ export default function HomePage() {
         </div>
 
         <div className="rounded-lg border p-6">
-          <h2 className="text-xl font-semibold mb-4">Quick Start</h2>
-          <div className="space-y-3 text-sm">
-            <p>
-              <strong>1.</strong> Start the ContextIO-Next proxy:
-            </p>
-            <pre className="rounded bg-muted p-3 text-xs">
-              ctxio proxy --log-dir ./captures
-            </pre>
-            <p>
-              <strong>2.</strong> Configure your AI tool to use the proxy:
-            </p>
-            <pre className="rounded bg-muted p-3 text-xs">
-              export ANTHROPIC_BASE_URL=http://localhost:4040
-            </pre>
-            <p>
-              <strong>3.</strong> View captured sessions in this interface.
-            </p>
+          <h2 className="text-xl font-semibold mb-4">Quick Start (Docker)</h2>
+          <div className="space-y-5 text-sm">
+            <div>
+              <h3 className="font-medium mb-2">1. Create environment file</h3>
+              <p className="text-muted-foreground mb-2">Copy the example and fill in required secrets:</p>
+              <pre className="rounded bg-muted p-3 text-xs overflow-x-auto">
+cp .env.example .env
+# edit .env with your secrets
+              </pre>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-2">2. Required Environment Variables</h3>
+              <div className="space-y-2 text-xs">
+                <div className="bg-muted p-3 rounded">
+                  <code className="font-mono text-green-600">CSRF_SECRET</code> <span className="text-muted-foreground ml-2">— Session cookie signing secret (min 32 chars). Generate: <code className="bg-background px-1 rounded">openssl rand -base64 32</code></span>
+                </div>
+                <div className="bg-muted p-3 rounded">
+                  <code className="font-mono text-green-600">CONTEXTIO_LOGGER_ENCRYPTION_KEY</code> <span className="text-muted-foreground ml-2">— Encryption key for capture data at rest (min 32 chars). Generate: <code className="bg-background px-1 rounded">openssl rand -base64 32</code></span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-2">3. Optional: OIDC Authentication</h3>
+              <div className="space-y-1 text-xs bg-muted p-3 rounded">
+                <div><code className="font-mono">OIDC_ENABLED=true</code> <span className="text-muted-foreground">— Enable OIDC</span></div>
+                <div><code className="font-mono">OIDC_ISSUER=https://accounts.google.com</code> <span className="text-muted-foreground">— OIDC issuer URL</span></div>
+                <div><code className="font-mono">OIDC_CLIENT_ID=...</code> <span className="text-muted-foreground">— OAuth2 client ID</span></div>
+                <div><code className="font-mono">OIDC_CLIENT_SECRET=...</code> <span className="text-muted-foreground">— OAuth2 client secret</span></div>
+                <div><code className="font-mono">OIDC_PUBLIC_URL=http://your-domain:4040</code> <span className="text-muted-foreground">— Public callback URL</span></div>
+                <div><code className="font-mono">OIDC_SCOPE=openid profile email</code> <span className="text-muted-foreground">— Scopes (default shown)</span></div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Secrets (CLIENT_SECRET, etc.) MUST be in .env — not in web UI settings.</p>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-2">4. Start the stack</h3>
+              <pre className="rounded bg-muted p-3 text-xs overflow-x-auto">
+docker compose up -d
+              </pre>
+              <p className="text-muted-foreground mt-1">Access web UI at <code className="font-mono bg-muted px-1 rounded">http://localhost:4040</code></p>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-2">5. Configure via Web UI</h3>
+              <p className="text-xs text-muted-foreground mb-2">Open <strong>Settings</strong> in the sidebar to configure:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs text-muted-foreground">
+                <li>Redaction policy (preset or custom JSON)</li>
+                <li>Rate limits per provider</li>
+                <li>Retry behavior per provider</li>
+                <li>Capture cleanup retention</li>
+                <li>Provider API keys (encrypted at rest)</li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-2">6. Client Configuration</h3>
+              <p className="text-xs text-muted-foreground mb-2">Point your AI tool to the proxy and include required headers:</p>
+              <pre className="rounded bg-muted p-3 text-xs overflow-x-auto">
+# Base URL
+export ANTHROPIC_BASE_URL=http://localhost:4040
+export OPENAI_BASE_URL=http://localhost:4040/v1
+
+# Required: Provider selection header
+# Values: anthropic, openai, google, openrouter, custom
+# Can also be set per-request via `x-contextio-provider` header
+              </pre>
+              <p className="text-xs text-muted-foreground mt-1">
+                <strong>Per-request headers (optional):</strong>
+              </p>
+              <pre className="rounded bg-muted p-3 text-xs overflow-x-auto">
+x-contextio-provider: anthropic     # Override default provider
+x-contextio-redact: true            # Enable/disable redaction per-request
+x-contextio-log: true               # Enable/disable logging per-request
+x-api-key: sk-...                   # Provider API key (if not in settings)
+              </pre>
+            </div>
           </div>
         </div>
       </div>
