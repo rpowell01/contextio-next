@@ -2,10 +2,9 @@ version: "3.8"
 
 services:
   contextio-next:
-    build: .
+    image: ghcr.io/rpowell01/contextio-next:main
     ports:
       - "4040:4040"
-      - "4041:4041"
     volumes:
       # Captures directory - writable by node user (UID 1000)
       - captures:/app/captures
@@ -14,32 +13,60 @@ services:
       # Settings directory - persists settings.json across restarts
       - settings:/home/node/.contextio-next
     environment:
+      # Core configuration
+      NODE_ENV: production
+      CONTEXT_PROXY_BIND_HOST: 0.0.0.0
+      CONTEXT_PROXY_PORT: 4040
+
+      # Plugin configuration - rate-limiter and retry are built-in/configured via env
+      # Only specify additional plugins here (redact, logger)
+      CONTEXT_PROXY_PLUGINS: /app/redact-plugin.js,/app/logger-plugin.js
+
       # Logging configuration
+      LOG_TRAFFIC: "false"
+      DEBUG_ROUTING: "false"
       LOGGER_CAPTURE_DIR: /app/captures
-      LOGGER_MAX_SESSIONS: 0
+      LOGGER_MAX_SESSIONS: "0"
+
       # Redaction configuration
       REDACT_POLICY_FILE: /app/custom-policy/custom-policy.json
       REDACT_REVERSIBLE: "false"
       REDACT_PRESET: pii
       REDACT_CAPTURE_DIR: /app/captures
-      # Plugin configuration
-      CONTEXT_PROXY_PLUGINS: /app/redact-plugin.js,/app/logger-plugin.js,/app/rate-limiter-plugin.js
+
+      # Rate limiter configuration (used by built-in plugin)
       RATE_LIMITER_ENABLED: "true"
       RATE_LIMITER_MAX_REQUESTS: "60"
       RATE_LIMITER_WINDOW_MS: "60000"
       RATE_LIMITER_BUFFER_CAPACITY: "10"
-      # Web UI configuration
-      NEXT_PUBLIC_SITE_URL: http://localhost:4041
-      # Next.js cache directory for ISR (Incremental Static Regeneration)
+
+      # Next.js cache directory for ISR
       NEXT_CACHE_DIR: /app/captures/.next/cache
-      # CSRF protection (set via Coolify environment variables)
-      CSRF_SECRET: ${CSRF_SECRET}
+
+      # Database path
+      CONTEXTIO_DB_PATH: /app/custom-policy/contextio.db
+
+      # Web UI configuration
+      NEXT_PUBLIC_SITE_URL: http://localhost:4040
+
+      # Required secrets (set via .env file or Docker secrets)
+      # CSRF_SECRET: ${CSRF_SECRET}
+      # CONTEXTIO_LOGGER_ENCRYPTION_KEY: ${CONTEXTIO_LOGGER_ENCRYPTION_KEY}
+
+      # OIDC configuration (optional)
+      # OIDC_ENABLED: "false"
+      # OIDC_ISSUER: ""
+      # OIDC_CLIENT_ID: ""
+      # OIDC_CLIENT_SECRET: ""
+      # OIDC_SCOPE: "openid profile email"
+      # OIDC_PUBLIC_URL: ""
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4040"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
 volumes:
   captures:
