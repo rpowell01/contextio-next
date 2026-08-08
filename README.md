@@ -1,4 +1,4 @@
-# ContextIO Next
+# ContextIO-Next
 
 [![CI](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml/badge.svg)](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml)
 ![Docker Pulls](https://img.shields.io/docker/pulls/ghcr.io/rpowell01/contextio-next)
@@ -6,13 +6,13 @@
 
 ## MIT License and Attribution
 
-This project is a fork of [contextio](https://github.com/larsderidder/contextio) by larsderidder, released under the MIT License. The original copyright and license are preserved in [LICENSE](LICENSE). This fork is maintained as **ContextIO Next** at `github.com/rpowell01/contextio-next`.
+This project is a fork of [contextio](https://github.com/larsderidder/contextio) by larsderidder, released under the MIT License. The original copyright and license are preserved in [LICENSE](LICENSE). This fork is maintained as **ContextIO-Next** at `github.com/rpowell01/contextio-next`.
 
 ---
 
 ## Overview
 
-ContextIO Next is a single-port Docker proxy that sits between your AI coding tools (Claude CLI, Aider, Gemini CLI, Codex, Copilot, OpenCode, etc.) and LLM provider APIs (Anthropic, OpenAI, Google, NVIDIA, OpenRouter, etc.). It provides:
+ContextIO-Next is a single-port Docker proxy that sits between your AI coding tools (Claude CLI, Aider, Gemini CLI, Codex, Copilot, OpenCode, etc.) and LLM provider APIs (Anthropic, OpenAI, Google, NVIDIA, OpenRouter, etc.). It provides:
 
 - **Transparent proxy** — Zero-config routing based on request headers and paths
 - **Web UI** — Dashboard, session inspection, redaction viewer, metrics, and settings all on port 4040
@@ -121,7 +121,7 @@ Set `CSRF_SECRET` in Coolify environment variables (it injects this at runtime).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    ContextIO Next (port 4040)               │
+│                    ContextIO-Next (port 4040)               │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │ HTTP Reverse Proxy                                   │   │
 │  │  • Provider classification (Anthropic, OpenAI, etc.) │   │
