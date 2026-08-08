@@ -213,8 +213,8 @@ export default function HomePage() {
               <h3 className="font-medium mb-2">1. Create environment file</h3>
               <p className="text-muted-foreground mb-2">Copy the example and fill in required secrets:</p>
               <pre className="rounded bg-muted p-3 text-xs overflow-x-auto">
-cp .env.example .env
-# edit .env with your secrets
+{`cp .env.example .env
+# edit .env with your secrets`}
               </pre>
             </div>
 
@@ -246,7 +246,7 @@ cp .env.example .env
             <div>
               <h3 className="font-medium mb-2">4. Start the stack</h3>
               <pre className="rounded bg-muted p-3 text-xs overflow-x-auto">
-docker compose up -d
+{`docker compose up -d`}
               </pre>
               <p className="text-muted-foreground mt-1">Access web UI at <code className="font-mono bg-muted px-1 rounded">http://localhost:4040</code></p>
             </div>
@@ -267,22 +267,22 @@ docker compose up -d
               <h3 className="font-medium mb-2">6. Client Configuration</h3>
               <p className="text-xs text-muted-foreground mb-2">Point your AI tool to the proxy and include required headers:</p>
               <pre className="rounded bg-muted p-3 text-xs overflow-x-auto">
-# Base URL
+{`# Base URL
 export ANTHROPIC_BASE_URL=http://localhost:4040
 export OPENAI_BASE_URL=http://localhost:4040/v1
 
 # Required: Provider selection header
 # Values: anthropic, openai, google, openrouter, custom
-# Can also be set per-request via `x-contextio-provider` header
+# Can also be set per-request via x-contextio-provider header`}
               </pre>
               <p className="text-xs text-muted-foreground mt-1">
                 <strong>Per-request headers (optional):</strong>
               </p>
               <pre className="rounded bg-muted p-3 text-xs overflow-x-auto">
-x-contextio-provider: anthropic     # Override default provider
+{`x-contextio-provider: anthropic     # Override default provider
 x-contextio-redact: true            # Enable/disable redaction per-request
 x-contextio-log: true               # Enable/disable logging per-request
-x-api-key: sk-...                   # Provider API key (if not in settings)
+x-api-key: sk-...                   # Provider API key (if not in settings)`}
               </pre>
             </div>
           </div>
