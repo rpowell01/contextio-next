@@ -195,7 +195,7 @@ export async function runCapturesReindex(options: CaptureReindexOptions): Promis
 		for (const error of result.errors) {
 			console.error(`  - ${error.file}: ${error.error}`);
 		}
-		process.exit(1);
+		throw new Error(`Reindex failed: ${result.failed} capture(s) failed to process`);
 	}
 }
 
