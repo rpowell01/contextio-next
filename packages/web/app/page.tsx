@@ -279,10 +279,17 @@ export OPENAI_BASE_URL=http://localhost:4040/v1
                 <strong>Per-request headers (optional):</strong>
               </p>
               <pre className="rounded bg-muted p-3 text-xs overflow-x-auto">
-{`x-contextio-provider: anthropic     # Override default provider
-x-contextio-redact: true            # Enable/disable redaction per-request
-x-contextio-log: true               # Enable/disable logging per-request
-x-api-key: sk-...                   # Provider API key (if not in settings)`}
+{`x-contextio-provider: anthropic        # Override default provider
+x-contextio-redact: true               # Enable/disable redaction per-request
+x-contextio-log: true                  # Enable/disable logging per-request
+x-api-key: sk-...                      # Provider API key (if not in settings)
+
+# Override provider's default base URL (per-request)
+x-anthropic-baseurl: https://api.anthropic.com
+x-openai-baseurl: https://api.openai.com/v1
+x-google-baseurl: https://generativelanguage.googleapis.com
+x-openrouter-baseurl: https://openrouter.ai/api/v1
+x-custom-baseurl: https://your-proxy.example.com`}
               </pre>
             </div>
           </div>
