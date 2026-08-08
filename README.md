@@ -311,13 +311,22 @@ Optional SSO via any OIDC provider (Google, Microsoft, Okta, Auth0, Keycloak, et
 
 ## Client Configuration
 
-Point your AI tool at the proxy. **All tools require the `x-contextio-provider` header** (or `CONTEXT_PROXY_DEFAULT_PROVIDER` env var) to identify which upstream to route to.
+Point your AI tool at the proxy. **Provider detection is automatic** — the proxy classifies requests based on URL path patterns, standard headers, and optional override headers. No `x-contextio-provider` header is required.
+
+### How Provider Detection Works
+
+| Method | Examples |
+|--------|----------|
+| **Path-based** | `/v1/messages` → Anthropic; `/chat/completions` → OpenAI; `:generateContent` → Gemini; `/v1/.../publishers/google` → Vertex |
+| **Provider base URL headers** | `x-anthropic-baseurl`, `x-openai-baseurl`, `x-google-baseurl`, `x-openrouter-baseurl`, `x-nvidia-baseurl`, `x-kilo-baseurl`, `x-chatgpt-baseurl`, `x-vertex-baseurl`, `x-gemini-code-assist-baseurl` |
+| **Auth header patterns** | `Bearer sk-...` → OpenAI; `Bearer nv-...` → NVIDIA |
+| **Explicit target URL** | `x-target-url: https://api.anthropic.com/v1/messages` |
+| **Source-tagged paths** | `/claude/v1/messages`, `/gemini/ab12cd34/v1/...` (set by CLI) |
 
 ### Required Headers
 
 | Header | Values | Description |
 |--------|--------|-------------|
-| `x-contextio-provider` | `anthropic`, `openai`, `google`, `openrouter`, `custom` | **Required** — identifies target provider |
 | `x-api-key` | `sk-...` | Provider API key (if not configured in Settings → Providers) |
 
 ### Optional Headers
@@ -329,49 +338,62 @@ Point your AI tool at the proxy. **All tools require the `x-contextio-provider` 
 | `x-anthropic-baseurl` | `https://...` | Override Anthropic base URL per-request |
 | `x-openai-baseurl` | `https://...` | Override OpenAI base URL per-request |
 | `x-google-baseurl` | `https://...` | Override Google/Gemini base URL per-request |
+| `x-gemini-code-assist-baseurl` | `https://...` | Override Gemini Code Assist base URL per-request |
 | `x-openrouter-baseurl` | `https://...` | Override OpenRouter base URL per-request |
-| `x-custom-baseurl` | `https://...` | Override custom provider base URL per-request |
+| `x-nvidia-baseurl` | `https://...` | Override NVIDIA base URL per-request |
+| `x-kilo-baseurl` | `https://...` | Override Kilo Code Gateway base URL per-request |
+| `x-chatgpt-baseurl` | `https://...` | Override ChatGPT base URL per-request |
+| `x-vertex-baseurl` | `https://...` | Override Vertex AI base URL per-request |
+| `x-target-url` | `https://...` | Explicit upstream URL (enables `CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE=1`) |
 
 ### Per-Tool Examples
 
 **Claude CLI:**
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:4040
-export ANTHROPIC_API_KEY=x-contextio-provider:anthropic,x-api-key:sk-ant-...
-# Or use headers directly in your tool config
+export ANTHROPIC_API_KEY=sk-ant-...
+# Proxy detects Anthropic from /v1/messages path
 ```
 
 **OpenAI / Codex / Aider:**
 ```bash
 export OPENAI_BASE_URL=http://localhost:4040/v1
-export OPENAI_API_KEY=x-contextio-provider:openai,x-api-key:sk-...
+export OPENAI_API_KEY=sk-...
+# Proxy detects OpenAI from /chat/completions or /responses path
 ```
 
 **Gemini CLI:**
 ```bash
 export GOOGLE_GEMINI_BASE_URL=http://localhost:4040
-export GEMINI_API_KEY=x-contextio-provider:google,x-api-key:...
+export GEMINI_API_KEY=...
+# Proxy detects Gemini from :generateContent path or x-goog-api-key header
 ```
 
 **OpenRouter:**
 ```bash
 export OPENROUTER_BASE_URL=http://localhost:4040/v1
-export OPENROUTER_API_KEY=x-contextio-provider:openrouter,x-api-key:sk-or-...
+export OPENROUTER_API_KEY=sk-or-...
+# Proxy detects OpenRouter from x-openrouter-baseurl header or openrouter.ai hostname in x-target-url
 ```
 
-**Custom Provider:**
+**NVIDIA NIM:**
 ```bash
-export CUSTOM_BASE_URL=http://localhost:4040/v1
-export CUSTOM_API_KEY=x-contextio-provider:custom,x-api-key:...,x-custom-baseurl:https://my-proxy.example.com
+export NVIDIA_BASE_URL=http://localhost:4040/v1
+export NVIDIA_API_KEY=...
+# Proxy detects NVIDIA from x-nvidia-baseurl header or Bearer nv-... auth
 ```
 
 **Override Provider Base URL (per-request):**
 ```bash
 # Example: Route Anthropic through a different upstream
-curl -H "x-contextio-provider: anthropic" \
-     -H "x-anthropic-baseurl: https://fcc.sslip.mywire.org" \
+curl -H "x-anthropic-baseurl: https://fcc.sslip.mywire.org" \
      -H "x-api-key: sk-ant-..." \
      http://localhost:4040/v1/messages
+
+# Example: Explicit target URL (requires CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE=1)
+curl -H "x-target-url: https://api.anthropic.com/v1/messages" \
+     -H "x-api-key: sk-ant-..." \
+     http://localhost:4040/any/path
 ```
 
 ---
