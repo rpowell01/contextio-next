@@ -738,11 +738,12 @@ describe("retry plugin - integration tests", () => {
       
       upstreamServer = http.createServer((req, res) => {
         requestCount++;
+        // Use chunked transfer encoding (default for streaming) - no Content-Length
+        // HTTP spec: MUST NOT have both Content-Length and Transfer-Encoding
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
           Connection: "keep-alive",
-          "Content-Length": "5000", // This should be stripped on overflow
         });
         // Send large response to trigger overflow
         for (let i = 0; i < 20; i++) {

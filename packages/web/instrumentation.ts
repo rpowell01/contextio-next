@@ -87,8 +87,6 @@ function registerCleanupHandlers(): void {
   process.on("exit", cleanup);
 }
 
-registerCleanupHandlers();
-
 function defaultSettings() {
   return {
     enabled: true,
@@ -267,6 +265,9 @@ export async function register(): Promise<void> {
     await applyPersistedSettings();
     return;
   }
+
+  // Register process exit handlers (deduplicated for HMR safety)
+  registerCleanupHandlers();
 
   // Validate CSRF secret in ALL runtimes (including Edge) before middleware runs
   validateCsrfSecret();

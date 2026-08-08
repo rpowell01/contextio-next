@@ -260,11 +260,11 @@ export function migrateProviders(options: MigrateProvidersOptions = {}): Migrate
 				}
 			} else {
 				if (existingProvider) {
-					// In dry-run, we only reach here if existingProvider.source === "default" or force=true
-					// (other cases continue earlier in the function)
-					result.updated++;
+				// In dry-run, we only reach here if existingProvider.source === "default" or force=true
+				// (other cases continue earlier in the function)
+				result.updated++;
 				} else {
-					result.imported++;
+				result.imported++;
 				}
 			}
 

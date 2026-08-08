@@ -9,7 +9,8 @@ import {
   getCaptureRedactionStats,
 } from "@/lib/sessions/redaction-utils";
 import { computeTokenUsage, type TokenUsageResult } from "@/lib/sessions/utils";
-import { upsertRedactionMetadata, type RedactionMetadata, runMigrations } from "@contextio/core/db";
+import { upsertRedactionMetadata, runMigrations } from "@contextio/core/db";
+import { buildRedactionMetadata, metadataToJsonSidecar } from "@/lib/sessions/backfill-helpers";
 
 interface BackfillStats {
   total: number;
@@ -65,7 +66,7 @@ function processCapture(
 
     const leanStats = toLeanStats(counts);
 
-// Compute token usage from response body (unconditionally to allow requestBody fallback)
+    // Compute token usage from response body (unconditionally to allow requestBody fallback)
     const responseBody = typeof data.responseBody === "string" ? data.responseBody : null;
     const tokenUsage: TokenUsageResult = computeTokenUsage(responseBody, data.requestBody);
 
@@ -77,55 +78,23 @@ function processCapture(
     const successCount = isSuccess ? 1 : 0;
     const errorCount = isSuccess ? 0 : 1;
 
-    const metaData = {
+    // Build canonical RedactionMetadata first (single source of truth)
+    const { metadata: sqliteMetadata, originalTimestamp } = buildRedactionMetadata({
       captureId: captureBasename,
-      sessionId:
-        typeof data.sessionId === "string" ? data.sessionId : null,
-      timestamp: typeof data.timestamp === "string" ? data.timestamp : null,
-      provider: typeof data.provider === "string" ? data.provider : null,
-      targetUrl: typeof data.targetUrl === "string" ? data.targetUrl : null,
-      source: typeof data.source === "string" ? data.source : null,
-      timings: data.timings && typeof data.timings === "object"
-        ? { total_ms: typeof (data.timings as Record<string, unknown>).total_ms === "number" ? (data.timings as Record<string, unknown>).total_ms as number : 0 }
-        : { total_ms: 0 },
-      requestBytes: typeof data.requestBytes === "number" ? data.requestBytes : 0,
-      responseBytes: typeof data.responseBytes === "number" ? data.responseBytes : 0,
-      ...leanStats,
-      // Token metrics
-      totalInputTokens: tokenUsage.input,
-      totalOutputTokens: tokenUsage.output,
-      tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
+      data,
+      leanStats,
+      tokenUsage,
+      tokensPerSecond,
       successCount,
       errorCount,
-      model: tokenUsage.model,
-    };
+    });
 
-    atomicWriteJson(metaPath, metaData);
+    // Derive JSON sidecar from RedactionMetadata (handles format differences)
+    const jsonSidecar = metadataToJsonSidecar(sqliteMetadata, leanStats, originalTimestamp);
 
-    // Also persist to SQLite
-    const sqliteMetadata: RedactionMetadata = {
-      captureId: captureBasename,
-      sessionId: typeof data.sessionId === "string" ? data.sessionId : null,
-      ruleCounts: leanStats.byRule,
-      totalRedactions: leanStats.totalRedactions,
-      encrypted: false,
-      createdAt: typeof data.timestamp === "string" ? new Date(data.timestamp).getTime() : Date.now(),
-      updatedAt: Date.now(),
-      source: typeof data.source === "string" ? data.source : null,
-      provider: typeof data.provider === "string" ? data.provider : null,
-      targetUrl: typeof data.targetUrl === "string" ? data.targetUrl : null,
-      requestBytes: typeof data.requestBytes === "number" ? data.requestBytes : 0,
-      responseBytes: typeof data.responseBytes === "number" ? data.responseBytes : 0,
-      timings: data.timings && typeof data.timings === "object"
-        ? { total_ms: typeof (data.timings as Record<string, unknown>).total_ms === "number" ? (data.timings as Record<string, unknown>).total_ms as number : 0 }
-        : { total_ms: 0 },
-      totalInputTokens: tokenUsage.input,
-      totalOutputTokens: tokenUsage.output,
-      tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
-      successCount,
-      errorCount,
-      model: tokenUsage.model,
-    };
+    atomicWriteJson(metaPath, jsonSidecar);
+
+    // Persist to SQLite using the same canonical object
     try {
       upsertRedactionMetadata(sqliteMetadata);
     } catch (sqliteErr) {
