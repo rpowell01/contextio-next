@@ -321,19 +321,20 @@ describe("migrate-captures.ts - Capture Migration", () => {
 			writeFileSync(join(testCaptureDir, "cap-progress.json"), JSON.stringify(capture));
 			
 			let progressCalled = false;
-			let progressArgs: { processed: number; total: number } | null = null;
+			let progressProcessed = 0;
+			let progressTotal = 0;
 			
 			migrateCapturesSync({
-				onProgress: (processed, total) => {
+				onProgress: (processed: number, total: number) => {
 					progressCalled = true;
-					progressArgs = { processed, total };
+					progressProcessed = processed;
+					progressTotal = total;
 				}
 			});
 			
 			assert.ok(progressCalled);
-			assert.ok(progressArgs !== null);
-			assert.equal(progressArgs!.processed, 1);
-			assert.equal(progressArgs!.total, 1);
+			assert.equal(progressProcessed, 1);
+			assert.equal(progressTotal, 1);
 		});
 
 		it("returns errors for malformed JSON files", () => {

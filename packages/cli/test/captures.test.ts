@@ -145,7 +145,7 @@ function writeCaptureFiles(captures: CaptureMetadata[]): void {
 }
 
 // Capture console output for assertions (captures output even if function throws)
-function captureConsole(fn: () => Promise<void>): Promise<string> {
+function captureConsole<T>(fn: () => Promise<T>): Promise<string> {
 	const lines: string[] = [];
 	const origLog = console.log;
 	const origWarn = console.warn;

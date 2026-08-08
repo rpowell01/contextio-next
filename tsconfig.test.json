@@ -12,11 +12,6 @@
     }
   },
   "include": [
-    "packages/web/lib/diff.ts",
-    "packages/web/lib/diff.test.ts",
-    "packages/web/lib/providers.ts",
-    "packages/web/lib/providers.test.ts",
-    "packages/web/types/api.ts",
     "packages/proxy/src/config.ts",
     "packages/cli/test/captures.test.ts",
     "packages/core/test/connection.test.ts",

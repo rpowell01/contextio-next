@@ -13,7 +13,7 @@ import {
 	deleteProvider,
 	isDatabaseAvailable,
 	type ProviderConfigInput,
-} from "./providers.js";
+} from "../dist/lib/providers.js";
 
 import { closeDb, initDb } from "@contextio/core/db";
 
