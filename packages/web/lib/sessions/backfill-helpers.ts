@@ -4,7 +4,8 @@ import { type TokenUsageResult } from "@/lib/sessions/utils";
 /**
  * Lean statistics for redaction metadata.
  * - Route caller (packages/web/app/api/admin/backfill-redaction-meta/route.ts): provides matches with renamed fields (preValue/postValue)
- * - Script caller (packages/web/scripts/backfill-redaction-meta.ts): provides only totalRedactions and byRule (no matches)
+ * - Root script caller (scripts/backfill-redaction-meta.ts): provides matches with renamed fields (preValue/postValue)
+ * - Web package script caller (packages/web/scripts/backfill-redaction-meta.ts): provides only totalRedactions and byRule (no matches)
  */
 export interface LeanStats {
   totalRedactions: number;

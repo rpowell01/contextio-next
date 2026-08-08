@@ -315,27 +315,3 @@ async function removeProviderSettings(providerId: string): Promise<void> {
 		console.warn(`[providers] Failed to remove settings for deleted provider "${providerId}":`, error);
 	}
 }
-
-/**
- * Migrates legacy array-format providers to the object (map) format.
- * Kept for backwards compatibility with any existing code that might call it.
- *
- * @param arr - Parsed JSON array from providers.json
- * @returns Object keyed by provider id
- * @deprecated Use database-backed provider storage instead
- */
-export function migrateProvidersArray(
-	arr: unknown[],
-): Record<string, CoreProviderConfig> {
-	const migrated: Record<string, CoreProviderConfig> = {};
-	for (const p of arr) {
-		try {
-			const validated = ProviderConfigSchema.parse(p);
-			migrated[validated.id] = toCoreProviderConfig(validated);
-		} catch {
-			// skip invalid entries
-		}
-	}
-	return migrated;
-}
-

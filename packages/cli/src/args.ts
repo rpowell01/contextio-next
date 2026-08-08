@@ -135,6 +135,27 @@ export interface MigrateArgs {
 	maxFiles?: number;
 }
 
+/** Parsed arguments for `ctxio captures`. */
+export interface CapturesArgs {
+	command: "captures";
+	/** Subcommand: list, stats, search, reindex */
+	subcommand: "list" | "stats" | "search" | "reindex";
+	/** Options for list */
+	session?: string;
+	since?: string;
+	limit?: string;
+	offset?: string;
+	/** Options for search */
+	model?: string;
+	status?: string;
+	until?: string;
+	/** Options for reindex */
+	captureDir?: string;
+	keyMaterial?: string;
+	force?: boolean;
+	dryRun?: boolean;
+}
+
 /** Union of all successfully parsed command types. */
 export type ParsedArgs =
 	| ProxyArgs
@@ -142,7 +163,8 @@ export type ParsedArgs =
 	| MonitorArgs
 	| InspectArgs
 	| DoctorArgs
-	| MigrateArgs;
+	| MigrateArgs
+	| CapturesArgs;
 
 /** Returned when argument parsing fails. */
 export interface ParseError {
@@ -585,6 +607,102 @@ Examples:
 				keyMaterial: opts.keyMaterial,
 				noBackup: opts.noBackup,
 				maxFiles,
+			});
+		});
+
+	// --- captures ---
+	const captures = program
+		.command("captures")
+		.description("Manage and query API captures using SQLite index")
+		.addHelpText("after", `
+Examples:
+  $ contextio captures list                         # List recent captures
+  $ contextio captures list --session abc123        # List captures for a session
+  $ contextio captures list --since 1h --limit 20   # Last hour, max 20
+  $ contextio captures stats                        # Show capture statistics
+  $ contextio captures search --model gpt-4         # Search by model
+  $ contextio captures search --status error        # Search by status
+  $ contextio captures search --since 24h --limit 100
+  $ contextio captures reindex                      # Rebuild index from JSON files
+  $ contextio captures reindex --force              # Force re-index all captures
+  $ contextio captures reindex --dry-run            # Preview what would be indexed
+		`);
+
+	// List subcommand
+	captures
+		.command("list")
+		.description("List capture files from SQLite index")
+		.option("--session <id>", "Filter by session ID")
+		.option("--since <date>", "Show captures since date (ISO, relative like 1h/7d, or epoch ms)")
+		.option("--limit <n>", "Maximum results (default: 50)")
+		.option("--offset <n>", "Skip first N results (default: 0)")
+		.option("--dir <path>", "Custom capture directory")
+		.action((opts) => {
+			onResult({
+				command: "captures",
+				subcommand: "list",
+				session: opts.session,
+				since: opts.since,
+				limit: opts.limit,
+				offset: opts.offset,
+				captureDir: opts.dir,
+			});
+		});
+
+	// Stats subcommand
+	captures
+		.command("stats")
+		.description("Show capture statistics from SQLite database")
+		.action(() => {
+			onResult({
+				command: "captures",
+				subcommand: "stats",
+			});
+		});
+
+	// Search subcommand
+	captures
+		.command("search")
+		.description("Search captures with flexible filters")
+		.option("--session <id>", "Filter by session ID")
+		.option("--model <name>", "Filter by model name (request or response)")
+		.option("--status <status>", "Filter by status (success, error, streaming)")
+		.option("--since <date>", "Start date (ISO, relative like 1h/7d, or epoch ms)")
+		.option("--until <date>", "End date (ISO, relative like 1h/7d, or epoch ms)")
+		.option("--limit <n>", "Maximum results (default: 50)")
+		.option("--offset <n>", "Skip first N results (default: 0)")
+		.option("--dir <path>", "Custom capture directory")
+		.action((opts) => {
+			onResult({
+				command: "captures",
+				subcommand: "search",
+				session: opts.session,
+				model: opts.model,
+				status: opts.status,
+				since: opts.since,
+				until: opts.until,
+				limit: opts.limit,
+				offset: opts.offset,
+				captureDir: opts.dir,
+			});
+		});
+
+	// Reindex subcommand
+	captures
+		.command("reindex")
+		.description("Rebuild SQLite index from JSON capture files")
+		.option("--dir <path>", "Custom capture directory")
+		.option("--key-material <key>", "Encryption key for decrypting encrypted captures")
+		.option("--force", "Re-index already indexed captures")
+		.option("--dry-run", "Preview changes without writing to database")
+		.action((opts) => {
+			onResult({
+				command: "captures",
+				subcommand: "reindex",
+				captureDir: opts.dir,
+				keyMaterial: opts.keyMaterial,
+				force: opts.force,
+				dryRun: opts.dryRun,
 			});
 		});
 

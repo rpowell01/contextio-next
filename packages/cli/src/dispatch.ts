@@ -1,5 +1,6 @@
 import type {
   AttachArgs,
+  CapturesArgs,
   InspectArgs,
   MigrateArgs,
   MonitorArgs,
@@ -20,6 +21,7 @@ interface CommandHandlers {
   runMonitor: (args: MonitorArgs) => Promise<void>;
   runInspect: (args: InspectArgs) => Promise<void>;
   runMigrate: (args: MigrateArgs) => Promise<void>;
+  runCaptures: (args: CapturesArgs) => Promise<void>;
 }
 
 export async function dispatchCommand(
@@ -53,6 +55,9 @@ export async function dispatchCommand(
       return undefined;
     case "migrate":
       await handlers.runMigrate(result);
+      return undefined;
+    case "captures":
+      await handlers.runCaptures(result);
       return undefined;
   }
 }

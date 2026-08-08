@@ -32,12 +32,13 @@ import { createRateLimiterPlugin } from "@contextio/proxy";
 import { createRetryPlugin } from "@contextio/proxy";
 
 import { isError, parseArgs } from "./args.js";
-import type { AttachArgs, MigrateArgs, ProxyArgs } from "./args.js";
+import type { AttachArgs, CapturesArgs, MigrateArgs, ProxyArgs } from "./args.js";
 import { getToolEnv } from "./tools.js";
 import { runMonitor } from "./monitor.js";
 import { runInspect } from "./inspect.js";
 import { dispatchCommand } from "./dispatch.js";
 import { runMigrateCaptures, runMigrateProviders, runMigrateAll } from "./commands/migrate.js";
+import { runCapturesList, runCapturesStats, runCapturesSearch, runCapturesReindex } from "./commands/captures.js";
 
 const _pkgPath = new URL("../package.json", import.meta.url);
 const _pkg = JSON.parse(fs.readFileSync(fileURLToPath(_pkgPath), "utf8")) as { version: string };
@@ -1069,6 +1070,44 @@ async function runMigrate(args: MigrateArgs): Promise<void> {
 	}
 }
 
+/** Handle captures command. */
+async function runCaptures(args: CapturesArgs): Promise<void> {
+	switch (args.subcommand) {
+		case "list":
+			await runCapturesList({
+				session: args.session,
+				since: args.since,
+				limit: args.limit,
+				offset: args.offset,
+				dir: args.captureDir,
+			});
+			break;
+		case "stats":
+			await runCapturesStats();
+			break;
+		case "search":
+			await runCapturesSearch({
+				session: args.session,
+				model: args.model,
+				status: args.status,
+				since: args.since,
+				until: args.until,
+				limit: args.limit,
+				offset: args.offset,
+				dir: args.captureDir,
+			});
+			break;
+		case "reindex":
+			await runCapturesReindex({
+				dir: args.captureDir,
+				keyMaterial: args.keyMaterial,
+				force: args.force,
+				dryRun: args.dryRun,
+			});
+			break;
+	}
+}
+
 async function main(): Promise<void> {
 	const result = parseArgs(process.argv);
 
@@ -1088,6 +1127,7 @@ async function main(): Promise<void> {
 		runMonitor,
 		runInspect,
 		runMigrate,
+		runCaptures,
 	});
 
 	if (typeof exitCode === "number") {
