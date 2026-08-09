@@ -20,6 +20,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./website
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,19 +37,18 @@ jobs:
         with:
           node-version: 24
           cache: 'pnpm'
+          cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: ./website
         run: pnpm install --frozen-lockfile
 
       - name: Build VitePress site
-        working-directory: ./website
         run: pnpm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./website/docs/.vitepress/dist
+          path: ./docs/.vitepress/dist
 
   deploy:
     environment:
