@@ -11,7 +11,7 @@ __pycache__/
 *.pyc
 .pi/
 .idea/
-test-results/
+test/results/
 .beads/formulas/
 
 # Beads / Dolt files (added by bd init)
@@ -28,5 +28,4 @@ test-results/
 # Temporary export files
 issue-export*.jsonl
 
-scripts/test-fixture/capture.bin
 .vscode/settings.json
