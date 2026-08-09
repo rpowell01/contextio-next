@@ -4,7 +4,7 @@ layout: doc
 
 # Headers Reference
 
-Complete reference for headers used by ContextIO Next.
+Complete reference for headers used by ContextIO-Next.
 
 ## Request Headers (Client → Proxy)
 

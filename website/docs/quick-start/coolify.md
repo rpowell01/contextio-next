@@ -4,7 +4,7 @@ layout: doc
 
 # Coolify Deployment
 
-Coolify is a self-hosted PaaS. This guide shows how to deploy ContextIO Next on Coolify.
+Coolify is a self-hosted PaaS. This guide shows how to deploy ContextIO-Next on Coolify.
 
 ## Persistent Directories
 

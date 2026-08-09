@@ -140,7 +140,7 @@ app.get('/metrics', (req, res) => {
 ## Grafana Dashboards
 
 Import community dashboards:
-- **ContextIO Next Overview** — Request volume, latency, errors
+- **ContextIO-Next Overview** — Request volume, latency, errors
 - **Rate Limiter Deep Dive** — Bucket states, 429s, queues
 - **Provider Comparison** — Per-provider latency, throughput
 
@@ -156,7 +156,7 @@ groups:
     labels:
       severity: warning
     annotations:
-      summary: "High error rate on ContextIO Next"
+      summary: "High error rate on ContextIO-Next"
       
   - alert: RateLimiterExhausted
     expr: contextio_rate_limiter_empty_buckets > 5

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'ContextIO Next',
+  title: 'ContextIO-Next',
   description: 'Single-port Docker proxy for LLM API traffic with redaction, logging, rate limiting, and OIDC auth',
   lang: 'en-US',
   lastUpdated: true,
@@ -13,14 +13,14 @@ export default defineConfig({
     ['link', { rel: 'icon', href: '/favicon.ico' }],
     ['meta', { name: 'theme-color', content: '#3b82f6' }],
     ['meta', { property: 'og:type', content: 'website' }],
-    ['meta', { property: 'og:title', content: 'ContextIO Next' }],
+    ['meta', { property: 'og:title', content: 'ContextIO-Next' }],
     ['meta', { property: 'og:description', content: 'Single-port Docker proxy for LLM API traffic with redaction, logging, rate limiting, and OIDC auth' }],
     ['meta', { property: 'og:image', content: 'https://rpowell01.github.io/contextio-next/contextio-next-brand.png' }],
   ],
 
   themeConfig: {
     logo: '/contextio-next-brand.png',
-    siteTitle: 'ContextIO Next',
+    siteTitle: 'ContextIO-Next',
 
     nav: [
       { text: 'Home', link: '/' },

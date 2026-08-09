@@ -8,7 +8,7 @@ Local ONNX model for context-aware PII detection. No external API calls, no GPU 
 
 ## Overview
 
-GLiNER (Generalist Lightweight Named Entity Recognizer) is a compact NER model that can detect arbitrary entity types. ContextIO Next includes a pre-built quantized ONNX model (~50MB) copied from `ghcr.io/rpowell01/contextio-gliner-model:0.2.28`.
+GLiNER (Generalist Lightweight Named Entity Recognizer) is a compact NER model that can detect arbitrary entity types. ContextIO-Next includes a pre-built quantized ONNX model (~50MB) copied from `ghcr.io/rpowell01/contextio-gliner-model:0.2.28`.
 
 ## Quick Start
 

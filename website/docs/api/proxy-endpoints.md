@@ -104,7 +104,7 @@ Proxy reassembles streams for:
 
 Tools that ignore base URLs use mitmproxy:
 ```
-Tool → HTTPS_PROXY → mitmproxy (TLS term) → ContextIO Next (port 4040) → Upstream
+Tool → HTTPS_PROXY → mitmproxy (TLS term) → ContextIO-Next (port 4040) → Upstream
 ```
 
 Mitmproxy adds:

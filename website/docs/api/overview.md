@@ -4,7 +4,7 @@ layout: doc
 
 # API Reference Overview
 
-ContextIO Next exposes several API endpoints for integration and automation.
+ContextIO-Next exposes several API endpoints for integration and automation.
 
 ## Base URL
 

@@ -2,12 +2,12 @@
 layout: home
 
 hero:
-  name: ContextIO Next
+  name: ContextIO-Next
   text: Single-Port Docker Proxy for LLM APIs
   tagline: Transparent proxy with redaction, logging, rate limiting, retry, and OIDC auth — all on port 4040
   image:
     src: /contextio-next-brand.png
-    alt: ContextIO Next
+    alt: ContextIO-Next
   actions:
     - theme: brand
       text: Quick Start
@@ -103,7 +103,7 @@ openssl rand -base64 32
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    ContextIO Next (port 4040)               │
+│                    ContextIO-Next (port 4040)               │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │ HTTP Reverse Proxy                                   │   │
 │  │  • Provider classification (Anthropic, OpenAI, etc.) │   │

@@ -4,7 +4,7 @@ layout: doc
 
 # Features Overview
 
-ContextIO Next provides a comprehensive set of features for observing, securing, and managing LLM API traffic.
+ContextIO-Next provides a comprehensive set of features for observing, securing, and managing LLM API traffic.
 
 ## Core Features
 
@@ -55,7 +55,7 @@ ContextIO Next provides a comprehensive set of features for observing, securing,
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    ContextIO Next (port 4040)               │
+│                    ContextIO-Next (port 4040)               │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │ HTTP Reverse Proxy                                   │   │
 │  │  • Provider classification                           │   │
@@ -91,7 +91,7 @@ ContextIO Next provides a comprehensive set of features for observing, securing,
 | **Copilot CLI** | mitmproxy + proxy chain | ✓ | ✓ |
 | **OpenCode** | mitmproxy + proxy chain | ✓ | ✓ |
 
-Tools that accept base URL overrides (Claude, Aider, Pi, Gemini) route directly. Tools that don't (Codex, Copilot, OpenCode) go through mitmproxy first for TLS termination, then chain into ContextIO Next.
+Tools that accept base URL overrides (Claude, Aider, Pi, Gemini) route directly. Tools that don't (Codex, Copilot, OpenCode) go through mitmproxy first for TLS termination, then chain into ContextIO-Next.
 
 ## Next Steps
 

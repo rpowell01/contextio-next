@@ -9,7 +9,7 @@ Single Sign-On via any OpenID Connect provider.
 ## Architecture
 
 ```
-User → ContextIO Next → OIDC Provider → Callback → Session Cookie
+User → ContextIO-Next → OIDC Provider → Callback → Session Cookie
 ```
 
 Flow:
