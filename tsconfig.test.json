@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist-test",
+    "outDir": "test/dist",
     "rootDir": ".",
     "types": ["node"],
     "baseUrl": ".",

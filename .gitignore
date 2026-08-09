@@ -1,6 +1,6 @@
 node_modules/
 dist/
-dist-test/
+test/dist/
 dist-test-proxy/
 dist-test-proxy-only/
 packages/dist-test-proxy3/
