@@ -129,12 +129,12 @@ async function startSyncScheduler(): Promise<NodeJS.Timeout | null> {
   if (syncStarted) return syncTimer;
   syncStarted = true;
 
-  // Ensure database schema is initialized (runs once at startup)
+  // Ensure database schema is initialized and migrate settings.json if needed (runs once at startup)
   try {
-    const { runMigrations } = await import("@contextio/core/db");
-    runMigrations();
+    const { initDb } = await import("@contextio/core/db");
+    initDb();
   } catch (error) {
-    console.error("[redaction-meta-sync] Failed to run migrations:", error);
+    console.error("[redaction-meta-sync] Failed to initialize database:", error);
   }
 
   syncTimer = setInterval(runSyncWithCatch, REDACTION_META_SYNC_INTERVAL_MS);
