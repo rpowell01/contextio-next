@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/theme-provider";
 import "../globals.css";
-import { readSettingsFile } from "@/lib/settings-server";
-import { DEFAULT_SETTINGS, validateSettingsLenient, applyEnvOverrides } from "@/lib/settings";
+import { getSettingsWithMeta } from "@contextio/core/db";
+import { DEFAULT_SETTINGS, applyEnvOverrides } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: "ContextIO-Next Web",
@@ -28,16 +28,19 @@ export const metadata: Metadata = {
 // anti-flash script can apply it before first paint, not just localStorage.
 async function getServerTheme(): Promise<string> {
   try {
-    const raw = await readSettingsFile();
-    if (!raw) return DEFAULT_SETTINGS.theme;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return DEFAULT_SETTINGS.theme;
-    const settings = validateSettingsLenient(parsed);
-    const { settings: effective, appliedKeys } = applyEnvOverrides(settings);
+    // Get settings from database (no env keys yet)
+    const { settings: dbSettings } = getSettingsWithMeta();
+    
+    // Handle case where settings might be null (database empty)
+    const settings = dbSettings ?? DEFAULT_SETTINGS;
+    
+    // Apply environment variable overrides
+    const { settings: effectiveSettings, appliedKeys } = applyEnvOverrides(settings);
+    
     // Only use the server theme if it came from an env override (dynamic) or was
     // explicitly saved; otherwise fall back to client localStorage / OS default.
     if (appliedKeys.has("theme")) {
-      return effective.theme;
+      return effectiveSettings.theme;
     }
     return settings.theme;
   } catch {

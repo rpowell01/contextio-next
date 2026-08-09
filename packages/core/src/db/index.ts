@@ -68,6 +68,8 @@ export {
 	getRecentCaptures,
 	getCapturesByDateRange,
 	deleteCapture,
+	deleteCaptureByFilepath,
+	deleteCapturesByFilepaths,
 	getCaptureCount,
 	getStats,
 	searchCaptures,

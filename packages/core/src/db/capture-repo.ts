@@ -192,6 +192,38 @@ export function deleteCapture(id: string): void {
 }
 
 /**
+ * Delete capture metadata entries by filepath.
+ * Useful when the capture file on disk has been deleted and we need to clean up orphaned metadata.
+ *
+ * @param filepath - The filepath as stored in the database (can be full path or relative)
+ * @returns Number of deleted records
+ */
+export function deleteCaptureByFilepath(filepath: string): number {
+	const db = getDb();
+	const result = db.prepare("DELETE FROM captures_metadata WHERE filepath = ?").run(filepath);
+	return result.changes;
+}
+
+/**
+ * Delete multiple capture metadata entries by filepaths.
+ * More efficient than calling deleteCaptureByFilepath repeatedly for bulk cleanup.
+ *
+ * @param filepaths - Array of filepaths as stored in the database
+ * @returns Number of deleted records
+ */
+export function deleteCapturesByFilepaths(filepaths: string[]): number {
+	if (filepaths.length === 0) return 0;
+
+	const db = getDb();
+	const placeholders = filepaths.map(() => "?").join(",");
+	const sql = `DELETE FROM captures_metadata WHERE filepath IN (${placeholders})`;
+
+	const stmt = db.prepare(sql);
+	const result = stmt.run(...filepaths);
+	return result.changes;
+}
+
+/**
  * Get the total count of capture metadata entries.
  */
 export function getCaptureCount(): number {

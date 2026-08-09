@@ -18,20 +18,17 @@ export async function GET(): Promise<NextResponse> {
   try {
     // Ensure database is initialized
     ensureDbInitialized();
-    
-    // Get settings from database (no env keys yet)
-    const { settings } = getSettingsWithMeta();
-    
-    // Handle case where settings might be null (database empty)
-    const dbSettings = settings ?? DEFAULT_SETTINGS;
-    
-    // Apply environment variable overrides
+
+    // Single DB read - get raw settings from database
+    const dbSettings = getSettings() ?? DEFAULT_SETTINGS;
+
+    // Apply environment variable overrides to determine which keys are env-controlled
     const { settings: effectiveSettings, appliedKeys } = applyEnvOverrides(dbSettings);
     applyLogDir(effectiveSettings.logDir);
-    
-    // Get metadata with applied env keys for accurate source tracking
-    const { meta: metadata } = getSettingsWithMeta(appliedKeys);
-    
+
+    // Get metadata using pure function (no DB read) with applied env keys for accurate source tracking
+    const metadata = getSettingMetadata(effectiveSettings, appliedKeys);
+
     return NextResponse.json(createSuccessResponse({ settings: effectiveSettings, metadata }));
   } catch (error) {
     console.error("Error reading settings:", error);

@@ -1,4 +1,5 @@
-import { DEFAULT_SETTINGS } from "@/lib/settings";
+import { DEFAULT_SETTINGS, applyEnvOverrides } from "@/lib/settings";
+import { isDbInitialized, deleteCapturesByFilepaths } from "@contextio/core/db";
 
 let cleanupTimer: NodeJS.Timeout | null = null;
 let schedulerStarted = false;
@@ -59,7 +60,7 @@ async function listCaptureFiles(): Promise<string[]> {
 
 function defaultSettings() {
   return {
-    enabled: DEFAULT_SETTINGS.captureCleanupEnabled,
+    enabled: true,
     maxAgeDays: DEFAULT_SETTINGS.captureCleanupMaxAgeDays,
     intervalHours: DEFAULT_SETTINGS.captureCleanupIntervalHours,
   };
@@ -70,43 +71,30 @@ async function loadSettings(): Promise<{
   maxAgeDays: number;
   intervalHours: number;
 }> {
-  const { ensureSettingsFile, readSettingsFile } = await import("@/lib/settings-server");
-
-  let capturedLogDir: string | undefined;
-  let cleanupSettings: { enabled: boolean; maxAgeDays: number; intervalHours: number } | null = null;
   try {
-    await ensureSettingsFile(DEFAULT_SETTINGS);
-    const raw = await readSettingsFile();
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (typeof parsed === "object" && parsed !== null) {
-        const obj = parsed as Record<string, unknown>;
-        if (typeof obj.logDir === "string") capturedLogDir = obj.logDir;
-        cleanupSettings = {
-          enabled:
-            typeof obj.captureCleanupEnabled === "boolean"
-              ? obj.captureCleanupEnabled
-              : defaultSettings().enabled,
-          maxAgeDays:
-            typeof obj.captureCleanupMaxAgeDays === "number" && Number.isInteger(obj.captureCleanupMaxAgeDays)
-              ? obj.captureCleanupMaxAgeDays
-              : defaultSettings().maxAgeDays,
-          intervalHours:
-            typeof obj.captureCleanupIntervalHours === "number" && Number.isInteger(obj.captureCleanupIntervalHours)
-              ? obj.captureCleanupIntervalHours
-              : defaultSettings().intervalHours,
-        };
-      }
+    // Ensure database schema is initialized and migrate settings.json if needed
+    const { initDb } = await import("@contextio/core/db");
+    initDb();
+    
+    const { getSettings } = await import("@contextio/core/db");
+    const dbSettings = getSettings() ?? DEFAULT_SETTINGS;
+    
+    // Apply environment variable overrides (same pattern as API route)
+    const { settings: effectiveSettings } = applyEnvOverrides(dbSettings);
+    
+    if (typeof effectiveSettings.logDir === "string") {
+      await applyLogDir(effectiveSettings.logDir);
     }
+    
+    return {
+      enabled: effectiveSettings.captureCleanupEnabled,
+      maxAgeDays: effectiveSettings.captureCleanupMaxAgeDays,
+      intervalHours: effectiveSettings.captureCleanupIntervalHours,
+    };
   } catch {
-    // ignore settings read errors; fall back to cleanup defaults below
+    // Ignore settings read errors; fall back to cleanup defaults
+    return defaultSettings();
   }
-
-  if (typeof capturedLogDir === "string") {
-    applyLogDir(capturedLogDir);
-  }
-
-  return cleanupSettings ?? defaultSettings();
 }
 
 // Use dynamic require for Node.js modules to avoid bundling in client
@@ -121,6 +109,8 @@ async function runCleanup(): Promise<void> {
   const fs = await import("fs/promises");
   const path = await import("path");
 
+  const deletedFilepaths: string[] = [];
+
   for (const file of files) {
     const filepath = path.join(captureDir, file);
     try {
@@ -128,8 +118,21 @@ async function runCleanup(): Promise<void> {
       if (stats.mtimeMs >= cutoff) continue;
       await fs.unlink(filepath);
       await fs.unlink(path.join(captureDir, metaFilenameFor(file))).catch(() => {});
+      deletedFilepaths.push(filepath);
     } catch {
       // ignore individual file errors (e.g., already deleted, permissions)
+    }
+  }
+
+  // Clean up corresponding SQLite metadata records
+  if (deletedFilepaths.length > 0 && isDbInitialized()) {
+    try {
+      const deletedCount = deleteCapturesByFilepaths(deletedFilepaths);
+      if (deletedCount > 0) {
+        console.log(`[cleanup] Removed ${deletedCount} orphaned capture metadata records from SQLite`);
+      }
+    } catch (err) {
+      console.warn(`[cleanup] Failed to clean up SQLite capture metadata: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }

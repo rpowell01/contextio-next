@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getOidcSettings } from "@/lib/settings-server";
+import { getSettings } from "@contextio/core/db";
 import { createSuccessResponse } from "@contextio/core";
 
 export async function GET(): Promise<NextResponse> {
-  // Check if OIDC is enabled via environment variable or settings.json
-  const settings = await getOidcSettings();
-  const oidcEnabled = process.env.CONTEXTIO_OIDC_ENABLED === "true" || settings.oidcEnabled;
+  // Check if OIDC is enabled via environment variable or database settings
+  const settings = getSettings();
+  const oidcEnabled = process.env.CONTEXTIO_OIDC_ENABLED === "true" || settings?.oidcEnabled;
   const issuer = process.env.CONTEXTIO_OIDC_ISSUER;
 
   if (!oidcEnabled || !issuer) {

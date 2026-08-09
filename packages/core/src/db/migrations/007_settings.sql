@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS settings (
     redact_reversible         INTEGER NOT NULL DEFAULT 0,
     redact_policy_file        TEXT NOT NULL DEFAULT '',
     encryption_at_rest        INTEGER NOT NULL DEFAULT 0,
-    capture_cleanup_enabled   INTEGER NOT NULL DEFAULT 0,
+    capture_cleanup_enabled   INTEGER NOT NULL DEFAULT 1,
     capture_cleanup_interval_hours INTEGER NOT NULL DEFAULT 24,
     capture_cleanup_max_age_days   INTEGER NOT NULL DEFAULT 30,
     theme                     TEXT NOT NULL DEFAULT 'system',

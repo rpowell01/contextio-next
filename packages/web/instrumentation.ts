@@ -1,6 +1,8 @@
 // Use Node.js runtime for instrumentation to support Node.js built-ins
 export const runtime = "nodejs";
 
+import { DEFAULT_SETTINGS, applyEnvOverrides } from "@/lib/settings";
+
 /**
  * Check if we're running in the Node.js runtime (not Edge).
  * In Next.js 15, instrumentation can be bundled for both runtimes.
@@ -9,9 +11,6 @@ export const runtime = "nodejs";
 function isNodeRuntime(): boolean {
   return typeof process !== "undefined" && !!process.versions?.node;
 }
-
-const SETTINGS_DIR = "/app/custom-policy";
-const SETTINGS_FILE = "/app/custom-policy/settings.json";
 
 // Periodic sync interval for importing redaction metadata from .redact-meta.json files to SQLite
 // Runs every 5 minutes to catch any files that the watcher might have missed
@@ -36,15 +35,19 @@ function validateCsrfSecret(): void {
 
 async function applyPersistedSettings(): Promise<void> {
   try {
-    const { readFile } = await import("fs/promises");
-    const raw = await readFile(SETTINGS_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null) {
-      const obj = parsed as Record<string, unknown>;
-      if (typeof obj.logDir === "string") {
-        const { applyLogDir } = await import("@/lib/sessions/server-utils");
-        applyLogDir(obj.logDir);
-      }
+    // Ensure database schema is initialized and migrate settings.json if needed
+    const { initDb } = await import("@contextio/core/db");
+    initDb();
+    
+    const { getSettings } = await import("@contextio/core/db");
+    const dbSettings = getSettings() ?? DEFAULT_SETTINGS;
+    
+    // Apply environment variable overrides
+    const { settings: effectiveSettings } = applyEnvOverrides(dbSettings);
+    
+    if (typeof effectiveSettings.logDir === "string") {
+      const { applyLogDir } = await import("@/lib/sessions/server-utils");
+      await applyLogDir(effectiveSettings.logDir);
     }
   } catch {
     // Ignore settings read errors
@@ -90,8 +93,8 @@ function registerCleanupHandlers(): void {
 function defaultSettings() {
   return {
     enabled: true,
-    maxAgeDays: 30,
-    intervalHours: 24,
+    maxAgeDays: DEFAULT_SETTINGS.captureCleanupMaxAgeDays,
+    intervalHours: DEFAULT_SETTINGS.captureCleanupIntervalHours,
   };
 }
 
@@ -175,37 +178,26 @@ function metaFilenameFor(captureFilename: string): string {
 }
 
 async function loadSettings(): Promise<{ enabled: boolean; maxAgeDays: number; intervalHours: number }> {
-  let cleanupSettings: { enabled: boolean; maxAgeDays: number; intervalHours: number } | null = null;
   try {
-    const { ensureSettingsFile } = await import("@/lib/settings-server");
-    await ensureSettingsFile({});
-    const { readSettingsFile } = await import("@/lib/settings-server");
-    const raw = await readSettingsFile();
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (typeof parsed === "object" && parsed !== null) {
-        const obj = parsed as Record<string, unknown>;
-        cleanupSettings = {
-          enabled:
-            typeof obj.captureCleanupEnabled === "boolean"
-              ? obj.captureCleanupEnabled
-              : defaultSettings().enabled,
-          maxAgeDays:
-            typeof obj.captureCleanupMaxAgeDays === "number" && Number.isInteger(obj.captureCleanupMaxAgeDays)
-              ? obj.captureCleanupMaxAgeDays
-              : defaultSettings().maxAgeDays,
-          intervalHours:
-            typeof obj.captureCleanupIntervalHours === "number" && Number.isInteger(obj.captureCleanupIntervalHours)
-              ? obj.captureCleanupIntervalHours
-              : defaultSettings().intervalHours,
-        };
-      }
-    }
+    // Ensure database schema is initialized and migrate settings.json if needed
+    const { initDb } = await import("@contextio/core/db");
+    initDb();
+    
+    const { getSettings } = await import("@contextio/core/db");
+    const dbSettings = getSettings() ?? DEFAULT_SETTINGS;
+    
+    // Apply environment variable overrides (same pattern as API route)
+    const { settings: effectiveSettings } = applyEnvOverrides(dbSettings);
+    
+    return {
+      enabled: effectiveSettings.captureCleanupEnabled,
+      maxAgeDays: effectiveSettings.captureCleanupMaxAgeDays,
+      intervalHours: effectiveSettings.captureCleanupIntervalHours,
+    };
   } catch {
-    // ignore settings read errors; fall back to cleanup defaults below
+    // Ignore settings read errors; fall back to cleanup defaults
+    return defaultSettings();
   }
-
-  return cleanupSettings ?? defaultSettings();
 }
 
 async function runCleanup() {
