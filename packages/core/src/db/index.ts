@@ -12,6 +12,7 @@ import {
 import { importRedactionMetaFromFiles } from "./redaction-repo.js";
 import { migrateCapturesSync, getDefaultCaptureDir, migrateCaptures } from "./migrate-captures.js";
 import { migrateProviders, getDefaultProvidersFile } from "./migrate-providers.js";
+import { importSettingsFromJson } from "./settings-repo.js";
 import { getDb } from "./connection.js";
 
 export {
@@ -43,6 +44,20 @@ export {
 	type MergedProvider,
 	type ProviderConfigWithMeta,
 } from "./provider-repo.js";
+
+export {
+	getSettings,
+	upsertSettings,
+	getSettingsWithMeta,
+	importSettingsFromJson,
+	type Settings,
+	type SettingsRow,
+	type SettingMeta,
+	type SettingSource,
+	type ImportSettingsResult,
+	type RateLimitConfig,
+	type StreamingRetryConfig,
+} from "./settings-repo.js";
 
 export {
 	upsertCapture,

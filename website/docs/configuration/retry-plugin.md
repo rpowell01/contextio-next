@@ -10,13 +10,15 @@ The built-in retry plugin provides **exponential backoff with jitter** for faile
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CONTEXTIO_RETRY_ENABLED` | `true` | Enable retry plugin |
+| `CONTEXTIO_ENABLE_RATE_LIMITER` | `true` | Enable rate limiter (retry enabled when this is `true`) |
 | `CONTEXTIO_RETRY_MAX_ATTEMPTS` | `3` | Max retry attempts |
 | `CONTEXTIO_RETRY_BASE_DELAY_MS` | `500` | Base delay for exponential backoff |
 | `CONTEXTIO_RETRY_MAX_DELAY_MS` | `30000` | Cap on delay |
 | `CONTEXTIO_RETRY_JITTER_FACTOR` | `0.1` | Jitter factor (0-1) |
 | `CONTEXTIO_RETRY_RETRYABLE_STATUS_CODES` | `429,500,502,503,504` | HTTP status codes to retry |
 | `CONTEXTIO_RETRY_PROVIDER_OVERRIDES` | *(JSON)* | Per-provider config overrides |
+
+> **Note**: The retry plugin is automatically enabled when the rate limiter is enabled (`CONTEXTIO_ENABLE_RATE_LIMITER=true`). There is no separate `CONTEXTIO_RETRY_ENABLED` variable.
 
 ## Backoff Algorithm
 
@@ -81,8 +83,8 @@ CONTEXTIO_RETRY_PROVIDER_OVERRIDES='{
 ## Disable Retry
 
 ```bash
-# Disable globally
-CONTEXTIO_RETRY_ENABLED=false
+# Disable rate limiter (also disables retry)
+CONTEXTIO_ENABLE_RATE_LIMITER=false
 
 # Or per-provider (programmatic only)
 createRetryPlugin({

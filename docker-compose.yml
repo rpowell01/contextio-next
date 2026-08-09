@@ -18,9 +18,10 @@ services:
       CONTEXT_PROXY_BIND_HOST: 0.0.0.0
       CONTEXT_PROXY_PORT: 4040
 
-      # Plugin configuration - rate-limiter and retry are built-in/configured via env
-      # Only specify additional plugins here (redact, logger)
-      CONTEXT_PROXY_PLUGINS: /app/redact-plugin.js,/app/logger-plugin.js
+      # Plugin enable/disable (all enabled by default)
+      CONTEXTIO_ENABLE_LOGGER: "true"
+      CONTEXTIO_ENABLE_REDACT: "true"
+      CONTEXTIO_ENABLE_RATE_LIMITER: "true"
 
       # Logging configuration
       LOG_TRAFFIC: "false"
@@ -35,10 +36,9 @@ services:
       REDACT_CAPTURE_DIR: /app/captures
 
       # Rate limiter configuration (used by built-in plugin)
-      RATE_LIMITER_ENABLED: "true"
-      RATE_LIMITER_MAX_REQUESTS: "60"
-      RATE_LIMITER_WINDOW_MS: "60000"
-      RATE_LIMITER_BUFFER_CAPACITY: "10"
+      CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS: "60"
+      CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS: "60000"
+      CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER: "10"
 
       # Next.js cache directory for ISR
       NEXT_CACHE_DIR: /app/captures/.next/cache
@@ -54,12 +54,13 @@ services:
       # CONTEXTIO_LOGGER_ENCRYPTION_KEY: ${CONTEXTIO_LOGGER_ENCRYPTION_KEY}
 
       # OIDC configuration (optional)
-      # OIDC_ENABLED: "false"
-      # OIDC_ISSUER: ""
-      # OIDC_CLIENT_ID: ""
-      # OIDC_CLIENT_SECRET: ""
-      # OIDC_SCOPE: "openid profile email"
-      # OIDC_PUBLIC_URL: ""
+      # CONTEXTIO_OIDC_ENABLED: "false"
+      # CONTEXTIO_OIDC_ISSUER: ""
+      # CONTEXTIO_OIDC_CLIENT_ID: ""
+      # CONTEXTIO_OIDC_CLIENT_SECRET: ""
+      # CONTEXTIO_OIDC_SESSION_SECRET: ""
+      # CONTEXTIO_OIDC_PUBLIC_URL: ""
+      # CONTEXTIO_OIDC_SCOPE: "openid profile email"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4040"]

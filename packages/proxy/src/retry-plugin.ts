@@ -255,8 +255,8 @@ export class RetryPlugin implements ProxyPlugin {
       }
     }
 
-    // Check RATE_LIMITER_ENABLED env var since retry plugin is closely related to rate limiting
-    const rateLimiterEnabled = process.env.RATE_LIMITER_ENABLED !== "false";
+    // Check CONTEXTIO_ENABLE_RATE_LIMITER env var since retry plugin is closely related to rate limiting
+    const rateLimiterEnabled = process.env.CONTEXTIO_ENABLE_RATE_LIMITER !== "false";
     
     this.globalConfig = {
       maxRetries,

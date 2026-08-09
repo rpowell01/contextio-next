@@ -18,7 +18,7 @@ The built-in rate limiter protects upstream LLM APIs from excessive traffic usin
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RATE_LIMITER_ENABLED` | `true` | Master enable/disable switch |
+| `CONTEXTIO_ENABLE_RATE_LIMITER` | `true` | Enable rate limiter |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_MAX_REQUESTS` | `60` | Max requests per window |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_WINDOW_MS` | `60000` | Time window in milliseconds |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_BUFFER` | `10` | Burst buffer capacity |
@@ -64,7 +64,7 @@ CONTEXTIO_RATE_LIMIT_OPENAI_WINDOW_MS=100
 CONTEXTIO_RATE_LIMIT_OPENAI_BUFFER=0
 
 # Option 2: Disable globally
-RATE_LIMITER_ENABLED=false
+CONTEXTIO_ENABLE_RATE_LIMITER=false
 ```
 
 ## 429 Response Format

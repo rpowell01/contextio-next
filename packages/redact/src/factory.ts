@@ -3,7 +3,7 @@
  *
  * This module exports a factory function that creates a redact plugin
  * configured from environment variables and the web UI settings file.
- * It can be loaded via CONTEXT_PROXY_PLUGINS=@contextio/redact/factory.
+ * The redact plugin is enabled via CONTEXTIO_ENABLE_REDACT environment variable (default: true).
  *
  * Environment variables (web UI settings take precedence if set):
  * - REDACT_PRESET: "secrets" | "pii" | "strict" (default: "pii")
@@ -13,6 +13,7 @@
  * - REDACT_DETECTOR_MODEL_DIR: path to GLiNER ONNX model directory
  * - REDACT_DETECTOR_THRESHOLD: number 0-1 (default: 0.5)
  * - LOGGER_CAPTURE_DIR: capture directory for sidecar writes
+ * - CONTEXTIO_ENABLE_REDACT: "true" | "false" (default: "true") - Enable/disable redact plugin
  */
 
 import fs from "node:fs";
@@ -54,13 +55,10 @@ function buildRedactConfig(): RedactPluginConfig | null {
 
 	// Check if redaction is enabled via env or settings
 	const redactEnabled =
-		process.env.REDACT_ENABLED === "true" || settings.redactPreset !== undefined;
+		process.env.CONTEXTIO_ENABLE_REDACT !== "false" || settings.redactPreset !== undefined;
 
 	if (!redactEnabled) {
-		// Check legacy env vars
-		const legacyEnabled =
-			process.env.REDACT_PRESET || process.env.REDACT_POLICY_FILE;
-		if (!legacyEnabled) return null;
+		return null;
 	}
 
 	const detectorConfig: RedactPluginConfig["detectorConfig"] = {};
@@ -96,8 +94,13 @@ function buildRedactConfig(): RedactPluginConfig | null {
 	return config;
 }
 
-/** Factory function for CONTEXT_PROXY_PLUGINS. */
+/** Factory function for redact plugin (enabled via CONTEXTIO_ENABLE_REDACT env var). */
 export default function createRedactPluginFactory(): ProxyPlugin | null {
+	// Check if redact is explicitly disabled via env var
+	const redactEnabled = process.env.CONTEXTIO_ENABLE_REDACT !== "false";
+	if (!redactEnabled) {
+		return null;
+	}
 	const config = buildRedactConfig();
 	if (!config) return null;
 	return createRedactPlugin(config);

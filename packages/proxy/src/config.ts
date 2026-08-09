@@ -292,6 +292,13 @@ export interface ResolvedProxyConfig {
   rateLimiter: Record<Provider, RateLimitConfig>;
   retry: Record<Provider, RetryConfig>;
   providers: ProvidersMap;
+  // Plugin enable flags
+  plugins: {
+    loggerEnabled: boolean;
+    redactEnabled: boolean;
+    rateLimiterEnabled: boolean;
+    retryEnabled: boolean;
+  };
 }
 
 /**
@@ -826,6 +833,12 @@ for (const upstreamKey of requiredUpstreams) {
     kilo: resolveRetryForProvider("kilo", providersConfig.kilo?.retry),
   };
 
+  // Plugin enable flags (default to true)
+  const loggerEnabled = process.env.CONTEXTIO_ENABLE_LOGGER !== "false";
+  const redactEnabled = process.env.CONTEXTIO_ENABLE_REDACT !== "false";
+  const rateLimiterEnabled = process.env.CONTEXTIO_ENABLE_RATE_LIMITER !== "false";
+  const retryEnabled = rateLimiterEnabled; // Retry is enabled when rate limiter is enabled
+
   return {
     upstreams: normalizedUpstreams,
     bindHost,
@@ -842,5 +855,11 @@ for (const upstreamKey of requiredUpstreams) {
     rateLimiter,
     retry,
     providers: providersConfig,
+    plugins: {
+      loggerEnabled,
+      redactEnabled,
+      rateLimiterEnabled,
+      retryEnabled,
+    },
   };
 }

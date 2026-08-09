@@ -63,7 +63,7 @@ Fallback for non-standard error formats:
 
 ### Environment Variables
 ```bash
-CONTEXTIO_RETRY_ENABLED=true
+# Retry is enabled automatically when CONTEXTIO_ENABLE_RATE_LIMITER=true (default)
 CONTEXTIO_RETRY_MAX_ATTEMPTS=3
 CONTEXTIO_RETRY_BASE_DELAY_MS=500
 CONTEXTIO_RETRY_MAX_DELAY_MS=30000
@@ -87,10 +87,10 @@ See [NVIDIA Worker Retry](/features/nvidia-retry) for details on `ResourceExhaus
 ## Disabling
 
 ```bash
-# Globally
-CONTEXTIO_RETRY_ENABLED=false
+# Globally (disable rate limiter, which also disables retry)
+CONTEXTIO_ENABLE_RATE_LIMITER=false
 
-# Per-provider (programmatic)
+# Per-provider (programmatic only)
 createRetryPlugin({
   providerOverrides: {
     openai: { enabled: false }

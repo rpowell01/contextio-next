@@ -5,8 +5,10 @@ Minimal Docker image for `@contextio/proxy` with logging and redaction plugins p
 ## What's Included
 
 - **@contextio/proxy**: HTTP proxy server (port 4040)
-- **@contextio/logger**: Capture-to-disk plugin (**enabled by default**)
-- **@contextio/redact**: PII/secrets redaction plugin (**disabled by default, opt-in**)
+- **@contextio/logger**: Capture-to-disk plugin (**enabled by default via CONTEXTIO_ENABLE_LOGGER=true**)
+- **@contextio/redact**: PII/secrets redaction plugin (**enabled by default via CONTEXTIO_ENABLE_REDACT=true**)
+- **Built-in rate limiter**: Enabled by default via CONTEXTIO_ENABLE_RATE_LIMITER=true
+- **Built-in retry**: Enabled automatically when rate limiter is enabled
 
 ## Quick Start
 
@@ -16,18 +18,18 @@ Minimal Docker image for `@contextio/proxy` with logging and redaction plugins p
 # Pull from ghcr.io
 docker pull ghcr.io/larsderidder/contextio-next:latest
 
-# Run with default settings (logging only, no redaction)
+# Run with default settings (logging, redaction, rate limiter all enabled)
 docker run --rm -p 4040:4040 ghcr.io/larsderidder/contextio-next:latest
 
-# Enable redaction (PII preset)
+# Disable a plugin
 docker run --rm -p 4040:4040 \
--e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
-ghcr.io/larsderidder/contextio-next:latest
+  -e CONTEXTIO_ENABLE_REDACT=false \
+  ghcr.io/larsderidder/contextio-next:latest
 
 # Mount a volume to persist captures
 docker run --rm -p 4040:4040 \
--v $(pwd)/captures:/home/node/.contextio-next/captures \
-ghcr.io/larsderidder/contextio-next:latest
+  -v $(pwd)/captures:/home/node/.contextio-next/captures \
+  ghcr.io/larsderidder/contextio-next:latest
 ```
 
 ### Building Locally
@@ -36,18 +38,13 @@ ghcr.io/larsderidder/contextio-next:latest
 # Build the image
 docker build -t contextio-next-proxy .
 
-# Run with default settings (logging only, no redaction)
+# Run with default settings
 docker run --rm -p 4040:4040 contextio-next-proxy
-
-# Enable redaction
-docker run --rm -p 4040:4040 \
--e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
-contextio-next-proxy
 
 # Mount a volume to persist captures
 docker run --rm -p 4040:4040 \
--v $(pwd)/captures:/home/node/.contextio-next/captures \
-contextio-next-proxy
+  -v $(pwd)/captures:/home/node/.contextio-next/captures \
+  contextio-next-proxy
 ```
 
 ### Available Tags
@@ -67,14 +64,16 @@ All configuration is via environment variables.
 
 | Env Var | Default | Description |
 |:--------|:--------|:------------|
-| `CONTEXT_PROXY_PLUGINS` | `/app/logger-plugin.js` | Comma-separated plugin paths |
+| `CONTEXTIO_ENABLE_LOGGER` | `true` | Enable logger plugin |
+| `CONTEXTIO_ENABLE_REDACT` | `true` | Enable redact plugin |
+| `CONTEXTIO_ENABLE_RATE_LIMITER` | `true` | Enable rate limiter (retry enabled when true) |
 | `CONTEXT_PROXY_BIND_HOST` | `0.0.0.0` | Bind address |
 | `CONTEXT_PROXY_PORT` | `4040` | Port to listen on |
 | `LOGGER_CAPTURE_DIR` | `/app/captures` | Capture output directory |
 | `LOGGER_MAX_SESSIONS` | `0` (unlimited) | Max sessions to retain |
 | `REDACT_PRESET` | `pii` | Preset: `secrets`, `pii`, `strict` |
 | `REDACT_REVERSIBLE` | `false` | Restore originals in responses |
-| `REDACT_POLICY_FILE` | _(none)_ | Path to custom policy JSON (default: `/app/custom-policy/custom-policy.json`) |
+| `REDACT_POLICY_FILE` | _(none)_ | Path to custom policy JSON |
 
 ### Detailed Configuration
 
@@ -90,22 +89,31 @@ All configuration is via environment variables.
 - `UPSTREAM_ANTHROPIC_URL`: Anthropic API endpoint (default: `https://api.anthropic.com`)
 - `UPSTREAM_GEMINI_URL`: Gemini API endpoint (default: `https://generativelanguage.googleapis.com`)
 
-### Plugin Configuration
+### Plugin Enable/Disable
 
-By default, only **logging is enabled**. Redaction is opt-in.
-
-Plugins are loaded from `CONTEXT_PROXY_PLUGINS` (comma-separated module paths). The image includes:
-- `/app/logger-plugin.js` - Logging plugin (enabled by default)
-- `/app/redact-plugin.js` - Redaction plugin (disabled by default)
-
-#### Enable Redaction
+By default, **all plugins are enabled**: logger, redact, rate limiter, and retry.
 
 ```bash
-# Mount a volume to persist captures
+# Disable redaction
 docker run --rm -p 4040:4040 \
--e LOGGER_CAPTURE_DIR=/app/captures \
--v ./captures:/app/captures \
-ghcr.io/larsderidder/contextio-next:latest
+  -e CONTEXTIO_ENABLE_REDACT=false \
+  ghcr.io/larsderidder/contextio-next:latest
+
+# Disable rate limiter (also disables retry)
+docker run --rm -p 4040:4040 \
+  -e CONTEXTIO_ENABLE_RATE_LIMITER=false \
+  ghcr.io/larsderidder/contextio-next:latest
+
+# Disable logger
+docker run --rm -p 4040:4040 \
+  -e CONTEXTIO_ENABLE_LOGGER=false \
+  ghcr.io/larsderidder/contextio-next:latest
+
+# Enable only rate limiter (no logger, no redaction)
+docker run --rm -p 4040:4040 \
+  -e CONTEXTIO_ENABLE_LOGGER=false \
+  -e CONTEXTIO_ENABLE_REDACT=false \
+  ghcr.io/larsderidder/contextio-next:latest
 ```
 
 #### Redaction Presets
@@ -113,35 +121,18 @@ ghcr.io/larsderidder/contextio-next:latest
 ```bash
 # Secrets only (API keys, tokens)
 docker run --rm -p 4040:4040 \
--e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
--e REDACT_PRESET=secrets \
-ghcr.io/larsderidder/contextio-next:latest
+  -e REDACT_PRESET=secrets \
+  ghcr.io/larsderidder/contextio-next:latest
 
 # PII (default: email, SSN, credit cards, phone numbers)
 docker run --rm -p 4040:4040 \
--e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
--e REDACT_PRESET=pii \
-ghcr.io/larsderidder/contextio-next:latest
+  -e REDACT_PRESET=pii \
+  ghcr.io/larsderidder/contextio-next:latest
 
 # Strict (PII + IP addresses, dates of birth)
 docker run --rm -p 4040:4040 \
--e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
--e REDACT_PRESET=strict \
-ghcr.io/larsderidder/contextio-next:latest
-```
-
-#### Disable Logging
-
-```bash
-# Redaction only (no logging)
-docker run --rm -p 4040:4040 \
--e CONTEXT_PROXY_PLUGINS=/app/redact-plugin.js \
-ghcr.io/larsderidder/contextio-next:latest
-
-# No plugins (raw proxy only)
-docker run --rm -p 4040:4040 \
--e CONTEXT_PROXY_PLUGINS= \
-ghcr.io/larsderidder/contextio-next:latest
+  -e REDACT_PRESET=strict \
+  ghcr.io/larsderidder/contextio-next:latest
 ```
 
 #### Logger Configuration
@@ -152,10 +143,10 @@ ghcr.io/larsderidder/contextio-next:latest
 ```bash
 # Custom capture directory with session limit
 docker run --rm -p 4040:4040 \
--e LOGGER_CAPTURE_DIR=/app/captures \
--e LOGGER_MAX_SESSIONS=50 \
--v ./captures:/app/captures \
-ghcr.io/larsderidder/contextio-next:latest
+  -e LOGGER_CAPTURE_DIR=/app/captures \
+  -e LOGGER_MAX_SESSIONS=50 \
+  -v ./captures:/app/captures \
+  ghcr.io/larsderidder/contextio-next:latest
 ```
 
 #### Redaction Configuration
@@ -167,10 +158,9 @@ ghcr.io/larsderidder/contextio-next:latest
 ```bash
 # Custom redaction policy
 docker run --rm -p 4040:4040 \
--e CONTEXT_PROXY_PLUGINS=/app/logger-plugin.js,/app/redact-plugin.js \
--e REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json \
--v $(pwd)/my-policy.json:/app/custom-policy/custom-policy.json:ro \
-ghcr.io/larsderidder/contextio-next:latest
+  -e REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json \
+  -v $(pwd)/my-policy.json:/app/custom-policy/custom-policy.json:ro \
+  ghcr.io/larsderidder/contextio-next:latest
 ```
 
 ## Capture Persistence
@@ -204,8 +194,8 @@ Configure in Coolify's **Persistent Directories** settings:
 
 ```bash
 docker run --rm -p 4040:4040 -p 4041:4041 \
--v ./captures:/app/captures \
-contextio-next-proxy
+  -v ./captures:/app/captures \
+  contextio-next-proxy
 ```
 
 Files on the host will be owned by UID `1000` (the `node` user inside the container).
@@ -227,8 +217,10 @@ services:
       - policy:/app/custom-policy
     environment:
       LOGGER_CAPTURE_DIR: /app/captures
-      CONTEXT_PROXY_PLUGINS: /app/logger-plugin.js
-      restart: unless-stopped
+      CONTEXTIO_ENABLE_LOGGER: "true"
+      CONTEXTIO_ENABLE_REDACT: "true"
+      CONTEXTIO_ENABLE_RATE_LIMITER: "true"
+    restart: unless-stopped
 
 volumes:
   captures:
@@ -247,10 +239,12 @@ services:
       - ./captures:/app/captures
       - ./my-policy.json:/app/custom-policy/custom-policy.json:ro
     environment:
-      CONTEXT_PROXY_PLUGINS: /app/logger-plugin.js,/app/redact-plugin.js
+      CONTEXTIO_ENABLE_LOGGER: "true"
+      CONTEXTIO_ENABLE_REDACT: "true"
+      CONTEXTIO_ENABLE_RATE_LIMITER: "true"
       REDACT_POLICY_FILE: /app/custom-policy/custom-policy.json
       REDACT_REVERSIBLE: "false"
-      restart: unless-stopped
+    restart: unless-stopped
 ```
 
 ## What's NOT Included
@@ -277,20 +271,17 @@ npm install -g @contextio/cli
 
 ## Troubleshooting
 
-**Plugins not loading:**
+**Plugin not loading:**
 ```
 Failed to load plugin "...": ...
 ```
-
-Check that `CONTEXT_PROXY_PLUGINS` points to valid module paths. The image includes `/app/logger-plugin.js` and `/app/redact-plugin.js` by default.
+Check that the corresponding `CONTEXTIO_ENABLE_*` environment variable is set to `true` (default). The image includes all plugins built-in; they are enabled/disabled via environment variables.
 
 **Port already in use:**
 ```
 Error: listen EADDRINUSE: address already in use 0.0.0.0:4040
 ```
-
 Change the port with `-p 4041:4040` or set `CONTEXT_PROXY_PORT=4041`.
 
 **Captures not persisting:**
-
 Mount a volume to `/app/captures`. Without a volume, captures are lost when the container stops.

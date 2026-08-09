@@ -33,7 +33,9 @@ Lowest:  Defaults (hardcoded in source)
 |----------|---------|-------------|
 | `CONTEXT_PROXY_BIND_HOST` | `0.0.0.0` | Bind address |
 | `CONTEXT_PROXY_PORT` | `4040` | Port for proxy + web UI |
-| `CONTEXT_PROXY_PLUGINS` | `/app/redact-plugin.js,/app/logger-plugin.js` | Comma-separated plugin paths |
+| `CONTEXTIO_ENABLE_LOGGER` | `true` | Enable logger plugin |
+| `CONTEXTIO_ENABLE_REDACT` | `true` | Enable redact plugin |
+| `CONTEXTIO_ENABLE_RATE_LIMITER` | `true` | Enable rate limiter plugin (retry enabled when this is true) |
 | `CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE` | `0` | Allow `x-target-url` header to override upstream |
 | `STRICT_URL_FORWARDING` | `false` | Ignore upstream overrides from tool headers, use only configured upstreams |
 | `LOG_TRAFFIC` | `false` | Log raw traffic to stdout (debug) |
@@ -98,7 +100,7 @@ Token bucket per `(sessionId, provider)` with burst buffer and request queue.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RATE_LIMITER_ENABLED` | `true` | Master enable/disable |
+| `CONTEXTIO_ENABLE_RATE_LIMITER` | `true` | Master enable/disable |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_MAX_REQUESTS` | `60` | Max requests per window |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_WINDOW_MS` | `60000` | Window in milliseconds |
 | `CONTEXTIO_RATE_LIMIT_<PROVIDER>_BUFFER` | `10` | Burst buffer capacity |
@@ -114,11 +116,10 @@ CONTEXTIO_RATE_LIMIT_ANTHROPIC_BUFFER=20
 
 ## Retry Plugin (Built-In)
 
-Exponential backoff with jitter for 429/5xx responses, plus streaming SSE error detection.
+Exponential backoff with jitter for 429/5xx responses, plus streaming SSE error detection. **Retry is automatically enabled when the rate limiter is enabled** (`CONTEXTIO_ENABLE_RATE_LIMITER=true`). There is no separate `CONTEXTIO_RETRY_ENABLED` variable.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CONTEXTIO_RETRY_ENABLED` | `true` | Enable retry plugin |
 | `CONTEXTIO_RETRY_MAX_ATTEMPTS` | `3` | Max retry attempts |
 | `CONTEXTIO_RETRY_BASE_DELAY_MS` | `500` | Base delay for exponential backoff |
 | `CONTEXTIO_RETRY_MAX_DELAY_MS` | `30000` | Cap on delay |
@@ -196,14 +197,15 @@ REDACT_REVERSIBLE=false
 REDACT_GLINER_ENABLED=true
 REDACT_GLINER_THRESHOLD=0.5
 
-# Rate Limiter
-RATE_LIMITER_ENABLED=true
+# Rate Limiter (retry enabled when rate limiter is enabled)
+CONTEXTIO_ENABLE_LOGGER=true
+CONTEXTIO_ENABLE_REDACT=true
+CONTEXTIO_ENABLE_RATE_LIMITER=true
 CONTEXTIO_RATE_LIMIT_ANTHROPIC_MAX_REQUESTS=100
 CONTEXTIO_RATE_LIMIT_OPENAI_MAX_REQUESTS=100
 CONTEXTIO_RATE_LIMIT_NVIDIA_MAX_REQUESTS=50
 
-# Retry
-CONTEXTIO_RETRY_ENABLED=true
+# Retry (enabled via CONTEXTIO_ENABLE_RATE_LIMITER)
 CONTEXTIO_RETRY_MAX_ATTEMPTS=3
 
 # OIDC (optional)

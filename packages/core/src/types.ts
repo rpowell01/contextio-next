@@ -354,6 +354,19 @@ export interface RetryConfig {
 	enabled: boolean;
 }
 
+/**
+ * Streaming retry configuration for a single provider (settings-specific).
+ * Differs from RetryConfig by using maxBufferSizeMB instead of maxResponseBufferSize.
+ */
+export interface StreamingRetryConfig {
+	/** Whether streaming retry is enabled. */
+	enabled: boolean;
+	/** Maximum retry attempts for streaming responses. */
+	maxRetries: number;
+	/** Maximum buffer size in MB for streaming response buffering. */
+	maxBufferSizeMB: number;
+}
+
 // --- Provider configuration ---
 
 /**
