@@ -36,12 +36,10 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        working-directory: ./website
-        run: pnpm install --frozen-lockfile
+        run: pnpm --dir website install --frozen-lockfile
 
       - name: Build VitePress site
-        working-directory: ./website
-        run: pnpm run build
+        run: pnpm --dir website run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
