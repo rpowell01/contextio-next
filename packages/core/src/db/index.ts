@@ -12,7 +12,7 @@ import {
 import { importRedactionMetaFromFiles } from "./redaction-repo.js";
 import { migrateCapturesSync, getDefaultCaptureDir, migrateCaptures } from "./migrate-captures.js";
 import { migrateProviders, getDefaultProvidersFile } from "./migrate-providers.js";
-import { importSettingsFromJson } from "./settings-repo.js";
+import { importSettingsFromJson, getDefaultSettingsFile } from "./settings-repo.js";
 import { getDb } from "./connection.js";
 
 export {
@@ -50,6 +50,7 @@ export {
 	upsertSettings,
 	getSettingsWithMeta,
 	importSettingsFromJson,
+	getDefaultSettingsFile,
 	type Settings,
 	type SettingsRow,
 	type SettingMeta,
@@ -139,43 +140,61 @@ export function initDb(
 	runMigrationsFn();
 	
 	if (isFreshDb) {
-		console.log("[initDb] Fresh database detected, running auto-migration...");
-		
-		// Auto-migrate providers if providers.json exists
-		const providersFile = getDefaultProvidersFile();
-		if (fs.existsSync(providersFile)) {
-			console.log("[initDb] Found providers.json, running provider migration...");
-			try {
-				migrateProviders({ dryRun: false, createBackup: true });
-			} catch (err) {
-				console.warn(`[initDb] Provider auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
-			}
-		}
-		
-		// Auto-migrate captures if capture directory exists (run in background)
-		const captureDir = getDefaultCaptureDir();
-		if (fs.existsSync(captureDir)) {
-			console.log("[initDb] Found capture directory, scheduling capture indexing in background...");
-			// Run capture indexing asynchronously (non-blocking)
-			// Pass decryptFn and keyMaterial for encrypted captures
-setImmediate(() => {
-			(async () => {
+			console.log("[initDb] Fresh database detected, running auto-migration...");
+			
+			// Auto-migrate providers if providers.json exists
+			const providersFile = getDefaultProvidersFile();
+			if (fs.existsSync(providersFile)) {
+				console.log("[initDb] Found providers.json, running provider migration...");
 				try {
-					if (decryptFn && keyMaterial) {
-						// Use async version with decryption support
-						await migrateCaptures({ dryRun: false, decryptFn, keyMaterial });
+					migrateProviders({ dryRun: false, createBackup: true });
+				} catch (err) {
+					console.warn(`[initDb] Provider auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
+				}
+			}
+			
+			// Auto-migrate settings if settings.json exists
+			const settingsFile = getDefaultSettingsFile();
+			if (fs.existsSync(settingsFile)) {
+				console.log("[initDb] Found settings.json, running settings migration...");
+				try {
+					const result = importSettingsFromJson(settingsFile);
+					if (result.imported) {
+						console.log("[initDb] Settings auto-migration completed successfully");
+					} else if (result.skipped) {
+						console.log("[initDb] Settings auto-migration skipped");
 					} else {
-						migrateCapturesSync({ dryRun: false });
+						console.warn(`[initDb] Settings auto-migration failed: ${result.error}`);
 					}
 				} catch (err) {
-					console.warn(`[initDb] Capture auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
+					console.warn(`[initDb] Settings auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
 				}
-			})().catch((err) => {
-				// Handle any promise rejection that escapes the async IIFE
-				console.warn(`[initDb] Capture auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
-			});
-		});
-		}
+			}
+			
+			// Auto-migrate captures if capture directory exists (run in background)
+			const captureDir = getDefaultCaptureDir();
+			if (fs.existsSync(captureDir)) {
+				console.log("[initDb] Found capture directory, scheduling capture indexing in background...");
+				// Run capture indexing asynchronously (non-blocking)
+				// Pass decryptFn and keyMaterial for encrypted captures
+				setImmediate(() => {
+					(async () => {
+						try {
+							if (decryptFn && keyMaterial) {
+								// Use async version with decryption support
+								await migrateCaptures({ dryRun: false, decryptFn, keyMaterial });
+							} else {
+								migrateCapturesSync({ dryRun: false });
+							}
+						} catch (err) {
+							console.warn(`[initDb] Capture auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
+						}
+					})().catch((err) => {
+						// Handle any promise rejection that escapes the async IIFE
+						console.warn(`[initDb] Capture auto-migration failed: ${err instanceof Error ? err.message : String(err)}`);
+					});
+				});
+			}
 	}
 	
 	// Import existing .redact-meta.json sidecar files into SQLite

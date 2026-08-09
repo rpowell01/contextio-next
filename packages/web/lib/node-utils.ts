@@ -35,42 +35,14 @@ export async function getDefaultCaptureDir(): Promise<string> {
 }
 
 export async function applyPersistedSettings(applyLogDir: (dir: string) => void): Promise<void> {
-  const { fs } = await getNodeModules();
-
+  // Read settings from SQLite database instead of JSON file
   try {
-    const raw = await fs.readFile(SETTINGS_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null) {
-      const obj = parsed as Record<string, unknown>;
-      if (typeof obj.logDir === "string") {
-        applyLogDir(obj.logDir);
-      }
+    const { getSettingsWithMeta } = await import("@contextio/core/db");
+    const { settings } = getSettingsWithMeta();
+    if (settings && typeof settings.logDir === "string") {
+      applyLogDir(settings.logDir);
     }
   } catch {
-    // Ignore settings read errors
+    // Ignore settings read errors - fall back to defaults
   }
-}
-
-export async function ensureSettingsFile(defaultSettings: unknown): Promise<void> {
-  const { fs } = await getNodeModules();
-  try {
-    await fs.mkdir(SETTINGS_DIR, { recursive: true });
-    await fs.access(SETTINGS_FILE);
-  } catch {
-    await fs.writeFile(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2));
-  }
-}
-
-export async function readSettingsFile(): Promise<string | null> {
-  const { fs } = await getNodeModules();
-  try {
-    return await fs.readFile(SETTINGS_FILE, "utf8");
-  } catch {
-    return null;
-  }
-}
-
-export async function writeSettingsFile(settings: unknown): Promise<void> {
-  const { fs } = await getNodeModules();
-  await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 }

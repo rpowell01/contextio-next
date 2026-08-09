@@ -14,7 +14,7 @@ import {
 	initDb,
 	getDb,
 } from "@contextio/core/db";
-import { readSettingsFile, writeSettingsFile } from "./node-utils";
+import { getSettings, upsertSettings } from "@contextio/core/db";
 
 let dbInitialized = false;
 let dbInitError: Error | null = null;
@@ -276,17 +276,13 @@ export async function deleteProvider(id: string): Promise<void> {
 }
 
 /**
- * Removes a provider's rateLimiter and streamingRetry settings from settings.json
+ * Removes a provider's rateLimiter and streamingRetry settings from database
  */
 async function removeProviderSettings(providerId: string): Promise<void> {
 	try {
-		const raw = await readSettingsFile();
-		if (!raw) return;
+		const settings = getSettings();
+		if (!settings) return;
 		
-		const parsed = JSON.parse(raw);
-		if (typeof parsed !== "object" || parsed === null) return;
-		
-		const settings = parsed as Record<string, unknown>;
 		let modified = false;
 		
 		// Remove from rateLimiter
@@ -308,7 +304,7 @@ async function removeProviderSettings(providerId: string): Promise<void> {
 		}
 		
 		if (modified) {
-			await writeSettingsFile(settings);
+			upsertSettings(settings);
 		}
 	} catch (error) {
 		// Log but don't throw - provider deletion should still succeed even if settings cleanup fails

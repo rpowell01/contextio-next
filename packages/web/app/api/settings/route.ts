@@ -1,41 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import type { Settings } from "@/lib/settings";
-import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults, getSettingMetadata, applyEnvOverrides } from "@/lib/settings";
+import { DEFAULT_SETTINGS, validateSettingsLenient, mergeWithDefaults, applyEnvOverrides, getSettingMetadata } from "@/lib/settings";
 import { applyLogDir } from "@/lib/sessions/server-utils";
 import { consumeToken } from "@/lib/csrf";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
+import { getSettingsWithMeta, upsertSettings, getSettings } from "@contextio/core/db";
 
-async function ensureSettingsFile(): Promise<void> {
-  const { ensureSettingsFile: ensureFile } = await import("@/lib/node-utils");
-  await ensureFile(DEFAULT_SETTINGS);
-}
-
-async function getNodeUtils() {
-  return import("@/lib/node-utils");
+// Ensure database is initialized before any operation
+function ensureDbInitialized(): void {
+  // The database is initialized at startup via instrumentation.ts
+  // This is a no-op if already initialized
+  getSettings(); // This will trigger lazy initialization if needed
 }
 
 export async function GET(): Promise<NextResponse> {
   try {
-    await ensureSettingsFile();
-    const { readSettingsFile } = await getNodeUtils();
-    const data = await readSettingsFile();
-  if (!data) {
-    return NextResponse.json(createSuccessResponse({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS, new Set()) }));
-  }
-  const parsed = JSON.parse(data);
-  if (typeof parsed !== "object" || parsed === null) {
-    return NextResponse.json(createSuccessResponse({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS, new Set()) }));
-  }
-    // Lenient per-field validation with defaults fallback - never fail the whole request
-    const settings = validateSettingsLenient(parsed);
-    const { settings: effectiveSettings, appliedKeys } = applyEnvOverrides(settings);
+    // Ensure database is initialized
+    ensureDbInitialized();
+    
+    // Get settings from database (no env keys yet)
+    const { settings } = getSettingsWithMeta();
+    
+    // Handle case where settings might be null (database empty)
+    const dbSettings = settings ?? DEFAULT_SETTINGS;
+    
+    // Apply environment variable overrides
+    const { settings: effectiveSettings, appliedKeys } = applyEnvOverrides(dbSettings);
     applyLogDir(effectiveSettings.logDir);
-    return NextResponse.json(createSuccessResponse({ settings: effectiveSettings, metadata: getSettingMetadata(effectiveSettings, appliedKeys) }));
+    
+    // Get metadata with applied env keys for accurate source tracking
+    const { meta: metadata } = getSettingsWithMeta(appliedKeys);
+    
+    return NextResponse.json(createSuccessResponse({ settings: effectiveSettings, metadata }));
   } catch (error) {
-  console.error("Error reading settings:", error);
-  return NextResponse.json(createSuccessResponse({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS, new Set<keyof Settings>()) }));
-}
+    console.error("Error reading settings:", error);
+    // Use pure function for metadata to avoid database I/O in error handler
+    return NextResponse.json(createSuccessResponse({ settings: DEFAULT_SETTINGS, metadata: getSettingMetadata(DEFAULT_SETTINGS, new Set<keyof Settings>()) }));
+  }
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -45,7 +47,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(createErrorResponse({ message: "Invalid or missing CSRF token", status: 400 }), { status: 400 });
     }
     const body = await request.json();
-    // Validate the incoming settings
+    
+    // Ensure database is initialized
+    ensureDbInitialized();
+    
+    // Validate the incoming settings (lenient - never fail the whole request)
     const validated = validateSettingsLenient(body);
     // Merge with defaults for any missing fields
     const settings = mergeWithDefaults(validated);
@@ -53,23 +59,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Apply env overrides to determine which keys are controlled by env vars
     const { appliedKeys } = applyEnvOverrides(settings);
 
-    // Remove env-var-overridden keys from settings before saving to file.
+    // Remove env-var-overridden keys from settings before saving to database.
     // Environment variables should ALWAYS take precedence at runtime, so we don't
-    // persist their values to the settings file. This ensures that if an env var
-    // is removed, the setting falls back to the default or settings-file value.
+    // persist their values to the settings. This ensures that if an env var
+    // is removed, the setting falls back to the default or database value.
     const settingsToPersist = { ...settings };
     for (const key of appliedKeys) {
       delete settingsToPersist[key];
     }
 
-    await ensureSettingsFile();
-    const { writeSettingsFile } = await getNodeUtils();
-    await writeSettingsFile(settingsToPersist);
+    // Persist to SQLite database
+    upsertSettings(settingsToPersist);
 
     // Re-apply env overrides for the response to show effective values
     const { settings: effectiveSettings, appliedKeys: responseAppliedKeys } = applyEnvOverrides(settingsToPersist);
     applyLogDir(effectiveSettings.logDir);
-    return NextResponse.json(createSuccessResponse({ success: true, settings: effectiveSettings, metadata: getSettingMetadata(effectiveSettings, responseAppliedKeys) }));
+    
+    // Get metadata with applied env keys for consistent source tracking
+    const { meta: metadata } = getSettingsWithMeta(responseAppliedKeys);
+    
+    return NextResponse.json(createSuccessResponse({ success: true, settings: effectiveSettings, metadata }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;

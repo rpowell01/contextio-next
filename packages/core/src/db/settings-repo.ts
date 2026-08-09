@@ -7,6 +7,14 @@ import { getDb } from "./connection.js";
 import type { Provider, RateLimitConfig, StreamingRetryConfig } from "../types.js";
 import fs from "node:fs";
 
+/**
+ * Get the default settings.json file path.
+ * Uses SETTINGS_FILE env var or falls back to /app/custom-policy/settings.json.
+ */
+export function getDefaultSettingsFile(): string {
+	return process.env.SETTINGS_FILE || "/app/custom-policy/settings.json";
+}
+
 // Re-export types from core types for consumers
 export type { RateLimitConfig, StreamingRetryConfig };
 
