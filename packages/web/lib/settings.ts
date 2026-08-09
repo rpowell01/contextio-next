@@ -323,7 +323,7 @@ export const DEFAULT_SETTINGS: Settings = {
   redactReversible: false,
   redactPolicyFile: "",
   encryptionAtRest: false,
-  captureCleanupEnabled: false,
+  captureCleanupEnabled: true,
   captureCleanupIntervalHours: 24,
   captureCleanupMaxAgeDays: 30,
   theme: "system",

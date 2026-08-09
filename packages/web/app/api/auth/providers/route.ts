@@ -6,6 +6,7 @@ export async function GET(): Promise<NextResponse> {
   // Check if OIDC is enabled via environment variable or database settings
   const settings = getSettings();
   const oidcEnabled = process.env.CONTEXTIO_OIDC_ENABLED === "true" || settings?.oidcEnabled;
+  const oidcPublicUrl = process.env.CONTEXTIO_OIDC_PUBLIC_URL || settings?.oidcPublicUrl || "";
   const issuer = process.env.CONTEXTIO_OIDC_ISSUER;
 
   if (!oidcEnabled || !issuer) {
@@ -19,6 +20,7 @@ export async function GET(): Promise<NextResponse> {
       id: "oidc",
       name: "OpenID Connect",
       authUrl: `/login?redirect=`,
+      publicUrl: oidcPublicUrl,
     },
   ];
 

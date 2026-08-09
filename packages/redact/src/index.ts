@@ -394,13 +394,23 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
               threshold: glinerConfig.llmThreshold ?? 0.5,
               labels: glinerConfig.llmLabels,
             });
+          } else {
+            // No GLiNER model configured - fall back to rules-only with a warning
+            console.warn(
+              `[redact] detectorMode="${detectorMode}" requires GLiNER model (detectorConfig.modelPath), falling back to rules-only mode`,
+            );
           }
 
           // In auto mode, we still use hybrid but could add logic to skip LLM for simple cases
-          const pipelineConfig = createHybridDetector(ruleDetector, llmDetector!, {
-            priorityOrder: ["rules", "gliner-onnx"],
-          });
-          pipeline = await createDetectorPipeline(pipelineConfig);
+          if (llmDetector) {
+            const pipelineConfig = createHybridDetector(ruleDetector, llmDetector, {
+              priorityOrder: ["rules", "gliner-onnx"],
+            });
+            pipeline = await createDetectorPipeline(pipelineConfig);
+          } else {
+            // Fall back to rules-only
+            pipeline = ruleDetector;
+          }
         } else {
           // Default to rules only
           pipeline = ruleDetector;
