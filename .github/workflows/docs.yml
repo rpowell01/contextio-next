@@ -34,7 +34,6 @@ jobs:
         with:
           node-version: 24
           cache: 'pnpm'
-          cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: ./website
