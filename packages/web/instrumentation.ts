@@ -2,6 +2,13 @@
 export const runtime = "nodejs";
 
 import { DEFAULT_SETTINGS, applyEnvOverrides } from "@/lib/settings";
+import { isDbInitialized, deleteCapturesByFilepaths } from "@contextio/core/db";
+import {
+  getCaptureDir,
+  listCaptureFiles,
+  metaFilenameFor,
+  applyLogDir,
+} from "@/lib/sessions/server-utils";
 
 /**
  * Check if we're running in the Node.js runtime (not Edge).
@@ -15,15 +22,6 @@ function isNodeRuntime(): boolean {
 // Periodic sync interval for importing redaction metadata from .redact-meta.json files to SQLite
 // Runs every 5 minutes to catch any files that the watcher might have missed
 const REDACTION_META_SYNC_INTERVAL_MS = 5 * 60 * 1000;
-
-async function getNodeModules() {
-  const [os, path, fs] = await Promise.all([
-    import("os"),
-    import("path"),
-    import("fs/promises"),
-  ]);
-  return { homedir: os.homedir, join: path.join, fs };
-}
 
 function validateCsrfSecret(): void {
   if (process.env.NODE_ENV === "production") {
@@ -39,14 +37,13 @@ async function applyPersistedSettings(): Promise<void> {
     const { initDb } = await import("@contextio/core/db");
     initDb();
     
-    const { getSettings } = await import("@contextio/core/db");
-    const dbSettings = getSettings() ?? DEFAULT_SETTINGS;
+    const { getSettingsWithMeta } = await import("@contextio/core/db");
+    const { settings: dbSettings } = getSettingsWithMeta();
     
     // Apply environment variable overrides
-    const { settings: effectiveSettings } = applyEnvOverrides(dbSettings);
+    const { settings: effectiveSettings } = applyEnvOverrides(dbSettings ?? DEFAULT_SETTINGS);
     
     if (typeof effectiveSettings.logDir === "string") {
-      const { applyLogDir } = await import("@/lib/sessions/server-utils");
       await applyLogDir(effectiveSettings.logDir);
     }
   } catch {
@@ -96,12 +93,6 @@ function defaultSettings() {
     maxAgeDays: DEFAULT_SETTINGS.captureCleanupMaxAgeDays,
     intervalHours: DEFAULT_SETTINGS.captureCleanupIntervalHours,
   };
-}
-
-async function getCaptureDir(): Promise<string> {
-  const { homedir, join } = await getNodeModules();
-  const captureDir = process.env.LOGGER_CAPTURE_DIR || join(homedir(), ".contextio", "captures");
-  return captureDir;
 }
 
 async function runRedactionMetaSync(): Promise<void> {
@@ -157,26 +148,6 @@ async function startSyncScheduler(): Promise<NodeJS.Timeout | null> {
   return syncTimer;
 }
 
-async function listCaptureFiles(): Promise<string[]> {
-  const { homedir, join, fs } = await getNodeModules();
-  const captureDir = await getCaptureDir();
-  try {
-    const files = await fs.readdir(captureDir);
-    return files
-      .filter((f) => /^[a-zA-Z0-9_-]+\.json$/.test(f) && !f.endsWith(".tmp") && !f.includes("redact-meta"))
-      .sort();
-  } catch {
-    return [];
-  }
-}
-
-function metaFilenameFor(captureFilename: string): string {
-  const base = captureFilename.endsWith(".json")
-    ? captureFilename.slice(0, -".json".length)
-    : captureFilename;
-  return `${base}.redact-meta.json`;
-}
-
 async function loadSettings(): Promise<{ enabled: boolean; maxAgeDays: number; intervalHours: number }> {
   try {
     // Ensure database schema is initialized and migrate settings.json if needed
@@ -206,18 +177,34 @@ async function runCleanup() {
 
   const cutoff = Date.now() - settings.maxAgeDays * 24 * 60 * 60 * 1000;
   const files = await listCaptureFiles();
-  const { join, fs } = await getNodeModules();
+  const { join } = await import("path");
+  const { stat, unlink } = await import("fs/promises");
   const captureDir = await getCaptureDir();
+
+  const deletedFilepaths: string[] = [];
 
   for (const file of files) {
     const filepath = join(captureDir, file);
     try {
-      const stats = await fs.stat(filepath);
+      const stats = await stat(filepath);
       if (stats.mtimeMs >= cutoff) continue;
-      await fs.unlink(filepath);
-      await fs.unlink(join(captureDir, metaFilenameFor(file))).catch(() => {});
+      await unlink(filepath);
+      await unlink(join(captureDir, metaFilenameFor(file))).catch(() => {});
+      deletedFilepaths.push(filepath);
     } catch {
       // ignore individual file errors (e.g., already deleted, permissions)
+    }
+  }
+
+  // Clean up corresponding SQLite metadata records
+  if (deletedFilepaths.length > 0 && isDbInitialized()) {
+    try {
+      const deletedCount = deleteCapturesByFilepaths(deletedFilepaths);
+      if (deletedCount > 0) {
+        console.log(`[cleanup] Removed ${deletedCount} orphaned capture metadata records from SQLite`);
+      }
+    } catch (err) {
+      console.warn(`[cleanup] Failed to clean up SQLite capture metadata: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }
