@@ -2,7 +2,6 @@
 export const runtime = "nodejs";
 
 import { DEFAULT_SETTINGS, applyEnvOverrides } from "@/lib/settings";
-import { isDbInitialized, deleteCapturesByFilepaths } from "@contextio/core/db";
 import {
   getCaptureDir,
   listCaptureFiles,
@@ -197,11 +196,14 @@ async function runCleanup() {
   }
 
   // Clean up corresponding SQLite metadata records
-  if (deletedFilepaths.length > 0 && isDbInitialized()) {
+  if (deletedFilepaths.length > 0) {
     try {
-      const deletedCount = deleteCapturesByFilepaths(deletedFilepaths);
-      if (deletedCount > 0) {
-        console.log(`[cleanup] Removed ${deletedCount} orphaned capture metadata records from SQLite`);
+      const { isDbInitialized, deleteCapturesByFilepaths } = await import("@contextio/core/db");
+      if (isDbInitialized()) {
+        const deletedCount = deleteCapturesByFilepaths(deletedFilepaths);
+        if (deletedCount > 0) {
+          console.log(`[cleanup] Removed ${deletedCount} orphaned capture metadata records from SQLite`);
+        }
       }
     } catch (err) {
       console.warn(`[cleanup] Failed to clean up SQLite capture metadata: ${err instanceof Error ? err.message : String(err)}`);
