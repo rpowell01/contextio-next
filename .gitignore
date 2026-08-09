@@ -1,6 +1,9 @@
 node_modules/
 dist/
 dist-test/
+dist-test-proxy/
+dist-test-proxy-only/
+packages/dist-test-proxy3/
 models/
 *.tsbuildinfo
 .turbo/
@@ -8,6 +11,8 @@ __pycache__/
 *.pyc
 .pi/
 .idea/
+test-results/
+.beads/formulas/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
