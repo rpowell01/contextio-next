@@ -16,13 +16,14 @@
  * - Retry plugin is enabled when rate limiter is enabled
  */
 
-import type { ProxyPlugin } from "@contextio/core";
+import type { EncryptionAtRestConfig, ProxyPlugin } from "@contextio/core";
 import { createRateLimiterPlugin } from "./rate-limiter.js";
 import { createRetryPlugin } from "./retry-plugin.js";
 import { resolveConfig } from "./config.js";
 import { createCombinedProxy } from "./combined-server.js";
 import { initDb } from "@contextio/core/db";
 import { decrypt } from "@contextio/logger";
+import { createLoggerPlugin } from "@contextio/logger";
 
 async function main(): Promise<void> {
 	// Resolve config first to get encryption key material for database initialization
@@ -132,8 +133,50 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// Note: Logger plugin is handled separately in the web UI for the combined entry point
-	// The logger plugin runs as part of the capture system via the proxy core
+	// Load logger plugin if enabled
+	if (loggerEnabled) {
+		try {
+			console.log("[startup] Encryption at rest configuration:");
+			console.log(`  enabled: ${config.loggerEncryption.enabled}`);
+			console.log(`  keyProvider: ${config.loggerEncryption.keyProvider}`);
+			console.log(`  keyEnvVar: ${config.loggerEncryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"}`);
+			console.log(`  keyLength: ${config.loggerEncryption.keyLength} bytes`);
+			console.log(`  staticKey provided: ${!!config.loggerEncryption.staticKey}`);
+			console.log(`  ${config.loggerEncryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"} environment variable: ${!!process.env[config.loggerEncryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"] ? "SET" : "NOT SET"}`);
+
+			if (config.loggerEncryption.enabled) {
+				const keyProvider = config.loggerEncryption.keyProvider;
+				const keyEnvVar = config.loggerEncryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY";
+				const hasStaticKey = !!config.loggerEncryption.staticKey;
+				const hasEnvKey = !!process.env[keyEnvVar];
+				const keyAvailable = hasStaticKey || hasEnvKey;
+				if (!keyAvailable) {
+					console.error(
+						`[startup] Encryption at rest is ENABLED but NO KEY MATERIAL is available! ` +
+						`Set ${keyEnvVar} environment variable or provide staticKey.`
+					);
+				}
+			}
+
+			const loggerPlugin = createLoggerPlugin({
+				encryption: {
+					enabled: config.loggerEncryption.enabled,
+					keyProvider: config.loggerEncryption.keyProvider,
+					staticKey: config.loggerEncryption.staticKey,
+					keyEnvVar: config.loggerEncryption.keyEnvVar,
+					keyLength: config.loggerEncryption.keyLength,
+				},
+			});
+			plugins.push(loggerPlugin);
+			console.log("[startup] Logger plugin enabled");
+		} catch (err: unknown) {
+			console.error(
+				`Initializing logger plugin failed:`,
+				err instanceof Error ? err.message : String(err),
+			);
+			process.exit(1);
+		}
+	}
 
 	const logTraffic = process.env.LOG_TRAFFIC === "true";
 	const proxy = createCombinedProxy({ plugins, logTraffic });
