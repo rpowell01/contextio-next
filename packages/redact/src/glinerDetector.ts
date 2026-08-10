@@ -157,10 +157,15 @@ export class GlinerOnnxDetector implements Detector {
       if (tokenizerConfig.tokenizer_class === "DebertaV2Tokenizer" ||
           tokenizerConfig.tokenizer_class === "BertTokenizer" ||
           tokenizerConfig.tokenizer_class === "BertTokenizerFast") {
-        // BERT-style WordPiece tokenizer
+        // BERT-style WordPiece tokenizer - try vocab.txt first, fall back to spm.model
         const vocabPath = join(modelDir, "vocab.txt");
-        try {
-          await fs.access(vocabPath);
+        const spmPath = join(modelDir, "spm.model");
+        let vocabExists = false;
+        let spmExists = false;
+        try { await fs.access(vocabPath); vocabExists = true; } catch {}
+        try { await fs.access(spmPath); spmExists = true; } catch {}
+
+        if (vocabExists) {
           const BertWordPieceTokenizer = (tokenizers as any).BertWordPieceTokenizer;
           if (!BertWordPieceTokenizer) {
             throw new Error("[gliner] BertWordPieceTokenizer export not found");
@@ -168,9 +173,18 @@ export class GlinerOnnxDetector implements Detector {
           this.tokenizer = new BertWordPieceTokenizer(vocabPath, {
             lowercase: tokenizerConfig.do_lower_case ?? false,
           });
-          console.error("[gliner] BertWordPieceTokenizer created");
-        } catch {
-          throw new Error(`vocab.txt not found for BERT-style tokenizer in ${modelDir}`);
+          console.error("[gliner] BertWordPieceTokenizer created from vocab.txt");
+        } else if (spmExists) {
+          // DeBERTa v2 with SentencePiece
+          const Unigram = (tokenizers as any).Unigram;
+          if (!Unigram) {
+            throw new Error("[gliner] Unigram export not found");
+          }
+          const model = new Unigram(spmPath);
+          this.tokenizer = new tokenizers.Tokenizer(model);
+          console.error("[gliner] Unigram tokenizer created from spm.model (DeBERTa v2 SentencePiece)");
+        } else {
+          throw new Error(`Neither vocab.txt nor spm.model found for BERT-style tokenizer in ${modelDir}`);
         }
       } else if (tokenizerConfig.tokenizer_class === "UnigramTokenizer" ||
                  tokenizerConfig.tokenizer_class === "XLMRobertaTokenizer") {
