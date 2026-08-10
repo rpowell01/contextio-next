@@ -154,19 +154,22 @@ export class GlinerOnnxDetector implements Detector {
     console.error(`[gliner] Tokenizer config loaded, keys: ${Object.keys(tokenizerConfig).join(", ")}`);
 
     // Load the SentencePiece model
+    console.error("[gliner] Loading Unigram class...");
     const Unigram = (tokenizers as any).Unigram;
     if (!Unigram) {
       throw new Error("[gliner] @huggingface/tokenizers.Unigram export not found - check package version");
     }
-    console.error("[gliner] Unigram class loaded");
+    console.error("[gliner] Unigram class loaded, creating model from:", spmPath);
     const model = new Unigram(spmPath);
     console.error("[gliner] SentencePiece model loaded");
 
     // Create tokenizer
+    console.error("[gliner] Creating tokenizer...");
     this.tokenizer = new tokenizers.Tokenizer(model);
     console.error("[gliner] Tokenizer created");
 
     // Add normalizer
+    console.error("[gliner] Adding normalizer...");
     const BertNormalizer = (tokenizers as any).BertNormalizer;
     this.tokenizer.normalizer = new BertNormalizer({
       cleanText: true,
@@ -174,16 +177,22 @@ export class GlinerOnnxDetector implements Detector {
       stripAccents: false,
       lowercase: false,
     });
+    console.error("[gliner] Normalizer added");
 
     // Add pre-tokenizer (whitespace split for SentencePiece)
+    console.error("[gliner] Adding pre-tokenizer...");
     const WhitespaceSplitPreTokenizer = (tokenizers as any).WhitespaceSplitPreTokenizer;
     this.tokenizer.preTokenizer = new WhitespaceSplitPreTokenizer();
+    console.error("[gliner] Pre-tokenizer added");
 
     // Add decoder
+    console.error("[gliner] Adding decoder...");
     const MetaspaceDecoder = (tokenizers as any).MetaspaceDecoder;
     this.tokenizer.decoder = new MetaspaceDecoder();
+    console.error("[gliner] Decoder added");
 
     // Add post-processor for special tokens (bert-style)
+    console.error("[gliner] Adding post-processor...");
     const specialTokens = [
       ["[CLS]", tokenizerConfig.cls_token ?? "[CLS]"],
       ["[SEP]", tokenizerConfig.sep_token ?? "[SEP]"],
@@ -199,24 +208,30 @@ export class GlinerOnnxDetector implements Detector {
       pair: "[CLS] $A [SEP] $B [SEP]",
       specialTokens: specialTokens.flatMap(([id, token]) => [token, id]),
     });
+    console.error("[gliner] Post-processor added");
 
     // Configure tokenizer for GLiNER
+    console.error("[gliner] Configuring truncation/padding...");
     this.tokenizer.enableTruncation(this.config.maxLength ?? 512);
     this.tokenizer.enablePadding({
       length: this.config.maxLength ?? 512,
       padId: this.tokenizer.getVocabulary().get("[PAD]") ?? 0,
       padToken: "[PAD]",
     });
+    console.error("[gliner] Truncation/padding configured");
 
     // Create inference session
+    console.error("[gliner] Creating ONNX inference session...");
     const InferenceSession = (await import("onnxruntime-node")).InferenceSession;
     const onnxModelPath = join(this.config.modelDir, "model.onnx");
+    console.error("[gliner] ONNX model path:", onnxModelPath);
     this.session = await InferenceSession.create(onnxModelPath, {
       executionProviders: this.config.providers ?? ["cpu"],
       graphOptimizationLevel: "all",
       enableCpuMemArena: true,
       enableMemPattern: true,
     });
+    console.error("[gliner] ONNX session created successfully");
 
     // If custom labels provided, use them
     if (this.config.labels && this.config.labels.length > 0) {
