@@ -113,12 +113,13 @@ export class GlinerOnnxDetector implements Detector {
   async initialize(config?: DetectorConfig): Promise<void> {
     if (this.initialized) return;
 
-    // Load tokenizer from model directory using Hugging Face tokenizers
-    // This provides accurate offset mappings for token-to-character conversion
-    // For tokenizers v0.1.x, we need to manually construct the tokenizer from the SentencePiece model
-    const tokenizers = await import("@huggingface/tokenizers");
-    const { join } = await import("node:path");
-    const fs = await import("node:fs/promises");
+    try {
+      // Load tokenizer from model directory using Hugging Face tokenizers
+      // This provides accurate offset mappings for token-to-character conversion
+      // For tokenizers v0.1.x, we need to manually construct the tokenizer from the SentencePiece model
+      const tokenizers = await import("@huggingface/tokenizers");
+      const { join } = await import("node:path");
+      const fs = await import("node:fs/promises");
 
     const modelDir = this.config.modelDir;
 
@@ -239,7 +240,14 @@ export class GlinerOnnxDetector implements Detector {
     }
 
     this.initialized = true;
+  } catch (err) {
+    console.error("[gliner] INITIALIZATION FAILED:", err);
+    if (err instanceof Error) {
+      console.error("[gliner] Stack:", err.stack);
+    }
+    throw err;
   }
+}
 
   isReady(): boolean {
     return this.initialized && this.session !== null && this.tokenizer !== null;
