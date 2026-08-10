@@ -186,7 +186,7 @@ export class GlinerOnnxDetector implements Detector {
 
               // Convert vocab array [token, score] to object {token: id}
               const vocabObj: Record<string, number> = {};
-              vocab.forEach(([token, _score], index) => {
+              vocab.forEach(([token, _score]: [string, number], index: number) => {
                 vocabObj[token] = index;
               });
 
@@ -201,7 +201,8 @@ export class GlinerOnnxDetector implements Detector {
 
               // Apply normalizer (BertNormalizer for DeBERTa)
               try {
-                this.tokenizer.normalizer = new tokenizers.BertNormalizer({
+                const BertNormalizer = (tokenizers as any).BertNormalizer;
+                this.tokenizer.normalizer = new BertNormalizer({
                   cleanText: true,
                   handleChineseChars: true,
                   stripAccents: false,
@@ -214,7 +215,8 @@ export class GlinerOnnxDetector implements Detector {
 
               // Apply pre-tokenizer (BertPreTokenizer)
               try {
-                this.tokenizer.preTokenizer = new tokenizers.BertPreTokenizer();
+                const BertPreTokenizer = (tokenizers as any).BertPreTokenizer;
+                this.tokenizer.preTokenizer = new BertPreTokenizer();
                 console.error("[gliner] BertPreTokenizer applied");
               } catch (e) {
                 console.error("[gliner] Failed to apply pre-tokenizer:", e instanceof Error ? e.message : String(e));
@@ -222,7 +224,8 @@ export class GlinerOnnxDetector implements Detector {
 
               // Apply decoder (WordPieceDecoder)
               try {
-                this.tokenizer.decoder = new tokenizers.WordPieceDecoder();
+                const WordPieceDecoder = (tokenizers as any).WordPieceDecoder;
+                this.tokenizer.decoder = new WordPieceDecoder();
                 console.error("[gliner] WordPieceDecoder applied");
               } catch (e) {
                 console.error("[gliner] Failed to apply decoder:", e instanceof Error ? e.message : String(e));
@@ -230,6 +233,7 @@ export class GlinerOnnxDetector implements Detector {
 
               // Apply post-processor (BERT-style template)
               try {
+                const TemplateProcessingPostProcessor = (tokenizers as any).TemplateProcessingPostProcessor;
                 const specialTokens = [
                   ["[CLS]", tokenizerConfig.cls_token ?? "[CLS]"],
                   ["[SEP]", tokenizerConfig.sep_token ?? "[SEP]"],
@@ -237,7 +241,7 @@ export class GlinerOnnxDetector implements Detector {
                   ["[UNK]", tokenizerConfig.unk_token ?? "[UNK]"],
                   ["[MASK]", tokenizerConfig.mask_token ?? "[MASK]"],
                 ];
-                this.tokenizer.postProcessor = new tokenizers.TemplateProcessingPostProcessor({
+                this.tokenizer.postProcessor = new TemplateProcessingPostProcessor({
                   single: "[CLS] $A [SEP]",
                   pair: "[CLS] $A [SEP] $B [SEP]",
                   specialTokens: specialTokens.flatMap(([id, token]) => [token, id]),
