@@ -175,22 +175,80 @@ export class GlinerOnnxDetector implements Detector {
             console.error("[gliner] model type:", tokenizerJson.model.type);
 
             if (tokenizerJson.model.type === "Unigram") {
-              // Reconstruct Unigram model from vocab data
+              // Reconstruct from vocab data using WordPiece (since DeBERTA v2 is WordPiece-based)
+              // Unigram in v0.1.x only accepts file path; tokenizer.json has vocab array
               console.error("[gliner] Unigram vocab size:", tokenizerJson.model.vocab?.length ?? "none");
 
-              // In tokenizers v0.1.x, the Unigram class only accepts a file path (spm.model)
-              // not a vocab object. We need to use a different approach.
-              // Try using Tokenizer constructor with the model from tokenizer.json directly
-              // The tokenizer.json model field might be usable as-is
-              try {
-                // Try creating tokenizer directly from the model object
-                this.tokenizer = new tokenizers.Tokenizer(tokenizerJson.model);
-                console.error("[gliner] Unigram tokenizer created from tokenizer.json model object");
-              } catch (e) {
-                console.error("[gliner] Direct model object failed:", e instanceof Error ? e.message : String(e));
-                // Fall back to manual construction via spm.model
-                throw new Error("Direct model object failed, need fallback");
+              const vocab = tokenizerJson.model.vocab;
+              if (!vocab || vocab.length === 0) {
+                throw new Error("Unigram vocab is empty");
               }
+
+              // Convert vocab array [token, score] to object {token: id}
+              const vocabObj: Record<string, number> = {};
+              vocab.forEach(([token, _score], index) => {
+                vocabObj[token] = index;
+              });
+
+              const WordPiece = (tokenizers as any).WordPiece;
+              if (!WordPiece) throw new Error("[gliner] WordPiece export not found");
+
+              // Create WordPiece model from vocab
+              const unkToken = "[UNK]";
+              const model = new WordPiece(vocabObj, unkToken);
+              this.tokenizer = new tokenizers.Tokenizer(model);
+              console.error("[gliner] WordPiece tokenizer created from tokenizer.json vocab");
+
+              // Apply normalizer (BertNormalizer for DeBERTa)
+              try {
+                this.tokenizer.normalizer = new tokenizers.BertNormalizer({
+                  cleanText: true,
+                  handleChineseChars: true,
+                  stripAccents: false,
+                  lowercase: false,
+                });
+                console.error("[gliner] BertNormalizer applied");
+              } catch (e) {
+                console.error("[gliner] Failed to apply normalizer:", e instanceof Error ? e.message : String(e));
+              }
+
+              // Apply pre-tokenizer (BertPreTokenizer)
+              try {
+                this.tokenizer.preTokenizer = new tokenizers.BertPreTokenizer();
+                console.error("[gliner] BertPreTokenizer applied");
+              } catch (e) {
+                console.error("[gliner] Failed to apply pre-tokenizer:", e instanceof Error ? e.message : String(e));
+              }
+
+              // Apply decoder (WordPieceDecoder)
+              try {
+                this.tokenizer.decoder = new tokenizers.WordPieceDecoder();
+                console.error("[gliner] WordPieceDecoder applied");
+              } catch (e) {
+                console.error("[gliner] Failed to apply decoder:", e instanceof Error ? e.message : String(e));
+              }
+
+              // Apply post-processor (BERT-style template)
+              try {
+                const specialTokens = [
+                  ["[CLS]", tokenizerConfig.cls_token ?? "[CLS]"],
+                  ["[SEP]", tokenizerConfig.sep_token ?? "[SEP]"],
+                  ["[PAD]", tokenizerConfig.pad_token ?? "[PAD]"],
+                  ["[UNK]", tokenizerConfig.unk_token ?? "[UNK]"],
+                  ["[MASK]", tokenizerConfig.mask_token ?? "[MASK]"],
+                ];
+                this.tokenizer.postProcessor = new tokenizers.TemplateProcessingPostProcessor({
+                  single: "[CLS] $A [SEP]",
+                  pair: "[CLS] $A [SEP] $B [SEP]",
+                  specialTokens: specialTokens.flatMap(([id, token]) => [token, id]),
+                });
+                console.error("[gliner] TemplateProcessingPostProcessor applied");
+              } catch (e) {
+                console.error("[gliner] Failed to apply post-processor:", e instanceof Error ? e.message : String(e));
+              }
+
+              console.error("[gliner] Tokenizer fully reconstructed from tokenizer.json (WordPiece)");
+              hasTokenizerJson = true;
             } else if (tokenizerJson.model.type === "BPE") {
               // BPE model - needs vocab and merges
               console.error("[gliner] BPE vocab size:", tokenizerJson.model.vocab?.length ?? "none");
@@ -232,23 +290,24 @@ export class GlinerOnnxDetector implements Detector {
           try { await fs.access(spmPath); spmExists = true; } catch {}
 
           if (vocabExists) {
-            const BertWordPieceTokenizer = (tokenizers as any).BertWordPieceTokenizer;
-            if (!BertWordPieceTokenizer) {
-              throw new Error("[gliner] BertWordPieceTokenizer export not found");
+            // Use WordPiece with vocab.txt
+            const WordPiece = (tokenizers as any).WordPiece;
+            if (!WordPiece) {
+              throw new Error("[gliner] WordPiece export not found");
             }
-            this.tokenizer = new BertWordPieceTokenizer(vocabPath, {
-              lowercase: tokenizerConfig.do_lower_case ?? false,
+            const vocabContent = await fs.readFile(vocabPath, "utf8");
+            const vocabLines = vocabContent.trim().split("\n");
+            const vocabObj: Record<string, number> = {};
+            vocabLines.forEach((token, index) => {
+              vocabObj[token.trim()] = index;
             });
-            console.error("[gliner] BertWordPieceTokenizer created from vocab.txt");
-          } else if (spmExists) {
-            // DeBERTa v2 with SentencePiece
-            const Unigram = (tokenizers as any).Unigram;
-            if (!Unigram) {
-              throw new Error("[gliner] Unigram export not found");
-            }
-            const model = new Unigram(spmPath);
+            const model = new WordPiece(vocabObj, "[UNK]");
             this.tokenizer = new tokenizers.Tokenizer(model);
-            console.error("[gliner] Unigram tokenizer created from spm.model (DeBERTa v2 SentencePiece)");
+            console.error("[gliner] WordPiece tokenizer created from vocab.txt");
+          } else if (spmExists) {
+            // DeBERTa v2 with SentencePiece - try creating WordPiece from tokenizer.json vocab instead
+            // since Unigram from spm.model fails
+            throw new Error("spm.model path not supported - need tokenizer.json");
           } else {
             throw new Error(`Neither vocab.txt nor spm.model found for BERT-style tokenizer in ${modelDir}`);
           }
