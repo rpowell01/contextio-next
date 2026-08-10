@@ -7,8 +7,6 @@ import {
   listCaptureFiles,
   applyLogDir,
 } from "@/lib/sessions/server-utils";
-// Import decrypt from logger for migrating encrypted redaction metadata
-import { decrypt } from "@contextio/logger";
 
 /**
  * Check if we're running in the Node.js runtime (not Edge).
@@ -17,6 +15,20 @@ import { decrypt } from "@contextio/logger";
  */
 function isNodeRuntime(): boolean {
   return typeof process !== "undefined" && !!process.versions?.node;
+}
+
+/**
+ * Dynamically import decrypt from @contextio/logger only in Node.js runtime.
+ * @contextio/logger uses Node.js crypto/fs which aren't available in Edge.
+ */
+async function getDecryptFn(): Promise<(encryptedJson: string, keyMaterial: string) => Promise<string> | null> {
+  if (!isNodeRuntime()) return null;
+  try {
+    const { decrypt } = await import("@contextio/logger");
+    return decrypt;
+  } catch {
+    return null;
+  }
 }
 
 function validateCsrfSecret(): void {
@@ -32,8 +44,14 @@ async function applyPersistedSettings(): Promise<void> {
     // Ensure database schema is initialized and migrate settings.json if needed
     const { initDb } = await import("@contextio/core/db");
     // Pass decrypt function and key material to handle encrypted .redact-meta.json files during migration
+    // Only available in Node.js runtime
+    const decryptFn = await getDecryptFn();
     const keyMaterial = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY;
-    initDb(decrypt, keyMaterial);
+    if (decryptFn && keyMaterial) {
+      initDb(decryptFn, keyMaterial);
+    } else {
+      initDb();
+    }
 
     const { getSettingsWithMeta } = await import("@contextio/core/db");
     const { settings: dbSettings } = getSettingsWithMeta();
@@ -87,8 +105,14 @@ async function loadSettings(): Promise<{ enabled: boolean; maxAgeDays: number; i
     // Ensure database schema is initialized and migrate settings.json if needed
     const { initDb } = await import("@contextio/core/db");
     // Pass decrypt function and key material to handle encrypted .redact-meta.json files during migration
+    // Only available in Node.js runtime
+    const decryptFn = await getDecryptFn();
     const keyMaterial = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY;
-    initDb(decrypt, keyMaterial);
+    if (decryptFn && keyMaterial) {
+      initDb(decryptFn, keyMaterial);
+    } else {
+      initDb();
+    }
 
     const { getSettings } = await import("@contextio/core/db");
     const dbSettings = getSettings() ?? DEFAULT_SETTINGS;
