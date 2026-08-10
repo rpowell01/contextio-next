@@ -116,7 +116,6 @@ export class GlinerOnnxDetector implements Detector {
     try {
       // Load tokenizer from model directory using Hugging Face tokenizers
       // This provides accurate offset mappings for token-to-character conversion
-      // For tokenizers v0.1.x, prefer Tokenizer.fromFile() which loads everything automatically
       const tokenizers = await import("@huggingface/tokenizers");
       const { join } = await import("node:path");
       const fs = await import("node:fs/promises");
@@ -131,7 +130,15 @@ export class GlinerOnnxDetector implements Detector {
       }
 
       const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
+      const tokenizerJsonPath = join(modelDir, "tokenizer.json");
       const onnxPath = join(modelDir, "model.onnx");
+
+      // Check for tokenizer.json (modern format with complete tokenizer state)
+      let hasTokenizerJson = false;
+      try {
+        await fs.access(tokenizerJsonPath);
+        hasTokenizerJson = true;
+      } catch {}
 
       // Validate required files exist
       for (const [filePath, fileName] of [
@@ -153,57 +160,83 @@ export class GlinerOnnxDetector implements Detector {
       const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
       console.error(`[gliner] tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
 
-      // Build tokenizer based on tokenizer_class
-      if (tokenizerConfig.tokenizer_class === "DebertaV2Tokenizer" ||
-          tokenizerConfig.tokenizer_class === "BertTokenizer" ||
-          tokenizerConfig.tokenizer_class === "BertTokenizerFast") {
-        // BERT-style WordPiece tokenizer - try vocab.txt first, fall back to spm.model
-        const vocabPath = join(modelDir, "vocab.txt");
-        const spmPath = join(modelDir, "spm.model");
-        let vocabExists = false;
-        let spmExists = false;
-        try { await fs.access(vocabPath); vocabExists = true; } catch {}
-        try { await fs.access(spmPath); spmExists = true; } catch {}
-
-        if (vocabExists) {
-          const BertWordPieceTokenizer = (tokenizers as any).BertWordPieceTokenizer;
-          if (!BertWordPieceTokenizer) {
-            throw new Error("[gliner] BertWordPieceTokenizer export not found");
-          }
-          this.tokenizer = new BertWordPieceTokenizer(vocabPath, {
-            lowercase: tokenizerConfig.do_lower_case ?? false,
-          });
-          console.error("[gliner] BertWordPieceTokenizer created from vocab.txt");
-        } else if (spmExists) {
-          // DeBERTa v2 with SentencePiece
-          const Unigram = (tokenizers as any).Unigram;
-          if (!Unigram) {
-            throw new Error("[gliner] Unigram export not found");
-          }
-          const model = new Unigram(spmPath);
-          this.tokenizer = new tokenizers.Tokenizer(model);
-          console.error("[gliner] Unigram tokenizer created from spm.model (DeBERTa v2 SentencePiece)");
-        } else {
-          throw new Error(`Neither vocab.txt nor spm.model found for BERT-style tokenizer in ${modelDir}`);
-        }
-      } else if (tokenizerConfig.tokenizer_class === "UnigramTokenizer" ||
-                 tokenizerConfig.tokenizer_class === "XLMRobertaTokenizer") {
-        // SentencePiece-based tokenizer
-        const spmPath = join(modelDir, "spm.model");
+      // Try tokenizer.json first (complete tokenizer state)
+      if (hasTokenizerJson) {
+        console.error("[gliner] Found tokenizer.json, attempting to load...");
         try {
-          await fs.access(spmPath);
-          const Unigram = (tokenizers as any).Unigram;
-          if (!Unigram) {
-            throw new Error("[gliner] Unigram export not found");
+          const tokenizerJson = JSON.parse(await fs.readFile(tokenizerJsonPath, "utf8"));
+          // In @huggingface/tokenizers v0.1.x, tokenizer.json has a "model" field
+          // We need to reconstruct the model from the JSON
+          if (tokenizerJson.model) {
+            // The model field contains the serialized model
+            // We can try using the JS Tokenizer with the model data
+            // This avoids the native binding issue in some cases
+            this.tokenizer = new tokenizers.Tokenizer(tokenizerJson.model);
+            console.error("[gliner] Tokenizer loaded from tokenizer.json model field");
+          } else {
+            throw new Error("tokenizer.json missing model field");
           }
-          const model = new Unigram(spmPath);
-          this.tokenizer = new tokenizers.Tokenizer(model);
-          console.error("[gliner] Unigram tokenizer created");
-        } catch {
-          throw new Error(`spm.model not found for SentencePiece tokenizer in ${modelDir}`);
+        } catch (e) {
+          console.error("[gliner] Failed to load from tokenizer.json:", e instanceof Error ? e.message : String(e));
+          console.error("[gliner] Falling back to manual construction...");
+          hasTokenizerJson = false;
         }
-      } else {
-        throw new Error(`Unsupported tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
+      }
+
+      // Fallback: manual construction from tokenizer_config.json
+      if (!hasTokenizerJson) {
+        // Build tokenizer based on tokenizer_class
+        if (tokenizerConfig.tokenizer_class === "DebertaV2Tokenizer" ||
+            tokenizerConfig.tokenizer_class === "BertTokenizer" ||
+            tokenizerConfig.tokenizer_class === "BertTokenizerFast") {
+          // BERT-style WordPiece tokenizer - try vocab.txt first, fall back to spm.model
+          const vocabPath = join(modelDir, "vocab.txt");
+          const spmPath = join(modelDir, "spm.model");
+          let vocabExists = false;
+          let spmExists = false;
+          try { await fs.access(vocabPath); vocabExists = true; } catch {}
+          try { await fs.access(spmPath); spmExists = true; } catch {}
+
+          if (vocabExists) {
+            const BertWordPieceTokenizer = (tokenizers as any).BertWordPieceTokenizer;
+            if (!BertWordPieceTokenizer) {
+              throw new Error("[gliner] BertWordPieceTokenizer export not found");
+            }
+            this.tokenizer = new BertWordPieceTokenizer(vocabPath, {
+              lowercase: tokenizerConfig.do_lower_case ?? false,
+            });
+            console.error("[gliner] BertWordPieceTokenizer created from vocab.txt");
+          } else if (spmExists) {
+            // DeBERTa v2 with SentencePiece
+            const Unigram = (tokenizers as any).Unigram;
+            if (!Unigram) {
+              throw new Error("[gliner] Unigram export not found");
+            }
+            const model = new Unigram(spmPath);
+            this.tokenizer = new tokenizers.Tokenizer(model);
+            console.error("[gliner] Unigram tokenizer created from spm.model (DeBERTa v2 SentencePiece)");
+          } else {
+            throw new Error(`Neither vocab.txt nor spm.model found for BERT-style tokenizer in ${modelDir}`);
+          }
+        } else if (tokenizerConfig.tokenizer_class === "UnigramTokenizer" ||
+                   tokenizerConfig.tokenizer_class === "XLMRobertaTokenizer") {
+          // SentencePiece-based tokenizer
+          const spmPath = join(modelDir, "spm.model");
+          try {
+            await fs.access(spmPath);
+            const Unigram = (tokenizers as any).Unigram;
+            if (!Unigram) {
+              throw new Error("[gliner] Unigram export not found");
+            }
+            const model = new Unigram(spmPath);
+            this.tokenizer = new tokenizers.Tokenizer(model);
+            console.error("[gliner] Unigram tokenizer created");
+          } catch {
+            throw new Error(`spm.model not found for SentencePiece tokenizer in ${modelDir}`);
+          }
+        } else {
+          throw new Error(`Unsupported tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
+        }
       }
 
       // Configure tokenizer for GLiNER
