@@ -165,14 +165,29 @@ export class GlinerOnnxDetector implements Detector {
         console.error("[gliner] Found tokenizer.json, attempting to load...");
         try {
           const tokenizerJson = JSON.parse(await fs.readFile(tokenizerJsonPath, "utf8"));
-          // In @huggingface/tokenizers v0.1.x, tokenizer.json has a "model" field
-          // We need to reconstruct the model from the JSON
+          // In tokenizer.json format, the structure is:
+          // { model: { type: "Unigram", ... }, normalizer: {...}, preTokenizer: {...}, decoder: {...}, postProcessor: {...} }
+          // We can reconstruct the tokenizer by creating a new Tokenizer with the model
+          // and then setting the other components
           if (tokenizerJson.model) {
-            // The model field contains the serialized model
-            // We can try using the JS Tokenizer with the model data
-            // This avoids the native binding issue in some cases
-            this.tokenizer = new tokenizers.Tokenizer(tokenizerJson.model);
-            console.error("[gliner] Tokenizer loaded from tokenizer.json model field");
+            console.error("[gliner] tokenizer.json model type:", tokenizerJson.model.type);
+            // Create the model based on type
+            let model;
+            if (tokenizerJson.model.type === "Unigram") {
+              const Unigram = (tokenizers as any).Unigram;
+              if (!Unigram) throw new Error("[gliner] Unigram export not found");
+              // Unigram in tokenizer.json has vocab, unk_id, ... fields
+              // We need to reconstruct from the JSON model data
+              // The proper way: use the model vocab directly if available
+              if (tokenizerJson.model.vocab) {
+                // Create Unigram from vocab
+                const vocab = tokenizerJson.model.vocab;
+                // The vocab is an array of {0: "token", 1: score} or similar
+                // This is complex - let's try a different approach
+              }
+            }
+            // Fall back to manual for now
+            throw new Error("Manual reconstruction needed");
           } else {
             throw new Error("tokenizer.json missing model field");
           }
