@@ -185,17 +185,24 @@ export class GlinerOnnxDetector implements Detector {
               }
 
               // Convert vocab array [token, score] to Map {token => id}
+              // Use the actual score from vocab entry, not index
               const vocabMap = new Map<string, number>();
               let validCount = 0;
-              vocab.forEach((entry: unknown, index: number) => {
+              let scoreSum = 0;
+              const entriesToLog: Array<[string, number]> = [];
+              vocab.forEach((entry: unknown) => {
                 // Validate entry format: [token, score] where token is string
-                if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string") {
+                if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string" && typeof entry[1] === "number") {
                   const token = entry[0];
-                  vocabMap.set(token, index);
+                  const score = entry[1];
+                  vocabMap.set(token, score);
                   validCount++;
+                  scoreSum += score;
+                  if (entriesToLog.length < 20) entriesToLog.push([token, score]);
                 }
               });
-              console.error(`[gliner] Valid vocab entries: ${validCount}/${vocab.length}`);
+              console.error(`[gliner] Valid vocab entries: ${validCount}/${vocab.length}, score sum: ${scoreSum}`);
+              console.error(`[gliner] First 20 entries:`, entriesToLog);
               if (validCount === 0) {
                 throw new Error("No valid vocab entries found in tokenizer.json");
               }
