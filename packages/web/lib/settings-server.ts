@@ -8,6 +8,7 @@ import { promises as fs } from "fs";
 const SETTINGS_DIR = "/app/custom-policy";
 const SETTINGS_FILE = "/app/custom-policy/settings.json";
 
+/** @deprecated Use database-backed settings via @contextio/core/db instead */
 export async function getSettingsFilePath(): Promise<string> {
   return SETTINGS_FILE;
 }
@@ -20,6 +21,7 @@ export async function getDefaultCaptureDir(): Promise<string> {
   return join(homedir(), ".contextio", "captures");
 }
 
+/** @deprecated Use database-backed settings via @contextio/core/db instead */
 export async function applyPersistedSettings(applyLogDir: (dir: string) => void): Promise<void> {
   try {
     const raw = await fs.readFile(SETTINGS_FILE, "utf8");
@@ -35,6 +37,7 @@ export async function applyPersistedSettings(applyLogDir: (dir: string) => void)
   }
 }
 
+/** @deprecated Use database-backed settings via @contextio/core/db instead */
 export async function ensureSettingsFile(defaultSettings: unknown): Promise<void> {
   try {
     await fs.mkdir(SETTINGS_DIR, { recursive: true });
@@ -44,6 +47,7 @@ export async function ensureSettingsFile(defaultSettings: unknown): Promise<void
   }
 }
 
+/** @deprecated Use database-backed settings via @contextio/core/db instead */
 export async function readSettingsFile(): Promise<string | null> {
   try {
     return await fs.readFile(SETTINGS_FILE, "utf8");
@@ -52,6 +56,7 @@ export async function readSettingsFile(): Promise<string | null> {
   }
 }
 
+/** @deprecated Use database-backed settings via @contextio/core/db instead */
 export async function writeSettingsFile(settings: unknown): Promise<void> {
   await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2));
  }
@@ -62,15 +67,15 @@ export interface OidcSettings {
   oidcPublicUrl: string | null;
 }
 
+/** @deprecated Use database-backed settings via @contextio/core/db instead */
 export async function getOidcSettings(): Promise<OidcSettings> {
   try {
-    const raw = await fs.readFile(SETTINGS_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null) {
-      const obj = parsed as Record<string, unknown>;
+    const { getSettings } = await import("@contextio/core/db");
+    const settings = getSettings();
+    if (settings) {
       return {
-        oidcEnabled: obj.oidcEnabled === true,
-        oidcPublicUrl: typeof obj.oidcPublicUrl === "string" ? obj.oidcPublicUrl : null,
+        oidcEnabled: settings.oidcEnabled,
+        oidcPublicUrl: settings.oidcPublicUrl,
       };
     }
   } catch {

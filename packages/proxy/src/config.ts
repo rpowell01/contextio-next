@@ -10,7 +10,7 @@ import fs from "node:fs";
 
 import type { EncryptionAtRestConfig, OidcProviderConfig, ProxyConfig, Upstreams, Provider, RateLimitConfig, RetryConfig, ProvidersMap, ProviderConfig, ApiFormat, AuthType } from "@contextio/core";
 import { DEFAULT_OIDC_SCOPE, validateRateLimitConfig, validateRetryConfig, KNOWN_API_FORMATS, KNOWN_AUTH_TYPES, KNOWN_PROVIDERS, validateProviderConfig } from "@contextio/core";
-import { getAllProvidersFromDb } from "@contextio/core/db";
+import { getAllProvidersFromDb, getSettings } from "@contextio/core/db";
 
 /** Type predicate to check if a string is a valid Provider. */
 function isProvider(value: string): value is Provider {
@@ -58,9 +58,29 @@ interface WebUISettings {
   };
 }
 
-/** Read web UI settings from the JSON file. */
+/** Read web UI settings from the database (with JSON file fallback for backward compatibility). */
 function readWebUISettings(): WebUISettings {
-  // Check local development path first, then Docker path
+  // First, try to read from the database
+  try {
+    const dbSettings = getSettings();
+    if (dbSettings) {
+      const result = {
+        captureCleanupEnabled: dbSettings.captureCleanupEnabled,
+        captureCleanupIntervalHours: dbSettings.captureCleanupIntervalHours,
+        captureCleanupMaxAgeDays: dbSettings.captureCleanupMaxAgeDays,
+        oidcEnabled: dbSettings.oidcEnabled,
+        oidcPublicUrl: dbSettings.oidcPublicUrl,
+        rateLimiter: dbSettings.rateLimiter,
+        streamingRetry: dbSettings.streamingRetry,
+      };
+      console.log(`[config] read settings from database: ${JSON.stringify(result)}`);
+      return result;
+    }
+  } catch (err) {
+    console.log(`[config] failed to read settings from database, falling back to JSON file: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Fallback to JSON file for backward compatibility (legacy migrations)
   const homePath = process.env.HOME || process.env.USERPROFILE;
   const localSettingsPath = homePath ? `${homePath}/.contextio-next/settings.json` : null;
   const dockerSettingsPath = "/app/custom-policy/settings.json";

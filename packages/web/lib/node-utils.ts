@@ -21,6 +21,7 @@ async function getNodeModules(): Promise<{
 const SETTINGS_DIR = "/app/custom-policy";
 const SETTINGS_FILE = "/app/custom-policy/settings.json";
 
+/** @deprecated Use database-backed settings via @contextio/core/db instead */
 export async function getSettingsFilePath(): Promise<string> {
   return SETTINGS_FILE;
 }
