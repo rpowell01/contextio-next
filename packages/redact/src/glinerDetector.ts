@@ -122,6 +122,8 @@ export class GlinerOnnxDetector implements Detector {
 
     const modelDir = this.config.modelDir;
 
+    console.error(`[gliner] Initializing GLiNER detector with modelDir: ${modelDir}`);
+
     // Validate model directory exists and has required files
     if (!modelDir) {
       throw new Error("GLiNER detector requires modelDir to be configured");
@@ -129,15 +131,16 @@ export class GlinerOnnxDetector implements Detector {
 
     const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
     const spmPath = join(modelDir, "spm.model");
-    const modelPath = join(modelDir, "model.onnx");
+    const onnxPath = join(modelDir, "model.onnx");
 
     for (const [filePath, fileName] of [
       [tokenizerConfigPath, "tokenizer_config.json"],
       [spmPath, "spm.model"],
-      [modelPath, "model.onnx"],
+      [onnxPath, "model.onnx"],
     ] as const) {
       try {
         await fs.access(filePath);
+        console.error(`[gliner] Found model file: ${fileName}`);
       } catch {
         throw new Error(
           `GLiNER model file not found: ${fileName} in ${modelDir}. ` +
@@ -148,13 +151,20 @@ export class GlinerOnnxDetector implements Detector {
 
     // Read tokenizer config to get special tokens
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
+    console.error(`[gliner] Tokenizer config loaded, keys: ${Object.keys(tokenizerConfig).join(", ")}`);
 
     // Load the SentencePiece model
     const Unigram = (tokenizers as any).Unigram;
+    if (!Unigram) {
+      throw new Error("[gliner] @huggingface/tokenizers.Unigram export not found - check package version");
+    }
+    console.error("[gliner] Unigram class loaded");
     const model = new Unigram(spmPath);
+    console.error("[gliner] SentencePiece model loaded");
 
     // Create tokenizer
     this.tokenizer = new tokenizers.Tokenizer(model);
+    console.error("[gliner] Tokenizer created");
 
     // Add normalizer
     const BertNormalizer = (tokenizers as any).BertNormalizer;
