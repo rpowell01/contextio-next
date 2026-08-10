@@ -184,14 +184,14 @@ export class GlinerOnnxDetector implements Detector {
                 throw new Error("Unigram vocab is empty");
               }
 
-              // Convert vocab array [token, score] to object {token: id}
-              const vocabObj: Record<string, number> = {};
+              // Convert vocab array [token, score] to Map {token => id}
+              const vocabMap = new Map<string, number>();
               let validCount = 0;
               vocab.forEach((entry: unknown, index: number) => {
                 // Validate entry format: [token, score] where token is string
                 if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string") {
                   const token = entry[0];
-                  vocabObj[token] = index;
+                  vocabMap.set(token, index);
                   validCount++;
                 }
               });
@@ -203,12 +203,12 @@ export class GlinerOnnxDetector implements Detector {
               const WordPiece = (tokenizers as any).WordPiece;
               if (!WordPiece) throw new Error("[gliner] WordPiece export not found");
 
-              // Create WordPiece model from vocab
+              // Create WordPiece model from vocab Map
               const unkToken = "[UNK]";
               console.error("[gliner] Creating WordPiece model...");
               let model;
               try {
-                model = new WordPiece(vocabObj, unkToken);
+                model = new WordPiece(vocabMap, unkToken);
                 console.error("[gliner] WordPiece model created");
               } catch (e) {
                 console.error("[gliner] WordPiece model creation failed:", e instanceof Error ? e.message : String(e));
