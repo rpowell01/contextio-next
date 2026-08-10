@@ -185,24 +185,23 @@ export class GlinerOnnxDetector implements Detector {
               }
 
               // Convert vocab array [token, score] to Map {token => id}
-              // Use the actual score from vocab entry, not index
+              // Use index as WordPiece merge priority (lower index = higher priority)
               const vocabMap = new Map<string, number>();
               let validCount = 0;
-              let scoreSum = 0;
+              let index = 0;
               const entriesToLog: Array<[string, number]> = [];
               vocab.forEach((entry: unknown) => {
                 // Validate entry format: [token, score] where token is string
-                if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string" && typeof entry[1] === "number") {
+                if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string") {
                   const token = entry[0];
-                  const score = entry[1];
-                  vocabMap.set(token, score);
+                  vocabMap.set(token, index);
                   validCount++;
-                  scoreSum += score;
-                  if (entriesToLog.length < 20) entriesToLog.push([token, score]);
+                  index++;
+                  if (entriesToLog.length < 20) entriesToLog.push([token, index - 1]);
                 }
               });
-              console.error(`[gliner] Valid vocab entries: ${validCount}/${vocab.length}, score sum: ${scoreSum}`);
-              console.error(`[gliner] First 20 entries:`, entriesToLog);
+              console.error(`[gliner] Valid vocab entries: ${validCount}/${vocab.length}, used index as priority`);
+              console.error(`[gliner] First 20 entries (token, priority):`, entriesToLog);
               if (validCount === 0) {
                 throw new Error("No valid vocab entries found in tokenizer.json");
               }
