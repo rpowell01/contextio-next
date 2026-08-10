@@ -7,6 +7,8 @@ import {
   listCaptureFiles,
   applyLogDir,
 } from "@/lib/sessions/server-utils";
+// Import decrypt from logger for migrating encrypted redaction metadata
+import { decrypt } from "@contextio/logger";
 
 /**
  * Check if we're running in the Node.js runtime (not Edge).
@@ -29,7 +31,8 @@ async function applyPersistedSettings(): Promise<void> {
   try {
     // Ensure database schema is initialized and migrate settings.json if needed
     const { initDb } = await import("@contextio/core/db");
-    initDb();
+    // Pass decrypt function to handle encrypted .redact-meta.json files during migration
+    initDb(decrypt);
 
     const { getSettingsWithMeta } = await import("@contextio/core/db");
     const { settings: dbSettings } = getSettingsWithMeta();
@@ -82,7 +85,8 @@ async function loadSettings(): Promise<{ enabled: boolean; maxAgeDays: number; i
   try {
     // Ensure database schema is initialized and migrate settings.json if needed
     const { initDb } = await import("@contextio/core/db");
-    initDb();
+    // Pass decrypt function to handle encrypted .redact-meta.json files during migration
+    initDb(decrypt);
 
     const { getSettings } = await import("@contextio/core/db");
     const dbSettings = getSettings() ?? DEFAULT_SETTINGS;
