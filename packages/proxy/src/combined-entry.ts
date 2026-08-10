@@ -159,6 +159,7 @@ async function main(): Promise<void> {
 			}
 
 			const loggerPlugin = createLoggerPlugin({
+				captureDir: config.loggerCaptureDir,
 				encryption: {
 					enabled: config.loggerEncryption.enabled,
 					keyProvider: config.loggerEncryption.keyProvider,
