@@ -162,25 +162,93 @@ export class GlinerOnnxDetector implements Detector {
 
       // Try tokenizer.json first (complete tokenizer state)
       if (hasTokenizerJson) {
-        console.error("[gliner] Found tokenizer.json, attempting to load...");
+        console.error("[gliner] Found tokenizer.json, reconstructing tokenizer...");
         try {
           const tokenizerJson = JSON.parse(await fs.readFile(tokenizerJsonPath, "utf8"));
           console.error("[gliner] tokenizer.json keys:", Object.keys(tokenizerJson));
           console.error("[gliner] tokenizer.json model:", JSON.stringify(tokenizerJson.model ?? null).slice(0, 200));
-          // In tokenizer.json format, the structure is:
-          // { model: { type: "Unigram"/"BPE"/etc, ... }, normalizer: {...}, preTokenizer: {...}, decoder: {...}, postProcessor: {...} }
+
           if (tokenizerJson.model) {
             console.error("[gliner] model type:", tokenizerJson.model.type);
-            // Try to reconstruct based on model type
+
             if (tokenizerJson.model.type === "Unigram") {
-              // Unigram model has vocab array
+              // Reconstruct Unigram model from vocab data
               console.error("[gliner] Unigram vocab size:", tokenizerJson.model.vocab?.length ?? "none");
+
+              // Create Unigram model from vocab
+              // vocab is array of [token, score] pairs
+              const vocab = tokenizerJson.model.vocab;
+              if (!vocab || vocab.length === 0) {
+                throw new Error("Unigram vocab is empty");
+              }
+
+              // Convert to the format expected by Unigram: record<string, number> or Map
+              const vocabMap = new Map<string, number>();
+              for (const [token, score] of vocab) {
+                vocabMap.set(token, score);
+              }
+
+              const Unigram = (tokenizers as any).Unigram;
+              if (!Unigram) throw new Error("[gliner] Unigram export not found");
+
+              // Create Unigram model directly from vocab
+              const model = new Unigram(vocabMap, tokenizerJson.model.unk_id ?? 3);
+              this.tokenizer = new tokenizers.Tokenizer(model);
+              console.error("[gliner] Unigram tokenizer created from tokenizer.json vocab");
             } else if (tokenizerJson.model.type === "BPE") {
+              // BPE model - needs vocab and merges
               console.error("[gliner] BPE vocab size:", tokenizerJson.model.vocab?.length ?? "none");
+              throw new Error("BPE reconstruction not yet implemented");
+            } else {
+              throw new Error(`Unsupported model type in tokenizer.json: ${tokenizerJson.model.type}`);
             }
+
+            // Apply normalizer if present
+            if (tokenizerJson.normalizer && this.tokenizer) {
+              try {
+                // The normalizer is typically a BertNormalizer or similar
+                this.tokenizer.normalizer = tokenizers.Normalizer.from(tokenizerJson.normalizer);
+                console.error("[gliner] Normalizer applied from tokenizer.json");
+              } catch (e) {
+                console.error("[gliner] Failed to apply normalizer:", e instanceof Error ? e.message : String(e));
+              }
+            }
+
+            // Apply pre-tokenizer if present
+            if (tokenizerJson.pre_tokenizer && this.tokenizer) {
+              try {
+                this.tokenizer.preTokenizer = tokenizers.PreTokenizer.from(tokenizerJson.pre_tokenizer);
+                console.error("[gliner] Pre-tokenizer applied from tokenizer.json");
+              } catch (e) {
+                console.error("[gliner] Failed to apply pre-tokenizer:", e instanceof Error ? e.message : String(e));
+              }
+            }
+
+            // Apply decoder if present
+            if (tokenizerJson.decoder && this.tokenizer) {
+              try {
+                this.tokenizer.decoder = tokenizers.Decoder.from(tokenizerJson.decoder);
+                console.error("[gliner] Decoder applied from tokenizer.json");
+              } catch (e) {
+                console.error("[gliner] Failed to apply decoder:", e instanceof Error ? e.message : String(e));
+              }
+            }
+
+            // Apply post-processor if present
+            if (tokenizerJson.post_processor && this.tokenizer) {
+              try {
+                this.tokenizer.postProcessor = tokenizers.PostProcessor.from(tokenizerJson.post_processor);
+                console.error("[gliner] Post-processor applied from tokenizer.json");
+              } catch (e) {
+                console.error("[gliner] Failed to apply post-processor:", e instanceof Error ? e.message : String(e));
+              }
+            }
+
+            console.error("[gliner] Tokenizer fully reconstructed from tokenizer.json");
+            hasTokenizerJson = true;
+          } else {
+            throw new Error("tokenizer.json missing model field");
           }
-          // Fall back to manual for now
-          throw new Error("Manual reconstruction needed");
         } catch (e) {
           console.error("[gliner] Failed to load from tokenizer.json:", e instanceof Error ? e.message : String(e));
           console.error("[gliner] Falling back to manual construction...");
