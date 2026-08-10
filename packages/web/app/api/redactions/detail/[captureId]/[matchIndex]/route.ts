@@ -3,7 +3,6 @@ import { join } from "path";
 import {
   getCaptureDir,
   readCaptureFile,
-  extractRedactionMatches,
 } from "@/lib/sessions/server-utils";
 import {
   getRedactionMetadataByCaptureIdFromDb,
@@ -72,18 +71,15 @@ export async function GET(
         return Response.json(createErrorResponse({ message: "Redaction metadata not found", status: 404 }), { status: 404 });
       }
 
-      // Get matches from capture data (since SQLite doesn't store individual matches)
-      // Note: extractRedactionMatches returns the full string as 'original', not the pre-redaction value.
-      // This is a known limitation; the old meta.matches had actual pre/post values.
-      const matches = extractRedactionMatches(captureData);
-
-      // Convert matches to MetaMatch format
-      const metaMatches: MetaMatch[] = matches.map((m) => ({
-        ruleId: m.rule,
-        original: m.original,
-        placeholder: m.placeholder,
-        preValue: m.original,
-        postValue: m.placeholder,
+      // Use matches from SQLite which has actual pre/post values from the redaction plugin
+      // NOTE: Previously we used extractRedactionMatches which incorrectly returned the entire
+      // text as 'original'. Now we use meta.matches from SQLite which stores exact preValue/postValue.
+      const metaMatches: MetaMatch[] = (meta.matches ?? []).map((m) => ({
+        ruleId: m.ruleId,
+        original: m.preValue,
+        placeholder: m.postValue,
+        preValue: m.preValue,
+        postValue: m.postValue,
         path: m.path,
       }));
 
@@ -99,28 +95,26 @@ export async function GET(
         const index = parseInt(matchIndex, 10);
         if (isNaN(index) || index < 0 || index >= metaMatches.length) {
           return Response.json(
-            createErrorResponse({ 
-              message: "Match index out of range", 
-              status: 400, 
-              details: { totalMatches: metaMatches.length } 
+            createErrorResponse({
+              message: "Match index out of range",
+              status: 400,
+              details: { totalMatches: metaMatches.length }
             }),
             { status: 400 }
           );
         }
         match = metaMatches[index];
 
-        // Use same field fallback logic as list API
-        const preRedactionValue =
-          (match.original ?? match.preValue ?? match.pre ?? "") as string;
-        const postRedactionValue =
-          (match.placeholder ?? match.postValue ?? match.post ?? "") as string;
-        redactionType = (match.ruleId ?? match.rule ?? "") as string;
+        // Use preValue/postValue directly from SQLite matches
+        const preRedactionValue = match.preValue ?? "";
+        const postRedactionValue = match.postValue ?? "";
+        redactionType = match.ruleId ?? "";
 
         // Build all matches for precise highlighting
         const allMatches = metaMatches.map((m) => ({
-          ruleId: m.ruleId ?? m.rule ?? "",
-          preValue: m.original ?? m.preValue ?? m.pre ?? "",
-          postValue: m.placeholder ?? m.postValue ?? m.post ?? "",
+          ruleId: m.ruleId ?? "",
+          preValue: m.preValue ?? "",
+          postValue: m.postValue ?? "",
           path: m.path ?? "",
         }));
 

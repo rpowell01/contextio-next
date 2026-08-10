@@ -50,6 +50,13 @@ export async function getRedactionMetadataByCaptureIdFromDb(
   errorCount?: number;
   model?: string | null;
   captureId: string;
+  // Actual redaction matches with pre/post values from SQLite
+  matches?: Array<{
+    ruleId: string;
+    preValue: string;
+    postValue: string;
+    path: string;
+  }>;
 } | null> {
   const db = await getDbModule();
   const meta = db.getRedactionMetadataByCaptureId(captureId);
@@ -82,6 +89,8 @@ export async function getRedactionMetadataByCaptureIdFromDb(
     errorCount: meta.errorCount ?? undefined,
     model: meta.model ?? undefined,
     captureId,
+    // Include matches from SQLite for precise diff highlighting
+    matches: meta.matches ?? undefined,
   };
 }
 
