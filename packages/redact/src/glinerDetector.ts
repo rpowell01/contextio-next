@@ -153,15 +153,17 @@ export class GlinerOnnxDetector implements Detector {
     // Read tokenizer config to get special tokens
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
     console.error(`[gliner] Tokenizer config loaded, keys: ${Object.keys(tokenizerConfig).join(", ")}`);
+    console.error(`[gliner] tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
 
-    // Load the SentencePiece model
-    console.error("[gliner] Loading Unigram class...");
-    const Unigram = (tokenizers as any).Unigram;
-    if (!Unigram) {
-      throw new Error("[gliner] @huggingface/tokenizers.Unigram export not found - check package version");
+    // Load the SentencePiece model - use the tokenizer class from config
+    console.error("[gliner] Loading tokenizer model class...");
+    const tokenizerClassName = tokenizerConfig.tokenizer_class ?? "Unigram";
+    const ModelClass = (tokenizers as any)[tokenizerClassName];
+    if (!ModelClass) {
+      throw new Error(`[gliner] @huggingface/tokenizers.${tokenizerClassName} export not found`);
     }
-    console.error("[gliner] Unigram class loaded, creating model from:", spmPath);
-    const model = new Unigram(spmPath);
+    console.error(`[gliner] ${tokenizerClassName} class loaded, creating model from:`, spmPath);
+    const model = new ModelClass(spmPath);
     console.error("[gliner] SentencePiece model loaded");
 
     // Create tokenizer
