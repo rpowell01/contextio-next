@@ -186,9 +186,19 @@ export class GlinerOnnxDetector implements Detector {
 
               // Convert vocab array [token, score] to object {token: id}
               const vocabObj: Record<string, number> = {};
-              vocab.forEach(([token, _score]: [string, number], index: number) => {
-                vocabObj[token] = index;
+              let validCount = 0;
+              vocab.forEach((entry: unknown, index: number) => {
+                // Validate entry format: [token, score] where token is string
+                if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string") {
+                  const token = entry[0];
+                  vocabObj[token] = index;
+                  validCount++;
+                }
               });
+              console.error(`[gliner] Valid vocab entries: ${validCount}/${vocab.length}`);
+              if (validCount === 0) {
+                throw new Error("No valid vocab entries found in tokenizer.json");
+              }
 
               const WordPiece = (tokenizers as any).WordPiece;
               if (!WordPiece) throw new Error("[gliner] WordPiece export not found");
