@@ -160,6 +160,9 @@ export class GlinerOnnxDetector implements Detector {
       const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
       console.error(`[gliner] tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
 
+      // First, let's debug what tokenizers exports are available
+      console.error("[gliner] Available tokenizers exports:", Object.keys(tokenizers).filter(k => !k.startsWith("_")));
+
       // Try tokenizer.json first (complete tokenizer state)
       if (hasTokenizerJson) {
         console.error("[gliner] Found tokenizer.json, reconstructing tokenizer...");
