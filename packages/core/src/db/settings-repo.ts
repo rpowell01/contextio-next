@@ -197,27 +197,31 @@ function rowToSettings(row: SettingsRow): Settings {
 
 /**
  * Convert a Settings object to database column values for insert/update.
+ * Uses DEFAULT_SETTINGS as fallback for any missing/undefined keys to satisfy NOT NULL constraints.
  */
-function settingsToRow(settings: Settings): Omit<SettingsRow, "id" | "created_at" | "updated_at"> {
+function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "created_at" | "updated_at"> {
+	// Merge with defaults to ensure all required fields are present
+	const merged: Settings = { ...DEFAULT_SETTINGS, ...settings };
+
 	return {
-		log_dir: settings.logDir,
-		max_sessions: settings.maxSessions,
-		redact_preset: settings.redactPreset,
-		redact_reversible: settings.redactReversible ? 1 : 0,
-		redact_policy_file: settings.redactPolicyFile,
-		encryption_at_rest: settings.encryptionAtRest ? 1 : 0,
-		capture_cleanup_enabled: settings.captureCleanupEnabled ? 1 : 0,
-		capture_cleanup_interval_hours: settings.captureCleanupIntervalHours,
-		capture_cleanup_max_age_days: settings.captureCleanupMaxAgeDays,
-		theme: settings.theme,
-		oidc_enabled: settings.oidcEnabled ? 1 : 0,
-		oidc_public_url: settings.oidcPublicUrl,
-		show_page_load_time: settings.showPageLoadTime ? 1 : 0,
-		detector_mode: settings.detectorMode,
-		detector_model_dir: settings.detectorModelDir,
-		detector_threshold: settings.detectorThreshold,
-		rate_limiter: JSON.stringify(settings.rateLimiter),
-		streaming_retry: JSON.stringify(settings.streamingRetry),
+		log_dir: merged.logDir,
+		max_sessions: merged.maxSessions,
+		redact_preset: merged.redactPreset,
+		redact_reversible: merged.redactReversible ? 1 : 0,
+		redact_policy_file: merged.redactPolicyFile,
+		encryption_at_rest: merged.encryptionAtRest ? 1 : 0,
+		capture_cleanup_enabled: merged.captureCleanupEnabled ? 1 : 0,
+		capture_cleanup_interval_hours: merged.captureCleanupIntervalHours,
+		capture_cleanup_max_age_days: merged.captureCleanupMaxAgeDays,
+		theme: merged.theme,
+		oidc_enabled: merged.oidcEnabled ? 1 : 0,
+		oidc_public_url: merged.oidcPublicUrl,
+		show_page_load_time: merged.showPageLoadTime ? 1 : 0,
+		detector_mode: merged.detectorMode,
+		detector_model_dir: merged.detectorModelDir,
+		detector_threshold: merged.detectorThreshold,
+		rate_limiter: JSON.stringify(merged.rateLimiter),
+		streaming_retry: JSON.stringify(merged.streamingRetry),
 	};
 }
 
