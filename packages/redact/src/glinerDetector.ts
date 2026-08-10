@@ -175,26 +175,19 @@ export class GlinerOnnxDetector implements Detector {
               // Reconstruct Unigram model from vocab data
               console.error("[gliner] Unigram vocab size:", tokenizerJson.model.vocab?.length ?? "none");
 
-              // Create Unigram model from vocab
-              // vocab is array of [token, score] pairs
-              const vocab = tokenizerJson.model.vocab;
-              if (!vocab || vocab.length === 0) {
-                throw new Error("Unigram vocab is empty");
+              // In tokenizers v0.1.x, the Unigram class only accepts a file path (spm.model)
+              // not a vocab object. We need to use a different approach.
+              // Try using Tokenizer constructor with the model from tokenizer.json directly
+              // The tokenizer.json model field might be usable as-is
+              try {
+                // Try creating tokenizer directly from the model object
+                this.tokenizer = new tokenizers.Tokenizer(tokenizerJson.model);
+                console.error("[gliner] Unigram tokenizer created from tokenizer.json model object");
+              } catch (e) {
+                console.error("[gliner] Direct model object failed:", e instanceof Error ? e.message : String(e));
+                // Fall back to manual construction via spm.model
+                throw new Error("Direct model object failed, need fallback");
               }
-
-              // Convert to the format expected by Unigram: record<string, number> or Map
-              const vocabMap = new Map<string, number>();
-              for (const [token, score] of vocab) {
-                vocabMap.set(token, score);
-              }
-
-              const Unigram = (tokenizers as any).Unigram;
-              if (!Unigram) throw new Error("[gliner] Unigram export not found");
-
-              // Create Unigram model directly from vocab
-              const model = new Unigram(vocabMap, tokenizerJson.model.unk_id ?? 3);
-              this.tokenizer = new tokenizers.Tokenizer(model);
-              console.error("[gliner] Unigram tokenizer created from tokenizer.json vocab");
             } else if (tokenizerJson.model.type === "BPE") {
               // BPE model - needs vocab and merges
               console.error("[gliner] BPE vocab size:", tokenizerJson.model.vocab?.length ?? "none");
