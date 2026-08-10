@@ -12,13 +12,13 @@
  * - REDACT_DETECTOR_MODE: "rules" | "llm" | "hybrid" | "auto" (default: "rules")
  * - REDACT_DETECTOR_MODEL_DIR: path to GLiNER ONNX model directory
  * - REDACT_DETECTOR_THRESHOLD: number 0-1 (default: 0.5)
- * - LOGGER_CAPTURE_DIR: capture directory for sidecar writes
  * - CONTEXTIO_ENABLE_REDACT: "true" | "false" (default: "true") - Enable/disable redact plugin
  */
 
 import fs from "node:fs";
-import { createRedactPlugin, type RedactPluginConfig } from "./index.js";
+import { createRedactPlugin, type RedactPluginConfig, type RedactionMetadata } from "./index.js";
 import type { ProxyPlugin } from "@contextio/core";
+import { upsertRedactionMetadata } from "@contextio/core/db";
 
 const WEB_UI_SETTINGS_PATH = "/app/custom-policy/settings.json";
 
@@ -80,7 +80,9 @@ function buildRedactConfig(): RedactPluginConfig | null {
 		detectorMode: settings.detectorMode || (process.env.REDACT_DETECTOR_MODE as "rules" | "llm" | "hybrid" | "auto") || "rules",
 		detectorConfig: Object.keys(detectorConfig).length > 0 ? detectorConfig : undefined,
 		verbose: process.env.REDACT_VERBOSE === "true",
-		captureDir: process.env.LOGGER_CAPTURE_DIR,
+		onRedactionMetadata: (metadata: RedactionMetadata) => {
+			upsertRedactionMetadata(metadata);
+		},
 	};
 
 	// Only enable if explicitly configured

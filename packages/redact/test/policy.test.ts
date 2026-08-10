@@ -258,8 +258,9 @@ describe("loadPolicyFile", () => {
     );
 
     const policy = loadPolicyFile(file);
-    assert.equal(policy.rules.length, 1);
-    assert.equal(policy.rules[0].name, "from-file");
+    assert.ok(policy !== null, "Policy should not be null");
+    assert.equal(policy!.rules.length, 1);
+    assert.equal(policy!.rules[0].name, "from-file");
 
     fs.unlinkSync(file);
   });
@@ -281,7 +282,8 @@ describe("loadPolicyFile", () => {
     );
 
     const policy = loadPolicyFile(file);
-    assert.equal(policy.rules.length, 1);
+    assert.ok(policy !== null, "Policy should not be null");
+    assert.equal(policy!.rules.length, 1);
 
     fs.unlinkSync(file);
   });
@@ -305,8 +307,9 @@ describe("loadPolicyFile", () => {
     );
 
     const policy = loadPolicyFile(file);
-    assert.equal(policy.rules.length, 1);
-    assert.equal(policy.allowlist.strings.size, 2);
+    assert.ok(policy !== null, "Policy should not be null");
+    assert.equal(policy!.rules.length, 1);
+    assert.equal(policy!.allowlist.strings.size, 2);
 
     fs.unlinkSync(file);
   });
@@ -330,7 +333,8 @@ describe("loadPolicyFile", () => {
     );
 
     const policy = loadPolicyFile(file);
-    assert.ok(policy.rules.length > 0);
+    assert.ok(policy !== null, "Policy should not be null");
+    assert.ok(policy!.rules.length > 0);
 
     fs.unlinkSync(file);
   });
@@ -346,8 +350,9 @@ describe("loadPolicyFile", () => {
     );
 
     const policy = loadPolicyFile(file);
+    assert.ok(policy !== null, "Policy should not be null");
     // Should compile empty policy
-    assert.equal(policy.rules.length, 0);
+    assert.equal(policy!.rules.length, 0);
 
     fs.unlinkSync(file);
   });

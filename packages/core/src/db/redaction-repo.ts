@@ -32,6 +32,7 @@ export interface RedactionMetadataRow {
 	success_count: number | null;
 	error_count: number | null;
 	model: string | null;
+	matches: string | null; // JSON: array of {ruleId, preValue, postValue, path}
 	created_at: number;
 	updated_at: number;
 }
@@ -39,6 +40,13 @@ export interface RedactionMetadataRow {
 /**
  * Type definitions for the redaction metadata API.
  */
+export interface RedactionMatch {
+	ruleId: string;
+	preValue: string;
+	postValue: string;
+	path: string;
+}
+
 export interface RedactionMetadata {
 	captureId: string;
 	sessionId: string | null;
@@ -64,6 +72,7 @@ export interface RedactionMetadata {
 	successCount?: number;
 	errorCount?: number;
 	model?: string | null;
+	matches?: RedactionMatch[];
 }
 
 export interface SessionRedactionAggregate {
@@ -102,6 +111,7 @@ function rowToRedactionMetadata(row: RedactionMetadataRow): RedactionMetadata {
 		successCount: row.success_count ?? undefined,
 		errorCount: row.error_count ?? undefined,
 		model: row.model ?? undefined,
+		matches: row.matches ? safeJsonParse<RedactionMatch[]>(row.matches, []) : undefined,
 	};
 }
 
@@ -144,6 +154,7 @@ function redactionMetadataToRow(
 		success_count: metadata.successCount ?? null,
 		error_count: metadata.errorCount ?? null,
 		model: metadata.model ?? null,
+		matches: metadata.matches ? JSON.stringify(metadata.matches) : null,
 	};
 }
 
@@ -154,8 +165,8 @@ const UPSERT_REDACTION_METADATA_SQL = `
 		source, provider, target_url, request_bytes, response_bytes,
 		timings_send_ms, timings_wait_ms, timings_receive_ms, timings_total_ms,
 		total_input_tokens, total_output_tokens, tokens_per_second,
-		success_count, error_count, model, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		success_count, error_count, model, matches, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(capture_id) DO UPDATE SET
 		session_id = excluded.session_id,
 		rule_counts = excluded.rule_counts,
@@ -176,7 +187,8 @@ const UPSERT_REDACTION_METADATA_SQL = `
 		success_count = excluded.success_count,
 		error_count = excluded.error_count,
 		model = excluded.model,
-		updated_at = strftime('%s','now') * 1000
+		matches = excluded.matches,
+		updated_at = excluded.updated_at
 `;
 
 /**
@@ -210,6 +222,7 @@ export function upsertRedactionMetadata(metadata: RedactionMetadata): void {
 		row.success_count,
 		row.error_count,
 		row.model,
+		row.matches,
 		metadata.createdAt,
 		metadata.updatedAt ?? Date.now(),
 	);
@@ -249,6 +262,7 @@ export function upsertRedactionMetadataBulk(metadataArray: RedactionMetadata[]):
 				row.success_count,
 				row.error_count,
 				row.model,
+				row.matches,
 				metadata.createdAt,
 				metadata.updatedAt ?? Date.now(),
 			);

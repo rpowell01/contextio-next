@@ -3,23 +3,21 @@
  *
  * Monitors CAPTURE_DIR for new or modified capture files using fs.watch
  * (with debounce + random jitter). On each settled change, reads the
- * capture JSON, invokes the redaction-utils computation, and writes the
- * `{captureId}.redact-meta.json` metadata file atomically.
+ * capture JSON, invokes the redaction-utils computation, and persists
+ * metadata directly to SQLite via the persistToSqlite callback.
  *
  * Design guarantees:
  * - The watcher runs asynchronously and never blocks the proxy's request
  *   / response path.
  * - Rapid sequential writes are batched with a debounce window plus a
  *   small random jitter so that bursts of captures produce at most one
- *   filesystem scan per debounce window.
- * - Metadata writes are atomic: they land in a `.tmp` sibling and are
- *   renamed into place, preventing torn reads.
+ *   metadata computation per debounce window.
  * - Errors are contained to the watcher loop; a bad capture file is
  *   skipped and logged but never propagates to the proxy caller.
  */
 
 import fs from "node:fs";
-import { stat, readdir, readFile, writeFile, rename, unlink, mkdir } from "node:fs/promises";
+import { stat, readdir, readFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { EncryptionAtRestConfig } from "@contextio/core";
 import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
@@ -30,7 +28,6 @@ import {
 } from "@contextio/core/db";
 
 
-
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -39,8 +36,7 @@ import {
 export const REDACTION_META_DEBOUNCE_MS = 2_000;
 /** Upper bound of random jitter appended to each debounce window (ms). */
 export const REDACTION_META_JITTER_MS = 500;
-/** Maximum time a .tmp file may exist before it is considered stale (ms). */
-export const REDACTION_META_TMP_MAX_AGE_MS = 30_000;
+
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -104,6 +100,7 @@ async function maybeDecryptCapture(
   }
 }
 
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -112,24 +109,15 @@ export interface RedactionMetaWatcherOptions {
   /** Directory containing capture JSON files. */
   captureDir: string;
   /**
-   * Optional in-process function called when metadata is ready.
-   *
-   * When omitted the watcher still writes `.redact-meta.json` files to
-   * disk so that the web UI can discover them without a live callback.
-   */
-  onMetadataReady?: (metadata: CaptureRedactionMetadata) => void;
-  /**
-   * Optional encryption configuration for encrypting metadata files.
-   * When provided, metadata files will be encrypted with AES-256-GCM
-   * using the same key derivation as capture files.
+   * Optional encryption configuration for decrypting capture files.
+   * When provided, capture files will be decrypted before processing.
    */
   encryption?: EncryptionAtRestConfig;
   /**
-   * Optional callback to persist redaction metadata to SQLite.
-   * When provided, the watcher will also write metadata to the database
-   * in addition to the sidecar file.
+   * Required callback to persist redaction metadata to SQLite.
+   * The watcher will compute metadata and call this callback for each capture.
    */
-  persistToSqlite?: (metadata: RedactionMetadata) => void;
+  persistToSqlite: (metadata: RedactionMetadata) => void;
 }
 
 export interface RedactionMatch {
@@ -175,119 +163,9 @@ export interface RedactionMetaWatcher {
   stop(): void;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Derive metadata file path: `<name>.redact-meta.json`.
- *
- * If the input filename ends in `.json`, the metadata filename replaces
- * that suffix. Otherwise `.redact-meta.json` is appended.
- */
-function metaFilenameFor(captureFilename: string): string {
-  const base = captureFilename.endsWith(".json")
-    ? captureFilename.slice(0, -".json".length)
-    : captureFilename;
-  return `${base}.redact-meta.json`;
-}
-
-/**
- * Write the metadata file atomically by staging to a `.tmp` sibling and
- * renaming. `rename` is atomic on POSIX systems when source and target
- * reside on the same filesystem.
- */
-async function atomicWriteMetadata(
-  targetPath: string,
-  metadata: CaptureRedactionMetadata,
-  encryption?: EncryptionAtRestConfig,
-): Promise<void> {
-  const tmpPath = `${targetPath}.tmp-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
-
-  let content: string;
-  if (encryption?.enabled) {
-    // Resolve key material the same way the logger plugin does
-    let keyMaterial: string | undefined;
-    switch (encryption.keyProvider) {
-      case "static":
-        keyMaterial = encryption.staticKey;
-        break;
-      case "env":
-      default:
-        keyMaterial = process.env[encryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
-        break;
-      case "kms":
-        throw new Error("[redaction-meta-watcher] KMS key provider not yet implemented");
-    }
-    if (!keyMaterial) {
-      throw new Error("[redaction-meta-watcher] Encryption enabled but no key material resolved");
-    }
-    const encrypted = await encrypt(JSON.stringify(metadata), keyMaterial);
-    content = JSON.stringify(encrypted);
-  } else {
-    content = JSON.stringify(metadata, null, 2);
-  }
-
-  await writeFile(
-    tmpPath,
-    content,
-    "utf8",
-  );
-
-  // Retry rename once on EBUSY/EPERM/EEXIST (rare but possible under
-  // concurrent writes on Windows or NFS mounts).
-  const maxAttempts = 2;
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await rename(tmpPath, targetPath);
-      return;
-    } catch (err: unknown) {
-      const code = (err as NodeJS.ErrnoException)?.code;
-      if (attempt >= maxAttempts - 1 || !["EBUSY", "EPERM", "EEXIST"].includes(code ?? "")) {
-        // Remove stale tmp if it still exists and re-throw.
-        await unlink(tmpPath).catch(() => undefined);
-        throw err;
-      }
-      await new Promise((r) => setTimeout(r, 100));
-    }
-  }
-}
-
-/**
- * Safely purge stale `.tmp-*` files older than `TMP_MAX_AGE_MS` that
- * may be left behind after a process crash.
- */
-async function reapStaleTmpFiles(dir: string): Promise<void> {
- try {
- const entries = await readdir(dir);
-    const threshold = Date.now() - REDACTION_META_TMP_MAX_AGE_MS;
-    for (const entry of entries) {
-      if (!entry.includes(".tmp-")) continue;
-      const path = join(dir, entry);
-      try {
-        const s = await stat(path);
-        if (s.mtimeMs < threshold) {
-          await unlink(path);
-        }
-      } catch {
-        // ignore unreadable entries
-      }
-    }
-  } catch {
-    // ignore read errors (dir may not exist yet)
-  }
-}
 
 // ---------------------------------------------------------------------------
-// Local redaction counting. The proxy previously called require("@contextio/web")
-// at runtime, but the proxy is built as an ES module (type: "module") where
-// require is undefined, and @contextio/web has no consumable entry point.
-// Counts are computed locally instead: prefer the capture's persisted
-// redactionStats (written by the redact plugin) and otherwise scan the
-// request body for [RULE_REDACTED] placeholders and SSNs. This keeps the
-// proxy free of a build/runtime dependency on the web package.
+// Local redaction counting.
 // ---------------------------------------------------------------------------
 
 const PLACEHOLDER_REGEX = /\[([A-Z][A-Z0-9_]*)_REDACTED\]/g;
@@ -335,7 +213,7 @@ interface RawRedactionStats {
 
 /**
  * Lightweight extractor for redaction matches, recording only rule and JSON path.
- * Used to populate the metadata file with minimal match information.
+ * Used to populate the metadata with minimal match information.
  */
 function extractRedactionMatches(rawData: unknown): Array<RedactionMatch> {
   const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
@@ -504,8 +382,8 @@ function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedacti
       totalRedactions: counts.totalRedactions,
       byRule: counts.byRule,
       generatedAt: new Date().toISOString(),
-      // Omit matches - they will be preserved from redact plugin's meta file via mergeExistingMetadata
-      // Watcher's extractRedactionMatches uses placeholder extraction which gives wrong ruleIds
+      // Include matches from redact plugin if available (we can extract from rawData if present)
+      matches: extractRedactionMatches(rawData),
       source: (rawCapture?.source as string) ?? undefined,
       provider: (rawCapture?.provider as string) ?? "unknown",
       targetUrl: (rawCapture?.targetUrl as string) ?? "",
@@ -561,161 +439,52 @@ export function createRedactionMetaWatcher(
   let stopped = false;
   let watcher: fs.FSWatcher | null = null;
 
-  const flushStaleTmp = async (): Promise<void> => {
-    await reapStaleTmpFiles(dir);
-  };
-
-async function mergeExistingMetadata(
-  metaPath: string,
-  computed: CaptureRedactionMetadata,
-): Promise<CaptureRedactionMetadata> {
-  try {
-    const raw = await readFile(metaPath, "utf8");
-    const existing = JSON.parse(raw) as Partial<CaptureRedactionMetadata>;
-    if (typeof existing !== "object" || existing === null || Array.isArray(existing)) return computed;
-
-    const enriched: CaptureRedactionMetadata = { ...computed };
-
-    // Prefer existing byRule from redact plugin (correct preset rule names like "credential_generic")
-    // over watcher-computed byRule (extracted from placeholders like "[SECRET_REDACTED]" -> "secret")
-    if (existing.byRule && typeof existing.byRule === "object" && !Array.isArray(existing.byRule)) {
-      enriched.byRule = existing.byRule as Record<string, number>;
-    }
-
-    // Prefer existing matches from redact plugin (they have correct ruleIds from presets)
-    // over watcher-computed matches (which extract ruleIds from placeholders with different naming)
-    // Always preserve existing matches if they exist - the API handles multiple formats
-    if (Array.isArray(existing.matches) && existing.matches.length > 0) {
-      enriched.matches = existing.matches;
-    }
-
-    if (!enriched.checksum && typeof existing.checksum === "string") {
-      enriched.checksum = existing.checksum;
-    }
-
-    if (!enriched.provider && typeof existing.provider === "string") {
-      enriched.provider = existing.provider;
-    }
-
-    if (!enriched.targetUrl && typeof existing.targetUrl === "string") {
-      enriched.targetUrl = existing.targetUrl;
-    }
-
-    if (!enriched.schemaVersion && typeof existing.schemaVersion === "string") {
-      enriched.schemaVersion = existing.schemaVersion;
-    }
-
-    if (!enriched.sessionId && typeof existing.sessionId === "string") {
-      enriched.sessionId = existing.sessionId;
-    }
-
-    if (!enriched.timestamp && typeof existing.timestamp === "string") {
-      enriched.timestamp = existing.timestamp;
-    }
-
-    // Preserve byte counts and timings from existing metadata if not in computed
-    if (enriched.requestBytes === undefined && typeof existing.requestBytes === "number") {
-      enriched.requestBytes = existing.requestBytes;
-    }
-    if (enriched.responseBytes === undefined && typeof existing.responseBytes === "number") {
-      enriched.responseBytes = existing.responseBytes;
-    }
-    if (existing.timings && typeof existing.timings === "object" && !Array.isArray(existing.timings)) {
-      enriched.timings = enriched.timings ?? {};
-      for (const key of ["send_ms", "wait_ms", "receive_ms", "total_ms"] as const) {
-        if (enriched.timings[key] === undefined && typeof existing.timings[key] === "number") {
-          enriched.timings[key] = existing.timings[key];
-        }
-      }
-    }
-    // Preserve token metrics from existing metadata if not in computed
-    if (enriched.totalInputTokens === undefined && typeof existing.totalInputTokens === "number") {
-      enriched.totalInputTokens = existing.totalInputTokens;
-    }
-    if (enriched.totalOutputTokens === undefined && typeof existing.totalOutputTokens === "number") {
-      enriched.totalOutputTokens = existing.totalOutputTokens;
-    }
-    if (enriched.tokensPerSecond === undefined && typeof existing.tokensPerSecond === "number") {
-      enriched.tokensPerSecond = existing.tokensPerSecond;
-    }
-    if (enriched.successCount === undefined && typeof existing.successCount === "number") {
-      enriched.successCount = existing.successCount;
-    }
-    if (enriched.errorCount === undefined && typeof existing.errorCount === "number") {
-      enriched.errorCount = existing.errorCount;
-    }
-    if (enriched.model === undefined && (typeof existing.model === "string" || existing.model === null)) {
-      enriched.model = existing.model;
-    }
-
-    return enriched;
-  } catch {
-    return computed;
-  }
-}
-
   const flush = async (captureFilename: string): Promise<void> => {
-    const metaPath = join(dir, metaFilenameFor(captureFilename));
     const state = pending.get(captureFilename);
     if (!state) return;
 
     pending.delete(captureFilename);
     clearTimeout(state.timer);
 
-    const metadataToMerge = state.metadata;
+    const metadata = state.metadata;
 
     try {
-      const metadata = await mergeExistingMetadata(
-        metaPath,
-        metadataToMerge,
-      );
-
-      await atomicWriteMetadata(metaPath, metadata, opts.encryption);
-      
-      // Also persist to SQLite if callback is provided
-      if (opts.persistToSqlite) {
-        try {
-          const sqliteMetadata: RedactionMetadata = {
-            captureId: metadata.captureId,
-            sessionId: metadata.sessionId ?? null,
-            ruleCounts: metadata.byRule,
-            totalRedactions: metadata.totalRedactions,
-            encrypted: opts.encryption?.enabled ?? false,
-            createdAt: new Date(metadata.generatedAt).getTime(),
-            updatedAt: Date.now(),
-            source: metadata.source,
-            provider: metadata.provider,
-            targetUrl: metadata.targetUrl,
-            requestBytes: metadata.requestBytes,
-            responseBytes: metadata.responseBytes,
-            timings: metadata.timings,
-            totalInputTokens: metadata.totalInputTokens,
-            totalOutputTokens: metadata.totalOutputTokens,
-            tokensPerSecond: metadata.tokensPerSecond,
-            successCount: metadata.successCount,
-            errorCount: metadata.errorCount,
-            model: metadata.model,
-          };
-          opts.persistToSqlite(sqliteMetadata);
-        } catch (sqliteErr) {
-          console.error(
-            `[redaction-meta-watcher] Failed to persist to SQLite for ${captureFilename}:`,
-            sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr),
-          );
-          // Don't re-schedule for SQLite errors - sidecar file was written successfully
-        }
-      }
-      
-      if (opts.onMetadataReady) {
-        opts.onMetadataReady(metadata);
-      }
+      // Persist to SQLite directly (no sidecar file)
+      const sqliteMetadata: RedactionMetadata = {
+        captureId: metadata.captureId,
+        sessionId: metadata.sessionId ?? null,
+        ruleCounts: metadata.byRule,
+        totalRedactions: metadata.totalRedactions,
+        encrypted: false, // SQLite doesn't use file encryption
+        createdAt: new Date(metadata.generatedAt).getTime(),
+        updatedAt: Date.now(),
+        source: metadata.source ?? null,
+        provider: metadata.provider ?? null,
+        targetUrl: metadata.targetUrl ?? null,
+        requestBytes: metadata.requestBytes,
+        responseBytes: metadata.responseBytes,
+        timings: metadata.timings,
+        totalInputTokens: metadata.totalInputTokens,
+        totalOutputTokens: metadata.totalOutputTokens,
+        tokensPerSecond: metadata.tokensPerSecond,
+        successCount: metadata.successCount,
+        errorCount: metadata.errorCount,
+        model: metadata.model,
+	        // Convert watcher's match format (original/placeholder) to DB format (preValue/postValue)
+	        matches: metadata.matches?.map((m) => ({
+	          ruleId: m.ruleId,
+	          preValue: m.original,
+	          postValue: m.placeholder,
+	          path: m.path,
+	        })),
+	      };
+      opts.persistToSqlite(sqliteMetadata);
     } catch (err) {
       console.error(
-        `[redaction-meta-watcher] Failed to write metadata for ${captureFilename}:`,
+        `[redaction-meta-watcher] Failed to persist to SQLite for ${captureFilename}:`,
         err instanceof Error ? err.message : String(err),
       );
-      // Re-schedule so transient errors (disk full, permission) do not
-      // permanently suppress a valid capture.
+      // Re-schedule so transient errors do not permanently suppress a valid capture.
       schedule(captureFilename, state.metadata);
     }
   };
@@ -775,40 +544,8 @@ async function mergeExistingMetadata(
         return;
       }
 
-const captureId = captureFilename.replace(/\.json$/, "");
+      const captureId = captureFilename.replace(/\.json$/, "");
       const metadata = computeCaptureMeta(captureId, rawData);
-
-      // Wait for redact plugin's meta file to appear (race condition: capture
-      // file event may arrive before meta file is visible). Retry up to 5s.
-      const metaPath = join(dir, metaFilenameFor(captureFilename));
-      let existingMeta: Record<string, unknown> | null = null;
-      for (let attempt = 0; attempt < 25; attempt++) {
-        try {
-          const metaContent = await readFile(metaPath, "utf8");
-          existingMeta = JSON.parse(metaContent) as Record<string, unknown>;
-          break;
-        } catch {
-          if (attempt === 24) break;
-          await new Promise((r) => setTimeout(r, 200));
-        }
-      }
-
-      if (existingMeta) {
-        const matches = existingMeta.matches;
-        if (Array.isArray(matches) && matches.length > 0) {
-          // Merge capture data fields into existing meta instead of skipping entirely
-          // The redact plugin creates meta first but doesn't include requestBytes/responseBytes/timings
-          console.log(`[redaction-meta-watcher] Merging capture data into existing meta for ${captureFilename}`);
-          if (metadata) {
-            const enrichedMeta = await mergeExistingMetadata(metaPath, metadata);
-            schedule(captureFilename, enrichedMeta);
-          }
-          return;
-        }
-        console.log(`[redaction-meta-watcher] Meta exists but empty/invalid matches, re-processing: ${captureFilename}`);
-      } else {
-        console.log(`[redaction-meta-watcher] No meta file after 5s, will create: ${captureFilename}`);
-      }
 
       if (metadata) {
         schedule(captureFilename, metadata);
@@ -835,19 +572,12 @@ const captureId = captureFilename.replace(/\.json$/, "");
 
       let processed = 0;
       for (const filename of captureFiles) {
-        const metaPath = join(dir, metaFilenameFor(filename));
-        try {
-          await readFile(metaPath, "utf8");
-          // Meta file exists, skip
-          continue;
-        } catch {
-          // Meta file doesn't exist, process this capture
-          await processCaptureFile(filename);
-          processed++;
-        }
+        // Process all capture files - we no longer check for .redact-meta.json sidecars
+        await processCaptureFile(filename);
+        processed++;
       }
       console.log(
-        `[redaction-meta-watcher] Scanned ${captureFiles.length} existing captures, processed ${processed} new meta files`,
+        `[redaction-meta-watcher] Scanned ${captureFiles.length} existing captures, processed ${processed} for SQLite metadata`,
       );
     } catch (err) {
       console.error(
@@ -865,11 +595,11 @@ const captureId = captureFilename.replace(/\.json$/, "");
     await processCaptureFile(filename);
   };
 
-const startWatcher = (): void => {
+  const startWatcher = (): void => {
     if (stopped) return;
     console.log("[redaction-meta-watcher] Starting watcher on:", dir);
 
-    // Scan existing capture files on startup to process any that don't have meta files
+    // Scan existing capture files on startup to process any that don't have SQLite metadata
     scanExistingCaptures().catch((err) => {
       console.error(
         "[redaction-meta-watcher] Failed to scan existing captures:",
@@ -889,12 +619,12 @@ const startWatcher = (): void => {
         "[redaction-meta-watcher] fs.watch error, attempting restart in 5s:",
         err.message,
       );
- try {
- watcher?.close();
- } catch {
- // ignore close errors during restart
- }
- if (!stopped) {
+      try {
+        watcher?.close();
+      } catch {
+        // ignore close errors during restart
+      }
+      if (!stopped) {
         setTimeout(startWatcher, 5_000);
       }
     });
@@ -918,12 +648,12 @@ const startWatcher = (): void => {
         clearTimeout(state.timer);
       }
       pending.clear();
- try {
- watcher?.close();
- } catch {
- // ignore close errors during shutdown
- }
- },
+      try {
+        watcher?.close();
+      } catch {
+        // ignore close errors during shutdown
+      }
+    },
   };
 }
 

@@ -1,11 +1,10 @@
 import fs from "fs/promises";
-import { join, basename } from "path";
+import { join } from "path";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
   getCaptureDir,
   MAX_FILE_SIZE,
-  metaFilenameFor,
   isValidFilename,
   readCaptureFile,
   CaptureReadError,
@@ -27,47 +26,11 @@ import type { RedactionDetails } from "@/types/api";
 import { consumeToken } from "@/lib/csrf";
 import { withAuth } from "@/lib/auth/guards";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
-
-async function readRedactionMetaSidecar(captureFilepath: string): Promise<{
-  captureId: string;
-  totalRedactions: number;
-  byRule: Record<string, number>;
-  totalInputTokens?: number;
-  totalOutputTokens?: number;
-  tokensPerSecond?: number;
-  model?: string | null;
-  successCount?: number;
-  errorCount?: number;
-} | null> {
-  const metaFilename = metaFilenameFor(basename(captureFilepath));
-  const captureDir = await getCaptureDir();
-  const metaPath = join(captureDir, metaFilename);
-  try {
-    const raw = await fs.readFile(metaPath, "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (
-      typeof parsed.captureId !== "string" ||
-      typeof parsed.totalRedactions !== "number" ||
-      typeof parsed.byRule !== "object" ||
-      parsed.byRule === null
-    ) {
-      return null;
-    }
-    return {
-      captureId: parsed.captureId,
-      totalRedactions: parsed.totalRedactions,
-      byRule: parsed.byRule as Record<string, number>,
-      totalInputTokens: typeof parsed.totalInputTokens === "number" ? parsed.totalInputTokens : undefined,
-      totalOutputTokens: typeof parsed.totalOutputTokens === "number" ? parsed.totalOutputTokens : undefined,
-      tokensPerSecond: typeof parsed.tokensPerSecond === "number" ? parsed.tokensPerSecond : undefined,
-      model: typeof parsed.model === "string" ? parsed.model : null,
-      successCount: typeof parsed.successCount === "number" ? parsed.successCount : undefined,
-      errorCount: typeof parsed.errorCount === "number" ? parsed.errorCount : undefined,
-    };
-  } catch {
-    return null;
-  }
-}
+import {
+  getRedactionMetadataByCaptureId,
+  upsertRedactionMetadata,
+  type RedactionMetadata,
+} from "@contextio/core/db";
 
 function buildRedactionMeta(
   captureId: string,
@@ -139,8 +102,11 @@ async function handleGetCapture(
       const data = await readCaptureFile(filepath);
       const capture = extractCaptureMetadata(id, data);
       const sessionMeta = await getSessionMetadata(id, data);
-      const sidecar = await readRedactionMetaSidecar(filepath);
       const persistedStatsFromCapture = getCaptureRedactionStats(data) ?? null;
+
+      // Read redaction metadata from SQLite
+      const captureIdKey = id.replace(/\.json$/, "");
+      const sqliteMeta = getRedactionMetadataByCaptureId(captureIdKey);
 
       // "computed" is used for the redactions list (with matches).
       const computed = computeCaptureRedactionCounts(
@@ -150,34 +116,47 @@ async function handleGetCapture(
         data.originalRequestBody,
       );
 
-      // "redactionMeta" is what gets persisted as the sidecar.
+      // "redactionMeta" combines SQLite metadata with computed data
       let redactionMeta: {
         captureId: string;
         totalRedactions: number;
         byRule: Record<string, number>;
-        generatedAt?: string;
-        totalInputTokens?: number;
-        totalOutputTokens?: number;
-        tokensPerSecond?: number;
-        model?: string | null;
+        generatedAt: string | undefined;
+        totalInputTokens: number | undefined;
+        totalOutputTokens: number | undefined;
+        tokensPerSecond: number | undefined;
+        model: string | null | undefined;
+        successCount?: number;
+        errorCount?: number;
+      } = {
+        captureId: captureIdKey,
+        totalRedactions: computed.totalRedactions,
+        byRule: computed.byRule,
+        generatedAt: undefined,
+        totalInputTokens: undefined,
+        totalOutputTokens: undefined,
+        tokensPerSecond: undefined,
+        model: undefined,
       };
 
-      if (sidecar) {
-        // Sidecar wins: preserves provider/targetUrl/timestamp/checksum/matches.
+      if (sqliteMeta) {
+        // SQLite metadata exists - use it (preserves provider/targetUrl/timestamp/matches)
         redactionMeta = {
-          captureId: sidecar.captureId,
-          totalRedactions: sidecar.totalRedactions,
-          byRule: sidecar.byRule,
-          generatedAt: undefined,
-          totalInputTokens: sidecar.totalInputTokens,
-          totalOutputTokens: sidecar.totalOutputTokens,
-          tokensPerSecond: sidecar.tokensPerSecond,
-          model: sidecar.model,
+          captureId: sqliteMeta.captureId,
+          totalRedactions: sqliteMeta.totalRedactions,
+          byRule: sqliteMeta.ruleCounts,
+          generatedAt: new Date(sqliteMeta.createdAt).toISOString(),
+          totalInputTokens: sqliteMeta.totalInputTokens,
+          totalOutputTokens: sqliteMeta.totalOutputTokens,
+          tokensPerSecond: sqliteMeta.tokensPerSecond,
+          model: sqliteMeta.model,
+          successCount: sqliteMeta.successCount,
+          errorCount: sqliteMeta.errorCount,
         };
       } else {
         // Fallback: derive from persisted stats in the capture file.
         redactionMeta = buildRedactionMeta(
-          id.replace(/\.json$/, ""),
+          captureIdKey,
           persistedStatsFromCapture,
           computed,
           data.requestBody,
@@ -282,8 +261,9 @@ async function handlePutCapture(
       data.originalRequestBody,
     );
 
-    // Read existing metadata to preserve token metrics
-    const existingMeta = await readRedactionMetaSidecar(filepath);
+    // Read existing metadata from SQLite to preserve token metrics
+    const captureIdKey = id.replace(/\.json$/, "");
+    const existingMeta = getRedactionMetadataByCaptureId(captureIdKey);
 
     // Compute token metrics if not in existing metadata
     let totalInputTokens = existingMeta?.totalInputTokens;
@@ -314,11 +294,20 @@ async function handlePutCapture(
       errorCount = isSuccess ? 0 : 1;
     }
 
-    const meta = {
-      captureId: id.replace(/\.json$/, ""),
+    const meta: RedactionMetadata = {
+      captureId: captureIdKey,
+      sessionId: existingMeta?.sessionId ?? null,
+      ruleCounts: redaction.byRule,
       totalRedactions: redaction.totalRedactions,
-      byRule: redaction.byRule,
-      generatedAt: new Date().toISOString(),
+      encrypted: false,
+      createdAt: existingMeta?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+      source: existingMeta?.source ?? null,
+      provider: existingMeta?.provider ?? null,
+      targetUrl: existingMeta?.targetUrl ?? null,
+      requestBytes: existingMeta?.requestBytes,
+      responseBytes: existingMeta?.responseBytes,
+      timings: existingMeta?.timings,
       totalInputTokens,
       totalOutputTokens,
       tokensPerSecond: Number((tokensPerSecond ?? 0).toFixed(2)),
@@ -327,14 +316,21 @@ async function handlePutCapture(
       errorCount,
     };
 
-    const metaPath = join(await getCaptureDir(), metaFilenameFor(id));
-    const tmpMetaPath = `${metaPath}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await fs.writeFile(tmpMetaPath, JSON.stringify(meta, null, 2), "utf8");
-    await fs.rename(tmpMetaPath, metaPath);
+    // Persist to SQLite
+    upsertRedactionMetadata(meta);
 
     return NextResponse.json(createSuccessResponse({
       success: true,
-      redactionMeta: meta,
+      redactionMeta: {
+        captureId: meta.captureId,
+        totalRedactions: meta.totalRedactions,
+        byRule: meta.ruleCounts,
+        generatedAt: new Date(meta.createdAt).toISOString(),
+        totalInputTokens: meta.totalInputTokens,
+        totalOutputTokens: meta.totalOutputTokens,
+        tokensPerSecond: meta.tokensPerSecond,
+        model: meta.model,
+      },
       redactions: redaction,
     }));
   } catch (error) {
@@ -438,6 +434,32 @@ async function handlePostCapture(
 
       await fs.writeFile(filepath, JSON.stringify(updatedData, null, 2));
 
+      // Update SQLite metadata
+      const captureIdKey = id.replace(/\.json$/, "");
+      const existingMeta = getRedactionMetadataByCaptureId(captureIdKey);
+      const meta: RedactionMetadata = {
+        captureId: captureIdKey,
+        sessionId: existingMeta?.sessionId ?? null,
+        ruleCounts: redactionDetails.byRule,
+        totalRedactions: redactionDetails.totalRedactions,
+        encrypted: false,
+        createdAt: existingMeta?.createdAt ?? Date.now(),
+        updatedAt: Date.now(),
+        source: existingMeta?.source ?? null,
+        provider: existingMeta?.provider ?? null,
+        targetUrl: existingMeta?.targetUrl ?? null,
+        requestBytes: existingMeta?.requestBytes,
+        responseBytes: existingMeta?.responseBytes,
+        timings: existingMeta?.timings,
+        totalInputTokens: existingMeta?.totalInputTokens,
+        totalOutputTokens: existingMeta?.totalOutputTokens,
+        tokensPerSecond: existingMeta?.tokensPerSecond,
+        model: existingMeta?.model,
+        successCount: existingMeta?.successCount,
+        errorCount: existingMeta?.errorCount,
+      };
+      upsertRedactionMetadata(meta);
+
       const capture = extractCaptureMetadata(id, updatedData);
       return NextResponse.json(createSuccessResponse({
         ...capture,
@@ -493,11 +515,22 @@ async function handlePostCapture(
     const successCount = isSuccess ? 1 : 0;
     const errorCount = isSuccess ? 0 : 1;
 
-    const meta = {
-      captureId: id.replace(/\.json$/, ""),
+    const captureIdKey = id.replace(/\.json$/, "");
+    const existingMeta = getRedactionMetadataByCaptureId(captureIdKey);
+    const meta: RedactionMetadata = {
+      captureId: captureIdKey,
+      sessionId: existingMeta?.sessionId ?? null,
+      ruleCounts: redaction.byRule,
       totalRedactions: redaction.totalRedactions,
-      byRule: redaction.byRule,
-      generatedAt: new Date().toISOString(),
+      encrypted: false,
+      createdAt: existingMeta?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+      source: existingMeta?.source ?? null,
+      provider: existingMeta?.provider ?? null,
+      targetUrl: existingMeta?.targetUrl ?? null,
+      requestBytes: existingMeta?.requestBytes,
+      responseBytes: existingMeta?.responseBytes,
+      timings: existingMeta?.timings,
       totalInputTokens: tokenUsage.input,
       totalOutputTokens: tokenUsage.output,
       tokensPerSecond: Number(tokensPerSecond.toFixed(2)),
@@ -506,15 +539,22 @@ async function handlePostCapture(
       errorCount,
     };
 
-    const metaPath = join(await getCaptureDir(), metaFilenameFor(id));
-    const tmpMetaPath = `${metaPath}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await fs.writeFile(tmpMetaPath, JSON.stringify(meta, null, 2), "utf8");
-    await fs.rename(tmpMetaPath, metaPath);
+    // Persist to SQLite
+    upsertRedactionMetadata(meta);
 
     return NextResponse.json(createSuccessResponse({
       success: true,
       capture: patched,
-      redactionMeta: meta,
+      redactionMeta: {
+        captureId: meta.captureId,
+        totalRedactions: meta.totalRedactions,
+        byRule: meta.ruleCounts,
+        generatedAt: new Date(meta.createdAt).toISOString(),
+        totalInputTokens: meta.totalInputTokens,
+        totalOutputTokens: meta.totalOutputTokens,
+        tokensPerSecond: meta.tokensPerSecond,
+        model: meta.model,
+      },
       redactions: redaction,
     }));
   } catch (error) {

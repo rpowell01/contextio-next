@@ -1,10 +1,6 @@
 import {
   getAllRedactionMetadataFromDb,
 } from "@/lib/sessions/db-utils";
-import {
-  loadRedactionMeta,
-  metaFilenameFor,
-} from "@/lib/sessions/server-utils";
 import { consumeToken } from "@/lib/csrf";
 import { unstable_cache } from "next/cache";
 import {
@@ -59,25 +55,15 @@ const getRedactionsSummary = unstable_cache(
         // Skip title generation captures
         if (sessionId.startsWith("title-")) continue;
 
-        // Load sidecar meta file for authoritative counts and placeholder names
-        const captureIdBase = meta.captureId.endsWith(".json") ? meta.captureId.slice(0, -5) : meta.captureId;
-        const captureId = captureIdBase + ".json";
-        const metaFileName = metaFilenameFor(captureId);
-        const metaFile = await loadRedactionMeta(metaFileName);
+        // Use SQLite metadata directly - it contains complete ruleCounts and matches
+        const byRule = meta.ruleCounts ?? {};
+        const totalRedactions = meta.totalRedactions ?? 0;
 
-        // Determine authoritative byRule and totalRedactions:
-        // 1. Prefer sidecar metaFile.byRule and metaFile.totalRedactions (complete counts from redact plugin)
-        // 2. Fall back to SQLite meta.ruleCounts and meta.totalRedactions (computed by watcher from full capture scan)
-        // NEVER recompute from metaFile.matches which is truncated to 20 entries (MATCHES_LIMIT=20)
-        const byRule = metaFile?.byRule ?? meta.ruleCounts ?? {};
-        const totalRedactions = metaFile?.totalRedactions ?? meta.totalRedactions ?? 0;
-
-        // Build ruleId -> placeholder name map from matches (if available)
-        // Matches are truncated samples (max 20) but give accurate placeholder names for custom rules
-        // This is ONLY used for placeholder name resolution, NOT for counting
+        // Build ruleId -> placeholder name map from SQLite matches
+        // Matches contain postValue with placeholder (e.g., "[API_KEY_REDACTED]")
         const ruleToPlaceholder = new Map<string, string>();
-        if (metaFile?.matches && metaFile.matches.length > 0) {
-          for (const match of metaFile.matches) {
+        if (meta.matches && meta.matches.length > 0) {
+          for (const match of meta.matches) {
             // postValue contains the placeholder (e.g., "[API_KEY_REDACTED]")
             const rawPlaceholder = match.postValue;
             if (rawPlaceholder) {
@@ -160,23 +146,15 @@ async function getRedactionDetailsFromDb(
       // Use createdAt from DB for timestamp
       const timestamp = meta.createdAt ? new Date(meta.createdAt).toISOString() : new Date().toISOString();
 
-      // Load sidecar meta file for authoritative counts and placeholder names
-      const metaFileName = metaFilenameFor(captureId);
-      const metaFile = await loadRedactionMeta(metaFileName);
+      // Use SQLite metadata directly - it contains complete ruleCounts and matches
+      const byRule = meta.ruleCounts ?? {};
+      const totalRedactions = meta.totalRedactions ?? 0;
 
-      // Determine authoritative byRule and totalRedactions:
-      // 1. Prefer sidecar metaFile.byRule and metaFile.totalRedactions (complete counts from redact plugin)
-      // 2. Fall back to SQLite meta.ruleCounts and meta.totalRedactions (computed by watcher from full capture scan)
-      // NEVER recompute from metaFile.matches which is truncated to 20 entries (MATCHES_LIMIT=20)
-      const byRule = metaFile?.byRule ?? meta.ruleCounts ?? {};
-      const totalRedactions = metaFile?.totalRedactions ?? meta.totalRedactions ?? 0;
-
-      // Build ruleId -> placeholder name map from matches (if available)
-      // Matches are truncated samples (max 20) but give accurate placeholder names for custom rules
-      // This is ONLY used for placeholder name resolution, NOT for counting
+      // Build ruleId -> placeholder name map from SQLite matches
+      // Matches contain postValue with placeholder (e.g., "[API_KEY_REDACTED]")
       const ruleToPlaceholder = new Map<string, string>();
-      if (metaFile?.matches && metaFile.matches.length > 0) {
-        for (const match of metaFile.matches) {
+      if (meta.matches && meta.matches.length > 0) {
+        for (const match of meta.matches) {
           // postValue contains the placeholder (e.g., "[API_KEY_REDACTED]")
           const rawPlaceholder = match.postValue;
           if (rawPlaceholder) {

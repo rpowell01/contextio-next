@@ -1,34 +1,20 @@
 import { NextResponse } from "next/server";
-import { getCaptureDir, listRedactionMetaFiles, loadRedactionMeta } from "@/lib/sessions/server-utils";
+import {
+  getRedactionAggregateStats,
+} from "@contextio/core/db";
+import { getCaptureDir } from "@/lib/sessions/server-utils";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
 export async function GET(): Promise<NextResponse> {
   try {
     const captureDir = await getCaptureDir();
-    const metaFiles = await listRedactionMetaFiles();
-
-    const results = [];
-    for (const filename of metaFiles.slice(0, 20)) {
-      const meta = await loadRedactionMeta(filename);
-      results.push({
-        filename,
-        meta: meta ? {
-          totalRedactions: meta.totalRedactions,
-          byRule: meta.byRule,
-          sessionId: meta.sessionId,
-          provider: meta.provider,
-          timestamp: meta.timestamp,
-          requestBytes: meta.requestBytes,
-          responseBytes: meta.responseBytes,
-          timings: meta.timings,
-        } : null
-      });
-    }
+    const aggregate = getRedactionAggregateStats();
 
     return NextResponse.json(createSuccessResponse({
       captureDir,
-      metaFileCount: metaFiles.length,
-      samples: results,
+      totalCaptures: aggregate.totalCaptures,
+      totalRedactions: aggregate.totalRedactions,
+      byRule: aggregate.byRule,
     }));
   } catch (error) {
     return NextResponse.json(

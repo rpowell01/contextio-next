@@ -33,7 +33,7 @@ import { ReplacementMap } from "./mapping.js";
 import type { CompiledPolicy, PolicyJson } from "./policy.js";
 import { compilePolicy, fromPreset, loadPolicyFile } from "./policy.js";
 import type { PresetName } from "./presets.js";
-import { buildRedactMetaPayload, createStats, redactWithPolicy, writeRedactionMeta } from "./redact.js";
+import { buildRedactMetaPayload, buildFullRedactionMetadata, createStats, redactWithPolicy, type MatchEntry, type RedactionMetadata, type RedactionStats } from "./redact.js";
 import { createStreamRehydrator } from "./stream.js";
 import type {
   Detector,
@@ -90,12 +90,12 @@ export interface RedactPluginConfig {
   /** Log redaction stats to stderr after each request. */
   verbose?: boolean;
   /**
-   * Directory where `${captureId}.redact-meta.json` sidecars are written
-   * after an onRequest redaction pass. Requires `captureId` on the
-   * RequestContext (plumbed by the proxy when captureDir is configured).
-   * Omit to skip sidecar writes.
+   * Optional callback invoked after each redaction pass with the complete
+   * metadata record. The plugin computes all fields and passes them here
+   * instead of writing .redact-meta.json sidecar files.
+   * The callback is responsible for persisting metadata (e.g., to SQLite).
    */
-  captureDir?: string;
+  onRedactionMetadata?: (metadata: RedactionMetadata) => void;
 }
 
 /** Per-session state for reversible mode: mapping table + stream rehydrator. */
@@ -454,15 +454,15 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
           session.rehydrator = createStreamRehydrator(session.map);
         }
 
-        const redactionStats = buildRedactMetaPayload(stats);
-
-        if (config?.captureDir && ctx.captureId) {
-          writeRedactionMeta(config.captureDir, ctx.captureId, {
+        // Call onRedactionMetadata callback if configured
+        if (config?.onRedactionMetadata && ctx.captureId) {
+          const metadata = buildFullRedactionMetadata(ctx.captureId, {
             provider: ctx.provider,
             sessionId: ctx.sessionId,
             targetUrl: ctx.targetUrl,
             source: ctx.source,
-          }, redactionStats);
+          }, stats);
+          config.onRedactionMetadata(metadata);
         }
 
         if (stats.totalReplacements > 0 && verbose) {
@@ -482,7 +482,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
 
         return {
           ...ctx,
-          redactionStats,
+          redactionStats: buildRedactMetaPayload(stats),
           body: redacted as Record<string, any>,
         };
       }
@@ -497,15 +497,15 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
       session.rehydrator = createStreamRehydrator(session.map);
     }
 
-    const redactionStats = buildRedactMetaPayload(stats);
-
-    if (config?.captureDir && ctx.captureId) {
-      writeRedactionMeta(config.captureDir, ctx.captureId, {
+    // Call onRedactionMetadata callback if configured
+    if (config?.onRedactionMetadata && ctx.captureId) {
+      const metadata = buildFullRedactionMetadata(ctx.captureId, {
         provider: ctx.provider,
         sessionId: ctx.sessionId,
         targetUrl: ctx.targetUrl,
         source: ctx.source,
-      }, redactionStats);
+      }, stats);
+      config.onRedactionMetadata(metadata);
     }
 
     if (stats.totalReplacements > 0 && verbose) {
@@ -525,7 +525,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
 
     return {
       ...ctx,
-      redactionStats,
+      redactionStats: buildRedactMetaPayload(stats),
       body: redacted as Record<string, any>,
     };
   },
@@ -575,8 +575,8 @@ export type { PresetName } from "./presets.js";
 export { PRESETS, getAllPlaceholderTokens, getPlaceholderPatterns } from "./presets.js";
 export type { PolicyJson, PolicyRuleJson, CompiledPolicy } from "./policy.js";
 export { compilePolicy, loadPolicyFile, fromPreset } from "./policy.js";
-export type { RedactionStats } from "./redact.js";
-export { redactWithPolicy, redactValue, createStats, redactString } from "./redact.js";
+export type { RedactionStats, RedactionMetadata, MatchEntry } from "./redact.js";
+export { redactWithPolicy, redactValue, createStats, redactString, buildFullRedactionMetadata } from "./redact.js";
 export type { MappingEntry } from "./mapping.js";
 export { ReplacementMap } from "./mapping.js";
 

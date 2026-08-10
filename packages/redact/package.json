@@ -41,7 +41,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "test": "node --test test/*.test.ts",
+    "test": "tsx --test test/*.test.ts",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
@@ -51,6 +51,8 @@
   },
   "devDependencies": {
     "@types/node": "^22",
+    "better-sqlite3": "^11.0.0",
+    "@types/better-sqlite3": "^7.6.0",
     "execa": "^9.0.0",
     "typescript": "^5.7"
   }

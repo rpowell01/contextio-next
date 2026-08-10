@@ -38,10 +38,10 @@ export function isValidFilename(filename: string): boolean {
 }
 
 /**
- * Derive metadata file path: `<name>.redact-meta.json`.
+ * Derive legacy metadata file path: `<name>.redact-meta.json`.
  *
- * If the input filename ends in `.json`, the metadata filename replaces
- * that suffix. Otherwise `.redact-meta.json` is appended.
+ * This function is for legacy/migration purposes only.
+ * Production code now persists redaction metadata directly to SQLite.
  */
 export function metaFilenameFor(captureFilename: string): string {
   const base = captureFilename.endsWith(".json")

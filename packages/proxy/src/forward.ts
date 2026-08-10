@@ -669,8 +669,8 @@ export function createProxyHandler(
     }
 
   // Pre-assign captureId so plugins (redact, logger) can use it.
-  // Logger plugin will use this verbatim in its filename; the redact plugin
-  // will write {captureId}.redact-meta.json to the same capture dir.
+  // Logger plugin will use this verbatim in its filename.
+  // Redact plugin persists metadata directly to SQLite via onRedactionMetadata callback.
   const captureId: string | null =
     source !== null && source !== undefined
       ? `${source.replace(/[^a-zA-Z0-9_-]/g, "_")}_${sessionId ?? "null"}_${Date.now()}-${String(Math.floor(Math.random() * 999_999)).padStart(6, "0")}.json`

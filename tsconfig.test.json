@@ -18,10 +18,18 @@
     "packages/core/test/migrations.test.ts",
     "packages/core/test/migrate-captures.test.ts",
     "packages/core/test/migrate-providers.test.ts",
+    "packages/core/test/migrate-settings.test.ts",
+    "packages/core/test/redaction-repo.test.ts",
+    "packages/core/test/settings-repo.test.ts",
     "packages/proxy/test/config.test.ts",
+    "packages/proxy/test/proxy.test.ts",
     "packages/proxy/test/rate-limiter.test.ts",
     "packages/proxy/test/retry-plugin.test.ts",
     "packages/proxy/test/retry-plugin.integration.test.ts",
-    "packages/proxy/test/proxy.test.ts"
+    "packages/proxy/test/redaction-meta-watcher.test.ts",
+    "packages/redact/test/redact-sqlite.test.ts",
+    "packages/redact/test/redact.test.ts",
+    "packages/redact/test/policy.test.ts",
+    "packages/redact/test/stream.test.ts"
   ]
 }

@@ -21,8 +21,6 @@ import type { RedactionRule } from "./rules.js";
 
 /**
  * A single redaction match record captured at write time.
- *
- * Mirrors the fields saved in `{captureId}.redact-meta.json`.
  */
 export interface MatchEntry {
   /** Canonical rule ID/name token (e.g. `SSN_4`). */
@@ -36,96 +34,19 @@ export interface MatchEntry {
 }
 
 /**
- * Persistent redaction metadata sidecar schema.
- *
- * Written to `{captureId}.redact-meta.json` in CAPTURE_DIR alongside each
- * capture file.  All fields are optional so that older capture data that
- * lacks them remains readable by any consumer.
- */
-export interface RedactionMetadata {
-  /** Version of the metadata schema. Currently `"1"`. */
-  schemaVersion: string;
-  /** Capture file identifier (derived from the capture filename). */
-  captureId: string;
-  /** Session ID extracted from the capture data, or a placeholder. */
-  sessionId: string;
-  /** ISO-8601 timestamp of the redaction pass, or the capture timestamp. */
-  timestamp: string;
-  /** Provider name from the capture (e.g. `openai`, `anthropic`). */
-  provider: string;
-  /** Upstream URL the request was forwarded to. */
-  targetUrl: string;
-  /** Raw values matched before redaction, in the order they were encountered. */
-  preValues: string[];
-  /** Replacement values written, aligned 1-to-1 with `preValues`. */
-  postValues: string[];
-  /** Primary rule identifier (first rule matched, or "none" if no matches). */
-  ruleId: "none" | string;
-  /** SHA-256 hex-encoded checksum of the canonical payload for integrity verification. */
-  checksum: string;
-}
-
-/**
  * Internal statistics accumulator used during a single redact pass.
- *
- * This is a superset of RedactionMetadata pre-conditions; the sidecar
- * schema is produced by `serializeRedactionMetadata()`.
  */
 export interface RedactionStats {
   /** Total number of replacements made across all rules. */
   totalReplacements: number;
   /** Per-rule replacement counts. Only includes rules that matched. */
   byRule: Record<string, number>;
-  /** First-10 match payload captured for the sidecar meta file. */
+  /** Match payload captured for the metadata. */
   matches?: MatchEntry[];
 }
 
 export function createStats(): RedactionStats {
   return { totalReplacements: 0, byRule: {} };
-}
-
-/**
- * Compute a SHA-256 hex checksum of the canonical metadata payload
- * for integrity verification after the metadata file is written.
- */
-export function computeMetadataChecksum(payload: object): string {
-  return crypto.createHash("sha256").update(JSON.stringify(payload, Object.keys(payload).sort())).digest("hex");
-}
-
-/**
- * Build a `CaptureRedactionMetadata` record from redaction stats that can
- * be passed to `atomicWriteMetadata` in the proxy watcher.
- *
- * The `getCaptureRedactionCounts` function in the watcher is the consumer
- * for this structure:
- *    { captureId, totalRedactions, byRule, generatedAt }
- *
- * It is intentionally a subset of the full `RedactionMetadata` schema so
- * that the proxy (which has no provider/targetUrl context) can write it
- * without extra plumbing.  Consumers that need the full schema should use
- * `buildFullRedactionMetadata()`.
- */
-export interface CaptureRedactionMetadata {
-  /** Unique capture identifier, derived from the capture filename. */
-  captureId: string;
-  /** Total number of redaction replacements performed. */
-  totalRedactions: number;
-  /** Per-rule replacement counts, keyed by rule name. */
-  byRule: Record<string, number>;
-  /** ISO-8601 timestamp of when this metadata record was generated. */
-  generatedAt: string;
-}
-
-export function toCaptureRedactionMetadata(
-  captureId: string,
-  stats: RedactionStats,
-): CaptureRedactionMetadata {
-  return {
-    captureId,
-    totalRedactions: stats.totalReplacements,
-    byRule: { ...stats.byRule },
-    generatedAt: new Date().toISOString(),
-  };
 }
 
 function recordMatch(
@@ -142,9 +63,8 @@ function recordMatch(
 export function buildRedactMetaPayload(
   stats: RedactionStats,
 ): { totalRedactions: number; byRule: Readonly<Record<string, number>>; matches?: MatchEntry[] } {
-  // Limit matches stored in meta file to first 20 to keep file sizes manageable
-  // for the summary API which must read all meta files. Full match details are
-  // available on-demand from the capture file via the detail API.
+  // Limit matches stored in metadata to first 20 to keep memory manageable.
+  // Full match details are available on-demand from the capture file via the detail API.
   const MATCHES_LIMIT = 20;
   const limitedMatches = stats.matches && stats.matches.length > 0
     ? stats.matches.slice(0, MATCHES_LIMIT)
@@ -157,41 +77,70 @@ export function buildRedactMetaPayload(
   };
 }
 
-export function writeRedactionMeta(
-  captureDir: string,
-  captureId: string | undefined,
-  ctx: { provider?: Provider | string; sessionId?: string | null; targetUrl?: string; source?: string | null },
-  payload: { totalRedactions: number; byRule: Readonly<Record<string, number>>; matches?: MatchEntry[] },
-): boolean {
-  if (!captureId) return false;
-  // captureId from proxy includes ".json" extension; strip it for meta filename
-  const baseId = captureId.endsWith(".json") ? captureId.slice(0, -5) : captureId;
-  const filePath = join(captureDir, `${baseId}.redact-meta.json`);
-  const tmpPath = `${filePath}.tmp`;
-  try {
-    /** Canonical field ordering for stable (therefore comparable) checksums. */
-    const checksumInput = {
-      schemaVersion: "1",
-      captureId,
-      sessionId: ctx.sessionId ?? "_unknown",
-      timestamp: new Date().toISOString(),
-      provider: ctx.provider ?? "unknown",
-      targetUrl: ctx.targetUrl ?? "",
-      source: ctx.source ?? null,
-      totalRedactions: payload.totalRedactions,
-      byRule: payload.byRule,
-      ...(payload.matches && payload.matches.length > 0 ? { matches: payload.matches } : {}),
-    };
-    const checksum = computeMetadataChecksum(checksumInput);
-    const meta: object = { ...checksumInput, checksum };
-    fs.writeFileSync(tmpPath, JSON.stringify(meta, null, 2));
-    fs.renameSync(tmpPath, filePath);
-    return true;
-  } catch (err: unknown) {
-    console.error("[redact] meta write error:", err instanceof Error ? err.message : String(err));
-    try { fs.unlinkSync(tmpPath); } catch { /* may not exist */ }
-    return false;
-  }
+/**
+ * Full redaction metadata for direct SQLite persistence.
+ * This matches the RedactionMetadata type from @contextio/core/db.
+ */
+export interface RedactionMetadata {
+  captureId: string;
+  sessionId: string | null;
+  ruleCounts: Record<string, number>;
+  totalRedactions: number;
+  encrypted: boolean;
+  createdAt: number;
+  updatedAt: number;
+  source?: string | null;
+  provider?: string | null;
+  targetUrl?: string | null;
+  requestBytes?: number;
+  responseBytes?: number;
+  timings?: {
+    send_ms?: number;
+    wait_ms?: number;
+    receive_ms?: number;
+    total_ms?: number;
+  };
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  tokensPerSecond?: number;
+  successCount?: number;
+  errorCount?: number;
+  model?: string | null;
+  matches?: MatchEntry[];
+}
+
+/**
+ * Build a complete RedactionMetadata record for SQLite persistence.
+ * The redact plugin has all the context needed to build this.
+ */
+export function buildFullRedactionMetadata(
+  captureId: string,
+  ctx: { provider?: string | null; sessionId?: string | null; targetUrl?: string; source?: string | null },
+  stats: RedactionStats,
+): RedactionMetadata {
+  const now = Date.now();
+  return {
+    captureId: captureId.endsWith(".json") ? captureId.slice(0, -5) : captureId,
+    sessionId: ctx.sessionId ?? null,
+    ruleCounts: stats.byRule,
+    totalRedactions: stats.totalReplacements,
+    encrypted: false,
+    createdAt: now,
+    updatedAt: now,
+    source: ctx.source ?? null,
+    provider: ctx.provider ?? null,
+    targetUrl: ctx.targetUrl ?? null,
+    requestBytes: 0,
+    responseBytes: 0,
+    timings: { send_ms: 0, wait_ms: 0, receive_ms: 0, total_ms: 0 },
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    tokensPerSecond: 0,
+    successCount: 1,
+    errorCount: 0,
+    model: null,
+    matches: stats.matches,
+  };
 }
 
 // --- Context word matching ---

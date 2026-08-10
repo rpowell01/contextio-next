@@ -62,9 +62,9 @@ export function convertByRuleToByPlaceholder(
 /**
  * Compute placeholder counts from an array of matches (from meta.matches).
  * This uses the actual placeholder strings found in content.
- * Supports both formats:
- * - { ruleId, placeholder, ... } (from redact-meta.json with placeholder field)
- * - { ruleId, preValue, postValue, ... } (from loadRedactionMeta return type)
+ * Supports formats from SQLite RedactionMetadata:
+ * - { ruleId, preValue, postValue, path } (current SQLite format)
+ * - { ruleId, placeholder, ... } (legacy redact-meta.json format, migration only)
  */
 export function computePlaceholderCounts(
   matches: Array<{ ruleId: string; placeholder?: string; postValue?: string }>

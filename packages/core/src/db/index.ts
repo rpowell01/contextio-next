@@ -87,6 +87,7 @@ export {
 	importRedactionMetaFromFiles,
 	redactionMetadataExists,
 	type RedactionMetadata,
+	type RedactionMatch,
 	type RedactionMetadataRow,
 	type SessionRedactionAggregate,
 } from "./redaction-repo.js";

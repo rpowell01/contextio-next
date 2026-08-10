@@ -5,7 +5,6 @@ import { DEFAULT_SETTINGS, applyEnvOverrides } from "@/lib/settings";
 import {
   getCaptureDir,
   listCaptureFiles,
-  metaFilenameFor,
   applyLogDir,
 } from "@/lib/sessions/server-utils";
 
@@ -17,10 +16,6 @@ import {
 function isNodeRuntime(): boolean {
   return typeof process !== "undefined" && !!process.versions?.node;
 }
-
-// Periodic sync interval for importing redaction metadata from .redact-meta.json files to SQLite
-// Runs every 5 minutes to catch any files that the watcher might have missed
-const REDACTION_META_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 function validateCsrfSecret(): void {
   if (process.env.NODE_ENV === "production") {
@@ -35,13 +30,13 @@ async function applyPersistedSettings(): Promise<void> {
     // Ensure database schema is initialized and migrate settings.json if needed
     const { initDb } = await import("@contextio/core/db");
     initDb();
-    
+
     const { getSettingsWithMeta } = await import("@contextio/core/db");
     const { settings: dbSettings } = getSettingsWithMeta();
-    
+
     // Apply environment variable overrides
     const { settings: effectiveSettings } = applyEnvOverrides(dbSettings ?? DEFAULT_SETTINGS);
-    
+
     if (typeof effectiveSettings.logDir === "string") {
       await applyLogDir(effectiveSettings.logDir);
     }
@@ -51,17 +46,7 @@ async function applyPersistedSettings(): Promise<void> {
 }
 
 let cleanupTimer: NodeJS.Timeout | null = null;
-let syncTimer: NodeJS.Timeout | null = null;
 let schedulerStarted = false;
-let syncStarted = false;
-
-function stopSyncScheduler(): void {
-  if (syncTimer) {
-    clearInterval(syncTimer);
-    syncTimer = null;
-    syncStarted = false;
-  }
-}
 
 function stopCleanupScheduler(): void {
   if (cleanupTimer) {
@@ -77,7 +62,6 @@ function registerCleanupHandlers(): void {
   if (cleanupHandlersRegistered || !isNodeRuntime()) return;
   cleanupHandlersRegistered = true;
   const cleanup = () => {
-    stopSyncScheduler();
     stopCleanupScheduler();
   };
   process.on("SIGTERM", cleanup);
@@ -94,71 +78,18 @@ function defaultSettings() {
   };
 }
 
-async function runRedactionMetaSync(): Promise<void> {
-  // Skip in Edge runtime as an additional safety measure
-  if (!isNodeRuntime()) {
-    return;
-  }
-  try {
-    const { importRedactionMetaFromFiles } = await import("@contextio/core/db");
-    const { decrypt } = await import("@contextio/logger");
-    const captureDir = await getCaptureDir();
-
-    // Import any .redact-meta.json files that aren't in SQLite yet
-    // Pass decrypt function to handle encrypted sidecar files
-    const imported = await importRedactionMetaFromFiles(captureDir, decrypt);
-    if (imported > 0) {
-      console.log(`[redaction-meta-sync] Imported ${imported} redaction metadata files to SQLite`);
-    }
-  } catch (error) {
-    console.error("[redaction-meta-sync] Failed to sync redaction metadata:", error);
-  }
-}
-
-function runSyncWithCatch(): void {
-  runRedactionMetaSync().catch((error) => {
-    console.error("Scheduled redaction metadata sync failed:", error);
-  });
-}
-
-async function startSyncScheduler(): Promise<NodeJS.Timeout | null> {
-  // Skip in Edge runtime
-  if (!isNodeRuntime()) {
-    return null;
-  }
-  if (syncStarted) return syncTimer;
-  syncStarted = true;
-
-  // Ensure database schema is initialized and migrate settings.json if needed (runs once at startup)
-  try {
-    const { initDb } = await import("@contextio/core/db");
-    initDb();
-  } catch (error) {
-    console.error("[redaction-meta-sync] Failed to initialize database:", error);
-  }
-
-  syncTimer = setInterval(runSyncWithCatch, REDACTION_META_SYNC_INTERVAL_MS);
-  if (syncTimer && typeof syncTimer.unref === "function") {
-    syncTimer.unref();
-  }
-  // Run an initial sync at startup
-  runSyncWithCatch();
-
-  return syncTimer;
-}
-
 async function loadSettings(): Promise<{ enabled: boolean; maxAgeDays: number; intervalHours: number }> {
   try {
     // Ensure database schema is initialized and migrate settings.json if needed
     const { initDb } = await import("@contextio/core/db");
     initDb();
-    
+
     const { getSettings } = await import("@contextio/core/db");
     const dbSettings = getSettings() ?? DEFAULT_SETTINGS;
-    
+
     // Apply environment variable overrides (same pattern as API route)
     const { settings: effectiveSettings } = applyEnvOverrides(dbSettings);
-    
+
     return {
       enabled: effectiveSettings.captureCleanupEnabled,
       maxAgeDays: effectiveSettings.captureCleanupMaxAgeDays,
@@ -188,7 +119,6 @@ async function runCleanup() {
       const stats = await stat(filepath);
       if (stats.mtimeMs >= cutoff) continue;
       await unlink(filepath);
-      await unlink(join(captureDir, metaFilenameFor(file))).catch(() => {});
       deletedFilepaths.push(filepath);
     } catch {
       // ignore individual file errors (e.g., already deleted, permissions)
@@ -258,7 +188,4 @@ export async function register(): Promise<void> {
 
   // Start the capture cleanup scheduler
   await startCleanupScheduler();
-
-  // Start the redaction metadata sync scheduler (periodic import of .redact-meta.json to SQLite)
-  await startSyncScheduler();
 }
