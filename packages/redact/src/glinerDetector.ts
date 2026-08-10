@@ -122,12 +122,34 @@ export class GlinerOnnxDetector implements Detector {
 
     const modelDir = this.config.modelDir;
 
-    // Read tokenizer config to get special tokens
+    // Validate model directory exists and has required files
+    if (!modelDir) {
+      throw new Error("GLiNER detector requires modelDir to be configured");
+    }
+
     const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
+    const spmPath = join(modelDir, "spm.model");
+    const modelPath = join(modelDir, "model.onnx");
+
+    for (const [filePath, fileName] of [
+      [tokenizerConfigPath, "tokenizer_config.json"],
+      [spmPath, "spm.model"],
+      [modelPath, "model.onnx"],
+    ] as const) {
+      try {
+        await fs.access(filePath);
+      } catch {
+        throw new Error(
+          `GLiNER model file not found: ${fileName} in ${modelDir}. ` +
+            `Download a GLiNER ONNX model (e.g., gliner-base) and set detectorConfig.modelPath to its directory.`
+        );
+      }
+    }
+
+    // Read tokenizer config to get special tokens
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
 
     // Load the SentencePiece model
-    const spmPath = join(modelDir, "spm.model");
     const Unigram = (tokenizers as any).Unigram;
     const model = new Unigram(spmPath);
 
@@ -178,8 +200,8 @@ export class GlinerOnnxDetector implements Detector {
 
     // Create inference session
     const InferenceSession = (await import("onnxruntime-node")).InferenceSession;
-    const modelPath = join(this.config.modelDir, "model.onnx");
-    this.session = await InferenceSession.create(modelPath, {
+    const onnxModelPath = join(this.config.modelDir, "model.onnx");
+    this.session = await InferenceSession.create(onnxModelPath, {
       executionProviders: this.config.providers ?? ["cpu"],
       graphOptimizationLevel: "all",
       enableCpuMemArena: true,
