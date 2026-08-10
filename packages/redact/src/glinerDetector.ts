@@ -131,18 +131,7 @@ export class GlinerOnnxDetector implements Detector {
       }
 
       const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
-      const tokenizerJsonPath = join(modelDir, "tokenizer.json");
       const onnxPath = join(modelDir, "model.onnx");
-
-      // Check for tokenizer.json first (preferred - contains full config)
-      let hasTokenizerJson = false;
-      try {
-        await fs.access(tokenizerJsonPath);
-        hasTokenizerJson = true;
-        console.error("[gliner] Found tokenizer.json - using Tokenizer.fromFile()");
-      } catch {
-        console.error("[gliner] No tokenizer.json found, using tokenizer_config.json");
-      }
 
       // Validate required files exist
       for (const [filePath, fileName] of [
@@ -160,57 +149,50 @@ export class GlinerOnnxDetector implements Detector {
         }
       }
 
-      // Load tokenizer - prefer tokenizer.json which has complete config
-      if (hasTokenizerJson) {
-        console.error("[gliner] Loading tokenizer from tokenizer.json...");
-        this.tokenizer = await tokenizers.Tokenizer.fromFile(tokenizerJsonPath);
-        console.error("[gliner] Tokenizer loaded from tokenizer.json");
-      } else {
-        // Fallback: manual construction from tokenizer_config.json
-        console.error("[gliner] Building tokenizer manually from tokenizer_config.json...");
-        const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
-        console.error(`[gliner] tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
+      // Read tokenizer config to determine tokenizer class
+      const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
+      console.error(`[gliner] tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
 
-        if (tokenizerConfig.tokenizer_class === "DebertaV2Tokenizer" ||
-            tokenizerConfig.tokenizer_class === "BertTokenizer" ||
-            tokenizerConfig.tokenizer_class === "BertTokenizerFast") {
-          // BERT-style WordPiece tokenizer
-          const vocabPath = join(modelDir, "vocab.txt");
-          try {
-            await fs.access(vocabPath);
-            const BertWordPieceTokenizer = (tokenizers as any).BertWordPieceTokenizer;
-            if (!BertWordPieceTokenizer) {
-              throw new Error("[gliner] BertWordPieceTokenizer export not found");
-            }
-            this.tokenizer = new BertWordPieceTokenizer(vocabPath, {
-              lowercase: tokenizerConfig.do_lower_case ?? false,
-            });
-            console.error("[gliner] BertWordPieceTokenizer created");
-          } catch {
-            throw new Error(`vocab.txt not found for BERT-style tokenizer in ${modelDir}`);
+      // Build tokenizer based on tokenizer_class
+      if (tokenizerConfig.tokenizer_class === "DebertaV2Tokenizer" ||
+          tokenizerConfig.tokenizer_class === "BertTokenizer" ||
+          tokenizerConfig.tokenizer_class === "BertTokenizerFast") {
+        // BERT-style WordPiece tokenizer
+        const vocabPath = join(modelDir, "vocab.txt");
+        try {
+          await fs.access(vocabPath);
+          const BertWordPieceTokenizer = (tokenizers as any).BertWordPieceTokenizer;
+          if (!BertWordPieceTokenizer) {
+            throw new Error("[gliner] BertWordPieceTokenizer export not found");
           }
-        } else if (tokenizerConfig.tokenizer_class === "UnigramTokenizer" ||
-                   tokenizerConfig.tokenizer_class === "XLMRobertaTokenizer") {
-          // SentencePiece-based tokenizer
-          const spmPath = join(modelDir, "spm.model");
-          try {
-            await fs.access(spmPath);
-            const Unigram = (tokenizers as any).Unigram;
-            if (!Unigram) {
-              throw new Error("[gliner] Unigram export not found");
-            }
-            const model = new Unigram(spmPath);
-            this.tokenizer = new tokenizers.Tokenizer(model);
-            console.error("[gliner] Unigram tokenizer created");
-          } catch {
-            throw new Error(`spm.model not found for SentencePiece tokenizer in ${modelDir}`);
-          }
-        } else {
-          throw new Error(`Unsupported tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
+          this.tokenizer = new BertWordPieceTokenizer(vocabPath, {
+            lowercase: tokenizerConfig.do_lower_case ?? false,
+          });
+          console.error("[gliner] BertWordPieceTokenizer created");
+        } catch {
+          throw new Error(`vocab.txt not found for BERT-style tokenizer in ${modelDir}`);
         }
+      } else if (tokenizerConfig.tokenizer_class === "UnigramTokenizer" ||
+                 tokenizerConfig.tokenizer_class === "XLMRobertaTokenizer") {
+        // SentencePiece-based tokenizer
+        const spmPath = join(modelDir, "spm.model");
+        try {
+          await fs.access(spmPath);
+          const Unigram = (tokenizers as any).Unigram;
+          if (!Unigram) {
+            throw new Error("[gliner] Unigram export not found");
+          }
+          const model = new Unigram(spmPath);
+          this.tokenizer = new tokenizers.Tokenizer(model);
+          console.error("[gliner] Unigram tokenizer created");
+        } catch {
+          throw new Error(`spm.model not found for SentencePiece tokenizer in ${modelDir}`);
+        }
+      } else {
+        throw new Error(`Unsupported tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
       }
 
-      // Configure tokenizer for GLiNER (works for both paths)
+      // Configure tokenizer for GLiNER
       console.error("[gliner] Configuring truncation/padding...");
       this.tokenizer.enableTruncation(this.config.maxLength ?? 512);
       this.tokenizer.enablePadding({
