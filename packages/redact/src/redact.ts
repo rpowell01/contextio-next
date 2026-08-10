@@ -49,15 +49,15 @@ export function createStats(): RedactionStats {
   return { totalReplacements: 0, byRule: {} };
 }
 
-function recordMatch(
+export function recordMatch(
   stats: RedactionStats,
-  rule: RedactionRule,
+  ruleId: string,
   preValue: string,
   postValue: string,
   path: string[],
 ): void {
   if (!stats.matches) stats.matches = [];
-  stats.matches.push({ ruleId: rule.name, preValue, postValue, path: path.join(".") });
+  stats.matches.push({ ruleId, preValue, postValue, path: path.join(".") });
 }
 
 export function buildRedactMetaPayload(
@@ -276,7 +276,7 @@ export function redactString(
         const replacement = resolveReplacement(match, rule, map);
         stats.totalReplacements++;
         stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
-        recordMatch(stats, rule, match, replacement, currentPath);
+        recordMatch(stats, rule.name, match, replacement, currentPath);
         result = result.slice(0, start) + replacement + result.slice(end);
       }
     } else {
@@ -291,7 +291,7 @@ export function redactString(
       const replacement = resolveReplacement(matchArg, rule, map);
       stats.totalReplacements++;
       stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
-      recordMatch(stats, rule, matchArg, replacement, currentPath);
+      recordMatch(stats, rule.name, matchArg, replacement, currentPath);
       return replacement;
       });
     }

@@ -33,7 +33,7 @@ import { ReplacementMap } from "./mapping.js";
 import type { CompiledPolicy, PolicyJson } from "./policy.js";
 import { compilePolicy, fromPreset, loadPolicyFile } from "./policy.js";
 import type { PresetName } from "./presets.js";
-import { buildRedactMetaPayload, buildFullRedactionMetadata, createStats, redactWithPolicy, type MatchEntry, type RedactionMetadata, type RedactionStats } from "./redact.js";
+import { buildRedactMetaPayload, buildFullRedactionMetadata, createStats, recordMatch, redactWithPolicy, type MatchEntry, type RedactionMetadata, type RedactionStats } from "./redact.js";
 import { createStreamRehydrator } from "./stream.js";
 import type {
   Detector,
@@ -123,6 +123,7 @@ function applyDetectorSpans(
   stats: ReturnType<typeof createStats>,
   map: ReplacementMap | null,
   placeholderAllowlist: Set<string>,
+  currentPath: string[] = [],
 ): string {
   if (spans.length === 0) return input;
 
@@ -137,6 +138,8 @@ function applyDetectorSpans(
     const replacement = map ? map.getOrCreate(match, ruleName) : `[${span.label}_${Date.now()}]`;
     stats.totalReplacements++;
     stats.byRule[ruleName] = (stats.byRule[ruleName] || 0) + 1;
+    // Record the match for metadata (matchEntry structure: ruleId, preValue, postValue, path)
+    recordMatch(stats, ruleName, match, replacement, currentPath);
     result = result.slice(0, span.start) + replacement + result.slice(span.end);
   }
   return result;
@@ -177,6 +180,7 @@ async function redactWithDetector(
         stats,
         map,
         policy.placeholderAllowlist,
+        currentPath,
       );
     }
 
