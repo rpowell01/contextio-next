@@ -205,9 +205,26 @@ export class GlinerOnnxDetector implements Detector {
 
               // Create WordPiece model from vocab
               const unkToken = "[UNK]";
-              const model = new WordPiece(vocabObj, unkToken);
-              this.tokenizer = new tokenizers.Tokenizer(model);
-              console.error("[gliner] WordPiece tokenizer created from tokenizer.json vocab");
+              console.error("[gliner] Creating WordPiece model...");
+              let model;
+              try {
+                model = new WordPiece(vocabObj, unkToken);
+                console.error("[gliner] WordPiece model created");
+              } catch (e) {
+                console.error("[gliner] WordPiece model creation failed:", e instanceof Error ? e.message : String(e));
+                if (e instanceof Error && e.stack) console.error(e.stack);
+                throw e;
+              }
+
+              console.error("[gliner] Creating Tokenizer from model...");
+              try {
+                this.tokenizer = new tokenizers.Tokenizer(model);
+                console.error("[gliner] WordPiece tokenizer created from tokenizer.json vocab");
+              } catch (e) {
+                console.error("[gliner] Tokenizer creation failed:", e instanceof Error ? e.message : String(e));
+                if (e instanceof Error && e.stack) console.error(e.stack);
+                throw e;
+              }
 
               // Apply normalizer (BertNormalizer for DeBERTa)
               try {
