@@ -165,32 +165,22 @@ export class GlinerOnnxDetector implements Detector {
         console.error("[gliner] Found tokenizer.json, attempting to load...");
         try {
           const tokenizerJson = JSON.parse(await fs.readFile(tokenizerJsonPath, "utf8"));
+          console.error("[gliner] tokenizer.json keys:", Object.keys(tokenizerJson));
+          console.error("[gliner] tokenizer.json model:", JSON.stringify(tokenizerJson.model ?? null).slice(0, 200));
           // In tokenizer.json format, the structure is:
-          // { model: { type: "Unigram", ... }, normalizer: {...}, preTokenizer: {...}, decoder: {...}, postProcessor: {...} }
-          // We can reconstruct the tokenizer by creating a new Tokenizer with the model
-          // and then setting the other components
+          // { model: { type: "Unigram"/"BPE"/etc, ... }, normalizer: {...}, preTokenizer: {...}, decoder: {...}, postProcessor: {...} }
           if (tokenizerJson.model) {
-            console.error("[gliner] tokenizer.json model type:", tokenizerJson.model.type);
-            // Create the model based on type
-            let model;
+            console.error("[gliner] model type:", tokenizerJson.model.type);
+            // Try to reconstruct based on model type
             if (tokenizerJson.model.type === "Unigram") {
-              const Unigram = (tokenizers as any).Unigram;
-              if (!Unigram) throw new Error("[gliner] Unigram export not found");
-              // Unigram in tokenizer.json has vocab, unk_id, ... fields
-              // We need to reconstruct from the JSON model data
-              // The proper way: use the model vocab directly if available
-              if (tokenizerJson.model.vocab) {
-                // Create Unigram from vocab
-                const vocab = tokenizerJson.model.vocab;
-                // The vocab is an array of {0: "token", 1: score} or similar
-                // This is complex - let's try a different approach
-              }
+              // Unigram model has vocab array
+              console.error("[gliner] Unigram vocab size:", tokenizerJson.model.vocab?.length ?? "none");
+            } else if (tokenizerJson.model.type === "BPE") {
+              console.error("[gliner] BPE vocab size:", tokenizerJson.model.vocab?.length ?? "none");
             }
-            // Fall back to manual for now
-            throw new Error("Manual reconstruction needed");
-          } else {
-            throw new Error("tokenizer.json missing model field");
           }
+          // Fall back to manual for now
+          throw new Error("Manual reconstruction needed");
         } catch (e) {
           console.error("[gliner] Failed to load from tokenizer.json:", e instanceof Error ? e.message : String(e));
           console.error("[gliner] Falling back to manual construction...");
