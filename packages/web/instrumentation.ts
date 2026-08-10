@@ -31,8 +31,9 @@ async function applyPersistedSettings(): Promise<void> {
   try {
     // Ensure database schema is initialized and migrate settings.json if needed
     const { initDb } = await import("@contextio/core/db");
-    // Pass decrypt function to handle encrypted .redact-meta.json files during migration
-    initDb(decrypt);
+    // Pass decrypt function and key material to handle encrypted .redact-meta.json files during migration
+    const keyMaterial = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY;
+    initDb(decrypt, keyMaterial);
 
     const { getSettingsWithMeta } = await import("@contextio/core/db");
     const { settings: dbSettings } = getSettingsWithMeta();
@@ -85,8 +86,9 @@ async function loadSettings(): Promise<{ enabled: boolean; maxAgeDays: number; i
   try {
     // Ensure database schema is initialized and migrate settings.json if needed
     const { initDb } = await import("@contextio/core/db");
-    // Pass decrypt function to handle encrypted .redact-meta.json files during migration
-    initDb(decrypt);
+    // Pass decrypt function and key material to handle encrypted .redact-meta.json files during migration
+    const keyMaterial = process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY;
+    initDb(decrypt, keyMaterial);
 
     const { getSettings } = await import("@contextio/core/db");
     const dbSettings = getSettings() ?? DEFAULT_SETTINGS;
