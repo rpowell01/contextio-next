@@ -113,21 +113,43 @@ export class GlinerOnnxDetector implements Detector {
   async initialize(config?: DetectorConfig): Promise<void> {
     if (this.initialized) return;
 
-    // Load tokenizer from model directory using Hugging Face tokenizers
-    // This provides accurate offset mappings for token-to-character conversion
-    // For tokenizers v0.1.x, we need to manually construct the tokenizer from the SentencePiece model
-    const tokenizers = await import("@huggingface/tokenizers");
+    // Validate model directory exists and has required files
     const { join } = await import("node:path");
     const fs = await import("node:fs/promises");
 
     const modelDir = this.config.modelDir;
+    if (!modelDir) {
+      throw new Error("GLiNER detector requires modelDir to be configured");
+    }
+
+    const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
+    const spmPath = join(modelDir, "spm.model");
+    const modelPath = join(modelDir, "model.onnx");
+
+    for (const [filePath, fileName] of [
+      [tokenizerConfigPath, "tokenizer_config.json"],
+      [spmPath, "spm.model"],
+      [modelPath, "model.onnx"],
+    ] as const) {
+      try {
+        await fs.access(filePath);
+      } catch {
+        throw new Error(
+          `GLiNER model file not found: ${fileName} in ${modelDir}. ` +
+            `Ensure the model directory contains tokenizer_config.json, spm.model, and model.onnx.`
+        );
+      }
+    }
+
+    // Load tokenizer from model directory using Hugging Face tokenizers
+    // This provides accurate offset mappings for token-to-character conversion
+    // For tokenizers v0.1.x, we need to manually construct the tokenizer from the SentencePiece model
+    const tokenizers = await import("@huggingface/tokenizers");
 
     // Read tokenizer config to get special tokens
-    const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
 
     // Load the SentencePiece model
-    const spmPath = join(modelDir, "spm.model");
     const Unigram = (tokenizers as any).Unigram;
     const model = new Unigram(spmPath);
 
@@ -178,7 +200,6 @@ export class GlinerOnnxDetector implements Detector {
 
     // Create inference session
     const InferenceSession = (await import("onnxruntime-node")).InferenceSession;
-    const modelPath = join(this.config.modelDir, "model.onnx");
     this.session = await InferenceSession.create(modelPath, {
       executionProviders: this.config.providers ?? ["cpu"],
       graphOptimizationLevel: "all",
