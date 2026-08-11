@@ -122,13 +122,13 @@ export class GlinerOnnxDetector implements Detector {
       throw new Error("GLiNER detector requires modelDir to be configured");
     }
 
+    const tokenizerJsonPath = join(modelDir, "tokenizer.json");
     const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
-    const spmPath = join(modelDir, "spm.model");
     const modelPath = join(modelDir, "model.onnx");
 
     for (const [filePath, fileName] of [
+      [tokenizerJsonPath, "tokenizer.json"],
       [tokenizerConfigPath, "tokenizer_config.json"],
-      [spmPath, "spm.model"],
       [modelPath, "model.onnx"],
     ] as const) {
       try {
@@ -136,27 +136,52 @@ export class GlinerOnnxDetector implements Detector {
       } catch {
         throw new Error(
           `GLiNER model file not found: ${fileName} in ${modelDir}. ` +
-            `Ensure the model directory contains tokenizer_config.json, spm.model, and model.onnx.`
+            `Ensure the model directory contains tokenizer.json, tokenizer_config.json, and model.onnx.`
         );
       }
     }
 
     // Load tokenizer from model directory using Hugging Face tokenizers
     // This provides accurate offset mappings for token-to-character conversion
-    // For tokenizers v0.1.x, we need to manually construct the tokenizer from the SentencePiece model
+    // For tokenizers v0.1.x, we need to reconstruct the WordPiece tokenizer from tokenizer.json
+    // (GLiNER uses DeBERTa v2 which is WordPiece-based)
     const tokenizers = await import("@huggingface/tokenizers");
+
+    // Read tokenizer.json to reconstruct WordPiece tokenizer
+    const tokenizerJson = JSON.parse(await fs.readFile(tokenizerJsonPath, "utf8"));
+    console.error("[gliner] tokenizer.json keys:", Object.keys(tokenizerJson));
+    console.error("[gliner] tokenizer.json model type:", tokenizerJson.model?.type);
 
     // Read tokenizer config to get special tokens
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
 
-    // Load the SentencePiece model
-    const Unigram = (tokenizers as any).Unigram;
-    const model = new Unigram(spmPath);
+    // Reconstruct WordPiece tokenizer from tokenizer.json vocab
+    if (tokenizerJson.model && tokenizerJson.model.type === "WordPiece") {
+      const vocab = tokenizerJson.model.vocab;
+      if (!vocab || Object.keys(vocab).length === 0) {
+        throw new Error("WordPiece vocab is empty in tokenizer.json");
+      }
 
-    // Create tokenizer
-    this.tokenizer = new tokenizers.Tokenizer(model);
+      // Convert vocab object {token: id} to array for WordPiece constructor
+      // WordPiece expects vocab as object with token -> score/priority
+      // Use index as priority (lower index = higher priority for merges)
+      const vocabObj: Record<string, number> = {};
+      let index = 0;
+      for (const [token, id] of Object.entries(vocab)) {
+        if (typeof id === "number") {
+          vocabObj[token] = index++;
+        }
+      }
+      console.error(`[gliner] Valid WordPiece vocab entries: ${Object.keys(vocabObj).length}`);
 
-    // Add normalizer
+      const WordPiece = (tokenizers as any).WordPiece;
+      const model = new WordPiece(vocabObj, "[UNK]");
+      this.tokenizer = new tokenizers.Tokenizer(model);
+    } else {
+      throw new Error(`Unsupported tokenizer type: ${tokenizerJson.model?.type}. Expected WordPiece for GLiNER DeBERTa v2 model.`);
+    }
+
+    // Add normalizer (BERT-style for DeBERTa)
     const BertNormalizer = (tokenizers as any).BertNormalizer;
     this.tokenizer.normalizer = new BertNormalizer({
       cleanText: true,
@@ -165,11 +190,11 @@ export class GlinerOnnxDetector implements Detector {
       lowercase: false,
     });
 
-    // Add pre-tokenizer (whitespace split for SentencePiece)
+    // Add pre-tokenizer (WhitespaceSplit for WordPiece)
     const WhitespaceSplitPreTokenizer = (tokenizers as any).WhitespaceSplitPreTokenizer;
     this.tokenizer.preTokenizer = new WhitespaceSplitPreTokenizer();
 
-    // Add decoder
+    // Add decoder (WordPiece uses Metaspace)
     const MetaspaceDecoder = (tokenizers as any).MetaspaceDecoder;
     this.tokenizer.decoder = new MetaspaceDecoder();
 

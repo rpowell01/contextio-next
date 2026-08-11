@@ -49,6 +49,9 @@ RUN echo "from huggingface_hub import snapshot_download" > /download_model.py &&
     echo "print('Fixed model_type in config')" >> /fix_config.py && \
     python /fix_config.py && cat ./gliner-small-v2.1/onnx/gliner_config.json | grep model_type
 
-# Final minimal stage - just the model files
+# Final minimal stage - model files + tokenizer for runtime reconstruction
 FROM scratch AS model
 COPY --from=model-builder /models/gliner-small-v2.1/onnx /gliner-small-v2.1
+COPY --from=model-builder /models/gliner-small-v2.1/tokenizer.json /gliner-small-v2.1/tokenizer.json
+COPY --from=model-builder /models/gliner-small-v2.1/tokenizer_config.json /gliner-small-v2.1/tokenizer_config.json
+COPY --from=model-builder /models/gliner-small-v2.1/special_tokens_map.json /gliner-small-v2.1/special_tokens_map.json
