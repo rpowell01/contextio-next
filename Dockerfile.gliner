@@ -17,8 +17,8 @@ ARG GLINER_VERSION=0.2.28
 # Install GLiNER, Optimum CLI with ONNX support, and huggingface_hub for downloading
 RUN pip install --no-cache-dir gliner==${GLINER_VERSION} optimum[onnx] onnxruntime huggingface_hub
 
-# Export to ONNX using GLiNER's built-in export_to_onnx method
 # Fix model_type in the exported config (GLiNER export leaves it as null)
+# Copy tokenizer files from original model to ONNX directory for runtime use
 RUN echo "from huggingface_hub import snapshot_download" > /download_model.py && \
     echo "snapshot_download(" >> /download_model.py && \
     echo "    repo_id='urchade/gliner_small-v2.1'," >> /download_model.py && \
@@ -47,11 +47,13 @@ RUN echo "from huggingface_hub import snapshot_download" > /download_model.py &&
     echo "with open('./gliner-small-v2.1/onnx/gliner_config.json', 'w') as f:" >> /fix_config.py && \
     echo "    json.dump(config, f, indent=2)" >> /fix_config.py && \
     echo "print('Fixed model_type in config')" >> /fix_config.py && \
-    python /fix_config.py && cat ./gliner-small-v2.1/onnx/gliner_config.json | grep model_type
+    python /fix_config.py && cat ./gliner-small-v2.1/onnx/gliner_config.json | grep model_type && \
+    # Copy tokenizer files to ONNX directory for runtime
+    cp ./gliner-small-v2.1/tokenizer.json ./gliner-small-v2.1/onnx/ 2>/dev/null || true && \
+    cp ./gliner-small-v2.1/tokenizer_config.json ./gliner-small-v2.1/onnx/ 2>/dev/null || true && \
+    cp ./gliner-small-v2.1/special_tokens_map.json ./gliner-small-v2.1/onnx/ 2>/dev/null || true && \
+    ls -la ./gliner-small-v2.1/onnx/
 
 # Final minimal stage - model files + tokenizer for runtime reconstruction
 FROM scratch AS model
 COPY --from=model-builder /models/gliner-small-v2.1/onnx /gliner-small-v2.1
-COPY --from=model-builder /models/gliner-small-v2.1/tokenizer.json /gliner-small-v2.1/tokenizer.json
-COPY --from=model-builder /models/gliner-small-v2.1/tokenizer_config.json /gliner-small-v2.1/tokenizer_config.json
-COPY --from=model-builder /models/gliner-small-v2.1/special_tokens_map.json /gliner-small-v2.1/special_tokens_map.json
