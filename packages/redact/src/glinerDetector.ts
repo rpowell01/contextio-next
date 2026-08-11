@@ -214,10 +214,12 @@ export class GlinerOnnxDetector implements Detector {
       ["<<SEP>>", "<<SEP>>"],
     ];
     const TemplateProcessingPostProcessor = (tokenizers as any).TemplateProcessingPostProcessor;
+    // specialTokens format: array of [token, id] pairs for tokenizers v0.1.x
+    const specialTokensForProcessor = specialTokens.map(([id, token]) => [token, id]);
     this.tokenizer.postProcessor = new TemplateProcessingPostProcessor({
       single: "[CLS] $A [SEP]",
       pair: "[CLS] $A [SEP] $B [SEP]",
-      specialTokens: specialTokens.flatMap(([id, token]) => [token, id]),
+      specialTokens: specialTokensForProcessor,
     });
 
     // Configure tokenizer for GLiNER
