@@ -143,11 +143,11 @@ export class GlinerOnnxDetector implements Detector {
 
     // Load tokenizer from model directory using Hugging Face tokenizers
     // This provides accurate offset mappings for token-to-character conversion
-    // For tokenizers v0.1.x, we need to reconstruct the WordPiece tokenizer from tokenizer.json
-    // (GLiNER uses DeBERTa v2 which is WordPiece-based)
+    // For tokenizers v0.1.x, we need to reconstruct the tokenizer from tokenizer.json
+    // (GLiNER uses a Unigram/SentencePiece tokenizer)
     const tokenizers = await import("@huggingface/tokenizers");
 
-    // Read tokenizer.json to reconstruct WordPiece tokenizer
+    // Read tokenizer.json to reconstruct tokenizer
     const tokenizerJson = JSON.parse(await fs.readFile(tokenizerJsonPath, "utf8"));
     console.error("[gliner] tokenizer.json keys:", Object.keys(tokenizerJson));
     console.error("[gliner] tokenizer.json model type:", tokenizerJson.model?.type);
@@ -155,33 +155,38 @@ export class GlinerOnnxDetector implements Detector {
     // Read tokenizer config to get special tokens
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
 
-    // Reconstruct WordPiece tokenizer from tokenizer.json vocab
-    if (tokenizerJson.model && tokenizerJson.model.type === "WordPiece") {
+    // Reconstruct tokenizer from tokenizer.json based on model type
+    if (tokenizerJson.model && tokenizerJson.model.type === "Unigram") {
       const vocab = tokenizerJson.model.vocab;
-      if (!vocab || Object.keys(vocab).length === 0) {
-        throw new Error("WordPiece vocab is empty in tokenizer.json");
+      if (!vocab || vocab.length === 0) {
+        throw new Error("Unigram vocab is empty in tokenizer.json");
       }
 
-      // Convert vocab object {token: id} to array for WordPiece constructor
-      // WordPiece expects vocab as object with token -> score/priority
-      // Use index as priority (lower index = higher priority for merges)
+      // Convert vocab array [token, score] to object {token => priority}
+      // Use index as priority (lower index = higher priority)
       const vocabObj: Record<string, number> = {};
+      let validCount = 0;
       let index = 0;
-      for (const [token, id] of Object.entries(vocab)) {
-        if (typeof id === "number") {
+      vocab.forEach((entry: unknown) => {
+        if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string") {
+          const token = entry[0];
           vocabObj[token] = index++;
+          validCount++;
         }
+      });
+      console.error(`[gliner] Valid Unigram vocab entries: ${validCount}/${vocab.length}`);
+      if (validCount === 0) {
+        throw new Error("No valid vocab entries found in tokenizer.json");
       }
-      console.error(`[gliner] Valid WordPiece vocab entries: ${Object.keys(vocabObj).length}`);
 
-      const WordPiece = (tokenizers as any).WordPiece;
-      const model = new WordPiece(vocabObj, "[UNK]");
+      const Unigram = (tokenizers as any).Unigram;
+      const model = new Unigram(vocabObj);
       this.tokenizer = new tokenizers.Tokenizer(model);
     } else {
-      throw new Error(`Unsupported tokenizer type: ${tokenizerJson.model?.type}. Expected WordPiece for GLiNER DeBERTa v2 model.`);
+      throw new Error(`Unsupported tokenizer type: ${tokenizerJson.model?.type}. Expected Unigram for GLiNER model.`);
     }
 
-    // Add normalizer (BERT-style for DeBERTa)
+    // Add normalizer (BERT-style)
     const BertNormalizer = (tokenizers as any).BertNormalizer;
     this.tokenizer.normalizer = new BertNormalizer({
       cleanText: true,
@@ -190,11 +195,11 @@ export class GlinerOnnxDetector implements Detector {
       lowercase: false,
     });
 
-    // Add pre-tokenizer (WhitespaceSplit for WordPiece)
+    // Add pre-tokenizer (WhitespaceSplit for Unigram)
     const WhitespaceSplitPreTokenizer = (tokenizers as any).WhitespaceSplitPreTokenizer;
     this.tokenizer.preTokenizer = new WhitespaceSplitPreTokenizer();
 
-    // Add decoder (WordPiece uses Metaspace)
+    // Add decoder (Unigram uses Metaspace)
     const MetaspaceDecoder = (tokenizers as any).MetaspaceDecoder;
     this.tokenizer.decoder = new MetaspaceDecoder();
 
