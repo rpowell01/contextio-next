@@ -113,236 +113,78 @@ export class GlinerOnnxDetector implements Detector {
   async initialize(config?: DetectorConfig): Promise<void> {
     if (this.initialized) return;
 
-    try {
-      // Load tokenizer from model directory using Hugging Face tokenizers
-      // This provides accurate offset mappings for token-to-character conversion
-      const tokenizers = await import("@huggingface/tokenizers");
-      const { join } = await import("node:path");
-      const fs = await import("node:fs/promises");
+    // Load tokenizer from model directory using Hugging Face tokenizers
+    // This provides accurate offset mappings for token-to-character conversion
+    // For tokenizers v0.1.x, we need to manually construct the tokenizer from the SentencePiece model
+    const tokenizers = await import("@huggingface/tokenizers");
+    const { join } = await import("node:path");
+    const fs = await import("node:fs/promises");
 
-      const modelDir = this.config.modelDir;
+    const modelDir = this.config.modelDir;
 
-      console.error(`[gliner] Initializing GLiNER detector with modelDir: ${modelDir}`);
+    // Read tokenizer config to get special tokens
+    const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
+    const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
 
-      // Validate model directory exists and has required files
-      if (!modelDir) {
-        throw new Error("GLiNER detector requires modelDir to be configured");
-      }
+    // Load the SentencePiece model
+    const spmPath = join(modelDir, "spm.model");
+    const Unigram = (tokenizers as any).Unigram;
+    const model = new Unigram(spmPath);
 
-      const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
-      const tokenizerJsonPath = join(modelDir, "tokenizer.json");
-      const onnxPath = join(modelDir, "model.onnx");
+    // Create tokenizer
+    this.tokenizer = new tokenizers.Tokenizer(model);
 
-      // Check for tokenizer.json (modern format with complete tokenizer state)
-      let hasTokenizerJson = false;
-      try {
-        await fs.access(tokenizerJsonPath);
-        hasTokenizerJson = true;
-      } catch {}
+    // Add normalizer
+    const BertNormalizer = (tokenizers as any).BertNormalizer;
+    this.tokenizer.normalizer = new BertNormalizer({
+      cleanText: true,
+      handleChineseChars: true,
+      stripAccents: false,
+      lowercase: false,
+    });
 
-      // Validate required files exist
-      for (const [filePath, fileName] of [
-        [tokenizerConfigPath, "tokenizer_config.json"],
-        [onnxPath, "model.onnx"],
-      ] as const) {
-        try {
-          await fs.access(filePath);
-          console.error(`[gliner] Found model file: ${fileName}`);
-        } catch {
-          throw new Error(
-            `GLiNER model file not found: ${fileName} in ${modelDir}. ` +
-              `Download a GLiNER ONNX model (e.g., gliner-base) and set detectorConfig.modelPath to its directory.`
-          );
-        }
-      }
+    // Add pre-tokenizer (whitespace split for SentencePiece)
+    const WhitespaceSplitPreTokenizer = (tokenizers as any).WhitespaceSplitPreTokenizer;
+    this.tokenizer.preTokenizer = new WhitespaceSplitPreTokenizer();
 
-      // Read tokenizer config to determine tokenizer class
-      const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
-      console.error(`[gliner] tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
+    // Add decoder
+    const MetaspaceDecoder = (tokenizers as any).MetaspaceDecoder;
+    this.tokenizer.decoder = new MetaspaceDecoder();
 
-      // First, let's debug what tokenizers exports are available
-      console.error("[gliner] Available tokenizers exports:", Object.keys(tokenizers).filter(k => !k.startsWith("_")));
+    // Add post-processor for special tokens (bert-style)
+    const specialTokens = [
+      ["[CLS]", tokenizerConfig.cls_token ?? "[CLS]"],
+      ["[SEP]", tokenizerConfig.sep_token ?? "[SEP]"],
+      ["[PAD]", tokenizerConfig.pad_token ?? "[PAD]"],
+      ["[UNK]", tokenizerConfig.unk_token ?? "[UNK]"],
+      ["[MASK]", tokenizerConfig.mask_token ?? "[MASK]"],
+      ["<<ENT>>", "<<ENT>>"],
+      ["<<SEP>>", "<<SEP>>"],
+    ];
+    const TemplateProcessingPostProcessor = (tokenizers as any).TemplateProcessingPostProcessor;
+    this.tokenizer.postProcessor = new TemplateProcessingPostProcessor({
+      single: "[CLS] $A [SEP]",
+      pair: "[CLS] $A [SEP] $B [SEP]",
+      specialTokens: specialTokens.flatMap(([id, token]) => [token, id]),
+    });
 
-      // Try tokenizer.json first (complete tokenizer state)
-      if (hasTokenizerJson) {
-        console.error("[gliner] Found tokenizer.json, reconstructing tokenizer...");
-        try {
-          const tokenizerJson = JSON.parse(await fs.readFile(tokenizerJsonPath, "utf8"));
-          console.error("[gliner] tokenizer.json keys:", Object.keys(tokenizerJson));
-          console.error("[gliner] tokenizer.json model:", JSON.stringify(tokenizerJson.model ?? null).slice(0, 200));
-
-          if (tokenizerJson.model) {
-            console.error("[gliner] model type:", tokenizerJson.model.type);
-
-            if (tokenizerJson.model.type === "Unigram") {
-              // Reconstruct from vocab data using WordPiece (since DeBERTA v2 is WordPiece-based)
-              // Unigram in v0.1.x only accepts file path; tokenizer.json has vocab array
-              console.error("[gliner] Unigram vocab size:", tokenizerJson.model.vocab?.length ?? "none");
-
-              const vocab = tokenizerJson.model.vocab;
-              if (!vocab || vocab.length === 0) {
-                throw new Error("Unigram vocab is empty");
-              }
-
-              // Convert vocab array [token, score] to object {token => priority}
-              // Use index as WordPiece merge priority (lower index = higher priority)
-              const vocabObj: Record<string, number> = {};
-              let validCount = 0;
-              let index = 0;
-              const entriesToLog: Array<[string, number]> = [];
-              vocab.forEach((entry: unknown) => {
-                // Validate entry format: [token, score] where token is string
-                if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string") {
-                  const token = entry[0];
-                  vocabObj[token] = index;
-                  validCount++;
-                  index++;
-                  if (entriesToLog.length < 20) entriesToLog.push([token, index - 1]);
-                }
-              });
-              console.error(`[gliner] Valid vocab entries: ${validCount}/${vocab.length}, used index as priority`);
-              console.error(`[gliner] First 20 entries (token, priority):`, entriesToLog);
-              if (validCount === 0) {
-                throw new Error("No valid vocab entries found in tokenizer.json");
-              }
-
-              const WordPiece = (tokenizers as any).WordPiece;
-              if (!WordPiece) throw new Error("[gliner] WordPiece export not found");
-
-              // Create WordPiece model from vocab object
-              // WordPiece expects config object with vocab property, then calls Object.entries(vocab)
-              const unkToken = "[UNK]";
-              console.error("[gliner] Creating WordPiece model...");
-              let model;
-              try {
-                model = new WordPiece({ vocab: vocabObj, unk_token: unkToken });
-                console.error("[gliner] WordPiece model created");
-              } catch (e) {
-                console.error("[gliner] WordPiece model creation failed:", e instanceof Error ? e.message : String(e));
-                if (e instanceof Error && e.stack) console.error(e.stack);
-                throw e;
-              }
-
-              // Create full tokenizer object (Tokenizer class expects object with model, normalizer, pre_tokenizer, decoder, post_processor)
-              // Use the configs directly from tokenizer.json which are in the correct format for tokenizers v0.1.x
-              console.error("[gliner] Creating Tokenizer from model with tokenizer.json configs...");
-              try {
-                // Extract configs from tokenizer.json (already in correct format)
-                const normalizer = tokenizerJson.normalizer;
-                const pre_tokenizer = tokenizerJson.pre_tokenizer;
-                const decoder = tokenizerJson.decoder;
-                const post_processor = tokenizerJson.post_processor;
-                const added_tokens = tokenizerJson.added_tokens;
-
-                const tokenizerObj = {
-                  model: model,
-                  normalizer: normalizer,
-                  pre_tokenizer: pre_tokenizer,
-                  decoder: decoder,
-                  post_processor: post_processor,
-                  added_tokens: added_tokens,
-                };
-                this.tokenizer = new tokenizers.Tokenizer(tokenizerObj, {});
-                console.error("[gliner] WordPiece tokenizer created from tokenizer.json vocab with original configs");
-              } catch (e) {
-                console.error("[gliner] Tokenizer creation failed:", e instanceof Error ? e.message : String(e));
-                if (e instanceof Error && e.stack) console.error(e.stack);
-                throw e;
-              }
-
-              console.error("[gliner] Tokenizer fully reconstructed from tokenizer.json (WordPiece)");
-              hasTokenizerJson = true;
-            } else if (tokenizerJson.model.type === "BPE") {
-              // BPE model - needs vocab and merges
-              console.error("[gliner] BPE vocab size:", tokenizerJson.model.vocab?.length ?? "none");
-              throw new Error("BPE reconstruction not yet implemented");
-            } else {
-              throw new Error(`Unsupported model type in tokenizer.json: ${tokenizerJson.model.type}`);
-            }
-
-          } else {
-            throw new Error("tokenizer.json missing model field");
-          }
-        } catch (e) {
-          console.error("[gliner] Failed to load from tokenizer.json:", e instanceof Error ? e.message : String(e));
-          console.error("[gliner] Falling back to manual construction...");
-          hasTokenizerJson = false;
-        }
-      }
-
-      // Fallback: manual construction from tokenizer_config.json
-      if (!hasTokenizerJson) {
-        // Build tokenizer based on tokenizer_class
-        if (tokenizerConfig.tokenizer_class === "DebertaV2Tokenizer" ||
-            tokenizerConfig.tokenizer_class === "BertTokenizer" ||
-            tokenizerConfig.tokenizer_class === "BertTokenizerFast") {
-          // BERT-style WordPiece tokenizer - try vocab.txt first, fall back to spm.model
-          const vocabPath = join(modelDir, "vocab.txt");
-          const spmPath = join(modelDir, "spm.model");
-          let vocabExists = false;
-          let spmExists = false;
-          try { await fs.access(vocabPath); vocabExists = true; } catch {}
-          try { await fs.access(spmPath); spmExists = true; } catch {}
-
-          if (vocabExists) {
-            // Use WordPiece with vocab.txt
-            const WordPiece = (tokenizers as any).WordPiece;
-            if (!WordPiece) {
-              throw new Error("[gliner] WordPiece export not found");
-            }
-            const vocabContent = await fs.readFile(vocabPath, "utf8");
-            const vocabLines = vocabContent.trim().split("\n");
-            const vocabObj: Record<string, number> = {};
-            vocabLines.forEach((token, index) => {
-              vocabObj[token.trim()] = index;
-            });
-            const model = new WordPiece(vocabObj, "[UNK]");
-            this.tokenizer = new tokenizers.Tokenizer(model);
-            console.error("[gliner] WordPiece tokenizer created from vocab.txt");
-          } else if (spmExists) {
-            // DeBERTa v2 with SentencePiece - try creating WordPiece from tokenizer.json vocab instead
-            // since Unigram from spm.model fails
-            throw new Error("spm.model path not supported - need tokenizer.json");
-          } else {
-            throw new Error(`Neither vocab.txt nor spm.model found for BERT-style tokenizer in ${modelDir}`);
-          }
-        } else if (tokenizerConfig.tokenizer_class === "UnigramTokenizer" ||
-                   tokenizerConfig.tokenizer_class === "XLMRobertaTokenizer") {
-          // SentencePiece-based tokenizer
-          const spmPath = join(modelDir, "spm.model");
-          try {
-            await fs.access(spmPath);
-            const Unigram = (tokenizers as any).Unigram;
-            if (!Unigram) {
-              throw new Error("[gliner] Unigram export not found");
-            }
-            const model = new Unigram(spmPath);
-            this.tokenizer = new tokenizers.Tokenizer(model);
-            console.error("[gliner] Unigram tokenizer created");
-          } catch {
-            throw new Error(`spm.model not found for SentencePiece tokenizer in ${modelDir}`);
-          }
-        } else {
-          throw new Error(`Unsupported tokenizer_class: ${tokenizerConfig.tokenizer_class}`);
-        }
-      }
-
-      // Note: Truncation/padding not supported in tokenizers v0.1.x
-      // Texts longer than maxLength will be handled during detection
-      console.error("[gliner] Truncation/padding not configured (using v0.1.x API)");
+    // Configure tokenizer for GLiNER
+    this.tokenizer.enableTruncation(this.config.maxLength ?? 512);
+    this.tokenizer.enablePadding({
+      length: this.config.maxLength ?? 512,
+      padId: this.tokenizer.getVocabulary().get("[PAD]") ?? 0,
+      padToken: "[PAD]",
+    });
 
     // Create inference session
-    console.error("[gliner] Creating ONNX inference session...");
     const InferenceSession = (await import("onnxruntime-node")).InferenceSession;
-    const onnxModelPath = join(this.config.modelDir, "model.onnx");
-    console.error("[gliner] ONNX model path:", onnxModelPath);
-    this.session = await InferenceSession.create(onnxModelPath, {
+    const modelPath = join(this.config.modelDir, "model.onnx");
+    this.session = await InferenceSession.create(modelPath, {
       executionProviders: this.config.providers ?? ["cpu"],
       graphOptimizationLevel: "all",
       enableCpuMemArena: true,
       enableMemPattern: true,
     });
-    console.error("[gliner] ONNX session created successfully");
 
     // If custom labels provided, use them
     if (this.config.labels && this.config.labels.length > 0) {
@@ -350,14 +192,7 @@ export class GlinerOnnxDetector implements Detector {
     }
 
     this.initialized = true;
-  } catch (err) {
-    console.error("[gliner] INITIALIZATION FAILED:", err);
-    if (err instanceof Error) {
-      console.error("[gliner] Stack:", err.stack);
-    }
-    throw err;
   }
-}
 
   isReady(): boolean {
     return this.initialized && this.session !== null && this.tokenizer !== null;
@@ -382,42 +217,16 @@ export class GlinerOnnxDetector implements Detector {
     const finalConfig = { ...this.config, ...config } as GlinerOnnxConfig;
     const threshold = config?.threshold ?? finalConfig.threshold ?? 0.5;
 
-    // Tokenize input - v0.1.x tokenizer returns {ids, tokens, attention_mask} but no offsets
+    // Tokenize input with offset mappings for accurate position tracking
     const encoding = this.tokenizer!.encode(text);
     const inputIds = encoding.ids;
     const attentionMask = encoding.attention_mask;
-    const tokens = encoding.tokens; // Includes [CLS], [SEP], and character-level tokens with ▁ for word boundaries
-
-    // Compute character offsets from tokens (since v0.1.x doesn't provide them)
-    // Tokens format: [CLS], ▁, char, char, ▁, char... [SEP]
-    // ▁ represents word boundary (space). We'll reconstruct the text and map positions.
-    const offsets = this.computeOffsetsFromTokens(tokens, text);
+    const offsets = encoding.offsets; // Array of [start, end] character positions for each token
 
     // Prepare inputs for ONNX
-    // GLiNER ONNX model expects: input_ids, attention_mask, words_mask, text_lengths, span_idx, span_mask
+    // GLiNER expects: input_ids, attention_mask
     const batchSize = 1;
     const seqLen = inputIds.length;
-
-    // Create words_mask: 1 for word start tokens, 0 for continuation
-    // Since our tokenizer is character-level (no subwords), each character is a token
-    // Word starts are tokens after [CLS] or after ▁ (Metaspace/word boundary)
-    const wordsMask = new Array(seqLen).fill(0);
-    let isWordStart = true; // First token after [CLS] is word start
-    for (let i = 0; i < tokens.length; i++) {
-      const token = tokens[i];
-      if (token === "[CLS]" || token === "[SEP]" || token === "[PAD]") {
-        wordsMask[i] = 0;
-        isWordStart = true; // Next token after special token is word start
-      } else if (token === "▁") {
-        wordsMask[i] = 0;
-        isWordStart = true; // Next character after ▁ is word start
-      } else if (isWordStart) {
-        wordsMask[i] = 1;
-        isWordStart = false;
-      } else {
-        wordsMask[i] = 0;
-      }
-    }
 
     // Create input tensors
     const inputIdsTensor = new Tensor(
@@ -430,45 +239,11 @@ export class GlinerOnnxDetector implements Detector {
       BigInt64Array.from(attentionMask.map((x: number) => BigInt(x))),
       [batchSize, seqLen],
     );
-    const wordsMaskTensor = new Tensor(
-      "int64",
-      BigInt64Array.from(wordsMask.map((x: number) => BigInt(x))),
-      [batchSize, seqLen],
-    );
-    const textLengthsTensor = new Tensor(
-      "int64",
-      BigInt64Array.from([BigInt(seqLen)]),
-      [batchSize, 1], // Rank 2: [batch, 1]
-    );
-    // span_idx and span_mask are for span-based head - provide minimal values
-    // span_idx: [batch, max_spans, 2] - start/end indices for spans
-    // span_mask: [batch, max_spans] - mask for valid spans
-    // For token classification, we can provide empty/zero spans
-    // The model seems to expect 12 spans (based on attention heads)
-    const maxSpans = 12;
-    const spanIdxData = new BigInt64Array(maxSpans * 2);
-    spanIdxData.fill(BigInt(0));
-    const spanIdxTensor = new Tensor(
-      "int64",
-      spanIdxData,
-      [batchSize, maxSpans, 2],
-    );
-    const spanMaskData = new Uint8Array(maxSpans);
-    spanMaskData.fill(0);
-    const spanMaskTensor = new Tensor(
-      "bool",
-      spanMaskData,
-      [batchSize, maxSpans],
-    );
 
     // Run inference
     const feeds = {
       input_ids: inputIdsTensor,
       attention_mask: attentionMaskTensor,
-      words_mask: wordsMaskTensor,
-      text_lengths: textLengthsTensor,
-      span_idx: spanIdxTensor,
-      span_mask: spanMaskTensor,
     };
 
     const results = await this.session!.run(feeds);
@@ -500,71 +275,6 @@ export class GlinerOnnxDetector implements Detector {
       spans: finalSpans,
       latencyMs: Date.now() - startTime,
     };
-  }
-
-  /**
-   * Compute character offsets from tokenizer tokens.
-   * v0.1.x tokenizer doesn't provide offsets, so we reconstruct from tokens.
-   * Tokens include [CLS], [SEP], and character-level tokens with ▁ (Metaspace) for word boundaries.
-   */
-  private computeOffsetsFromTokens(
-    tokens: string[],
-    originalText: string,
-  ): Array<[number, number]> {
-    const offsets: Array<[number, number]> = [];
-    const specialTokens = new Set(["[CLS]", "[SEP]", "[PAD]", "[UNK]", "[MASK]"]);
-
-    let charPos = 0;
-    let tokenIndex = 0;
-
-    for (const token of tokens) {
-      if (specialTokens.has(token)) {
-        // Special tokens don't correspond to original text characters
-        offsets.push([-1, -1]);
-        tokenIndex++;
-        continue;
-      }
-
-      if (token === "▁") {
-        // Metaspace: represents a word boundary (space)
-        // Find next space in original text
-        while (charPos < originalText.length && !originalText[charPos].match(/\s/)) {
-          charPos++;
-        }
-        if (charPos < originalText.length && originalText[charPos].match(/\s/)) {
-          offsets.push([charPos, charPos + 1]);
-          charPos++;
-        } else {
-          offsets.push([-1, -1]);
-        }
-      } else {
-        // Regular character token
-        if (charPos < originalText.length) {
-          // Try to match the character
-          const tokenChar = token;
-          let found = false;
-          // Search for the character starting from current position
-          for (let i = charPos; i < Math.min(originalText.length, charPos + 10); i++) {
-            if (originalText[i] === tokenChar) {
-              offsets.push([i, i + 1]);
-              charPos = i + 1;
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            // Fallback: use current position
-            offsets.push([charPos, charPos + 1]);
-            charPos++;
-          }
-        } else {
-          offsets.push([-1, -1]);
-        }
-      }
-      tokenIndex++;
-    }
-
-    return offsets;
   }
 
   /**
