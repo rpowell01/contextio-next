@@ -12,6 +12,7 @@ import {
 import { computeTokenUsage, type TokenUsageResult } from "@/lib/sessions/utils";
 import { initDb, upsertRedactionMetadata, runMigrations } from "@contextio/core/db";
 import { buildRedactionMetadata } from "@/lib/sessions/backfill-helpers";
+import { withRequestCache } from "@/lib/request-cache";
 
 interface BackfillResponse {
   success: boolean;
@@ -28,7 +29,8 @@ interface BackfillResponse {
  * just scanning for placeholder patterns in the request body.
  */
 export async function POST(request: NextRequest) {
-  try {
+  return withRequestCache(async () => {
+    try {
     const { searchParams } = new URL(request.url);
     const force = searchParams.get("force") === "true";
 
@@ -152,4 +154,5 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+  });
 }
