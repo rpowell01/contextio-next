@@ -79,6 +79,7 @@ ENV LOG_TRAFFIC=false
 ENV DEBUG_ROUTING=false
 ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
+ENV REDACT_DETECTOR_MODEL_DIR=/app/models/gliner-small-v2.1
 ENV NEXT_CACHE_DIR=/app/captures/.next/cache
 ENV CONTEXTIO_DB_PATH=/app/custom-policy/contextio.db
 
