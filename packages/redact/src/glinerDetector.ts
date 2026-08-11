@@ -146,15 +146,23 @@ export class GlinerOnnxDetector implements Detector {
     // Load tokenizer from model directory using Hugging Face tokenizers
     // This provides accurate offset mappings for token-to-character conversion
     // For tokenizers v0.1.x, we need to use the SentencePiece model file directly with Unigram
+    console.error("[gliner] Importing @huggingface/tokenizers");
     const tokenizers = await import("@huggingface/tokenizers");
+    console.error("[gliner] tokenizers exports:", Object.keys(tokenizers).filter(k => !k.startsWith("_")));
 
     // Read tokenizer config to get special tokens
+    console.error("[gliner] Reading tokenizer_config.json");
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
+    console.error("[gliner] tokenizer_config:", JSON.stringify(tokenizerConfig).slice(0, 200));
 
     // Load the SentencePiece model directly (tokenizers v0.1.x Unigram expects file path)
+    console.error("[gliner] Creating Unigram from spm.model");
     const Unigram = (tokenizers as any).Unigram;
+    console.error("[gliner] Unigram constructor:", typeof Unigram);
     const model = new Unigram(spmPath);
+    console.error("[gliner] Unigram model created:", !!model);
     this.tokenizer = new tokenizers.Tokenizer(model);
+    console.error("[gliner] Tokenizer created:", !!this.tokenizer);
 
     // Add normalizer (BERT-style)
     const BertNormalizer = (tokenizers as any).BertNormalizer;
