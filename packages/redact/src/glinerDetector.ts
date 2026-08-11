@@ -124,11 +124,13 @@ export class GlinerOnnxDetector implements Detector {
 
     const tokenizerJsonPath = join(modelDir, "tokenizer.json");
     const tokenizerConfigPath = join(modelDir, "tokenizer_config.json");
+    const spmPath = join(modelDir, "spm.model");
     const modelPath = join(modelDir, "model.onnx");
 
     for (const [filePath, fileName] of [
       [tokenizerJsonPath, "tokenizer.json"],
       [tokenizerConfigPath, "tokenizer_config.json"],
+      [spmPath, "spm.model"],
       [modelPath, "model.onnx"],
     ] as const) {
       try {
@@ -136,55 +138,23 @@ export class GlinerOnnxDetector implements Detector {
       } catch {
         throw new Error(
           `GLiNER model file not found: ${fileName} in ${modelDir}. ` +
-            `Ensure the model directory contains tokenizer.json, tokenizer_config.json, and model.onnx.`
+            `Ensure the model directory contains tokenizer.json, tokenizer_config.json, spm.model, and model.onnx.`
         );
       }
     }
 
     // Load tokenizer from model directory using Hugging Face tokenizers
     // This provides accurate offset mappings for token-to-character conversion
-    // For tokenizers v0.1.x, we need to reconstruct the tokenizer from tokenizer.json
-    // (GLiNER uses a Unigram/SentencePiece tokenizer)
+    // For tokenizers v0.1.x, we need to use the SentencePiece model file directly with Unigram
     const tokenizers = await import("@huggingface/tokenizers");
-
-    // Read tokenizer.json to reconstruct tokenizer
-    const tokenizerJson = JSON.parse(await fs.readFile(tokenizerJsonPath, "utf8"));
-    console.error("[gliner] tokenizer.json keys:", Object.keys(tokenizerJson));
-    console.error("[gliner] tokenizer.json model type:", tokenizerJson.model?.type);
 
     // Read tokenizer config to get special tokens
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
 
-    // Reconstruct tokenizer from tokenizer.json based on model type
-    if (tokenizerJson.model && tokenizerJson.model.type === "Unigram") {
-      const vocab = tokenizerJson.model.vocab;
-      if (!vocab || vocab.length === 0) {
-        throw new Error("Unigram vocab is empty in tokenizer.json");
-      }
-
-      // Convert vocab array [token, score] to object {token => priority}
-      // Use index as priority (lower index = higher priority)
-      const vocabObj: Record<string, number> = {};
-      let validCount = 0;
-      let index = 0;
-      vocab.forEach((entry: unknown) => {
-        if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string") {
-          const token = entry[0];
-          vocabObj[token] = index++;
-          validCount++;
-        }
-      });
-      console.error(`[gliner] Valid Unigram vocab entries: ${validCount}/${vocab.length}`);
-      if (validCount === 0) {
-        throw new Error("No valid vocab entries found in tokenizer.json");
-      }
-
-      const Unigram = (tokenizers as any).Unigram;
-      const model = new Unigram(vocabObj);
-      this.tokenizer = new tokenizers.Tokenizer(model);
-    } else {
-      throw new Error(`Unsupported tokenizer type: ${tokenizerJson.model?.type}. Expected Unigram for GLiNER model.`);
-    }
+    // Load the SentencePiece model directly (tokenizers v0.1.x Unigram expects file path)
+    const Unigram = (tokenizers as any).Unigram;
+    const model = new Unigram(spmPath);
+    this.tokenizer = new tokenizers.Tokenizer(model);
 
     // Add normalizer (BERT-style)
     const BertNormalizer = (tokenizers as any).BertNormalizer;
@@ -195,7 +165,7 @@ export class GlinerOnnxDetector implements Detector {
       lowercase: false,
     });
 
-    // Add pre-tokenizer (WhitespaceSplit for Unigram)
+    // Add pre-tokenizer (WhitespaceSplit for SentencePiece)
     const WhitespaceSplitPreTokenizer = (tokenizers as any).WhitespaceSplitPreTokenizer;
     this.tokenizer.preTokenizer = new WhitespaceSplitPreTokenizer();
 
