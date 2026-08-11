@@ -1,7 +1,7 @@
 # =============================================================================
 # Main Dockerfile for Coolify - Pulls pre-built GLiNER model from registry
 # =============================================================================
-# GLiNER model is pre-built and pushed to: ghcr.io/rpowell01/contextio-gliner-model:0.2.29
+# GLiNER model is pre-built and pushed to: ghcr.io/rpowell01/contextio-gliner-model:0.2.28-fix1
 # To update model version:
 # 1. Build Dockerfile.gliner with new GLINER_VERSION
 # 2. Push to ghcr.io/rpowell01/contextio-gliner-model:<new-version>
@@ -119,7 +119,7 @@ COPY --from=build /app/default-providers.json /app/default-providers.json
 #   1. Build Dockerfile.gliner with new GLINER_VERSION
 #   2. Push to ghcr.io/rpowell01/contextio-gliner-model:<new-version>
 #   3. Update the image reference below
-COPY --from=ghcr.io/rpowell01/contextio-gliner-model:0.2.29 /gliner-small-v2.1 /app/models/gliner-small-v2.1
+COPY --from=ghcr.io/rpowell01/contextio-gliner-model:0.2.28-fix1 /gliner-small-v2.1 /app/models/gliner-small-v2.1
 
 # Copy pre-built plugin files and start script
 COPY docker/plugins/logger-plugin.js /app/logger-plugin.js
