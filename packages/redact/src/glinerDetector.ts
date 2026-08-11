@@ -186,10 +186,18 @@ export class GlinerOnnxDetector implements Detector {
       console.error("[gliner] Creating Unigram from vocab object");
       const Unigram = (tokenizers as any).Unigram;
       console.error("[gliner] Unigram constructor:", typeof Unigram);
-      const model = new Unigram(vocabObj);
-      console.error("[gliner] Unigram model created:", !!model);
-      this.tokenizer = new tokenizers.Tokenizer(model);
-      console.error("[gliner] Tokenizer created:", !!this.tokenizer);
+      try {
+        const model = new Unigram(vocabObj);
+        console.error("[gliner] Unigram model created:", !!model);
+        this.tokenizer = new tokenizers.Tokenizer(model);
+        console.error("[gliner] Tokenizer created:", !!this.tokenizer);
+      } catch (e) {
+        console.error("[gliner] Unigram from vocab failed:", e instanceof Error ? e.message : String(e));
+        // Fallback: try Tokenizer.from_pretrained with tokenizer.json
+        console.error("[gliner] Trying Tokenizer.from_pretrained with tokenizer.json");
+        this.tokenizer = await tokenizers.Tokenizer.from_pretrained(tokenizerJsonPath);
+        console.error("[gliner] Tokenizer from_pretrained created:", !!this.tokenizer);
+      }
     } else {
       throw new Error(`Unsupported tokenizer type: ${tokenizerJson.model?.type}. Expected Unigram for GLiNER model.`);
     }
