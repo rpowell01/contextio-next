@@ -117,7 +117,7 @@ async function main(): Promise<void> {
 			const redactModule = await import("@contextio/redact/factory");
 			const redactFactory = redactModule.default ?? redactModule.createRedactPluginFactory ?? redactModule;
 			if (typeof redactFactory === "function") {
-				const redactPlugin = redactFactory();
+				const redactPlugin = await redactFactory();
 				if (redactPlugin) {
 					plugins.push(redactPlugin);
 					console.log("Loaded plugin: redact (from @contextio/redact/factory)");

@@ -2,7 +2,7 @@
  * Redact plugin factory for proxy integration.
  *
  * This module exports a factory function that creates a redact plugin
- * configured from environment variables and the web UI settings file.
+ * configured from environment variables and the web UI settings (stored in SQLite database).
  * The redact plugin is enabled via CONTEXTIO_ENABLE_REDACT environment variable (default: true).
  *
  * Environment variables (web UI settings take precedence if set):
@@ -15,12 +15,9 @@
  * - CONTEXTIO_ENABLE_REDACT: "true" | "false" (default: "true") - Enable/disable redact plugin
  */
 
-import fs from "node:fs";
 import { createRedactPlugin, type RedactPluginConfig, type RedactionMetadata } from "./index.js";
 import type { ProxyPlugin } from "@contextio/core";
-import { upsertRedactionMetadata } from "@contextio/core/db";
-
-const WEB_UI_SETTINGS_PATH = "/app/custom-policy/settings.json";
+import { upsertRedactionMetadata, getSettings } from "@contextio/core/db";
 
 interface WebUISettings {
 	redactPreset?: string;
@@ -31,8 +28,28 @@ interface WebUISettings {
 	detectorThreshold?: number;
 }
 
-/** Read web UI settings from JSON file. */
-function readWebUISettings(): WebUISettings {
+/** Read web UI settings from SQLite database (with JSON file fallback for backward compatibility). */
+async function readWebUISettings(): Promise<WebUISettings> {
+	// First, try to read from the database
+	try {
+		const dbSettings = getSettings();
+		if (dbSettings) {
+			return {
+				redactPreset: dbSettings.redactPreset,
+				redactReversible: dbSettings.redactReversible,
+				redactPolicyFile: dbSettings.redactPolicyFile,
+				detectorMode: dbSettings.detectorMode,
+				detectorModelDir: dbSettings.detectorModelDir,
+				detectorThreshold: dbSettings.detectorThreshold,
+			};
+		}
+	} catch (err) {
+		console.log(`[redact-factory] failed to read settings from database, falling back to JSON file: ${err instanceof Error ? err.message : String(err)}`);
+	}
+
+	// Fallback to JSON file for backward compatibility (legacy migrations)
+	const fs = await import("node:fs");
+	const WEB_UI_SETTINGS_PATH = "/app/custom-policy/settings.json";
 	try {
 		const data = fs.readFileSync(WEB_UI_SETTINGS_PATH, "utf8");
 		const parsed = JSON.parse(data);
@@ -50,8 +67,8 @@ function readWebUISettings(): WebUISettings {
 }
 
 /** Build redact plugin config from env vars and web UI settings. */
-function buildRedactConfig(): RedactPluginConfig | null {
-	const settings = readWebUISettings();
+async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
+	const settings = await readWebUISettings();
 
 	// Check if redaction is enabled via env or settings
 	const redactEnabled =
@@ -97,13 +114,13 @@ function buildRedactConfig(): RedactPluginConfig | null {
 }
 
 /** Factory function for redact plugin (enabled via CONTEXTIO_ENABLE_REDACT env var). */
-export default function createRedactPluginFactory(): ProxyPlugin | null {
+export default async function createRedactPluginFactory(): Promise<ProxyPlugin | null> {
 	// Check if redact is explicitly disabled via env var
 	const redactEnabled = process.env.CONTEXTIO_ENABLE_REDACT !== "false";
 	if (!redactEnabled) {
 		return null;
 	}
-	const config = buildRedactConfig();
+	const config = await buildRedactConfig();
 	if (!config) return null;
 	return createRedactPlugin(config);
 }
