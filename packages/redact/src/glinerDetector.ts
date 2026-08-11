@@ -160,46 +160,22 @@ export class GlinerOnnxDetector implements Detector {
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
     console.error("[gliner] tokenizer_config:", JSON.stringify(tokenizerConfig).slice(0, 200));
 
-    // Reconstruct Unigram model from tokenizer.json vocab
-    // tokenizers v0.1.x Unigram constructor expects vocab object {token: score}
-    if (tokenizerJson.model && tokenizerJson.model.type === "Unigram") {
-      const vocab = tokenizerJson.model.vocab;
-      console.error(`[gliner] Unigram vocab length: ${vocab?.length ?? "undefined"}`);
-      if (!vocab || vocab.length === 0) {
-        throw new Error("Unigram vocab is empty in tokenizer.json");
-      }
-
-      // Convert vocab array [token, score] to object {token => score}
-      const vocabObj: Record<string, number> = {};
-      let validCount = 0;
-      vocab.forEach((entry: unknown) => {
-        if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string" && typeof entry[1] === "number") {
-          vocabObj[entry[0]] = entry[1];
-          validCount++;
-        }
-      });
-      console.error(`[gliner] Valid Unigram vocab entries: ${validCount}/${vocab.length}`);
-      if (validCount === 0) {
-        throw new Error("No valid vocab entries found in tokenizer.json");
-      }
-
-      console.error("[gliner] Creating Unigram from vocab object");
+    // Reconstruct tokenizer from tokenizer.json (tokenizers v0.1.x way)
+    // tokenizer.json contains the full tokenizer state - we can pass it directly to Tokenizer constructor
+    console.error("[gliner] Loading tokenizer from tokenizer.json file");
+    try {
+      // Read the raw tokenizer.json file and pass to Tokenizer constructor
+      const tokenizerJsonStr = await fs.readFile(tokenizerJsonPath, "utf8");
+      this.tokenizer = new tokenizers.Tokenizer(tokenizerJsonStr);
+      console.error("[gliner] Tokenizer from tokenizer.json created:", !!this.tokenizer);
+    } catch (e) {
+      console.error("[gliner] Tokenizer from tokenizer.json failed:", e instanceof Error ? e.message : String(e));
+      // Fallback: try Unigram from spm.model file path
+      console.error("[gliner] Trying Unigram from spm.model file path");
       const Unigram = (tokenizers as any).Unigram;
-      console.error("[gliner] Unigram constructor:", typeof Unigram);
-      try {
-        const model = new Unigram(vocabObj);
-        console.error("[gliner] Unigram model created:", !!model);
-        this.tokenizer = new tokenizers.Tokenizer(model);
-        console.error("[gliner] Tokenizer created:", !!this.tokenizer);
-      } catch (e) {
-        console.error("[gliner] Unigram from vocab failed:", e instanceof Error ? e.message : String(e));
-        // Fallback: try Tokenizer.from_pretrained with tokenizer.json
-        console.error("[gliner] Trying Tokenizer.from_pretrained with tokenizer.json");
-        this.tokenizer = await tokenizers.Tokenizer.from_pretrained(tokenizerJsonPath);
-        console.error("[gliner] Tokenizer from_pretrained created:", !!this.tokenizer);
-      }
-    } else {
-      throw new Error(`Unsupported tokenizer type: ${tokenizerJson.model?.type}. Expected Unigram for GLiNER model.`);
+      const model = new Unigram(spmPath);
+      this.tokenizer = new tokenizers.Tokenizer(model);
+      console.error("[gliner] Tokenizer from spm.model created:", !!this.tokenizer);
     }
 
     // Add normalizer (BERT-style)
