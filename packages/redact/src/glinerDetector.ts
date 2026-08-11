@@ -145,24 +145,54 @@ export class GlinerOnnxDetector implements Detector {
 
     // Load tokenizer from model directory using Hugging Face tokenizers
     // This provides accurate offset mappings for token-to-character conversion
-    // For tokenizers v0.1.x, we need to use the SentencePiece model file directly with Unigram
+    // For tokenizers v0.1.x, we reconstruct Unigram from tokenizer.json vocab
     console.error("[gliner] Importing @huggingface/tokenizers");
     const tokenizers = await import("@huggingface/tokenizers");
     console.error("[gliner] tokenizers exports:", Object.keys(tokenizers).filter(k => !k.startsWith("_")));
+
+    // Read tokenizer.json to get Unigram vocab
+    console.error("[gliner] Reading tokenizer.json");
+    const tokenizerJson = JSON.parse(await fs.readFile(tokenizerJsonPath, "utf8"));
+    console.error("[gliner] tokenizer.json model type:", tokenizerJson.model?.type);
 
     // Read tokenizer config to get special tokens
     console.error("[gliner] Reading tokenizer_config.json");
     const tokenizerConfig = JSON.parse(await fs.readFile(tokenizerConfigPath, "utf8"));
     console.error("[gliner] tokenizer_config:", JSON.stringify(tokenizerConfig).slice(0, 200));
 
-    // Load the SentencePiece model directly (tokenizers v0.1.x Unigram expects file path)
-    console.error("[gliner] Creating Unigram from spm.model");
-    const Unigram = (tokenizers as any).Unigram;
-    console.error("[gliner] Unigram constructor:", typeof Unigram);
-    const model = new Unigram(spmPath);
-    console.error("[gliner] Unigram model created:", !!model);
-    this.tokenizer = new tokenizers.Tokenizer(model);
-    console.error("[gliner] Tokenizer created:", !!this.tokenizer);
+    // Reconstruct Unigram model from tokenizer.json vocab
+    // tokenizers v0.1.x Unigram constructor expects vocab object {token: score}
+    if (tokenizerJson.model && tokenizerJson.model.type === "Unigram") {
+      const vocab = tokenizerJson.model.vocab;
+      console.error(`[gliner] Unigram vocab length: ${vocab?.length ?? "undefined"}`);
+      if (!vocab || vocab.length === 0) {
+        throw new Error("Unigram vocab is empty in tokenizer.json");
+      }
+
+      // Convert vocab array [token, score] to object {token => score}
+      const vocabObj: Record<string, number> = {};
+      let validCount = 0;
+      vocab.forEach((entry: unknown) => {
+        if (Array.isArray(entry) && entry.length >= 2 && typeof entry[0] === "string" && typeof entry[1] === "number") {
+          vocabObj[entry[0]] = entry[1];
+          validCount++;
+        }
+      });
+      console.error(`[gliner] Valid Unigram vocab entries: ${validCount}/${vocab.length}`);
+      if (validCount === 0) {
+        throw new Error("No valid vocab entries found in tokenizer.json");
+      }
+
+      console.error("[gliner] Creating Unigram from vocab object");
+      const Unigram = (tokenizers as any).Unigram;
+      console.error("[gliner] Unigram constructor:", typeof Unigram);
+      const model = new Unigram(vocabObj);
+      console.error("[gliner] Unigram model created:", !!model);
+      this.tokenizer = new tokenizers.Tokenizer(model);
+      console.error("[gliner] Tokenizer created:", !!this.tokenizer);
+    } else {
+      throw new Error(`Unsupported tokenizer type: ${tokenizerJson.model?.type}. Expected Unigram for GLiNER model.`);
+    }
 
     // Add normalizer (BERT-style)
     const BertNormalizer = (tokenizers as any).BertNormalizer;
