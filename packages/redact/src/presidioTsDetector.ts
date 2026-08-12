@@ -174,7 +174,7 @@ export class PresidioTsDetector implements Detector {
         const defaultModel = "Xenova/bert-base-NER";
         if (configuredModel !== defaultModel) {
           console.warn(
-            `[presidio-ts] Failed to load NER model "${configuredModel}: ${error instanceof Error ? error.message : String(error)}. Falling back to default model "${defaultModel}".`
+            `[presidio-ts] Failed to load NER model "${configuredModel}": ${error instanceof Error ? error.message : String(error)}. Falling back to default model "${defaultModel}".`
           );
           try {
             this.analyzer = new PresidioAnalyzer({
@@ -185,8 +185,12 @@ export class PresidioTsDetector implements Detector {
             this.initialized = true;
             return;
           } catch (fallbackError) {
-            console.warn(
+            console.error(
               `[presidio-ts] Fallback to default model also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+            );
+            this.initializing = null;
+            throw new Error(
+              `Failed to initialize PresidioTsDetector: ${error instanceof Error ? error.message : String(error)}`
             );
           }
         }
