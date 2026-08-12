@@ -101,16 +101,14 @@ export class PresidioTsDetector implements Detector {
   }
 
   get labels(): readonly string[] {
-    // If config specifies labels, return canonical versions; otherwise return all supported
+    // If config specifies labels, return canonical versions that will actually appear in spans;
+    // otherwise return all supported canonical labels.
     if (this.config.labels && this.config.labels.length > 0) {
       return this.config.labels
-        .map((label) => {
-          const entityType = this.labelToEntityType(label);
-          return entityType
-            ? PresidioTsDetector.ENTITY_LABEL_MAP[entityType]
-            : label.toUpperCase();
-        })
-        .filter((l): l is string => l !== null && l !== undefined);
+        .map((label) => this.labelToEntityType(label))
+        .filter((et): et is EntityType => et !== null)
+        .map((et) => PresidioTsDetector.ENTITY_LABEL_MAP[et])
+        .filter((label): label is string => label !== undefined);
     }
     return PresidioTsDetector.SUPPORTED_ENTITY_TYPES.map(
       (et) => PresidioTsDetector.ENTITY_LABEL_MAP[et]

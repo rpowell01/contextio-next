@@ -280,7 +280,7 @@ function deduplicateOverlaps(spans: DetectedSpan[]): DetectedSpan[] {
 }
 
 /**
- * Create a pre-configured hybrid detector using rules + GLiNER ONNX.
+ * Create a pre-configured hybrid detector using rules + Presidio TS.
  * This is a convenience factory that handles model loading.
  */
 export async function createDefaultHybridDetector(
@@ -290,15 +290,16 @@ export async function createDefaultHybridDetector(
     allowlistPatterns?: string[];
     placeholderAllowlist?: string[];
   },
-  glinerConfig?: {
-    modelDir: string;
-    providers?: string[];
+  presidioConfig?: {
+    modelName?: string;
     threshold?: number;
     labels?: string[];
+    useNER?: boolean;
+    options?: Record<string, unknown>;
   },
 ): Promise<DetectorPipeline> {
   const { RuleDetector, createRuleDetector } = await import("./ruleDetector.js");
-  const { GlinerOnnxDetector, createGlinerOnnxDetector } = await import("./glinerDetector.js");
+  const { createPresidioTsDetector } = await import("./presidioTsDetector.js");
 
   // Create rule detector
   const ruleDetector = await createRuleDetector({
@@ -309,15 +310,16 @@ export async function createDefaultHybridDetector(
     placeholderAllowlist: ruleConfig?.placeholderAllowlist,
   });
 
-  // Create LLM detector
+  // Create Presidio detector
   let llmDetector: Detector | null = null;
-  if (glinerConfig?.modelDir) {
-    llmDetector = await createGlinerOnnxDetector({
-      name: "gliner-onnx",
-      modelDir: glinerConfig.modelDir,
-      providers: glinerConfig.providers,
-      threshold: glinerConfig.threshold ?? 0.5,
-      labels: glinerConfig.labels,
+  if (presidioConfig?.modelName) {
+    llmDetector = await createPresidioTsDetector({
+      name: "presidio-ts",
+      modelName: presidioConfig.modelName,
+      threshold: presidioConfig.threshold ?? 0.5,
+      labels: presidioConfig.labels,
+      useNER: presidioConfig.useNER ?? true,
+      options: presidioConfig.options,
     });
   }
 
@@ -326,7 +328,7 @@ export async function createDefaultHybridDetector(
   const pipeline = new DetectorPipeline({
     detectors,
     mergeStrategy: "priority",
-    priorityOrder: ["rules", "gliner-onnx"].filter((n) => detectors.some((d) => d.name === n)),
+    priorityOrder: ["rules", "presidio-ts"].filter((n) => detectors.some((d) => d.name === n)),
   });
 
   await pipeline.initialize();

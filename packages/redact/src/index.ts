@@ -45,11 +45,10 @@ import type {
   DetectorPipelineConfig,
 } from "./detector.js";
 import type { RuleDetectorConfig } from "./ruleDetector.js";
-import type { GlinerOnnxConfig } from "./glinerDetector.js";
 import { detectorRegistry, registerDetector, createDetector } from "./detector.js";
 import { createRuleDetector } from "./ruleDetector.js";
 import { createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";
-// GLiNER detector is loaded lazily to avoid onnxruntime-node in Next.js static build
+import { createPresidioTsDetector, type PresidioTsConfig } from "./presidioTsDetector.js";
 
 /** Configuration for {@link createRedactPlugin}. */
 export interface RedactPluginConfig {
@@ -254,7 +253,7 @@ function resolveDetectorConfig(config?: RedactPluginConfig): RedactDetectorConfi
         return {
           mode: policyDetector.mode,
           llmModel: policyDetector.llmModel,
-          modelPath: policyDetector.modelPath ?? policyDetector.modelDir, // Map modelDir -> modelPath
+          modelName: policyDetector.modelName ?? policyDetector.modelDir, // Map modelDir -> modelName
           options: policyDetector.options,
           llmThreshold: policyDetector.llmThreshold ?? policyDetector.threshold, // Map threshold -> llmThreshold
           llmLabels: policyDetector.llmLabels ?? policyDetector.labels, // Map labels -> llmLabels
@@ -368,47 +367,37 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
         let pipeline: Detector;
 
         if (detectorMode === "llm") {
-          // LLM-only mode: use GLiNER detector
-          const glinerConfig = detectorConfig as RedactDetectorConfig;
-          if (!glinerConfig.modelPath) {
-            throw new Error("LLM detector requires detectorConfig.modelPath to be set");
-          }
-          // Lazy load GLiNER module to avoid onnxruntime-node in Next.js static build
-          const { createGlinerOnnxDetector: createGLiner } = await getGlinerDetector();
-          const llmDetector = await createGLiner({
-            name: "gliner-onnx",
-            modelDir: glinerConfig.modelPath,
-            threshold: glinerConfig.llmThreshold ?? 0.5,
-            labels: glinerConfig.llmLabels,
+          // LLM-only mode: use Presidio TS detector
+          const presidioConfig = detectorConfig as RedactDetectorConfig;
+          const modelName = presidioConfig.modelName ?? "Xenova/bert-base-NER";
+          const llmDetector = await createPresidioTsDetector({
+            name: "presidio-ts",
+            modelName,
+            threshold: presidioConfig.llmThreshold ?? 0.5,
+            labels: presidioConfig.llmLabels,
+            options: presidioConfig.options,
           });
           pipeline = await createDetectorPipeline({
             detectors: [llmDetector],
             mergeStrategy: "union",
           });
         } else if (detectorMode === "hybrid" || detectorMode === "auto") {
-          // Hybrid mode: rules + GLiNER with priority merge
-          const glinerConfig = detectorConfig as RedactDetectorConfig;
+          // Hybrid mode: rules + Presidio TS with priority merge
+          const presidioConfig = detectorConfig as RedactDetectorConfig;
           let llmDetector: Detector | null = null;
-          if (glinerConfig.modelPath) {
-            // Lazy load GLiNER module to avoid onnxruntime-node in Next.js static build
-            const { createGlinerOnnxDetector: createGLiner } = await getGlinerDetector();
-            llmDetector = await createGLiner({
-              name: "gliner-onnx",
-              modelDir: glinerConfig.modelPath,
-              threshold: glinerConfig.llmThreshold ?? 0.5,
-              labels: glinerConfig.llmLabels,
-            });
-          } else {
-            // No GLiNER model configured - fall back to rules-only with a warning
-            console.warn(
-              `[redact] detectorMode="${detectorMode}" requires GLiNER model (detectorConfig.modelPath), falling back to rules-only mode`,
-            );
-          }
+          const modelName = presidioConfig.modelName ?? "Xenova/bert-base-NER";
+          llmDetector = await createPresidioTsDetector({
+            name: "presidio-ts",
+            modelName,
+            threshold: presidioConfig.llmThreshold ?? 0.5,
+            labels: presidioConfig.llmLabels,
+            options: presidioConfig.options,
+          });
 
           // In auto mode, we still use hybrid but could add logic to skip LLM for simple cases
           if (llmDetector) {
             const pipelineConfig = createHybridDetector(ruleDetector, llmDetector, {
-              priorityOrder: ["rules", "gliner-onnx"],
+              priorityOrder: ["rules", "presidio-ts"],
             });
             pipeline = await createDetectorPipeline(pipelineConfig);
           } else {
@@ -598,24 +587,8 @@ export type {
 export { detectorRegistry, registerDetector, createDetector } from "./detector.js";
 export type { RuleDetectorConfig } from "./ruleDetector.js";
 export { RuleDetector, createRuleDetector } from "./ruleDetector.js";
-export type { GlinerOnnxConfig } from "./glinerDetector.js";
 export type { PresidioTsConfig } from "./presidioTsDetector.js";
 export { PresidioTsDetector, createPresidioTsDetector } from "./presidioTsDetector.js";
-
-// Lazy export for GLiNER detector to avoid loading onnxruntime-node in environments
-// where native modules are not available (e.g., Next.js static generation on Alpine)
-let _glinerModule: typeof import("./glinerDetector.js") | null = null;
-async function loadGlinerModule() {
-  if (!_glinerModule) {
-    _glinerModule = await import("./glinerDetector.js");
-  }
-  return _glinerModule;
-}
-
-export async function getGlinerDetector() {
-  const mod = await loadGlinerModule();
-  return { GlinerOnnxDetector: mod.GlinerOnnxDetector, createGlinerOnnxDetector: mod.createGlinerOnnxDetector, prepareGlinerModel: mod.prepareGlinerModel };
-}
 
 export { DetectorPipeline, createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";
 export { createRedactPluginFactory } from "./factory.js";

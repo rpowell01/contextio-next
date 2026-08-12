@@ -59,7 +59,7 @@ export interface DetectionResult {
  *
  * Detectors can be:
  * - Rule-based (regex patterns)
- * - LLM-based (GLiNER, DistilBERT, Phi-3-mini via ONNX/llama.cpp)
+ * - LLM-based (Presidio TS, DistilBERT, Phi-3-mini via ONNX/llama.cpp)
  * - External API (cloud PII detection services)
  * - Hybrid (combination of above)
  */
@@ -121,10 +121,10 @@ export type DetectorMode = "rules" | "llm" | "hybrid" | "auto";
 export interface RedactDetectorConfig {
   /** Detection mode. Default: "rules". */
   mode?: DetectorMode;
-  /** LLM detector model to use. Default: "gliner-small". */
-  llmModel?: "gliner-small" | "gliner-base" | "distilbert-pii" | "phi3-mini";
-  /** Path to local ONNX model file. */
-  modelPath?: string;
+  /** LLM detector model to use. Default: "Xenova/bert-base-NER". */
+  llmModel?: string;
+  /** HuggingFace model ID for Presidio TS (e.g., "Xenova/bert-base-NER"). Default: "Xenova/bert-base-NER". */
+  modelName?: string;
   /** Custom detector instances. */
   customDetectors?: Detector[];
   /** Runtime options for the detector. */

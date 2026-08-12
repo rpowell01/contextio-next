@@ -83,10 +83,10 @@ export interface PolicyJson {
   detector?: {
     /** Detection mode: rules-only, LLM-only, hybrid (rules priority), or auto. */
     mode?: "rules" | "llm" | "hybrid" | "auto";
-    /** LLM detector model to use. Default: "gliner-small". */
-    llmModel?: "gliner-small" | "gliner-base" | "distilbert-pii" | "phi3-mini";
-    /** Path to local GLiNER ONNX model directory. Required for llm/hybrid/auto modes. */
-    modelPath?: string;
+    /** LLM detector model to use (e.g., "Xenova/bert-base-NER"). Default: "Xenova/bert-base-NER". */
+    llmModel?: string;
+    /** HuggingFace model ID for Presidio TS (e.g., "Xenova/bert-base-NER"). Default: "Xenova/bert-base-NER". */
+    modelName?: string;
     /** Runtime options for the detector. */
     options?: Record<string, unknown>;
     /** Minimum confidence threshold for LLM detections (0-1). Default: 0.5 */
