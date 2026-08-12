@@ -328,7 +328,7 @@ export async function createDefaultHybridDetector(
   const pipeline = new DetectorPipeline({
     detectors,
     mergeStrategy: "priority",
-    priorityOrder: ["rules", "presidio-ts"].filter((n) => detectors.some((d) => d.name === n)),
+    priorityOrder: ["presidio-ts", "rules"].filter((n) => detectors.some((d) => d.name === n)),
   });
 
   await pipeline.initialize();
