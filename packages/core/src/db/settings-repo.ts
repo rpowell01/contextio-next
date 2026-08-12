@@ -38,7 +38,7 @@ export interface SettingsRow {
 	oidc_public_url: string;
 	show_page_load_time: number;
 	detector_mode: string;
-	detector_model_dir: string;
+	detector_model_name: string;
 	detector_threshold: number;
 	rate_limiter: string; // JSON blob
 	streaming_retry: string; // JSON blob
@@ -79,7 +79,7 @@ export interface Settings {
 	oidcPublicUrl: string;
 	showPageLoadTime: boolean;
 	detectorMode: "rules" | "llm" | "hybrid" | "auto";
-	detectorModelDir: string;
+	detectorModelName: string;
 	detectorThreshold: number;
 	rateLimiter: Record<Provider, RateLimitConfig>;
 	streamingRetry: Record<Provider, StreamingRetryConfig>;
@@ -153,7 +153,7 @@ const DEFAULT_SETTINGS: Settings = {
 	oidcPublicUrl: "",
 	showPageLoadTime: false,
 	detectorMode: "rules",
-	detectorModelDir: "",
+	detectorModelName: "Xenova/bert-base-NER",
 	detectorThreshold: 0.5,
 	rateLimiter: DEFAULT_RATE_LIMITER,
 	streamingRetry: DEFAULT_STREAMING_RETRY,
@@ -188,7 +188,7 @@ function rowToSettings(row: SettingsRow): Settings {
 		oidcPublicUrl: row.oidc_public_url,
 		showPageLoadTime: row.show_page_load_time === 1,
 		detectorMode: row.detector_mode as Settings["detectorMode"],
-		detectorModelDir: row.detector_model_dir,
+		detectorModelName: row.detector_model_name,
 		detectorThreshold: row.detector_threshold,
 		rateLimiter: safeJsonParse(row.rate_limiter, DEFAULT_RATE_LIMITER),
 		streamingRetry: safeJsonParse(row.streaming_retry, DEFAULT_STREAMING_RETRY),
@@ -218,7 +218,7 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		oidc_public_url: merged.oidcPublicUrl,
 		show_page_load_time: merged.showPageLoadTime ? 1 : 0,
 		detector_mode: merged.detectorMode,
-		detector_model_dir: merged.detectorModelDir,
+		detector_model_name: merged.detectorModelName,
 		detector_threshold: merged.detectorThreshold,
 		rate_limiter: JSON.stringify(merged.rateLimiter),
 		streaming_retry: JSON.stringify(merged.streamingRetry),
@@ -287,7 +287,7 @@ export function upsertSettings(settings: Settings): void {
 			id, log_dir, max_sessions, redact_preset, redact_reversible, redact_policy_file,
 			encryption_at_rest, capture_cleanup_enabled, capture_cleanup_interval_hours,
 			capture_cleanup_max_age_days, theme, oidc_enabled, oidc_public_url,
-			show_page_load_time, detector_mode, detector_model_dir, detector_threshold,
+			show_page_load_time, detector_mode, detector_model_name, detector_threshold,
 			rate_limiter, streaming_retry
 		) VALUES (
 			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
@@ -307,7 +307,7 @@ export function upsertSettings(settings: Settings): void {
 			oidc_public_url = excluded.oidc_public_url,
 			show_page_load_time = excluded.show_page_load_time,
 			detector_mode = excluded.detector_mode,
-			detector_model_dir = excluded.detector_model_dir,
+			detector_model_name = excluded.detector_model_name,
 			detector_threshold = excluded.detector_threshold,
 			rate_limiter = excluded.rate_limiter,
 			streaming_retry = excluded.streaming_retry
@@ -329,7 +329,7 @@ export function upsertSettings(settings: Settings): void {
 			row.oidc_public_url,
 			row.show_page_load_time,
 			row.detector_mode,
-			row.detector_model_dir,
+			row.detector_model_name,
 			row.detector_threshold,
 			row.rate_limiter,
 			row.streaming_retry
@@ -370,7 +370,7 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		oidcPublicUrl: { envVar: "CONTEXTIO_OIDC_PUBLIC_URL", dynamic: false },
 		showPageLoadTime: { envVar: "", dynamic: true },
 		detectorMode: { envVar: "REDACT_DETECTOR_MODE", dynamic: true },
-		detectorModelDir: { envVar: "REDACT_DETECTOR_MODEL_DIR", dynamic: true },
+		detectorModelName: { envVar: "REDACT_DETECTOR_MODEL_NAME", dynamic: true },
 		detectorThreshold: { envVar: "REDACT_DETECTOR_THRESHOLD", dynamic: true },
 		rateLimiter: { envVar: "", dynamic: false },
 		streamingRetry: { envVar: "", dynamic: false },
@@ -545,7 +545,7 @@ function validateAndMergeSettings(input: unknown): Settings {
 		oidcPublicUrl: getString("oidcPublicUrl", DEFAULT_SETTINGS.oidcPublicUrl),
 		showPageLoadTime: getBoolean("showPageLoadTime", DEFAULT_SETTINGS.showPageLoadTime),
 		detectorMode: getEnum("detectorMode", ["rules", "llm", "hybrid", "auto"], DEFAULT_SETTINGS.detectorMode),
-		detectorModelDir: getString("detectorModelDir", DEFAULT_SETTINGS.detectorModelDir),
+		detectorModelName: getString("detectorModelName", DEFAULT_SETTINGS.detectorModelName),
 		detectorThreshold: getFloat("detectorThreshold", DEFAULT_SETTINGS.detectorThreshold, 0, 1),
 		rateLimiter: parseRateLimiter("rateLimiter"),
 		streamingRetry: parseStreamingRetry("streamingRetry"),

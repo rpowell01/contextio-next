@@ -28,7 +28,7 @@ async function readWebUISettings() {
                 redactReversible: dbSettings.redactReversible,
                 redactPolicyFile: dbSettings.redactPolicyFile,
                 detectorMode: dbSettings.detectorMode,
-                detectorModelName: dbSettings.detectorModelDir, // Map existing DB field to new config
+                detectorModelName: dbSettings.detectorModelName,
                 detectorThreshold: dbSettings.detectorThreshold,
             };
         }

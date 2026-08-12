@@ -237,8 +237,8 @@ function buildProxyArgs(args: ProxyArgs, port: number): string[] {
 	}
 	if (args.detectorMode && args.detectorMode !== "rules") {
 		out.push("--detector-mode", args.detectorMode);
-		if (args.detectorModelDir) {
-			out.push("--detector-model-dir", args.detectorModelDir);
+		if (args.detectorModelName) {
+			out.push("--detector-model-name", args.detectorModelName);
 		}
 		if (args.detectorThreshold !== null) {
 			out.push("--detector-threshold", String(args.detectorThreshold));
@@ -529,8 +529,8 @@ function buildPlugins(args: ProxyArgs): ProxyPlugin[] {
 
 	if (args.redact) {
 		const detectorConfig: Record<string, unknown> = {};
-		if (args.detectorModelDir) {
-			detectorConfig.modelPath = args.detectorModelDir;
+		if (args.detectorModelName) {
+			detectorConfig.modelName = args.detectorModelName;
 		}
 		if (args.detectorThreshold !== null) {
 			detectorConfig.llmThreshold = args.detectorThreshold;
@@ -630,7 +630,7 @@ function printStartupInfo(plugins: ProxyPlugin[], args: ProxyArgs, isWrap = fals
 		}
 		if (args.detectorMode && args.detectorMode !== "rules") {
 			const detectorInfo = `Detector mode: ${args.detectorMode}`;
-			const modelInfo = args.detectorModelDir ? ` (model: ${args.detectorModelDir})` : "";
+			const modelInfo = args.detectorModelName ? ` (model: ${args.detectorModelName})` : "";
 			const thresholdInfo = args.detectorThreshold !== null ? `, threshold: ${args.detectorThreshold}` : "";
 			console.log(detectorInfo + modelInfo + thresholdInfo);
 		}

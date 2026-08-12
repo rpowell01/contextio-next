@@ -98,7 +98,7 @@ function createTestSettingsFile(overrides: Record<string, unknown> = {}): string
 		oidcPublicUrl: "https://oidc.example.com",
 		showPageLoadTime: true,
 		detectorMode: "hybrid",
-		detectorModelDir: "/models",
+		detectorModelName: "/models",
 		detectorThreshold: 0.75,
 		rateLimiter: {
 			anthropic: { maxRequests: 120, windowMs: 60000, bufferCapacity: 15 },
@@ -192,7 +192,7 @@ describe("migrate-settings - Settings Auto-Migration (via initDb)", () => {
 			assert.equal(settings!.oidcPublicUrl, "https://oidc.example.com");
 			assert.equal(settings!.showPageLoadTime, true);
 			assert.equal(settings!.detectorMode, "hybrid");
-			assert.equal(settings!.detectorModelDir, "/models");
+			assert.equal(settings!.detectorModelName, "/models");
 			assert.equal(settings!.detectorThreshold, 0.75);
 		});
 

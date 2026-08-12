@@ -52,7 +52,7 @@ db.exec(`
     encryption_at_rest INTEGER, capture_cleanup_enabled INTEGER,
     capture_cleanup_interval_hours INTEGER, capture_cleanup_max_age_days INTEGER,
     theme TEXT, oidc_enabled INTEGER, oidc_public_url TEXT,
-    show_page_load_time INTEGER, detector_mode TEXT, detector_model_dir TEXT,
+    show_page_load_time INTEGER, detector_mode TEXT, detector_model_name TEXT NOT NULL DEFAULT 'Xenova/bert-base-NER',
     detector_threshold REAL, rate_limiter TEXT, streaming_retry TEXT,
     created_at INTEGER DEFAULT (strftime('%s','now')*1000),
     updated_at INTEGER DEFAULT (strftime('%s','now')*1000)
@@ -68,8 +68,8 @@ db.exec(`
     created_at INTEGER DEFAULT (strftime('%s','now')*1000),
     updated_at INTEGER DEFAULT (strftime('%s','now')*1000)
   );
-  INSERT OR IGNORE INTO settings (id, detector_mode, detector_model_dir, detector_threshold, redact_preset)
-  VALUES ('default', 'rules', '', 0.5, 'pii');
+  INSERT OR IGNORE INTO settings (id, detector_mode, detector_model_name, detector_threshold, redact_preset)
+  VALUES ('default', 'rules', 'Xenova/bert-base-NER', 0.5, 'pii');
 `);
 
 // Insert default providers
@@ -271,17 +271,17 @@ async function testWebUISettings() {
   console.log("\n=== Test 5: Web UI settings for detectorMode ===");
   
   upsertSettings({
-    detectorMode: "hybrid", detectorModelDir: "Xenova/bert-base-NER", detectorThreshold: 0.7,
+    detectorMode: "hybrid", detectorModelName: "Xenova/bert-base-NER", detectorThreshold: 0.7,
   });
   
   const db2 = getDb();
   const row = db2.prepare("SELECT * FROM settings WHERE id = 'default'").get();
   assert(row !== undefined, "settings row exists in SQLite");
   assert(row.detector_mode === "hybrid", "detectorMode = hybrid persisted");
-  assert(row.detector_model_dir === "Xenova/bert-base-NER", "detectorModelDir persisted");
+  assert(row.detector_model_name === "Xenova/bert-base-NER", "detectorModelName persisted");
   assert(row.detector_threshold === 0.7, "detectorThreshold persisted");
   
-  upsertSettings({ detectorMode: "rules", detectorModelDir: "", detectorThreshold: 0.5 });
+  upsertSettings({ detectorMode: "rules", detectorModelName: "Xenova/bert-base-NER", detectorThreshold: 0.5 });
 }
 
 async function testRedactFactory() {

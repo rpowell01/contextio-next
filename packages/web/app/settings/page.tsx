@@ -67,8 +67,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Display page load time in the bottom-left corner. Measures time from navigation start to fully interactive page (hydration + data fetch + render complete). Changes apply immediately.",
   detectorMode:
     "Detection mode: 'rules' (fast, deterministic patterns), 'llm' (semantic PII detection via LLM), 'hybrid' (rules + LLM with priority merge), or 'auto' (automatically choose). Changes apply dynamically per request.",
-  detectorModelDir:
-    "Path to the local LLM detector model directory (required for llm/hybrid/auto modes). Contains model files and tokenizer config. Changes apply dynamically.",
+  detectorModelName:
+    "Name of the Hugging Face model used for LLM-based PII detection (e.g., 'Xenova/bert-base-NER'). Used in llm/hybrid/auto modes. Changes apply dynamically.",
   detectorThreshold:
     "Minimum confidence threshold for LLM-based detections (0-1). Higher values reduce false positives but may miss some entities. Applied dynamically per request.",
   rateLimiter:
@@ -149,7 +149,7 @@ export default function SettingsPage() {
     oidcPublicUrl: "",
     showPageLoadTime: false,
     detectorMode: "rules",
-    detectorModelDir: "",
+    detectorModelName: "Xenova/bert-base-NER",
     detectorThreshold: 0.5,
     rateLimiter: {
       anthropic: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
@@ -319,7 +319,7 @@ export default function SettingsPage() {
                 <h4 className="text-sm font-medium text-muted-foreground mb-3">Detector Settings</h4>
                 <div className="space-y-4">
                   {renderSetting("detectorMode")}
-                  {renderSetting("detectorModelDir")}
+                  {renderSetting("detectorModelName")}
                   {renderSetting("detectorThreshold")}
                 </div>
               </div>
@@ -1166,25 +1166,25 @@ export default function SettingsPage() {
             />
           </div>
         );
-      case "detectorModelDir":
+      case "detectorModelName":
         return (
           <div>
-            <Label htmlFor="detectorModelDir" className="block text-sm font-medium mb-2">
-              LLM Detector Model Directory
+            <Label htmlFor="detectorModelName" className="block text-sm font-medium mb-2">
+              Detector Model Name
             </Label>
             <Input
-              id="detectorModelDir"
-              value={settings.detectorModelDir}
-              onChange={(e) => updateSetting("detectorModelDir", e.target.value)}
-              placeholder="/path/to/llm-model"
-              disabled={isSettingOverridden("detectorModelDir")}
+              id="detectorModelName"
+              value={settings.detectorModelName}
+              onChange={(e) => updateSetting("detectorModelName", e.target.value)}
+              placeholder="Xenova/bert-base-NER"
+              disabled={isSettingOverridden("detectorModelName")}
               className={
-                isSettingOverridden("detectorModelDir") ? "bg-muted cursor-not-allowed" : ""
+                isSettingOverridden("detectorModelName") ? "bg-muted cursor-not-allowed" : ""
               }
             />
             <SettingHelp
-              meta={getMeta("detectorModelDir")}
-              description={SETTING_DESCRIPTIONS.detectorModelDir}
+              meta={getMeta("detectorModelName")}
+              description={SETTING_DESCRIPTIONS.detectorModelName}
             />
           </div>
         );

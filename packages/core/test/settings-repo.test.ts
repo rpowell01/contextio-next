@@ -89,7 +89,7 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 		oidcPublicUrl: "",
 		showPageLoadTime: false,
 		detectorMode: "rules",
-		detectorModelDir: "",
+		detectorModelName: "Xenova/bert-base-NER",
 		detectorThreshold: 0.5,
 		rateLimiter: {
 			anthropic: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
@@ -297,7 +297,7 @@ describe("settings-repo.ts", () => {
 				oidcPublicUrl: "https://oidc.example.com",
 				showPageLoadTime: true,
 				detectorMode: "hybrid",
-				detectorModelDir: "/models",
+				detectorModelName: "/models",
 				detectorThreshold: 0.75,
 			});
 			upsertSettings(customSettings);
@@ -318,7 +318,7 @@ describe("settings-repo.ts", () => {
 			assert.equal(result!.oidcPublicUrl, "https://oidc.example.com");
 			assert.equal(result!.showPageLoadTime, true);
 			assert.equal(result!.detectorMode, "hybrid");
-			assert.equal(result!.detectorModelDir, "/models");
+			assert.equal(result!.detectorModelName, "/models");
 			assert.equal(result!.detectorThreshold, 0.75);
 		});
 	});
@@ -569,7 +569,7 @@ describe("settings-repo.ts", () => {
 				"redactPolicyFile", "encryptionAtRest", "captureCleanupEnabled",
 				"captureCleanupIntervalHours", "captureCleanupMaxAgeDays",
 				"theme", "oidcEnabled", "oidcPublicUrl", "showPageLoadTime",
-				"detectorMode", "detectorModelDir", "detectorThreshold",
+				"detectorMode", "detectorModelName", "detectorThreshold",
 				"rateLimiter", "streamingRetry"
 			];
 			

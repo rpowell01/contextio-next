@@ -52,7 +52,7 @@ export interface Settings {
   showPageLoadTime: boolean;
   // Detector settings
   detectorMode: "rules" | "llm" | "hybrid" | "auto";
-  detectorModelDir: string;
+  detectorModelName: string;
   detectorThreshold: number;
   // Rate limiter settings per provider
   rateLimiter: Record<Provider, RateLimitConfig>;
@@ -117,8 +117,8 @@ export const SETTING_ENV_MAP: Record<
     envVar: "REDACT_DETECTOR_MODE",
     dynamic: true,
   },
-  detectorModelDir: {
-    envVar: "REDACT_DETECTOR_MODEL_DIR",
+  detectorModelName: {
+    envVar: "REDACT_DETECTOR_MODEL_NAME",
     dynamic: true,
   },
   detectorThreshold: {
@@ -271,8 +271,8 @@ export function applyEnvOverrides(settings: Settings): {
           accepted = true;
         }
         break;
-      case "detectorModelDir":
-        override.detectorModelDir = raw;
+      case "detectorModelName":
+        override.detectorModelName = raw;
         accepted = true;
         break;
       case "detectorThreshold": {
@@ -331,7 +331,7 @@ export const DEFAULT_SETTINGS: Settings = {
   oidcPublicUrl: "",
   showPageLoadTime: false,
   detectorMode: "rules",
-  detectorModelDir: "",
+  detectorModelName: "Xenova/bert-base-NER",
   detectorThreshold: 0.5,
   rateLimiter: {
     anthropic: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
@@ -449,7 +449,7 @@ export function validateSettings(input: unknown): Settings {
     oidcPublicUrl: validateString("oidcPublicUrl", 0),
     showPageLoadTime: validateBoolean("showPageLoadTime"),
     detectorMode: validateEnum("detectorMode", ["rules", "llm", "hybrid", "auto"]) as "rules" | "llm" | "hybrid" | "auto",
-    detectorModelDir: validateString("detectorModelDir", 0),
+    detectorModelName: validateString("detectorModelName", 0),
     detectorThreshold: (() => {
       const v = obj.detectorThreshold;
       if (typeof v !== "number" || v < 0 || v > 1) {
@@ -610,10 +610,10 @@ export function validateSettingsLenient(input: unknown): Settings {
       ["rules", "llm", "hybrid", "auto"].includes(obj.detectorMode)
         ? (obj.detectorMode as "rules" | "llm" | "hybrid" | "auto")
         : DEFAULT_SETTINGS.detectorMode,
-    detectorModelDir:
-      typeof obj.detectorModelDir === "string"
-        ? obj.detectorModelDir
-        : DEFAULT_SETTINGS.detectorModelDir,
+    detectorModelName:
+      typeof obj.detectorModelName === "string"
+        ? obj.detectorModelName
+        : DEFAULT_SETTINGS.detectorModelName,
     detectorThreshold:
       typeof obj.detectorThreshold === "number" &&
       obj.detectorThreshold >= 0 &&

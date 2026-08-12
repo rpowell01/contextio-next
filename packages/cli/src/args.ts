@@ -31,8 +31,8 @@ export interface ProxyArgs {
 	redactReversible: boolean;
 	/** Detector mode: rules | llm | hybrid | auto. Default: rules */
 	detectorMode: "rules" | "llm" | "hybrid" | "auto";
-	/** Path to LLM detector model directory (required for llm/hybrid/auto modes). */
-	detectorModelDir: string | null;
+	/** Model name/path for LLM detector (required for llm/hybrid/auto modes). */
+	detectorModelName: string | null;
 	/** Minimum confidence threshold for LLM detections (0-1). Default: 0.5 */
 	detectorThreshold: number | null;
 	log: boolean;
@@ -204,7 +204,7 @@ export function buildProgram(
 		.option("-f, --redact-policy <path>", "path to a redaction policy JSON file")
 		.option("-R, --redact-reversible", "restore redacted values in responses")
 		.option("--detector-mode <mode>", "detector mode: rules, llm, hybrid, auto")
-		.option("--detector-model-dir <path>", "path to LLM detector model directory")
+		.option("--detector-model-name <name>", "model name/path for LLM detector")
 		.option("--detector-threshold <number>", "LLM detection confidence threshold (0-1)")
 		.option("--no-log", "disable capture logging (on by default)")
 		.option("--log-dir <path>", "directory for capture files")
@@ -255,9 +255,9 @@ export function buildProgram(
 				redactPreset: "pii",
 				redactPolicy: null,
 				redactReversible: false,
-				detectorMode: "rules",
-				detectorModelDir: null,
-				detectorThreshold: null,
+			detectorMode: "rules",
+			detectorModelName: null,
+			detectorThreshold: null,
 				log: true,
 				noLog: false,
 				logDir: null,
@@ -310,10 +310,10 @@ export function buildProgram(
 			return;
 		}
 
-		// LLM/hybrid/auto modes require a model directory
-		if (detectorMode !== "rules" && !opts.detectorModelDir) {
+		// LLM/hybrid/auto modes require a model name
+		if (detectorMode !== "rules" && !opts.detectorModelName) {
 			onResult({
-				error: `Detector mode "${detectorMode}" requires --detector-model-dir to be set`,
+				error: `Detector mode "${detectorMode}" requires --detector-model-name to be set`,
 			});
 			return;
 		}
@@ -427,7 +427,7 @@ export function buildProgram(
 			redactPolicy: opts.redactPolicy || null,
 			redactReversible: opts.redactReversible || false,
 			detectorMode,
-			detectorModelDir: opts.detectorModelDir || null,
+			detectorModelName: opts.detectorModelName || null,
 			detectorThreshold: opts.detectorThreshold ? parseFloat(opts.detectorThreshold) : null,
 			log,
 			noLog,
