@@ -193,7 +193,7 @@ console.log('Valid:', JSON.stringify(policy, null, 2));
 Settings → **Redaction** tab:
 - Select preset or upload custom policy
 - Toggle reversible mode
-- Configure GLiNER detector
+- Configure LLM detector
 - View redaction statistics
 
 ## JSON Schema

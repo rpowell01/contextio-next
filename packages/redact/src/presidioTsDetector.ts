@@ -222,9 +222,24 @@ export class PresidioTsDetector implements Detector {
     // Determine which entity types to detect
     let entityTypes: EntityType[] | undefined;
     if (finalConfig.labels && finalConfig.labels.length > 0) {
-      entityTypes = finalConfig.labels
-        .map((label) => this.labelToEntityType(label))
-        .filter((et): et is EntityType => et !== null);
+      const mappedTypes = finalConfig.labels.map((label) => ({
+        label,
+        entityType: this.labelToEntityType(label),
+      }));
+      const unrecognizedLabels = mappedTypes
+        .filter((m) => m.entityType === null)
+        .map((m) => m.label);
+      if (unrecognizedLabels.length > 0) {
+        const supportedLabels = PresidioTsDetector.SUPPORTED_ENTITY_TYPES.map(
+          (et) => PresidioTsDetector.ENTITY_LABEL_MAP[et]
+        );
+        console.warn(
+          `[presidio-ts] Unsupported labels: ${unrecognizedLabels.join(", ")} - ignoring. Supported: ${supportedLabels.join(", ")}`
+        );
+      }
+      entityTypes = mappedTypes
+        .filter((m): m is { label: string; entityType: EntityType } => m.entityType !== null)
+        .map((m) => m.entityType);
     }
 
     // Run analysis

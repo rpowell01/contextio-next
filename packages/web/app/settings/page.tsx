@@ -66,9 +66,9 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
   showPageLoadTime:
     "Display page load time in the bottom-left corner. Measures time from navigation start to fully interactive page (hydration + data fetch + render complete). Changes apply immediately.",
   detectorMode:
-    "Detection mode: 'rules' (fast, deterministic patterns), 'llm' (semantic PII detection via GLiNER), 'hybrid' (rules + LLM with priority merge), or 'auto' (automatically choose). Changes apply dynamically per request.",
+    "Detection mode: 'rules' (fast, deterministic patterns), 'llm' (semantic PII detection via LLM), 'hybrid' (rules + LLM with priority merge), or 'auto' (automatically choose). Changes apply dynamically per request.",
   detectorModelDir:
-    "Path to the local GLiNER ONNX model directory (required for llm/hybrid/auto modes). Contains model.onnx, vocab.txt, and tokenizer config. Changes apply dynamically.",
+    "Path to the local LLM detector model directory (required for llm/hybrid/auto modes). Contains model files and tokenizer config. Changes apply dynamically.",
   detectorThreshold:
     "Minimum confidence threshold for LLM-based detections (0-1). Higher values reduce false positives but may miss some entities. Applied dynamically per request.",
   rateLimiter:
@@ -1156,7 +1156,7 @@ export default function SettingsPage() {
               }`}
             >
               <option value="rules">Rules only (fast, deterministic patterns)</option>
-              <option value="llm">LLM only (semantic detection via GLiNER)</option>
+              <option value="llm">LLM only (semantic detection via LLM)</option>
               <option value="hybrid">Hybrid (rules + LLM, rules take priority)</option>
               <option value="auto">Auto (choose based on content)</option>
             </select>
@@ -1170,13 +1170,13 @@ export default function SettingsPage() {
         return (
           <div>
             <Label htmlFor="detectorModelDir" className="block text-sm font-medium mb-2">
-              GLiNER Model Directory
+              LLM Detector Model Directory
             </Label>
             <Input
               id="detectorModelDir"
               value={settings.detectorModelDir}
               onChange={(e) => updateSetting("detectorModelDir", e.target.value)}
-              placeholder="/path/to/gliner-model"
+              placeholder="/path/to/llm-model"
               disabled={isSettingOverridden("detectorModelDir")}
               className={
                 isSettingOverridden("detectorModelDir") ? "bg-muted cursor-not-allowed" : ""

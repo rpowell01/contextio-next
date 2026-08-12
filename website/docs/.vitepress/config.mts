@@ -61,7 +61,6 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/features/overview' },
             { text: 'Redaction', link: '/features/redaction' },
-            { text: 'GLiNER LLM Detection', link: '/features/gliner' },
             { text: 'Reversible Redaction', link: '/features/reversible-redaction' },
             { text: 'Capture Logging', link: '/features/logging' },
             { text: 'Metrics & Monitoring', link: '/features/metrics' },

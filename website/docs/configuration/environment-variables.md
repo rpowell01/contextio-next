@@ -80,20 +80,6 @@ When enabled, all capture files are encrypted with **AES-256-GCM** (PBKDF2, 100k
 - **pii** — Everything in `secrets` + email, SSN, credit cards, US phone numbers
 - **strict** — Everything in `pii` + IPv4 addresses, dates of birth
 
-## GLiNER LLM Redaction Detector
-
-Local ONNX model for context-aware PII detection (no external API calls).
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REDACT_GLINER_ENABLED` | `false` | Enable GLiNER detector |
-| `REDACT_GLINER_THRESHOLD` | `0.5` | Confidence threshold (0-1) |
-| `REDACT_GLINER_LABELS` | *(built-in)* | Comma-separated custom labels |
-| `REDACT_GLINER_MODEL_PATH` | `/app/models/gliner_model.onnx` | Model file path |
-
-### Built-in Labels
-`person`, `organization`, `location`, `email`, `phone_number`, `credit_card`, `ssn`, `api_key`, `password`, `ip_address`, `date_of_birth`, `address`, `passport_number`, `driver_license`, `bank_account`, `crypto_wallet`, `medical_record_number`, `health_plan_beneficiary`, `national_id`, `vehicle_vin`, `license_plate`
-
 ## Rate Limiter (Built-In)
 
 Token bucket per `(sessionId, provider)` with burst buffer and request queue.
@@ -194,8 +180,6 @@ CONTEXTIO_LOGGER_ENCRYPTION_ENABLED=true
 # Redaction
 REDACT_PRESET=pii
 REDACT_REVERSIBLE=false
-REDACT_GLINER_ENABLED=true
-REDACT_GLINER_THRESHOLD=0.5
 
 # Rate Limiter (retry enabled when rate limiter is enabled)
 CONTEXTIO_ENABLE_LOGGER=true

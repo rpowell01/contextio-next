@@ -31,7 +31,7 @@ export interface ProxyArgs {
 	redactReversible: boolean;
 	/** Detector mode: rules | llm | hybrid | auto. Default: rules */
 	detectorMode: "rules" | "llm" | "hybrid" | "auto";
-	/** Path to GLiNER ONNX model directory (required for llm/hybrid/auto modes). */
+	/** Path to LLM detector model directory (required for llm/hybrid/auto modes). */
 	detectorModelDir: string | null;
 	/** Minimum confidence threshold for LLM detections (0-1). Default: 0.5 */
 	detectorThreshold: number | null;
@@ -204,7 +204,7 @@ export function buildProgram(
 		.option("-f, --redact-policy <path>", "path to a redaction policy JSON file")
 		.option("-R, --redact-reversible", "restore redacted values in responses")
 		.option("--detector-mode <mode>", "detector mode: rules, llm, hybrid, auto")
-		.option("--detector-model-dir <path>", "path to GLiNER ONNX model directory")
+		.option("--detector-model-dir <path>", "path to LLM detector model directory")
 		.option("--detector-threshold <number>", "LLM detection confidence threshold (0-1)")
 		.option("--no-log", "disable capture logging (on by default)")
 		.option("--log-dir <path>", "directory for capture files")

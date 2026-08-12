@@ -100,20 +100,7 @@ Leaves: emails, phone numbers, names, SSNs.
 }
 ```
 
-## 7. Multi-Language Names (with GLiNER)
-
-```jsonc
-{
-  "extends": "pii",
-  "gliner": {
-    "enabled": true,
-    "labels": ["person", "organization", "location", "email", "phone_number"],
-    "threshold": 0.4
-  }
-}
-```
-
-## 8. Path-Scoped (Message Content Only)
+## 7. Path-Scoped (Message Content Only)
 
 ```jsonc
 {
@@ -135,7 +122,7 @@ Leaves: emails, phone numbers, names, SSNs.
 }
 ```
 
-## 9. Reversible Mode Policy
+## 8. Reversible Mode Policy
 
 ```jsonc
 {
@@ -153,7 +140,7 @@ REDACT_REVERSIBLE=true
 REDACT_POLICY_FILE=/app/custom-policy/reversible-policy.jsonc
 ```
 
-## 10. Context-Gated Rules
+## 9. Context-Gated Rules
 
 ```jsonc
 {

@@ -16,7 +16,7 @@ ContextIO-Next is a single-port Docker proxy that sits between your AI coding to
 
 - **Transparent proxy** — Zero-config routing based on request headers and paths
 - **Web UI** — Dashboard, session inspection, redaction viewer, metrics, and settings all on port 4040
-- **Redaction** — PII/secrets detection with built-in presets, custom policies, GLiNER LLM detector, and reversible mode
+- **Redaction** — PII/secrets detection with built-in presets, custom policies, and reversible mode
 - **Capture logging** — Every request/response written to disk with AES-256-GCM encryption at rest
 - **Rate limiting** — Per-session, per-provider token bucket with burst buffering
 - **Retry with backoff** — Exponential backoff for 429/5xx, plus NVIDIA `ResourceExhausted` special handling
@@ -69,8 +69,6 @@ Images are published to GitHub Container Registry:
 | `ghcr.io/rpowell01/contextio-next:main` | Latest build from `main` branch |
 | `ghcr.io/rpowell01/contextio-next:vX.Y.Z` | Specific version (semver) |
 | `ghcr.io/rpowell01/contextio-next:main-sha-<sha>` | Specific commit |
-
-The image includes a pre-built GLiNER ONNX model (copied from `ghcr.io/rpowell01/contextio-gliner-model:0.2.28`) for LLM-based PII detection.
 
 ### Docker Compose (Recommended)
 
@@ -217,19 +215,6 @@ When enabled, all capture files are encrypted with **AES-256-GCM** (PBKDF2, 100k
 - `secrets` — API keys, tokens, private keys, AWS credentials
 - `pii` — Everything in `secrets` + email, SSN, credit cards, US phone numbers
 - `strict` — Everything in `pii` + IPv4 addresses, dates of birth
-
-### GLiNER LLM Redaction Detector
-
-Local ONNX model for context-aware PII detection (no external API calls).
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REDACT_GLINER_ENABLED` | `false` | Enable GLiNER detector |
-| `REDACT_GLINER_THRESHOLD` | `0.5` | Confidence threshold (0-1) |
-| `REDACT_GLINER_LABELS` | *(built-in)* | Comma-separated custom labels |
-| `REDACT_GLINER_MODEL_PATH` | `/app/models/gliner_model.onnx` | Model file path |
-
-Built-in labels: `person`, `organization`, `location`, `email`, `phone_number`, `credit_card`, `ssn`, `api_key`, `password`, `ip_address`, `date_of_birth`, `address`, `passport_number`, `driver_license`, `bank_account`, `crypto_wallet`, `medical_record_number`, `health_plan_beneficiary`, `national_id`, `vehicle_vin`, `license_plate`.
 
 ### Rate Limiter (Built-In)
 
@@ -427,7 +412,7 @@ Access at `http://localhost:4040` (or your configured `NEXT_PUBLIC_SITE_URL`).
 
 ### Settings (6 Tabs)
 1. **Logging** — Capture directory, retention (max sessions, max age, cleanup interval)
-2. **Redaction** — Preset or custom policy, reversible mode, GLiNER settings
+2. **Redaction** — Preset or custom policy, reversible mode
 3. **Security** — OIDC configuration, encryption at rest toggle
 4. **Rate Limiter** — Per-provider limits (max requests, window, buffer)
 5. **Appearance** — Theme (light/dark/system)
@@ -448,17 +433,6 @@ Capture files are encrypted with **AES-256-GCM** using a key derived from `CONTE
 ```
 
 Files are decrypted transparently when read via the web UI or CLI. The encryption key **never** leaves the container — it only exists in memory at runtime.
-
-### GLiNER LLM Redaction
-
-Local ONNX model (quantized, ~50MB) running via ONNX Runtime Web. No external API calls, no GPU required.
-
-- **Custom labels**: Define any entity types via `REDACT_GLINER_LABELS`
-- **Threshold**: Confidence cutoff (default 0.5)
-- **NMS**: Non-maximum suppression removes overlapping spans
-- **Tokenizer offset mapping**: Accurate character-level positions for redaction
-
-Enable with `REDACT_GLINER_ENABLED=true`. Combines with rule-based detector in `hybrid` or `auto` mode.
 
 ### Reversible Redaction
 

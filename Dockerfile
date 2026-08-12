@@ -1,11 +1,6 @@
 # =============================================================================
-# Main Dockerfile for Coolify - Pulls pre-built GLiNER model from registry
+# Main Dockerfile for Coolify
 # =============================================================================
-# GLiNER model is pre-built and pushed to: ghcr.io/rpowell01/contextio-gliner-model:0.2.28-fix1
-# To update model version:
-# 1. Build Dockerfile.gliner with new GLINER_VERSION
-# 2. Push to ghcr.io/rpowell01/contextio-gliner-model:<new-version>
-# 3. Update the COPY --from reference in the runtime stage
 
 # =============================================================================
 # Build stage: Build all TypeScript packages
@@ -79,7 +74,6 @@ ENV LOG_TRAFFIC=false
 ENV DEBUG_ROUTING=false
 ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
-ENV REDACT_DETECTOR_MODEL_DIR=/app/models/gliner-small-v2.1
 ENV NEXT_CACHE_DIR=/app/captures/.next/cache
 ENV CONTEXTIO_DB_PATH=/app/custom-policy/contextio.db
 
@@ -113,13 +107,6 @@ RUN mkdir -p /app/packages/web/.next/cache /app/captures/.next/cache && \
 # Copy bundled default policy file
 COPY --from=build /app/packages/web/public/default-policy.json /app/default-policy.json
 COPY --from=build /app/default-providers.json /app/default-providers.json
-
-# Copy GLiNER model from pre-built registry image (cached forever until version changes)
-# To update model version:
-#   1. Build Dockerfile.gliner with new GLINER_VERSION
-#   2. Push to ghcr.io/rpowell01/contextio-gliner-model:<new-version>
-#   3. Update the image reference below
-COPY --from=ghcr.io/rpowell01/contextio-gliner-model:0.2.28-fix1 /gliner-small-v2.1 /app/models/gliner-small-v2.1
 
 # Copy pre-built plugin files and start script
 COPY docker/plugins/logger-plugin.js /app/logger-plugin.js

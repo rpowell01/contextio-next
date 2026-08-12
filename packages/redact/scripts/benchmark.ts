@@ -7,6 +7,7 @@ import { PRESETS } from "../dist/presets.js";
 import { createRuleDetector, RuleDetector, type RuleDetectorConfig } from "../dist/ruleDetector.js";
 import { DetectorPipeline, createHybridDetector, type DetectorPipelineConfig } from "../dist/detectorPipeline.js";
 import type { Detector, DetectorConfig, DetectionResult, DetectedSpan } from "../dist/detector.js";
+import { PresidioTsDetector, createPresidioTsDetector, type PresidioTsConfig } from "../dist/presidioTsDetector.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_PATH = join(__dirname, "..", "test", "benchmark-data.jsonl");
@@ -141,215 +142,6 @@ function computeMetrics(
   };
 }
 
-// Mock GLiNER detector that simulates semantic entity detection
-class MockGlinerDetector implements Detector {
-  readonly name = "gliner-onnx-mock";
-  readonly description = "Mock GLiNER detector for benchmarking (simulates ONNX model behavior)";
-  readonly labels = [
-    "PERSON", "ORGANIZATION", "LOCATION", "EMAIL", "PHONE", "SSN",
-    "CREDIT_CARD", "IP_ADDRESS", "URL", "DATE", "IBAN", "PASSPORT",
-    "BANK_ACCOUNT", "ROUTING_NUMBER", "LICENSE_PLATE", "JWT",
-    "CREDENTIAL_API_KEY", "CREDENTIAL_GITHUB_TOKEN", "CREDENTIAL_AWS_KEY",
-  ];
-
-  private initialized = false;
-  private baseLatencyMs = 12; // Simulated model inference latency
-
-  async initialize(config?: DetectorConfig): Promise<void> {
-    this.initialized = true;
-  }
-
-  isReady(): boolean {
-    return this.initialized;
-  }
-
-  async shutdown(): Promise<void> {
-    this.initialized = false;
-  }
-
-  async detect(text: string, config?: DetectorConfig): Promise<DetectionResult> {
-    const startTime = Date.now();
-    const threshold = config?.threshold ?? 0.5;
-
-    const spans: DetectedSpan[] = [];
-
-    // Simulate GLiNER semantic detection - finds entities rules might miss
-    // Real GLiNER would use the ONNX model for this
-
-    // PERSON detection (names with titles)
-    const personPattern = /\b(?:Dr\.|Mr\.|Ms\.|Mrs\.|Prof\.)?\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g;
-    personPattern.lastIndex = 0;
-    let match;
-    while ((match = personPattern.exec(text)) !== null) {
-      const context = text.slice(Math.max(0, match.index - 30), match.index + match[0].length + 30).toLowerCase();
-      if (this.isFalsePositive(match[0], context)) continue;
-      const score = 0.72 + Math.random() * 0.2;
-      if (score >= threshold) {
-        spans.push({
-          text: match[0],
-          start: match.index,
-          end: match.index + match[0].length,
-          label: "PERSON",
-          score,
-          detectorName: this.name,
-        });
-      }
-    }
-
-    // ORGANIZATION detection
-    const orgPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Inc|Corporation|Corp|LLC|Ltd|Company|Group|Systems|Technologies|Solutions|Services|Enterprises)\b/g;
-    orgPattern.lastIndex = 0;
-    while ((match = orgPattern.exec(text)) !== null) {
-      const score = 0.75 + Math.random() * 0.2;
-      if (score >= threshold) {
-        spans.push({
-          text: match[0],
-          start: match.index,
-          end: match.index + match[0].length,
-          label: "ORGANIZATION",
-          score,
-          detectorName: this.name,
-        });
-      }
-    }
-
-    // LOCATION detection (major cities)
-    const locationPattern = /\b(?:New York|San Francisco|Los Angeles|Chicago|Boston|Seattle|London|Paris|Tokyo|Berlin|New York City|San Jose|Austin|Denver)\b/g;
-    locationPattern.lastIndex = 0;
-    while ((match = locationPattern.exec(text)) !== null) {
-      const score = 0.8 + Math.random() * 0.15;
-      if (score >= threshold) {
-        spans.push({
-          text: match[0],
-          start: match.index,
-          end: match.index + match[0].length,
-          label: "LOCATION",
-          score,
-          detectorName: this.name,
-        });
-      }
-    }
-
-    // DATE detection
-    const datePattern = /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b/g;
-    datePattern.lastIndex = 0;
-    while ((match = datePattern.exec(text)) !== null) {
-      const score = 0.85 + Math.random() * 0.1;
-      if (score >= threshold) {
-        spans.push({
-          text: match[0],
-          start: match.index,
-          end: match.index + match[0].length,
-          label: "DATE",
-          score,
-          detectorName: this.name,
-        });
-      }
-    }
-
-    // Email (GLiNER can also detect these, might catch some rules miss)
-    const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
-    emailPattern.lastIndex = 0;
-    while ((match = emailPattern.exec(text)) !== null) {
-      const context = text.slice(Math.max(0, match.index - 30), match.index + match[0].length + 30).toLowerCase();
-      if (this.isFalsePositive(match[0], context)) continue;
-      const score = 0.88 + Math.random() * 0.1;
-      if (score >= threshold) {
-        spans.push({
-          text: match[0],
-          start: match.index,
-          end: match.index + match[0].length,
-          label: "EMAIL",
-          score,
-          detectorName: this.name,
-        });
-      }
-    }
-
-    // SSN with context
-    const ssnPattern = /\b\d{3}-\d{2}-\d{4}\b/g;
-    ssnPattern.lastIndex = 0;
-    while ((match = ssnPattern.exec(text)) !== null) {
-      const context = text.slice(Math.max(0, match.index - 50), match.index + match[0].length + 50).toLowerCase();
-      if (["ssn", "social security", "tax", "taxpayer"].some(w => context.includes(w))) {
-        const score = 0.9;
-        if (score >= threshold) {
-          spans.push({
-            text: match[0],
-            start: match.index,
-            end: match.index + match[0].length,
-            label: "SSN",
-            score,
-            detectorName: this.name,
-          });
-        }
-      }
-    }
-
-    // Phone (international format)
-    const phonePattern = /\b(?:\+?1\s*)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
-    phonePattern.lastIndex = 0;
-    while ((match = phonePattern.exec(text)) !== null) {
-      const context = text.slice(Math.max(0, match.index - 30), match.index + match[0].length + 30).toLowerCase();
-      if (this.isFalsePositive(match[0], context)) continue;
-      const score = 0.78 + Math.random() * 0.15;
-      if (score >= threshold) {
-        spans.push({
-          text: match[0],
-          start: match.index,
-          end: match.index + match[0].length,
-          label: "PHONE",
-          score,
-          detectorName: this.name,
-        });
-      }
-    }
-
-    // Credit card (Luhn-valid looking)
-    const ccPattern = /\b(?:\d{4}[\s-]?){3}\d{4}\b/g;
-    ccPattern.lastIndex = 0;
-    while ((match = ccPattern.exec(text)) !== null) {
-      const context = text.slice(Math.max(0, match.index - 30), match.index + match[0].length + 30).toLowerCase();
-      if (!["card", "credit", "payment", "charge", "visa", "mastercard", "amex"].some(w => context.includes(w))) continue;
-      const score = 0.82 + Math.random() * 0.15;
-      if (score >= threshold) {
-        spans.push({
-          text: match[0],
-          start: match.index,
-          end: match.index + match[0].length,
-          label: "CREDIT_CARD",
-          score,
-          detectorName: this.name,
-        });
-      }
-    }
-
-    // Sort by position
-    spans.sort((a, b) => a.start - b.start);
-
-    const latency = Date.now() - startTime + this.baseLatencyMs;
-
-    return { spans, latencyMs: latency };
-  }
-
-  private isFalsePositive(text: string, context: string): boolean {
-    // Skip test/placeholder/uuid context
-    if (context.includes("test") || context.includes("example")
-      || context.includes("placeholder") || context.includes("uuid")
-      || context.includes("not a") || context.includes("fake")
-      || context.includes("reference")) {
-      return true;
-    }
-    // Skip UUID-like
-    if (text.match(/\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b/i)) {
-      return true;
-    }
-    // Skip all-same-char patterns
-    if (/^(.)\1+$/.test(text)) return true;
-    return false;
-  }
-}
-
 async function runBenchmark(): Promise<void> {
   console.log("Loading test data...");
   const groundTruth = loadGroundTruth();
@@ -366,22 +158,25 @@ async function runBenchmark(): Promise<void> {
     placeholderAllowlist: new Set(),
   });
 
-  // Mock GLiNER detector
-  const glinerDetector = new MockGlinerDetector();
-  await glinerDetector.initialize();
+  // Presidio TS detector (replaces GLiNER mock)
+  const presidioDetector = await createPresidioTsDetector({
+    name: "presidio-ts",
+    modelName: "Xenova/bert-base-NER",
+    threshold: 0.5,
+  });
 
-  // Hybrid detector (rules + GLiNER)
+  // Hybrid detector (rules + Presidio TS)
   const hybridPipeline = new DetectorPipeline({
-    detectors: [ruleDetector, glinerDetector],
+    detectors: [ruleDetector, presidioDetector],
     mergeStrategy: "priority",
-    priorityOrder: ["rules", "gliner-onnx-mock"],
-    thresholds: { "rules": 0.95, "gliner-onnx-mock": 0.5 },
+    priorityOrder: ["rules", "presidio-ts"],
+    thresholds: { "rules": 0.95, "presidio-ts": 0.5 },
   });
   await hybridPipeline.initialize();
 
   const detectorConfigs = [
     { name: "rules-only", detector: ruleDetector },
-    { name: "gliner-mock", detector: glinerDetector },
+    { name: "presidio-ts", detector: presidioDetector },
     { name: "hybrid", detector: hybridPipeline },
   ];
 
@@ -520,7 +315,7 @@ function generateReport(results: BenchmarkResult[], numSamples: number): string 
   lines.push("");
 
   const rulesResult = results.find(r => r.detectorName === "rules-only");
-  const glinerResult = results.find(r => r.detectorName === "gliner-mock");
+  const presidioResult = results.find(r => r.detectorName === "presidio-ts");
   const hybridResult = results.find(r => r.detectorName === "hybrid");
 
   if (rulesResult && hybridResult) {
@@ -532,14 +327,14 @@ function generateReport(results: BenchmarkResult[], numSamples: number): string 
     lines.push(`- **Hybrid vs Rules-only:** F1 ${f1Improvement > 0 ? "+" : ""}${f1Improvement.toFixed(3)}, Recall ${recallImprovement > 0 ? "+" : ""}${recallImprovement.toFixed(3)}, Precision ${precisionChange > 0 ? "+" : ""}${precisionChange.toFixed(3)}, Latency +${latencyIncrease.toFixed(1)}ms`);
   }
 
-  if (glinerResult && rulesResult) {
-    lines.push(`- **GLiNER mock** adds semantic entity detection (PERSON, ORG, LOCATION, DATE) that rules miss`);
+  if (presidioResult && rulesResult) {
+    lines.push(`- **Presidio TS** adds semantic entity detection (PERSON, ORG, LOCATION, DATE) that rules miss`);
     lines.push(`- **Rules** excel at structured patterns (emails, API keys, JWTs, credit cards) with near-zero false positives`);
   }
 
-  lines.push("- **Threshold tuning:** Consider lowering GLiNER threshold to 0.4 for higher recall, or raising to 0.6 for higher precision");
-  lines.push("- **Production note:** Mock detector used; real GLiNER ONNX model latency ~10-20ms on CPU (INT8 quantized), memory ~150MB");
-  lines.push("- **False positive analysis:** Rules are precision-optimized; GLiNER may need allowlist for test/placeholder data");
+  lines.push("- **Threshold tuning:** Consider lowering Presidio threshold to 0.4 for higher recall, or raising to 0.6 for higher precision");
+  lines.push("- **Production note:** Presidio TS uses @siddicky/anonymizerts with ONNX Runtime Web");
+  lines.push("- **False positive analysis:** Rules are precision-optimized; Presidio TS may need allowlist for test/placeholder data");
 
   lines.push("");
   lines.push("---");

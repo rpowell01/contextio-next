@@ -72,8 +72,6 @@ services:
       - CONTEXTIO_ENABLE_REDACT=true
       - REDACT_PRESET=pii
       - REDACT_REVERSIBLE=false
-      - REDACT_GLINER_ENABLED=true
-      - REDACT_GLINER_THRESHOLD=0.5
       
       # Rate Limiting (retry enabled when rate limiter is enabled)
       - CONTEXTIO_ENABLE_RATE_LIMITER=true

@@ -20,7 +20,7 @@ const PathsSchema = z.object({
 
 const DetectorSchema = z.object({
   mode: z.enum(["rules", "llm", "hybrid", "auto"]).optional(),
-  llmModel: z.enum(["gliner-small", "gliner-base", "distilbert-pii", "phi3-mini"]).optional(),
+  llmModel: z.enum(["distilbert-pii", "phi3-mini"]).optional(),
   modelPath: z.string().optional(),
   options: z.record(z.unknown()).optional(),
   llmThreshold: z.number().min(0).max(1).optional(),

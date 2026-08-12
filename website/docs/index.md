@@ -24,7 +24,7 @@ features:
     details: Zero-config routing based on URL paths and headers. Works with Claude, OpenAI, Gemini, NVIDIA, OpenRouter, and custom providers.
     icon: 🔀
   - title: PII & Secrets Redaction
-    details: Built-in presets (secrets, pii, strict), custom policies, and GLiNER LLM-based detection with reversible mode.
+    details: Built-in presets (secrets, pii, strict), custom policies, and reversible mode.
     icon: 🛡️
   - title: Capture Logging
     details: Every request/response written to disk with AES-256-GCM encryption at rest. Time-based and count-based retention.
@@ -42,7 +42,7 @@ features:
     details: Sessions, Redactions, Metrics, Settings — all served on the same port 4040. Dark/light theme support.
     icon: 📊
   - title: Docker Native
-    details: Pre-built images on ghcr.io. Multi-stage build with pre-baked GLiNER model. Coolify-ready with persistent directories.
+    details: Pre-built images on ghcr.io. Multi-stage build. Coolify-ready with persistent directories.
     icon: 🐳
 ---
 
@@ -139,8 +139,6 @@ openssl rand -base64 32
 | `ghcr.io/rpowell01/contextio-next:main` | Latest build from `main` branch |
 | `ghcr.io/rpowell01/contextio-next:vX.Y.Z` | Specific version (semver) |
 | `ghcr.io/rpowell01/contextio-next:main-sha-<sha>` | Specific commit |
-
-Images include a pre-built GLiNER ONNX model (copied from `ghcr.io/rpowell01/contextio-gliner-model:0.2.28`).
 
 ## License
 

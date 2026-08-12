@@ -10,7 +10,8 @@
  * - REDACT_REVERSIBLE: "true" | "false" (default: "false")
  * - REDACT_POLICY_FILE: path to policy JSON file
  * - REDACT_DETECTOR_MODE: "rules" | "llm" | "hybrid" | "auto" (default: "rules")
- * - REDACT_DETECTOR_MODEL_DIR: path to Presidio TS model directory
+ * - REDACT_DETECTOR_MODEL_NAME: HuggingFace model ID for Presidio TS (default: "Xenova/bert-base-NER")
+ * - REDACT_DETECTOR_MODEL_DIR: (deprecated) path to model directory, kept for backward compatibility
  * - REDACT_DETECTOR_THRESHOLD: number 0-1 (default: 0.5)
  * - CONTEXTIO_ENABLE_REDACT: "true" | "false" (default: "true") - Enable/disable redact plugin
  */
@@ -24,7 +25,7 @@ interface WebUISettings {
 	redactReversible?: boolean;
 	redactPolicyFile?: string;
 	detectorMode?: "rules" | "llm" | "hybrid" | "auto";
-	detectorModelDir?: string;
+	detectorModelName?: string;
 	detectorThreshold?: number;
 }
 
@@ -39,7 +40,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 				redactReversible: dbSettings.redactReversible,
 				redactPolicyFile: dbSettings.redactPolicyFile,
 				detectorMode: dbSettings.detectorMode,
-				detectorModelDir: dbSettings.detectorModelDir,
+				detectorModelName: dbSettings.detectorModelDir, // Map existing DB field to new config
 				detectorThreshold: dbSettings.detectorThreshold,
 			};
 		}
@@ -58,7 +59,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			redactReversible: parsed.redactReversible,
 			redactPolicyFile: parsed.redactPolicyFile,
 			detectorMode: parsed.detectorMode,
-			detectorModelDir: parsed.detectorModelDir,
+			detectorModelName: parsed.detectorModelName ?? parsed.detectorModelDir,
 			detectorThreshold: parsed.detectorThreshold,
 		};
 	} catch {
@@ -80,8 +81,10 @@ async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 
 	const detectorConfig: RedactPluginConfig["detectorConfig"] = {};
 
-	if (settings.detectorModelDir || process.env.REDACT_DETECTOR_MODEL_DIR) {
-		detectorConfig.modelName = settings.detectorModelDir || process.env.REDACT_DETECTOR_MODEL_DIR!;
+	// Support both new (modelName) and deprecated (modelDir) env vars for backward compatibility
+	const modelName = settings.detectorModelName || process.env.REDACT_DETECTOR_MODEL_NAME || process.env.REDACT_DETECTOR_MODEL_DIR;
+	if (modelName) {
+		detectorConfig.modelName = modelName;
 	}
 	if (settings.detectorThreshold !== undefined || process.env.REDACT_DETECTOR_THRESHOLD) {
 		const val = settings.detectorThreshold ?? Number.parseFloat(process.env.REDACT_DETECTOR_THRESHOLD || "0.5");

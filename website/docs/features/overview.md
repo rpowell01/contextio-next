@@ -19,7 +19,6 @@ ContextIO-Next provides a comprehensive set of features for observing, securing,
 | Feature | Description |
 |---------|-------------|
 | **Redaction Engine** | Presets (secrets, PII, strict), custom policies, context-gated rules, path scoping |
-| **GLiNER LLM Detection** | Local ONNX model for context-aware entity detection (person, org, email, SSN, API keys, etc.) |
 | **Reversible Redaction** | Numbered placeholders restored in response stream — LLM sees `[EMAIL_1]`, you see `[EMAIL_REDACTED]` |
 | **Encryption at Rest** | AES-256-GCM with PBKDF2 (100k iterations), per-file nonces, keys never leave container |
 | **OIDC Authentication** | SSO via Google, Microsoft, Okta, Auth0, Keycloak, or any OIDC provider |
@@ -46,7 +45,7 @@ ContextIO-Next provides a comprehensive set of features for observing, securing,
 
 | Feature | Description |
 |---------|-------------|
-| **Docker Native** | Pre-built images on ghcr.io, multi-stage build with pre-baked GLiNER model |
+| **Docker Native** | Pre-built images on ghcr.io, multi-stage build |
 | **Coolify Ready** | Persistent directory mappings for captures, policy, settings |
 | **Configuration** | Environment variables (override settings file), web UI settings persistence |
 | **Provider Management** | SQLite-backed provider configs with API keys encrypted at rest |
