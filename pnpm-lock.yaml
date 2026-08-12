@@ -151,6 +151,9 @@ importers:
       '@contextio/core':
         specifier: workspace:*
         version: link:../core
+      '@huggingface/transformers':
+        specifier: ^3.1.2
+        version: 3.8.1
       '@siddicky/anonymizerts':
         specifier: ^1.0.3
         version: 1.0.3

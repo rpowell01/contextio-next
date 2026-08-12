@@ -46,7 +46,8 @@
   },
   "dependencies": {
     "@contextio/core": "workspace:*",
-    "@siddicky/anonymizerts": "^1.0.3"
+    "@siddicky/anonymizerts": "^1.0.3",
+    "@huggingface/transformers": "^3.1.2"
   },
   "devDependencies": {
     "@types/node": "^22",

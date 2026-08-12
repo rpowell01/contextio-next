@@ -8,6 +8,12 @@
  * The first call to detect() will trigger warmup as transformers.js loads the WASM model.
  */
 import { PresidioAnalyzer, EntityType, } from "@siddicky/anonymizerts";
+import { env } from "@huggingface/transformers";
+// Ensure transformers.js uses a writable cache directory.
+// The default cache location is inside node_modules, which may not be writable
+// in containerized/restricted environments.
+const CACHE_DIR = process.env.REDACT_CACHE_DIR || "/tmp/.cache";
+env.cacheDir = CACHE_DIR;
 /**
  * PresidioTsDetector implements the Detector interface using @siddicky/anonymizerts.
  *
@@ -122,27 +128,6 @@ export class PresidioTsDetector {
                 this.initialized = true;
             }
             catch (error) {
-                // If the configured model fails to load and it's not the default,
-                // fall back to the default HuggingFace model so the detector remains usable.
-                const configuredModel = this.config.modelName ?? "Xenova/bert-base-NER";
-                const defaultModel = "Xenova/bert-base-NER";
-                if (configuredModel !== defaultModel) {
-                    console.warn(`[presidio-ts] Failed to load NER model "${configuredModel}": ${error instanceof Error ? error.message : String(error)}. Falling back to default model "${defaultModel}".`);
-                    try {
-                        this.analyzer = new PresidioAnalyzer({
-                            useNER: this.config.useNER ?? true,
-                            modelName: defaultModel,
-                        });
-                        await this.analyzer.initialize();
-                        this.initialized = true;
-                        return;
-                    }
-                    catch (fallbackError) {
-                        console.error(`[presidio-ts] Fallback to default model also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
-                        this.initializing = null;
-                        throw new Error(`Failed to initialize PresidioTsDetector: ${error instanceof Error ? error.message : String(error)}`);
-                    }
-                }
                 this.initializing = null;
                 throw new Error(`Failed to initialize PresidioTsDetector: ${error instanceof Error ? error.message : String(error)}`);
             }
