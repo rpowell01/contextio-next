@@ -17,8 +17,8 @@
 | Detector | Mean | P50 | P95 | P99 | Min | Max |
 |----------|------|-----|-----|-----|-----|-----|
 | rules-only | 0.1 | 0 | 1 | 2 | 0 | 2 |
-| presidio-ts | 27.7 | 27 | 37 | 40 | 17 | 40 |
-| hybrid | 32.5 | 31 | 45 | 97 | 17 | 97 |
+| presidio-ts | 36.8 | 35 | 58 | 75 | 19 | 75 |
+| hybrid | 43.3 | 40 | 78 | 111 | 21 | 111 |
 
 ## Per-Entity Metrics
 
@@ -328,7 +328,7 @@
 
 ## Recommendations
 
-- **Hybrid vs Rules-only:** F1 +0.096, Recall +0.082, Precision -0.092, Latency +32.4ms
+- **Hybrid vs Rules-only:** F1 +0.096, Recall +0.082, Precision -0.092, Latency +43.2ms
 - **Presidio TS** adds semantic entity detection (PERSON, ORG, LOCATION, DATE) that rules miss
 - **Rules** excel at structured patterns (emails, API keys, JWTs, credit cards) with near-zero false positives
 - **Threshold tuning:** Consider lowering Presidio threshold to 0.4 for higher recall, or raising to 0.6 for higher precision

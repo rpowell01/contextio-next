@@ -27,6 +27,7 @@
     "packages/proxy/test/retry-plugin.test.ts",
     "packages/proxy/test/retry-plugin.integration.test.ts",
     "packages/proxy/test/redaction-meta-watcher.test.ts",
+    "packages/redact/test/detector.test.ts",
     "packages/redact/test/redact-sqlite.test.ts",
     "packages/redact/test/redact.test.ts",
     "packages/redact/test/policy.test.ts",

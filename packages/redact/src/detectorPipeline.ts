@@ -37,6 +37,11 @@ export class DetectorPipeline implements Detector {
 
   readonly labels: readonly string[];
 
+  /** Get the detectors in this pipeline (for testing/inspection). */
+  getDetectors(): readonly Detector[] {
+    return this.detectors;
+  }
+
   async initialize(config?: DetectorConfig): Promise<void> {
     if (this.initialized) return;
 

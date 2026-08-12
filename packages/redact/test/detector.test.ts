@@ -91,77 +91,77 @@ function skipIfIntegration(this: { skip: (msg: string) => void }) {
 
 describe("PresidioTsDetector", () => {
   describe("basic detection", () => {
-    it("detects email addresses", async function() {
+    it("detects email addresses", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("Contact me at john.doe@example.com please");
       assert.ok(result.spans.some(s => s.label === "EMAIL_ADDRESS"), `Expected EMAIL_ADDRESS, got: ${JSON.stringify(result.spans)}`);
     });
 
-    it("detects phone numbers", async function() {
+    it("detects phone numbers", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("Call me at +1-555-123-4567");
       assert.ok(result.spans.some(s => s.label === "PHONE_NUMBER"), `Expected PHONE_NUMBER, got: ${JSON.stringify(result.spans)}`);
     });
 
-    it("detects US SSN", async function() {
+    it("detects US SSN", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("My SSN is 123-45-6789");
       assert.ok(result.spans.some(s => s.label === "US_SSN"), `Expected US_SSN, got: ${JSON.stringify(result.spans)}`);
     });
 
-    it("detects credit card numbers", async function() {
+    it("detects credit card numbers", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("Card: 4111-1111-1111-1111");
       assert.ok(result.spans.some(s => s.label === "CREDIT_CARD"), `Expected CREDIT_CARD, got: ${JSON.stringify(result.spans)}`);
     });
 
-    it("detects IP addresses", async function() {
+    it("detects IP addresses", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("Server at 192.168.1.100");
       assert.ok(result.spans.some(s => s.label === "IP_ADDRESS"), `Expected IP_ADDRESS, got: ${JSON.stringify(result.spans)}`);
     });
 
-    it("detects URLs", async function() {
+    it("detects URLs", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("Visit https://example.com for info");
       assert.ok(result.spans.some(s => s.label === "URL"), `Expected URL, got: ${JSON.stringify(result.spans)}`);
     });
 
-    it("detects person names (NER)", async function() {
+    it("detects person names (NER)", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("John Doe works at Microsoft");
       assert.ok(result.spans.some(s => s.label === "PERSON"), `Expected PERSON, got: ${JSON.stringify(result.spans)}`);
     });
 
-    it("detects organizations (NER)", async function() {
+    it("detects organizations (NER)", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("Microsoft announced a new product");
       assert.ok(result.spans.some(s => s.label === "ORGANIZATION"), `Expected ORGANIZATION, got: ${JSON.stringify(result.spans)}`);
     });
 
-    it("detects locations (NER)", async function() {
+    it("detects locations (NER)", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("Meeting in New York tomorrow");
       assert.ok(result.spans.some(s => s.label === "LOCATION"), `Expected LOCATION, got: ${JSON.stringify(result.spans)}`);
     });
 
-    it("returns empty spans for text with no PII", async function() {
+    it("returns empty spans for text with no PII", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("This is a plain message with no sensitive data");
       assert.equal(result.spans.length, 0);
     });
 
-    it("returns spans sorted by start position", async function() {
+    it("returns spans sorted by start position", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("Email john@test.com and call +1-555-123-4567");
@@ -172,7 +172,7 @@ describe("PresidioTsDetector", () => {
   });
 
   describe("threshold filtering", () => {
-    it("filters out low-confidence detections with high threshold", async function() {
+    it("filters out low-confidence detections with high threshold", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       // Create a detector with high threshold for this test only
       const highThresholdDetector = await createPresidioTsDetector({
@@ -193,7 +193,7 @@ describe("PresidioTsDetector", () => {
       }
     });
 
-    it("includes more detections with low threshold", async function() {
+    it("includes more detections with low threshold", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const lowThresholdDetector = await createPresidioTsDetector({
         name: "test-presidio-low-threshold",
@@ -211,7 +211,7 @@ describe("PresidioTsDetector", () => {
   });
 
   describe("label filtering", () => {
-    it("only detects specified labels when configured", async function() {
+    it("only detects specified labels when configured", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const filteredDetector = await createPresidioTsDetector({
         name: "test-presidio-filtered",
@@ -230,7 +230,7 @@ describe("PresidioTsDetector", () => {
       }
     });
 
-    it("supports label aliases (EMAIL -> EMAIL_ADDRESS)", async function() {
+    it("supports label aliases (EMAIL -> EMAIL_ADDRESS)", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const filteredDetector = await createPresidioTsDetector({
         name: "test-presidio-aliases",
@@ -249,7 +249,7 @@ describe("PresidioTsDetector", () => {
       }
     });
 
-    it("warns on unsupported labels", async function() {
+    it("warns on unsupported labels", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const originalWarn = console.warn;
       let warning = "";
@@ -274,14 +274,14 @@ describe("PresidioTsDetector", () => {
   });
 
   describe("detector properties", () => {
-    it("has correct name and description", async function() {
+    it("has correct name and description", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       assert.equal(detector.name, "test-presidio-shared");
       assert.ok(detector.description.includes("Presidio"));
     });
 
-    it("exposes supported labels", async function() {
+    it("exposes supported labels", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const labels = detector.labels;
@@ -292,13 +292,13 @@ describe("PresidioTsDetector", () => {
       assert.ok(labels.includes("LOCATION"));
     });
 
-    it("isReady returns true after initialization", async function() {
+    it("isReady returns true after initialization", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       assert.ok(detector.isReady());
     });
 
-    it("can shutdown and reinitialize", async function() {
+    it("can shutdown and reinitialize", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await createPresidioTsDetector({
         name: "test-reinit",
@@ -318,7 +318,7 @@ describe("PresidioTsDetector", () => {
   });
 
   describe("auto-initialization", () => {
-    it("auto-initializes on first detect call", async function() {
+    it("auto-initializes on first detect call", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const newDetector = new PresidioTsDetector({
         name: "auto-init-test",
@@ -337,7 +337,7 @@ describe("PresidioTsDetector", () => {
   });
 
   describe("with NER disabled", () => {
-    it("only uses pattern-based recognition when useNER=false", async function() {
+    it("only uses pattern-based recognition when useNER=false", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await createPresidioTsDetector({
         name: "presidio-pattern-only",
@@ -357,14 +357,14 @@ describe("PresidioTsDetector", () => {
   });
 
   describe("edge cases", () => {
-    it("handles empty string input", async function() {
+    it("handles empty string input", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const result = await detector.detect("");
       assert.equal(result.spans.length, 0);
     });
 
-    it("handles very long text", async function() {
+    it("handles very long text", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const longText = "Contact me at john@test.com. ".repeat(100);
@@ -375,7 +375,7 @@ describe("PresidioTsDetector", () => {
       assert.ok(emailSpans.length > 0);
     });
 
-    it("handles special characters in text", async function() {
+    it("handles special characters in text", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
       const text = "Email: john.doe+tag@example.com, phone: +1-555-123-4567, SSN: 123-45-6789";
@@ -391,13 +391,11 @@ describe("PresidioTsDetector", () => {
 describe("RuleDetector", () => {
   const testRules: RedactionRule[] = [
     {
-      id: "test-email",
       name: "test-email",
       pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
       replacement: "[EMAIL]",
     },
     {
-      id: "test-phone",
       name: "test-phone",
       pattern: /\+\d{1,3}[-.\s]?\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/g,
       replacement: "[PHONE]",
@@ -471,7 +469,6 @@ describe("RuleDetector", () => {
     it("only detects when context word is present", async () => {
       const contextRules: RedactionRule[] = [
         {
-          id: "ssn",
           name: "ssn",
           pattern: /\d{3}-\d{2}-\d{4}/g,
           replacement: "[SSN]",
@@ -498,7 +495,7 @@ describe("RuleDetector", () => {
 
 describe("DetectorPipeline", () => {
   describe("merge strategies", () => {
-    it("priority merge keeps all unique detections", async function() {
+    it("priority merge keeps all unique detections", async function(this: { skip: (msg: string) => void }) {
       skipIfIntegration.call(this);
       const pipeline = await getSharedPipeline();
       const result = await pipeline.detect("Email john@test.com and person John Doe");
@@ -507,13 +504,12 @@ describe("DetectorPipeline", () => {
       assert.ok(labels.includes("PERSON") || labels.includes("ORGANIZATION") || labels.includes("LOCATION"), "Should include NER detection");
     });
 
-    it("priority merge prefers higher priority detector on overlap", async function() {
+    it("priority merge prefers higher priority detector on overlap", async function(this: { skip: (msg: string) => void }) {
       skipIfIntegration.call(this);
       // Create a fresh pipeline with standard names for this test
       const ruleDetector = await createRuleDetector({
         name: "rules",
         rules: [{
-          id: "email",
           name: "email",
           pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
           replacement: "[EMAIL]",
@@ -543,13 +539,12 @@ describe("DetectorPipeline", () => {
       }
     });
 
-    it("intersection merge only keeps detections found by all detectors", async function() {
+    it("intersection merge only keeps detections found by all detectors", async function(this: { skip: (msg: string) => void }) {
       skipIfIntegration.call(this);
       // Create fresh detectors for this test to avoid shared state issues
       const ruleDetector = await createRuleDetector({
         name: "rules",
         rules: [{
-          id: "email",
           name: "email",
           pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
           replacement: "[EMAIL]",
@@ -582,7 +577,7 @@ describe("DetectorPipeline", () => {
   });
 
   describe("createHybridDetector factory", () => {
-    it("creates hybrid config with rules and Presidio detector", async function() {
+    it("creates hybrid config with rules and Presidio detector", async function(this: { skip: (msg: string) => void }) {
       skipIfIntegration.call(this);
       // Create fresh detectors with expected names
       const ruleDetector = await createRuleDetector({
@@ -605,7 +600,7 @@ describe("DetectorPipeline", () => {
       }
     });
 
-    it("allows custom merge strategy and priority order", async function() {
+    it("allows custom merge strategy and priority order", async function(this: { skip: (msg: string) => void }) {
       skipIfIntegration.call(this);
       const ruleDetector = await getSharedRuleDetector();
       const presidioDetector = await getSharedPresidioDetector();
@@ -620,13 +615,14 @@ describe("DetectorPipeline", () => {
   });
 
   describe("createDefaultHybridDetector factory", () => {
-    it("creates fully initialized hybrid pipeline with rules + Presidio", async function() {
+    it("creates fully initialized hybrid pipeline with rules + Presidio", async function(this: { skip: (msg: string) => void }) {
       skipIfIntegration.call(this);
       const pipeline = await getSharedHybridPipeline();
 
       assert.ok(pipeline.isReady());
-      assert.equal(pipeline.detectors.length, 2);
-      const detectorNames = pipeline.detectors.map(d => d.name).sort();
+      const detectors = pipeline.getDetectors();
+      assert.equal(detectors.length, 2);
+      const detectorNames = detectors.map(d => d.name).sort();
       assert.deepEqual(detectorNames, ["presidio-ts", "rules"]);
 
       const result = await pipeline.detect("Email john@test.com, person John Doe, key AKIAIOSFODNN7EXAMPLE");
@@ -645,8 +641,9 @@ describe("DetectorPipeline", () => {
       );
       try {
         assert.ok(pipeline.isReady());
-        assert.equal(pipeline.detectors.length, 1);
-        assert.equal(pipeline.detectors[0].name, "rules");
+        const detectors = pipeline.getDetectors();
+        assert.equal(detectors.length, 1);
+        assert.equal(detectors[0].name, "rules");
 
         const result = await pipeline.detect("Email john@test.com and key AKIAIOSFODNN7EXAMPLE");
         const labels = result.spans.map(s => s.label);
@@ -661,7 +658,7 @@ describe("DetectorPipeline", () => {
   });
 
   describe("latency tracking", () => {
-    it("reports total latency across all detectors", async function() {
+    it("reports total latency across all detectors", async function(this: { skip: (msg: string) => void }) {
       skipIfIntegration.call(this);
       // Create a fresh pipeline for this test
       const ruleDetector = await createRuleDetector({ name: "rules", rules: PRESETS.pii });
@@ -684,7 +681,7 @@ describe("DetectorPipeline", () => {
   });
 
   describe("shutdown", () => {
-    it("shuts down all detectors in a new pipeline", async function() {
+    it("shuts down all detectors in a new pipeline", async function(this: { skip: (msg: string) => void }) {
       skipIfIntegration.call(this);
       const ruleDetector = await createRuleDetector({ name: "rules", rules: [] });
       const presidioDetector = await createPresidioTsDetector({ name: "presidio-ts", threshold: 0.5, useNER: true });

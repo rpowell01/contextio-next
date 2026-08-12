@@ -32,6 +32,8 @@ export interface PresidioTsConfig extends DetectorConfig {
   threshold?: number;
   /** Entity types to detect. If empty, detects all supported types. */
   labels?: string[];
+  /** Additional options passed to the analyzer for future extensibility. */
+  options?: Record<string, unknown>;
 }
 
 /**
