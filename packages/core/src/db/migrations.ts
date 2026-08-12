@@ -99,17 +99,34 @@ function getCurrentVersion(db: ReturnType<typeof getDb>): number {
  * Apply a single migration.
  */
 function applyMigration(db: ReturnType<typeof getDb>, migration: Migration): void {
-  const transaction = db.transaction(() => {
-    // Execute the migration SQL
-    if (migration.up) {
-      db.exec(migration.up);
-    }
-    // Record the migration
-    db.prepare(
-      "INSERT INTO schema_version (version, description) VALUES (?, ?)"
-    ).run(migration.version, migration.name);
-  });
-  transaction();
+	const transaction = db.transaction(() => {
+		// Execute the migration SQL
+		if (migration.up) {
+			db.exec(migration.up);
+		}
+		// Record the migration
+		db.prepare(
+			"INSERT INTO schema_version (version, description) VALUES (?, ?)"
+		).run(migration.version, migration.name);
+	});
+	try {
+		transaction();
+	} catch (err) {
+		// Be resilient to idempotent/duplicate DDL in migrations.
+		// For example, 010_add_retry_columns_to_providers adds columns that
+		// already exist in the current initial schema, which would otherwise
+		// break fresh databases with `duplicate column name`.
+		const isDuplicateColumn =
+			err instanceof Error &&
+			err.message.includes("duplicate column name");
+		if (!isDuplicateColumn) {
+			throw err;
+		}
+		// Still record the migration as applied so we don’t retry it.
+		db.prepare(
+			"INSERT OR IGNORE INTO schema_version (version, description) VALUES (?, ?)"
+		).run(migration.version, migration.name);
+	}
 }
 
 /**

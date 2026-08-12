@@ -158,7 +158,7 @@ async function runBenchmark(): Promise<void> {
     placeholderAllowlist: new Set(),
   });
 
-  // Presidio TS detector (replaces GLiNER mock)
+  // Presidio TS detector
   const presidioDetector = await createPresidioTsDetector({
     name: "presidio-ts",
     modelName: "Xenova/bert-base-NER",
