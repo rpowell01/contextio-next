@@ -57,7 +57,13 @@ after(async () => {
         sharedPipeline?.shutdown() ?? Promise.resolve(),
         sharedHybridPipeline?.shutdown() ?? Promise.resolve(),
     ];
-    await Promise.allSettled(shutdowns);
+    const results = await Promise.allSettled(shutdowns);
+    for (const [index, result] of results.entries()) {
+        if (result.status === "rejected") {
+            const detectorNames = ["PresidioTsDetector", "RuleDetector", "DetectorPipeline", "HybridDetectorPipeline"];
+            console.error(`[test cleanup] Failed to shut down ${detectorNames[index]}:`, result.reason);
+        }
+    }
     sharedPresidioDetector = null;
     sharedRuleDetector = null;
     sharedPipeline = null;
