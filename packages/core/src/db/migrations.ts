@@ -97,14 +97,31 @@ function getCurrentVersion(db: ReturnType<typeof getDb>): number {
 
 /**
  * Apply a single migration.
+ * Executes migration SQL outside a transaction (to avoid "cannot start a transaction
+ * within a transaction" errors from DDL implicit commits), then records the migration
+ * in a separate transaction. Handles duplicate column errors for idempotent migrations.
  */
 function applyMigration(db: ReturnType<typeof getDb>, migration: Migration): void {
-	const transaction = db.transaction(() => {
-		// Execute the migration SQL
-		if (migration.up) {
+	// Execute the migration SQL first (outside transaction to avoid DDL implicit commit issues)
+	if (migration.up) {
+		try {
 			db.exec(migration.up);
+		} catch (err) {
+			// Be resilient to idempotent/duplicate DDL in migrations.
+			// For example, 010_add_retry_columns_to_providers adds columns that
+			// already exist in the current initial schema, which would otherwise
+			// break fresh databases with `duplicate column name`.
+			const isDuplicateColumn =
+				err instanceof Error &&
+				err.message.includes("duplicate column name");
+			if (!isDuplicateColumn) {
+				throw err;
+			}
+			// Duplicate column is OK - the column already exists (fresh DB with new schema)
 		}
-		// Record the migration
+	}
+	// Record the migration in a transaction
+	const transaction = db.transaction(() => {
 		db.prepare(
 			"INSERT INTO schema_version (version, description) VALUES (?, ?)"
 		).run(migration.version, migration.name);
@@ -113,16 +130,13 @@ function applyMigration(db: ReturnType<typeof getDb>, migration: Migration): voi
 		transaction();
 	} catch (err) {
 		// Be resilient to idempotent/duplicate DDL in migrations.
-		// For example, 010_add_retry_columns_to_providers adds columns that
-		// already exist in the current initial schema, which would otherwise
-		// break fresh databases with `duplicate column name`.
 		const isDuplicateColumn =
 			err instanceof Error &&
 			err.message.includes("duplicate column name");
 		if (!isDuplicateColumn) {
 			throw err;
 		}
-		// Still record the migration as applied so we don’t retry it.
+		// Still record the migration as applied so we don't retry it.
 		db.prepare(
 			"INSERT OR IGNORE INTO schema_version (version, description) VALUES (?, ?)"
 		).run(migration.version, migration.name);
