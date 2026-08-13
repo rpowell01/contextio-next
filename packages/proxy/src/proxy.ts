@@ -17,6 +17,8 @@ import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
 import { createAuthHandler, validateSession } from "./auth.js";
 import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
+// Import default plugins from core
+import { loggerPlugin, redactPlugin, rateLimiterPlugin, retryPlugin } from "@contextio/core";
 
 async function cleanupCaptureFiles(config: {
   loggerCaptureDir: string;
@@ -93,11 +95,19 @@ export interface ProxyInstance {
  * ```
  */
 export function createProxy(
-  config?: ProxyConfig & { logTraffic?: boolean },
-): ProxyInstance {
-  const resolved = resolveConfig(config);
-  const plugins: ProxyPlugin[] = config?.plugins ?? [];
-  const logTraffic = !!config?.logTraffic;
+   config?: ProxyConfig & { logTraffic?: boolean },
+ ): ProxyInstance {
+   const resolved = resolveConfig(config);
+   const logTraffic = !!config?.logTraffic;
+
+   // Build plugins array from enabled flags and user-provided plugins
+   const effectivePlugins: ProxyPlugin[] = [];
+   if (resolved.plugins.loggerEnabled) effectivePlugins.push(loggerPlugin);
+   if (resolved.plugins.redactEnabled) effectivePlugins.push(redactPlugin);
+   if (resolved.plugins.rateLimiterEnabled) effectivePlugins.push(rateLimiterPlugin);
+   if (resolved.plugins.retryEnabled) effectivePlugins.push(retryPlugin);
+   // Add any user-provided plugins after built-ins
+   if (config?.plugins) effectivePlugins.push(...config.plugins);
 
   const startTime = Date.now();
 
@@ -114,16 +124,16 @@ export function createProxy(
   const upstreams = { ...resolved.upstreams };
   const providers = { ...resolved.providers };
 
-  const proxyHandler = createProxyHandler({
-    upstreams,
-    allowTargetOverride: resolved.allowTargetOverride,
-    strictUrlForwarding: resolved.strictUrlForwarding,
-    plugins,
-    logTraffic,
-    providers,
-  });
+   const proxyHandler = createProxyHandler({
+     upstreams,
+     allowTargetOverride: resolved.allowTargetOverride,
+     strictUrlForwarding: resolved.strictUrlForwarding,
+     plugins: effectivePlugins,
+     logTraffic,
+     providers,
+   });
 
-  const adminHandler = createAdminHandler({ plugins, logTraffic, startTime });
+   const adminHandler = createAdminHandler({ plugins: effectivePlugins, logTraffic, startTime });
 
   const authHandler = resolved.oidc
     ? createAuthHandler({
