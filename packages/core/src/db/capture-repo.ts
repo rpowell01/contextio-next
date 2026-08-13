@@ -258,6 +258,17 @@ export function getStats(): {
 }
 
 /**
+ * Delete all capture metadata entries.
+ * Used when clearing all captures to ensure the SQLite database is also cleared.
+ * @returns Number of deleted records
+ */
+export function deleteAllCaptures(): number {
+	const db = getDb();
+	const result = db.prepare("DELETE FROM captures_metadata").run();
+	return result.changes;
+}
+
+/**
  * Search captures with flexible filters.
  */
 export function searchCaptures(query: {

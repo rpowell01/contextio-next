@@ -17,6 +17,7 @@ import { consumeToken } from "@/lib/csrf";
 import { withRequestCache } from "@/lib/request-cache";
 import { withAuth } from "@/lib/auth/guards";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
+import { deleteAllRedactionMetadata, deleteAllCaptures } from "@contextio/core/db";
 
 function extractCaptureMetadata(
   filename: string,
@@ -313,11 +314,26 @@ async function handleClearCaptures(
         }
       }
 
+      // Also clear the SQLite database tables to ensure redaction metadata
+      // and capture index are fully cleared.
+      let redactionDeleted = 0;
+      let capturesDeleted = 0;
+      try {
+        redactionDeleted = deleteAllRedactionMetadata();
+        capturesDeleted = deleteAllCaptures();
+        console.log(`Cleared SQLite: ${redactionDeleted} redaction metadata entries, ${capturesDeleted} capture metadata entries`);
+      } catch (dbError) {
+        errors++;
+        console.error("Error clearing SQLite database:", dbError);
+      }
+
       return Response.json(createSuccessResponse({
         success: true,
         deleted,
         errors,
-        message: `Deleted ${deleted} capture(s)${errors > 0 ? `, ${errors} error(s)` : ""}`,
+        redactionDeleted,
+        capturesDeleted,
+        message: `Deleted ${deleted} capture file(s), ${redactionDeleted} redaction metadata entries, ${capturesDeleted} capture metadata entries${errors > 0 ? `, ${errors} error(s)` : ""}`,
       }));
     } catch (error) {
       console.error("Error clearing captures:", error);

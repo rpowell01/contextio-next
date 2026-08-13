@@ -593,3 +593,14 @@ export function redactionMetadataExists(captureId: string): boolean {
 	const row = db.prepare("SELECT 1 FROM redaction_metadata WHERE capture_id = ?").get(captureId);
 	return row !== undefined;
 }
+
+/**
+ * Delete all redaction metadata entries.
+ * Used when clearing all captures to ensure the SQLite database is also cleared.
+ * @returns Number of deleted records
+ */
+export function deleteAllRedactionMetadata(): number {
+	const db = getDb();
+	const result = db.prepare("DELETE FROM redaction_metadata").run();
+	return result.changes;
+}
