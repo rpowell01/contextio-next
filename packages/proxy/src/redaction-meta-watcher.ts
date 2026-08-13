@@ -20,6 +20,7 @@ import fs from "node:fs";
 import { stat, readdir, readFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { parseResponseUsage, estimateTokensFromText } from "@contextio/core";
+import { decrypt } from "@contextio/logger";
 import {
 	upsertRedactionMetadata,
 	type RedactionMetadata,
@@ -48,6 +49,13 @@ export interface RedactionMetaWatcherOptions {
    * The watcher will compute metadata and call this callback for each capture.
    */
   persistToSqlite: (metadata: RedactionMetadata) => void;
+  /**
+   * Optional encryption key for decrypting encrypted capture files.
+   * When captures are encrypted at rest, provide the same key material
+   * used by the logger plugin so the watcher can extract request/response
+   * byte counts and other fields from the plaintext.
+   */
+  encryptionKey?: string;
 }
 
 export interface RedactionMatch {
@@ -474,6 +482,37 @@ export function createRedactionMetaWatcher(
       } catch {
         // Could not parse JSON, skip
         return;
+      }
+
+      // If the capture is encrypted at rest, decrypt it before extracting
+      // metadata so requestBytes/responseBytes and other fields are available.
+      const encryptedEnvelope = rawData as Record<string, unknown> | null;
+      const isEncrypted =
+        !!encryptedEnvelope &&
+        typeof encryptedEnvelope.ciphertext === "string" &&
+        typeof encryptedEnvelope.salt === "string" &&
+        typeof encryptedEnvelope.iv === "string";
+
+      if (isEncrypted) {
+        if (!opts.encryptionKey) {
+          console.warn(
+            `[redaction-meta-watcher] Skipping encrypted capture ${captureFilename}: no encryption key provided`,
+          );
+          return;
+        }
+        try {
+          const plaintext = await decrypt(
+            rawBytes,
+            opts.encryptionKey,
+          );
+          rawData = JSON.parse(plaintext);
+        } catch (err) {
+          console.warn(
+            `[redaction-meta-watcher] Failed to decrypt capture ${captureFilename}:`,
+            err instanceof Error ? err.message : String(err),
+          );
+          return;
+        }
       }
 
       const captureId = captureFilename.replace(/\.json$/, "");

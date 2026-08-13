@@ -143,9 +143,13 @@ export function createProxy(
 
   // Start background redaction metadata watcher. Runs independently and
   // never touches the hot request/response path.
+  const encryptionKey =
+    resolved.loggerEncryption.staticKey ??
+    process.env[resolved.loggerEncryption.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
   const redactionMetaWatcher = createRedactionMetaWatcher({
     captureDir: resolved.loggerCaptureDir,
     persistToSqlite: upsertRedactionMetadata,
+    encryptionKey,
   });
 
   // Enable log capture for admin API
