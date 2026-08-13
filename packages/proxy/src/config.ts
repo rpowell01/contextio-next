@@ -58,8 +58,20 @@ interface WebUISettings {
   };
 }
 
+/** Cache for web UI settings to avoid repeated database reads. */
+let cachedWebUISettings: WebUISettings | null = null;
+
+/** Reset cached web UI settings (for test isolation). */
+export function resetWebUISettingsCache(): void {
+  cachedWebUISettings = null;
+}
+
 /** Read web UI settings from the database (with JSON file fallback for backward compatibility). */
 function readWebUISettings(): WebUISettings {
+  if (cachedWebUISettings !== null) {
+    return cachedWebUISettings;
+  }
+
   // First, try to read from the database
   try {
     const dbSettings = getSettings();
@@ -74,6 +86,7 @@ function readWebUISettings(): WebUISettings {
         streamingRetry: dbSettings.streamingRetry,
       };
       console.log(`[config] read settings from database: ${JSON.stringify(result)}`);
+      cachedWebUISettings = result;
       return result;
     }
   } catch (err) {
@@ -101,11 +114,13 @@ function readWebUISettings(): WebUISettings {
         streamingRetry: parsed.streamingRetry,
       };
       console.log(`[config] read settings.json from ${settingsPath}: ${JSON.stringify(result)}`);
+      cachedWebUISettings = result;
       return result;
     } catch (err) {
       console.log(`[config] failed to read settings.json at ${settingsPath}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+  cachedWebUISettings = {};
   return {};
 }
 

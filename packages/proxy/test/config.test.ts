@@ -5,7 +5,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { readProvidersConfig, resolveConfig } from "../dist/config.js";
+import { readProvidersConfig, resolveConfig, resetWebUISettingsCache } from "../dist/config.js";
 import { closeDb, initDb, Database } from "@contextio/core/db";
 
 function makeTempHome(): string {
@@ -136,6 +136,7 @@ describe("resolveConfig", () => {
 		delete process.env.LOGGER_CAPTURE_CLEANUP_ENABLED;
 		removeSettings(tempHome!);
 		clearProvidersTable();
+		resetWebUISettingsCache();
 	});
 
 	after(() => {
