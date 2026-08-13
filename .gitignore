@@ -14,6 +14,11 @@ __pycache__/
 test/results/
 .beads/formulas/
 
+# Build/test artifacts
+dist-test/
+packages/*/dist-test/
+scripts/test-fixture/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
