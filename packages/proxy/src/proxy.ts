@@ -17,8 +17,11 @@ import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
 import { createAuthHandler, validateSession } from "./auth.js";
 import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
-// Import default plugins from core
-import { loggerPlugin, redactPlugin, rateLimiterPlugin, retryPlugin } from "@contextio/core";
+// Import plugin factories from their respective packages
+import { createLoggerPlugin } from "@contextio/logger";
+import { createRedactPlugin } from "@contextio/redact";
+import { createRateLimiterPlugin } from "./rate-limiter.js";
+import { createRetryPlugin } from "./retry-plugin.js";
 
 async function cleanupCaptureFiles(config: {
   loggerCaptureDir: string;
@@ -102,10 +105,37 @@ export function createProxy(
 
    // Build plugins array from enabled flags and user-provided plugins
    const effectivePlugins: ProxyPlugin[] = [];
-   if (resolved.plugins.loggerEnabled) effectivePlugins.push(loggerPlugin);
-   if (resolved.plugins.redactEnabled) effectivePlugins.push(redactPlugin);
-   if (resolved.plugins.rateLimiterEnabled) effectivePlugins.push(rateLimiterPlugin);
-   if (resolved.plugins.retryEnabled) effectivePlugins.push(retryPlugin);
+   if (resolved.plugins.loggerEnabled) {
+     effectivePlugins.push(
+       createLoggerPlugin({
+         captureDir: resolved.loggerCaptureDir,
+         encryption: resolved.loggerEncryption,
+       })
+     );
+   }
+   if (resolved.plugins.redactEnabled) {
+     effectivePlugins.push(
+       createRedactPlugin({
+         // Use preset from config or environment
+         policyFile: process.env.REDACT_POLICY_FILE || "/app/custom-policy/custom-policy.json",
+       })
+     );
+   }
+   if (resolved.plugins.rateLimiterEnabled) {
+     effectivePlugins.push(
+       createRateLimiterPlugin({
+         defaults: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+         providers: resolved.rateLimiter,
+       })
+     );
+   }
+   if (resolved.plugins.retryEnabled) {
+     effectivePlugins.push(
+       createRetryPlugin({
+         providers: resolved.retry,
+       })
+     );
+   }
    // Add any user-provided plugins after built-ins
    if (config?.plugins) effectivePlugins.push(...config.plugins);
 
