@@ -267,7 +267,10 @@ let started = false;
       // Force resolve after a short grace period. server.close() waits
       // for active connections to drain, which may never happen with
       // long-lived streaming or SSE connections.
-      const forceTimer = setTimeout(() => resolve(), 500);
+      const forceTimer = setTimeout(() => {
+        started = false;
+        resolve();
+      }, 500);
       server.close(() => {
         clearTimeout(forceTimer);
         started = false;

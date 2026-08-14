@@ -589,6 +589,19 @@ export { redactWithPolicy, redactValue, createStats, redactString, buildFullReda
 export type { MappingEntry } from "./mapping.js";
 export { ReplacementMap } from "./mapping.js";
 
+// Feedback API
+export type {
+	FalsePositiveEntry,
+	MatchMode,
+	FeedbackStore,
+} from "./feedback.js";
+export {
+	SqliteFeedbackStore,
+	MemoryFeedbackStore,
+	createFeedbackStore,
+	generatePatternFromValue,
+} from "./feedback.js";
+
 // Detector API
 export type {
   Detector,

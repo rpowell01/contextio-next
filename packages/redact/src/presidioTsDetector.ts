@@ -65,6 +65,7 @@ export class PresidioTsDetector implements Detector {
   private config: PresidioTsConfig;
   private initialized = false;
   private initializing: Promise<void> | null = null;
+  private shuttingDown = false;
 
   // Entity types supported by the current @siddicky/anonymizerts version
   private static readonly SUPPORTED_ENTITY_TYPES: readonly EntityType[] = [
@@ -162,11 +163,29 @@ export class PresidioTsDetector implements Detector {
       }
     }
 
+    // If shutdown is in progress, don't clear the flag or start new initialization
+    if (this.shuttingDown) {
+      // Wait for any ongoing initialization to complete, then return
+      if (this.initializing) {
+        await this.initializing;
+      }
+      return;
+    }
+
     // Prevent duplicate initialization
     if (this.initialized) return;
     if (this.initializing) {
+      // There's an ongoing initialization - await it and return.
+      // Do NOT clear shuttingDown here, as it would race with shutdown()
+      // which may be waiting for this initialization to complete.
       await this.initializing;
       return;
+    }
+
+    // Allow reinitialization after shutdown by clearing the shuttingDown flag
+    // Only clear it if no initialization is in progress
+    if (this.shuttingDown) {
+      this.shuttingDown = false;
     }
 
     this.initializing = (async () => {
@@ -180,7 +199,10 @@ export class PresidioTsDetector implements Detector {
         }
         // Initialize the analyzer (loads transformers.js NER model on first call)
         await this.analyzer.initialize();
-        this.initialized = true;
+        // If shutdown was called while we were initializing, don't mark as initialized
+        if (!this.shuttingDown) {
+          this.initialized = true;
+        }
       } catch (error) {
         this.initializing = null;
         throw new Error(
@@ -204,6 +226,8 @@ export class PresidioTsDetector implements Detector {
    * Clean up resources. Releases the transformers.js model to allow GC.
    */
   async shutdown(): Promise<void> {
+    // Set shuttingDown flag FIRST to prevent new initializations from proceeding
+    this.shuttingDown = true;
     this.initialized = false;
     // If initialization is in progress, wait for it to complete before releasing analyzer
     // to avoid the initialize() coroutine crashing when it resumes.
@@ -215,6 +239,7 @@ export class PresidioTsDetector implements Detector {
       }
     }
     this.initializing = null;
+    this.shuttingDown = false;
     // Drop reference to the analyzer to allow the transformers.js model (BERT) to be garbage collected
     // The analyzer holds the NER pipeline which can be ~500MB
     this.analyzer = null;
@@ -229,6 +254,11 @@ export class PresidioTsDetector implements Detector {
    */
   async detect(text: string, config?: DetectorConfig): Promise<DetectionResult> {
     const startTime = Date.now();
+
+    // Prevent detection during shutdown
+    if (this.shuttingDown) {
+      throw new Error("PresidioTsDetector is shutting down");
+    }
 
     // Auto-initialize if not already done (handles warmup on first call)
     if (!this.initialized) {
