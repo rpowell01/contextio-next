@@ -34,8 +34,6 @@ const nextConfig = {
     "@contextio/core",
     "@contextio/logger",
     "@contextio/redact",
-    "onnxruntime-node",
-    "@huggingface/tokenizers",
     "better-sqlite3",
     // Node.js built-in modules with node: protocol (required for Turbopack dev mode)
     "node:crypto",
@@ -95,7 +93,7 @@ const nextConfig = {
     };
 
     // Exclude native Node.js modules from bundling
-    const nativeModules = ["onnxruntime-node", "onnxruntime-node/napi", "onnxruntime-web", "sharp", "unrs-resolver", "@huggingface/tokenizers", "better-sqlite3"];
+    const nativeModules = ["sharp", "unrs-resolver", "@huggingface/tokenizers", "better-sqlite3"];
 
     if (!isServer) {
       config.resolve.fallback = {
@@ -119,7 +117,6 @@ const nextConfig = {
         "@contextio/core": "commonjs @contextio/core",
         "@contextio/logger": "commonjs @contextio/logger",
         "@contextio/redact": "commonjs @contextio/redact",
-        "onnxruntime-node": "commonjs onnxruntime-node",
       });
       // Externalize all @contextio/core submodules
       config.externals.push((context, request, callback) => {

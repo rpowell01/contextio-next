@@ -245,7 +245,7 @@ function resolveDetectorConfig(config?: RedactPluginConfig): RedactDetectorConfi
     try {
       const raw = fs.readFileSync(config.policyFile, "utf8");
       const cleaned = raw.replace(/^\s*\/\/.*$/gm, "").replace(/,\s*([\]}])/g, "$1");
-      const json = JSON.parse(cleaned) as PolicyJson & { detector?: RedactDetectorConfig & { modelDir?: string; threshold?: number; labels?: string[] } };
+      const json = JSON.parse(cleaned) as PolicyJson & { detector?: RedactDetectorConfig & { threshold?: number; labels?: string[] } };
       if (json.detector) {
         const policyDetector = json.detector;
         // Merge: plugin config values override policy file values
@@ -253,11 +253,11 @@ function resolveDetectorConfig(config?: RedactPluginConfig): RedactDetectorConfi
         return {
           mode: policyDetector.mode,
           llmModel: policyDetector.llmModel,
-          modelName: policyDetector.modelName ?? policyDetector.modelDir, // Map modelDir -> modelName
+          modelName: policyDetector.modelName,
           options: policyDetector.options,
-          llmThreshold: policyDetector.llmThreshold ?? policyDetector.threshold, // Map threshold -> llmThreshold
-          llmLabels: policyDetector.llmLabels ?? policyDetector.labels, // Map labels -> llmLabels
-          ...detectorConfig, // Plugin config takes precedence
+          llmThreshold: policyDetector.llmThreshold ?? policyDetector.threshold,
+          llmLabels: policyDetector.llmLabels ?? policyDetector.labels,
+          ...detectorConfig,
         } as RedactDetectorConfig;
       }
     } catch {

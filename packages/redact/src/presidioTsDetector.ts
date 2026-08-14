@@ -182,12 +182,6 @@ export class PresidioTsDetector implements Detector {
       return;
     }
 
-    // Allow reinitialization after shutdown by clearing the shuttingDown flag
-    // Only clear it if no initialization is in progress
-    if (this.shuttingDown) {
-      this.shuttingDown = false;
-    }
-
     this.initializing = (async () => {
       try {
         // If analyzer was released by shutdown(), recreate it

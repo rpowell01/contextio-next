@@ -321,6 +321,56 @@ describe("PresidioTsDetector", () => {
         await detector.shutdown();
       }
     });
+
+    it("handles concurrent shutdown() during initialize() without crash", async function(this: { skip: (msg: string) => void }) {
+      skipIfHeavy.call(this);
+      // Use useNER=false to avoid loading the NER model for faster, more reliable test
+      const detector = new PresidioTsDetector({
+        name: "test-concurrent-shutdown-init",
+        threshold: 0.5,
+        useNER: false,
+      });
+      
+      // Start initialization and immediately call shutdown concurrently
+      const initPromise = detector.initialize();
+      const shutdownPromise = detector.shutdown();
+      
+      // Both should complete without throwing
+      await Promise.allSettled([initPromise, shutdownPromise]);
+      
+      // Detector should be shut down (not ready)
+      assert.ok(!detector.isReady(), "Detector should not be ready after concurrent shutdown during init");
+      
+      // Clean up
+      await detector.shutdown();
+    });
+
+    it("handles multiple concurrent initialize() and shutdown() calls", async function(this: { skip: (msg: string) => void }) {
+      skipIfHeavy.call(this);
+      const detector = new PresidioTsDetector({
+        name: "test-multiple-concurrent",
+        threshold: 0.5,
+        useNER: false,
+      });
+      
+      // Fire multiple initialize and shutdown calls concurrently
+      const promises = [
+        detector.initialize(),
+        detector.initialize(),
+        detector.shutdown(),
+        detector.initialize(),
+        detector.shutdown(),
+      ];
+      
+      // All should complete without throwing
+      await Promise.allSettled(promises);
+      
+      // Detector should be shut down
+      assert.ok(!detector.isReady(), "Detector should not be ready after multiple concurrent init/shutdown calls");
+      
+      // Clean up
+      await detector.shutdown();
+    });
   });
 
   describe("auto-initialization", () => {

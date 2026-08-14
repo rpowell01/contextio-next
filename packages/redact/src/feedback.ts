@@ -259,8 +259,9 @@ export class MemoryFeedbackStore implements FeedbackStore {
 	async isFalsePositive(value: string, ruleId: string, sessionId?: string): Promise<boolean> {
 		for (const entry of this.entries) {
 			if (entry.ruleId !== ruleId) continue;
+			// Match SQLite behavior: include session-specific entries AND global entries (sessionId is null/undefined)
 			if (entry.sessionId && entry.sessionId !== sessionId) continue;
-			if (!entry.sessionId && sessionId) continue;
+			// If entry has no sessionId (global), it matches regardless of whether sessionId is provided
 
 			if (entry.matchMode === "exact" && entry.value === value) {
 				return true;
@@ -283,6 +284,7 @@ export class MemoryFeedbackStore implements FeedbackStore {
 		return this.entries
 			.filter((entry) => {
 				if (ruleId && entry.ruleId !== ruleId) return false;
+				// Match SQLite behavior: when sessionId provided, only match exact sessionId (not global)
 				if (sessionId && entry.sessionId !== sessionId) return false;
 				return true;
 			})
@@ -294,7 +296,8 @@ export class MemoryFeedbackStore implements FeedbackStore {
 			(entry) =>
 				entry.value === value &&
 				entry.ruleId === ruleId &&
-				(!entry.sessionId && !sessionId || entry.sessionId === sessionId)
+				// Match SQLite behavior: include session-specific entries AND global entries (sessionId is null/undefined)
+				(!entry.sessionId || !sessionId || entry.sessionId === sessionId)
 		);
 
 		if (index >= 0) {
@@ -308,6 +311,7 @@ export class MemoryFeedbackStore implements FeedbackStore {
 		const initialLength = this.entries.length;
 		this.entries = this.entries.filter((entry) => {
 			if (ruleId && entry.ruleId !== ruleId) return true;
+			// Match SQLite behavior: when sessionId provided, only match exact sessionId (not global)
 			if (sessionId && entry.sessionId !== sessionId) return true;
 			return false;
 		});

@@ -3,7 +3,7 @@ packages:
 allowBuilds:
   better-sqlite3: true
   esbuild: true
-  onnxruntime-node: true
+  onnxruntime-node: set this to true or false
   protobufjs: false
   sharp: true
   unrs-resolver: true
