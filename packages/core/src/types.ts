@@ -248,6 +248,12 @@ export interface ProxyPlugin {
    * Fire-and-forget. Errors are logged but do not block the response.
    */
   onCapture?: (capture: CaptureData) => void | Promise<void>;
+
+  /**
+   * Clean up plugin resources. Called when the proxy is shutting down.
+   * Plugins should release any held resources (timers, connections, models, etc.).
+   */
+  shutdown?: () => void | Promise<void>;
 }
 
 // --- Encryption at rest ---

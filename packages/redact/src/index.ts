@@ -559,6 +559,22 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
           return session.rehydrator.onEnd();
         }
       : undefined,
+
+    shutdown() {
+      // Shut down detector pipeline if initialized
+      if (detectorState.pipeline) {
+        detectorState.pipeline.shutdown().catch((err) => {
+          console.error("[redact] Detector pipeline shutdown error:", err);
+        });
+        detectorState.pipeline = null;
+        detectorState.initialized = false;
+      }
+      // Clear all session state
+      sessions.clear();
+      if (verbose) {
+        console.error("[redact] Plugin shutdown complete");
+      }
+    },
   };
 }
 

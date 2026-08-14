@@ -243,6 +243,26 @@ let started = false;
   stop() {
     if (!started) return Promise.resolve();
     redactionMetaWatcher.stop();
+    // Clear capture cleanup timer
+    if (cleanupTimer) {
+      clearInterval(cleanupTimer as unknown as NodeJS.Timeout);
+    }
+    // Shutdown all plugins to release resources (timers, models, caches)
+    for (const plugin of effectivePlugins) {
+      if (plugin.shutdown) {
+        try {
+          const result = plugin.shutdown();
+          if (result && typeof result.then === "function") {
+            // Fire and forget - we don't wait for async shutdown
+            result.catch((err: unknown) => {
+              console.error(`Plugin "${plugin.name}" shutdown error:`, err);
+            });
+          }
+        } catch (err: unknown) {
+          console.error(`Plugin "${plugin.name}" shutdown error:`, err);
+        }
+      }
+    }
     return new Promise<void>((resolve) => {
       // Force resolve after a short grace period. server.close() waits
       // for active connections to drain, which may never happen with
@@ -250,6 +270,7 @@ let started = false;
       const forceTimer = setTimeout(() => resolve(), 500);
       server.close(() => {
         clearTimeout(forceTimer);
+        started = false;
         resolve();
       });
     });

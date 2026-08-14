@@ -61,7 +61,7 @@ export class PresidioTsDetector implements Detector {
   readonly description =
     "Microsoft Presidio PII detection via @siddicky/anonymizerts (pattern + NER, local, private)";
 
-  private analyzer: PresidioAnalyzer;
+  private analyzer: PresidioAnalyzer | null = null;
   private config: PresidioTsConfig;
   private initialized = false;
   private initializing: Promise<void> | null = null;
@@ -171,6 +171,13 @@ export class PresidioTsDetector implements Detector {
 
     this.initializing = (async () => {
       try {
+        // If analyzer was released by shutdown(), recreate it
+        if (!this.analyzer) {
+          this.analyzer = new PresidioAnalyzer({
+            useNER: this.config.useNER ?? true,
+            modelName: this.config.modelName ?? "Xenova/bert-base-NER",
+          });
+        }
         // Initialize the analyzer (loads transformers.js NER model on first call)
         await this.analyzer.initialize();
         this.initialized = true;
@@ -194,14 +201,23 @@ export class PresidioTsDetector implements Detector {
   }
 
   /**
-   * Clean up resources. Note: transformers.js doesn't expose a cleanup method,
-   * but we mark as uninitialized to allow re-initialization if needed.
+   * Clean up resources. Releases the transformers.js model to allow GC.
    */
   async shutdown(): Promise<void> {
     this.initialized = false;
+    // If initialization is in progress, wait for it to complete before releasing analyzer
+    // to avoid the initialize() coroutine crashing when it resumes.
+    if (this.initializing) {
+      try {
+        await this.initializing;
+      } catch {
+        // Ignore initialization errors during shutdown
+      }
+    }
     this.initializing = null;
-    // The NER pipeline in transformers.js doesn't have an explicit shutdown,
-    // but we can drop our reference to allow GC
+    // Drop reference to the analyzer to allow the transformers.js model (BERT) to be garbage collected
+    // The analyzer holds the NER pipeline which can be ~500MB
+    this.analyzer = null;
   }
 
   /**
@@ -252,7 +268,8 @@ export class PresidioTsDetector implements Detector {
     }
 
     // Run analysis
-    const analyzerResults = await this.analyzer.analyze(text, entityTypes);
+    // analyzer is guaranteed non-null after successful initialize()
+    const analyzerResults = await this.analyzer!.analyze(text, entityTypes);
 
     // Convert to DetectionResult format
     const spans = analyzerResults
