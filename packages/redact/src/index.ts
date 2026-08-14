@@ -58,7 +58,18 @@ export const DEFAULT_REDACT_SKIP_PATHS = [
   "tool_choice",
   "functions",
   "function_call",
-  // Skip tool call IDs and function arguments to prevent NER false positives
+// Skip tool call IDs and function arguments to prevent NER false positives
+  // Full paths from root (path matching is prefix-based)
+  "messages[*].tool_calls[*].id",
+  "messages[*].tool_calls[*].function.name",
+  "messages[*].tool_calls[*].function.arguments",
+  "messages[*].tools[*].id",
+  "messages[*].tools[*].function.name",
+  "messages[*].tools[*].function.arguments",
+  "messages[*].function_call.id",
+  "messages[*].function_call.name",
+  "messages[*].function_call.arguments",
+  // Also handle top-level tool_calls (non-standard but possible)
   "tool_calls[*].id",
   "tool_calls[*].function.name",
   "tool_calls[*].function.arguments",
