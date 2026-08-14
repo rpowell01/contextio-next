@@ -101,6 +101,30 @@ async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
 			upsertRedactionMetadata(metadata);
 		},
+		// By default, only redact user message content to avoid breaking tool calls
+		// Tool calls contain IDs, timestamps, and structured data that NER models
+		// may incorrectly classify as PII (e.g., PERSON entities)
+		paths: {
+			only: process.env.REDACT_PATHS_ONLY?.split(",") ?? ["messages[*].content"],
+			skip: process.env.REDACT_PATHS_SKIP?.split(",") ?? [
+				"tools",
+				"tool_calls",
+				"toolChoice",
+				"tool_choice",
+				"functions",
+				"function_call",
+				// Skip tool call IDs and function arguments to prevent NER false positives
+				"tool_calls[*].id",
+				"tool_calls[*].function.name",
+				"tool_calls[*].function.arguments",
+				"tools[*].id",
+				"tools[*].function.name",
+				"tools[*].function.arguments",
+				"function_call.id",
+				"function_call.name",
+				"function_call.arguments",
+			],
+		},
 	};
 
 	// Only enable if explicitly configured

@@ -147,11 +147,11 @@ function stripJsonComments(text: string): string {
  * Parse a path string into segments.
  * "messages[*].content" -> ["messages", "*", "content"]
  */
-function parsePath(path: string): PathMatcher {
+export function parsePath(path: string): PathMatcher {
   const segments = path
     .replace(/\[\*\]/g, ".*.")
     .split(".")
-    .filter(Boolean);
+    .filter((s): s is string => Boolean(s));
   return { source: path, segments };
 }
 

@@ -31,7 +31,7 @@ import type {
 import fs from "node:fs";
 import { ReplacementMap } from "./mapping.js";
 import type { CompiledPolicy, PolicyJson } from "./policy.js";
-import { compilePolicy, fromPreset, loadPolicyFile } from "./policy.js";
+import { compilePolicy, fromPreset, loadPolicyFile, parsePath } from "./policy.js";
 import type { PresetName } from "./presets.js";
 import { buildRedactMetaPayload, buildFullRedactionMetadata, createStats, recordMatch, redactWithPolicy, type MatchEntry, type RedactionMetadata, type RedactionStats } from "./redact.js";
 import { createStreamRehydrator } from "./stream.js";
@@ -49,6 +49,29 @@ import { detectorRegistry, registerDetector, createDetector } from "./detector.j
 import { createRuleDetector } from "./ruleDetector.js";
 import { createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";
 import { createPresidioTsDetector, type PresidioTsConfig } from "./presidioTsDetector.js";
+
+/** Default skip paths to prevent redaction of tool call IDs and structured data. */
+export const DEFAULT_REDACT_SKIP_PATHS = [
+  "tools",
+  "tool_calls",
+  "toolChoice",
+  "tool_choice",
+  "functions",
+  "function_call",
+  // Skip tool call IDs and function arguments to prevent NER false positives
+  "tool_calls[*].id",
+  "tool_calls[*].function.name",
+  "tool_calls[*].function.arguments",
+  "tools[*].id",
+  "tools[*].function.name",
+  "tools[*].function.arguments",
+  "function_call.id",
+  "function_call.name",
+  "function_call.arguments",
+];
+
+/** Default only paths - only redact user message content by default. */
+export const DEFAULT_REDACT_ONLY_PATHS = ["messages[*].content"];
 
 /** Configuration for {@link createRedactPlugin}. */
 export interface RedactPluginConfig {
@@ -71,6 +94,18 @@ export interface RedactPluginConfig {
    * LLM detector configuration. Used when detectorMode is "llm", "hybrid", or "auto".
    */
   detectorConfig?: RedactDetectorConfig;
+  /**
+   * JSON path scoping to limit where redaction is applied.
+   * By default, only redacts user message content (messages[*].content) and skips
+   * tool calls and their structured data (IDs, function names, arguments).
+   * Set to { only: null, skip: [] } to redact all string values.
+   */
+  paths?: {
+    /** If set, only redact values at these JSON paths. Supports simple dot notation and [*] for array wildcard. Example: ["messages[*].content", "system"] */
+    only?: string[];
+    /** Skip redaction for values at these JSON paths. Checked before "only". Default skips tool calls and structured data. Example: ["model", "metadata", "tools", "tool_calls"] */
+    skip?: string[];
+  };
   /**
    * Enable reversible redaction. When true, the plugin tracks
    * original values per session and restores them in LLM responses.
@@ -229,10 +264,48 @@ function resolvePolicy(config?: RedactPluginConfig): CompiledPolicy {
   if (config?.policy) return config.policy;
   if (config?.policyFile) {
     const loaded = loadPolicyFile(config.policyFile);
-    if (loaded) return loaded;
+    if (loaded) {
+      // Merge paths from config with policy file paths (config takes precedence)
+      if (config.paths) {
+        return mergePathsIntoPolicy(loaded, config.paths);
+      }
+      // Apply default paths if not specified in config or policy file
+      return mergePathsIntoPolicy(loaded, {
+        only: DEFAULT_REDACT_ONLY_PATHS,
+        skip: DEFAULT_REDACT_SKIP_PATHS,
+      });
+    }
     // Fall through to preset if policy file doesn't exist
   }
-  return fromPreset(config?.preset ?? "pii");
+  const presetPolicy = fromPreset(config?.preset ?? "pii");
+  // Apply paths from config to preset policy
+  if (config?.paths) {
+    return mergePathsIntoPolicy(presetPolicy, config.paths);
+  }
+  // Apply default paths
+  return mergePathsIntoPolicy(presetPolicy, {
+    only: DEFAULT_REDACT_ONLY_PATHS,
+    skip: DEFAULT_REDACT_SKIP_PATHS,
+  });
+}
+
+/**
+ * Merge paths configuration into a compiled policy.
+ * Config paths take precedence over policy file paths.
+ */
+function mergePathsIntoPolicy(policy: CompiledPolicy, paths: { only?: string[]; skip?: string[] }): CompiledPolicy {
+  const pathsOnly = paths.only
+    ? paths.only.map(parsePath)
+    : policy.paths.only; // Keep existing if not specified in config
+  
+  const pathsSkip = paths.skip
+    ? paths.skip.map(parsePath)
+    : policy.paths.skip; // Keep existing if not specified in config
+  
+  return {
+    ...policy,
+    paths: { only: pathsOnly, skip: pathsSkip },
+  };
 }
 
 /** Load detector config from policy file or plugin config. */

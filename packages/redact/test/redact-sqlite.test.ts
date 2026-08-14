@@ -149,6 +149,11 @@ describe("redact plugin - SQLite integration", () => {
 			onRedactionMetadata: (metadata: RedactionMetadata) => {
 				sqliteCalls.push(metadata);
 			},
+			// Override default paths to test PII redaction in user object
+			paths: {
+				only: ["user.*"],
+				skip: [],
+			},
 		};
 
 		const plugin = createRedactPlugin(config);
