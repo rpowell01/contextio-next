@@ -299,7 +299,10 @@ export class PresidioTsDetector implements Detector {
 
     // Run analysis
     // analyzer is guaranteed non-null after successful initialize()
-    const analyzerResults = await this.analyzer!.analyze(text, entityTypes);
+    if (!this.analyzer) {
+      throw new Error("PresidioTsDetector analyzer is not initialized");
+    }
+    const analyzerResults = await this.analyzer.analyze(text, entityTypes);
 
     // Convert to DetectionResult format
     const spans = analyzerResults

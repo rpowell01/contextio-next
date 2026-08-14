@@ -284,7 +284,6 @@ export class MemoryFeedbackStore implements FeedbackStore {
 			.filter((entry) => {
 				if (ruleId && entry.ruleId !== ruleId) return false;
 				if (sessionId && entry.sessionId !== sessionId) return false;
-				if (!sessionId && entry.sessionId) return false;
 				return true;
 			})
 			.sort((a, b) => b.timestamp - a.timestamp);
@@ -310,7 +309,6 @@ export class MemoryFeedbackStore implements FeedbackStore {
 		this.entries = this.entries.filter((entry) => {
 			if (ruleId && entry.ruleId !== ruleId) return true;
 			if (sessionId && entry.sessionId !== sessionId) return true;
-			if (!sessionId && entry.sessionId) return true;
 			return false;
 		});
 		return initialLength - this.entries.length;
