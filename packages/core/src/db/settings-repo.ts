@@ -20,7 +20,7 @@ export type { RateLimitConfig, StreamingRetryConfig };
 
 /**
  * Database row type for settings table.
- * Matches the schema in 007_settings.sql
+ * Matches the schema in 007_settings.sql + 014 migration
  */
 export interface SettingsRow {
 	id: string;
@@ -44,6 +44,27 @@ export interface SettingsRow {
 	redact_paths_skip: string | null; // JSON array of path strings
 	rate_limiter: string; // JSON blob
 	streaming_retry: string; // JSON blob
+	// Feature flags (migration 014)
+	enable_logger: number;
+	enable_redact: number;
+	enable_rate_limiter: number;
+	log_traffic: number;
+	// Advanced rate limiter cache configuration (migration 014)
+	rate_limiter_max_entries: number;
+	rate_limiter_cleanup_interval_ms: number;
+	rate_limiter_entry_ttl_ms: number;
+	// Advanced streaming retry cache configuration (migration 014)
+	retry_max_entries: number;
+	retry_entry_ttl_ms: number;
+	retry_cleanup_interval_ms: number;
+	retry_max_buffer_size: number;
+	retry_max_stream_retries: number;
+	// Proxy configuration (migration 014)
+	proxy_bind_host: string;
+	proxy_port: number;
+	proxy_allow_target_override: number;
+	strict_url_forwarding: number;
+	upstream_openrouter_url: string;
 	created_at: number;
 	updated_at: number;
 }
@@ -87,6 +108,27 @@ export interface Settings {
 	detectorThreshold: number;
 	rateLimiter: Record<Provider, RateLimitConfig>;
 	streamingRetry: Record<Provider, StreamingRetryConfig>;
+	// Feature flags
+	enableLogger: boolean;
+	enableRedact: boolean;
+	enableRateLimiter: boolean;
+	logTraffic: boolean;
+	// Advanced rate limiter cache configuration
+	rateLimiterMaxEntries: number;
+	rateLimiterCleanupIntervalMs: number;
+	rateLimiterEntryTtlMs: number;
+	// Advanced streaming retry cache configuration
+	retryMaxEntries: number;
+	retryEntryTtlMs: number;
+	retryCleanupIntervalMs: number;
+	retryMaxBufferSize: number;
+	retryMaxStreamRetries: number;
+	// Proxy configuration
+	proxyBindHost: string;
+	proxyPort: number;
+	proxyAllowTargetOverride: boolean;
+	strictUrlForwarding: boolean;
+	upstreamOpenRouterUrl: string;
 }
 
 /**
@@ -204,6 +246,27 @@ const DEFAULT_SETTINGS: Settings = {
 	detectorThreshold: 0.5,
 	rateLimiter: DEFAULT_RATE_LIMITER,
 	streamingRetry: DEFAULT_STREAMING_RETRY,
+	// Feature flags
+	enableLogger: true,
+	enableRedact: true,
+	enableRateLimiter: true,
+	logTraffic: false,
+	// Advanced rate limiter cache configuration
+	rateLimiterMaxEntries: 2000,
+	rateLimiterCleanupIntervalMs: 60000,
+	rateLimiterEntryTtlMs: 300000,
+	// Advanced streaming retry cache configuration
+	retryMaxEntries: 1000,
+	retryEntryTtlMs: 300000,
+	retryCleanupIntervalMs: 30000,
+	retryMaxBufferSize: 5242880,
+	retryMaxStreamRetries: 3,
+	// Proxy configuration
+	proxyBindHost: "0.0.0.0",
+	proxyPort: 4040,
+	proxyAllowTargetOverride: false,
+	strictUrlForwarding: false,
+	upstreamOpenRouterUrl: "",
 };
 
 /**
@@ -241,6 +304,27 @@ function rowToSettings(row: SettingsRow): Settings {
 		detectorThreshold: row.detector_threshold,
 		rateLimiter: safeJsonParse(row.rate_limiter, DEFAULT_RATE_LIMITER),
 		streamingRetry: safeJsonParse(row.streaming_retry, DEFAULT_STREAMING_RETRY),
+		// Feature flags (migration 014)
+		enableLogger: row.enable_logger === 1,
+		enableRedact: row.enable_redact === 1,
+		enableRateLimiter: row.enable_rate_limiter === 1,
+		logTraffic: row.log_traffic === 1,
+		// Advanced rate limiter cache configuration (migration 014)
+		rateLimiterMaxEntries: row.rate_limiter_max_entries,
+		rateLimiterCleanupIntervalMs: row.rate_limiter_cleanup_interval_ms,
+		rateLimiterEntryTtlMs: row.rate_limiter_entry_ttl_ms,
+		// Advanced streaming retry cache configuration (migration 014)
+		retryMaxEntries: row.retry_max_entries,
+		retryEntryTtlMs: row.retry_entry_ttl_ms,
+		retryCleanupIntervalMs: row.retry_cleanup_interval_ms,
+		retryMaxBufferSize: row.retry_max_buffer_size,
+		retryMaxStreamRetries: row.retry_max_stream_retries,
+		// Proxy configuration (migration 014)
+		proxyBindHost: row.proxy_bind_host,
+		proxyPort: row.proxy_port,
+		proxyAllowTargetOverride: row.proxy_allow_target_override === 1,
+		strictUrlForwarding: row.strict_url_forwarding === 1,
+		upstreamOpenRouterUrl: row.upstream_openrouter_url,
 	};
 }
 
@@ -273,6 +357,27 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		detector_threshold: merged.detectorThreshold,
 		rate_limiter: JSON.stringify(merged.rateLimiter),
 		streaming_retry: JSON.stringify(merged.streamingRetry),
+		// Feature flags (migration 014)
+		enable_logger: merged.enableLogger ? 1 : 0,
+		enable_redact: merged.enableRedact ? 1 : 0,
+		enable_rate_limiter: merged.enableRateLimiter ? 1 : 0,
+		log_traffic: merged.logTraffic ? 1 : 0,
+		// Advanced rate limiter cache configuration (migration 014)
+		rate_limiter_max_entries: merged.rateLimiterMaxEntries,
+		rate_limiter_cleanup_interval_ms: merged.rateLimiterCleanupIntervalMs,
+		rate_limiter_entry_ttl_ms: merged.rateLimiterEntryTtlMs,
+		// Advanced streaming retry cache configuration (migration 014)
+		retry_max_entries: merged.retryMaxEntries,
+		retry_entry_ttl_ms: merged.retryEntryTtlMs,
+		retry_cleanup_interval_ms: merged.retryCleanupIntervalMs,
+		retry_max_buffer_size: merged.retryMaxBufferSize,
+		retry_max_stream_retries: merged.retryMaxStreamRetries,
+		// Proxy configuration (migration 014)
+		proxy_bind_host: merged.proxyBindHost,
+		proxy_port: merged.proxyPort,
+		proxy_allow_target_override: merged.proxyAllowTargetOverride ? 1 : 0,
+		strict_url_forwarding: merged.strictUrlForwarding ? 1 : 0,
+		upstream_openrouter_url: merged.upstreamOpenRouterUrl,
 	};
 }
 
@@ -340,9 +445,13 @@ export function upsertSettings(settings: Settings): void {
 			encryption_at_rest, capture_cleanup_enabled, capture_cleanup_interval_hours,
 			capture_cleanup_max_age_days, theme, oidc_enabled, oidc_public_url,
 			show_page_load_time, detector_mode, detector_model_name, detector_threshold,
-			rate_limiter, streaming_retry
+			rate_limiter, streaming_retry,
+			enable_logger, enable_redact, enable_rate_limiter, log_traffic,
+			rate_limiter_max_entries, rate_limiter_cleanup_interval_ms, rate_limiter_entry_ttl_ms,
+			retry_max_entries, retry_entry_ttl_ms, retry_cleanup_interval_ms, retry_max_buffer_size, retry_max_stream_retries,
+			proxy_bind_host, proxy_port, proxy_allow_target_override, strict_url_forwarding, upstream_openrouter_url
 		) VALUES (
-			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 		ON CONFLICT(id) DO UPDATE SET
 			log_dir = excluded.log_dir,
@@ -364,7 +473,24 @@ export function upsertSettings(settings: Settings): void {
 			detector_model_name = excluded.detector_model_name,
 			detector_threshold = excluded.detector_threshold,
 			rate_limiter = excluded.rate_limiter,
-			streaming_retry = excluded.streaming_retry
+			streaming_retry = excluded.streaming_retry,
+			enable_logger = excluded.enable_logger,
+			enable_redact = excluded.enable_redact,
+			enable_rate_limiter = excluded.enable_rate_limiter,
+			log_traffic = excluded.log_traffic,
+			rate_limiter_max_entries = excluded.rate_limiter_max_entries,
+			rate_limiter_cleanup_interval_ms = excluded.rate_limiter_cleanup_interval_ms,
+			rate_limiter_entry_ttl_ms = excluded.rate_limiter_entry_ttl_ms,
+			retry_max_entries = excluded.retry_max_entries,
+			retry_entry_ttl_ms = excluded.retry_entry_ttl_ms,
+			retry_cleanup_interval_ms = excluded.retry_cleanup_interval_ms,
+			retry_max_buffer_size = excluded.retry_max_buffer_size,
+			retry_max_stream_retries = excluded.retry_max_stream_retries,
+			proxy_bind_host = excluded.proxy_bind_host,
+			proxy_port = excluded.proxy_port,
+			proxy_allow_target_override = excluded.proxy_allow_target_override,
+			strict_url_forwarding = excluded.strict_url_forwarding,
+			upstream_openrouter_url = excluded.upstream_openrouter_url
 	`);
 
 	try {
@@ -388,7 +514,24 @@ export function upsertSettings(settings: Settings): void {
 			row.detector_model_name,
 			row.detector_threshold,
 			row.rate_limiter,
-			row.streaming_retry
+			row.streaming_retry,
+			row.enable_logger,
+			row.enable_redact,
+			row.enable_rate_limiter,
+			row.log_traffic,
+			row.rate_limiter_max_entries,
+			row.rate_limiter_cleanup_interval_ms,
+			row.rate_limiter_entry_ttl_ms,
+			row.retry_max_entries,
+			row.retry_entry_ttl_ms,
+			row.retry_cleanup_interval_ms,
+			row.retry_max_buffer_size,
+			row.retry_max_stream_retries,
+			row.proxy_bind_host,
+			row.proxy_port,
+			row.proxy_allow_target_override,
+			row.strict_url_forwarding,
+			row.upstream_openrouter_url
 		);
 	} catch (err) {
 		// Preserve original error stack trace for debugging
@@ -432,6 +575,27 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		detectorThreshold: { envVar: "REDACT_DETECTOR_THRESHOLD", dynamic: true },
 		rateLimiter: { envVar: "", dynamic: false },
 		streamingRetry: { envVar: "", dynamic: false },
+		// Feature flags
+		enableLogger: { envVar: "CONTEXTIO_ENABLE_LOGGER", dynamic: false },
+		enableRedact: { envVar: "CONTEXTIO_ENABLE_REDACT", dynamic: false },
+		enableRateLimiter: { envVar: "CONTEXTIO_ENABLE_RATE_LIMITER", dynamic: false },
+		logTraffic: { envVar: "LOG_TRAFFIC", dynamic: false },
+		// Advanced rate limiter cache configuration
+		rateLimiterMaxEntries: { envVar: "CONTEXTIO_RATE_LIMIT_MAX_ENTRIES", dynamic: false },
+		rateLimiterCleanupIntervalMs: { envVar: "CONTEXTIO_RATE_LIMIT_CLEANUP_INTERVAL_MS", dynamic: false },
+		rateLimiterEntryTtlMs: { envVar: "CONTEXTIO_RATE_LIMIT_ENTRY_TTL_MS", dynamic: false },
+		// Advanced streaming retry cache configuration
+		retryMaxEntries: { envVar: "CONTEXTIO_RETRY_MAX_ENTRIES", dynamic: false },
+		retryEntryTtlMs: { envVar: "CONTEXTIO_RETRY_ENTRY_TTL_MS", dynamic: false },
+		retryCleanupIntervalMs: { envVar: "CONTEXTIO_RETRY_CLEANUP_INTERVAL_MS", dynamic: false },
+		retryMaxBufferSize: { envVar: "CONTEXTIO_RETRY_MAX_BUFFER_SIZE", dynamic: false },
+		retryMaxStreamRetries: { envVar: "CONTEXTIO_RETRY_MAX_STREAM_RETRIES", dynamic: false },
+		// Proxy configuration
+		proxyBindHost: { envVar: "CONTEXT_PROXY_BIND_HOST", dynamic: false },
+		proxyPort: { envVar: "CONTEXT_PROXY_PORT", dynamic: false },
+		proxyAllowTargetOverride: { envVar: "CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE", dynamic: false },
+		strictUrlForwarding: { envVar: "STRICT_URL_FORWARDING", dynamic: false },
+		upstreamOpenRouterUrl: { envVar: "UPSTREAM_OPENROUTER_URL", dynamic: false },
 	};
 
 	const meta = {} as Record<keyof Settings, SettingMeta>;
@@ -632,5 +796,26 @@ function validateAndMergeSettings(input: unknown): Settings {
 		detectorThreshold: getFloat("detectorThreshold", DEFAULT_SETTINGS.detectorThreshold, 0, 1),
 		rateLimiter: parseRateLimiter("rateLimiter"),
 		streamingRetry: parseStreamingRetry("streamingRetry"),
+		// Feature flags
+		enableLogger: getBoolean("enableLogger", DEFAULT_SETTINGS.enableLogger),
+		enableRedact: getBoolean("enableRedact", DEFAULT_SETTINGS.enableRedact),
+		enableRateLimiter: getBoolean("enableRateLimiter", DEFAULT_SETTINGS.enableRateLimiter),
+		logTraffic: getBoolean("logTraffic", DEFAULT_SETTINGS.logTraffic),
+		// Advanced rate limiter cache configuration
+		rateLimiterMaxEntries: getNumber("rateLimiterMaxEntries", DEFAULT_SETTINGS.rateLimiterMaxEntries, 1, 100000),
+		rateLimiterCleanupIntervalMs: getNumber("rateLimiterCleanupIntervalMs", DEFAULT_SETTINGS.rateLimiterCleanupIntervalMs, 1000, 86400000),
+		rateLimiterEntryTtlMs: getNumber("rateLimiterEntryTtlMs", DEFAULT_SETTINGS.rateLimiterEntryTtlMs, 1000, 86400000),
+		// Advanced streaming retry cache configuration
+		retryMaxEntries: getNumber("retryMaxEntries", DEFAULT_SETTINGS.retryMaxEntries, 1, 100000),
+		retryEntryTtlMs: getNumber("retryEntryTtlMs", DEFAULT_SETTINGS.retryEntryTtlMs, 1000, 86400000),
+		retryCleanupIntervalMs: getNumber("retryCleanupIntervalMs", DEFAULT_SETTINGS.retryCleanupIntervalMs, 1000, 86400000),
+		retryMaxBufferSize: getNumber("retryMaxBufferSize", DEFAULT_SETTINGS.retryMaxBufferSize, 1024, 100 * 1024 * 1024),
+		retryMaxStreamRetries: getNumber("retryMaxStreamRetries", DEFAULT_SETTINGS.retryMaxStreamRetries, 0, 100),
+		// Proxy configuration
+		proxyBindHost: getString("proxyBindHost", DEFAULT_SETTINGS.proxyBindHost),
+		proxyPort: getNumber("proxyPort", DEFAULT_SETTINGS.proxyPort, 1, 65535),
+		proxyAllowTargetOverride: getBoolean("proxyAllowTargetOverride", DEFAULT_SETTINGS.proxyAllowTargetOverride),
+		strictUrlForwarding: getBoolean("strictUrlForwarding", DEFAULT_SETTINGS.strictUrlForwarding),
+		upstreamOpenRouterUrl: getString("upstreamOpenRouterUrl", DEFAULT_SETTINGS.upstreamOpenRouterUrl),
 	};
 }

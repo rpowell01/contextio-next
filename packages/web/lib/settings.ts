@@ -60,6 +60,27 @@ export interface Settings {
   rateLimiter: Record<Provider, RateLimitConfig>;
   // Streaming retry settings per provider
   streamingRetry: Record<Provider, StreamingRetryConfig>;
+  // Feature flags
+  enableLogger: boolean;
+  enableRedact: boolean;
+  enableRateLimiter: boolean;
+  logTraffic: boolean;
+  // Advanced rate limiter cache configuration
+  rateLimiterMaxEntries: number;
+  rateLimiterCleanupIntervalMs: number;
+  rateLimiterEntryTtlMs: number;
+  // Advanced streaming retry cache configuration
+  retryMaxEntries: number;
+  retryEntryTtlMs: number;
+  retryCleanupIntervalMs: number;
+  retryMaxBufferSize: number;
+  retryMaxStreamRetries: number;
+  // Proxy configuration
+  proxyBindHost: string;
+  proxyPort: number;
+  proxyAllowTargetOverride: boolean;
+  strictUrlForwarding: boolean;
+  upstreamOpenRouterUrl: string;
 }
 
 export type SettingSource =
@@ -137,6 +158,27 @@ export const SETTING_ENV_MAP: Record<
     envVar: "", // No direct env var - configured via settings file/UI with per-provider keys
     dynamic: false,
   },
+  // Feature flags
+  enableLogger: { envVar: "CONTEXTIO_ENABLE_LOGGER", dynamic: false },
+  enableRedact: { envVar: "CONTEXTIO_ENABLE_REDACT", dynamic: false },
+  enableRateLimiter: { envVar: "CONTEXTIO_ENABLE_RATE_LIMITER", dynamic: false },
+  logTraffic: { envVar: "LOG_TRAFFIC", dynamic: false },
+  // Advanced rate limiter cache configuration
+  rateLimiterMaxEntries: { envVar: "CONTEXTIO_RATE_LIMIT_MAX_ENTRIES", dynamic: false },
+  rateLimiterCleanupIntervalMs: { envVar: "CONTEXTIO_RATE_LIMIT_CLEANUP_INTERVAL_MS", dynamic: false },
+  rateLimiterEntryTtlMs: { envVar: "CONTEXTIO_RATE_LIMIT_ENTRY_TTL_MS", dynamic: false },
+  // Advanced streaming retry cache configuration
+  retryMaxEntries: { envVar: "CONTEXTIO_RETRY_MAX_ENTRIES", dynamic: false },
+  retryEntryTtlMs: { envVar: "CONTEXTIO_RETRY_ENTRY_TTL_MS", dynamic: false },
+  retryCleanupIntervalMs: { envVar: "CONTEXTIO_RETRY_CLEANUP_INTERVAL_MS", dynamic: false },
+  retryMaxBufferSize: { envVar: "CONTEXTIO_RETRY_MAX_BUFFER_SIZE", dynamic: false },
+  retryMaxStreamRetries: { envVar: "CONTEXTIO_RETRY_MAX_STREAM_RETRIES", dynamic: false },
+  // Proxy configuration
+  proxyBindHost: { envVar: "CONTEXT_PROXY_BIND_HOST", dynamic: false },
+  proxyPort: { envVar: "CONTEXT_PROXY_PORT", dynamic: false },
+  proxyAllowTargetOverride: { envVar: "CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE", dynamic: false },
+  strictUrlForwarding: { envVar: "STRICT_URL_FORWARDING", dynamic: false },
+  upstreamOpenRouterUrl: { envVar: "UPSTREAM_OPENROUTER_URL", dynamic: false },
 };
 
 /**
@@ -303,6 +345,126 @@ export function applyEnvOverrides(settings: Settings): {
         }
         break;
       }
+      // Feature flags
+      case "enableLogger":
+        if (raw === "true" || raw === "false") {
+          override.enableLogger = raw === "true";
+          accepted = true;
+        }
+        break;
+      case "enableRedact":
+        if (raw === "true" || raw === "false") {
+          override.enableRedact = raw === "true";
+          accepted = true;
+        }
+        break;
+      case "enableRateLimiter":
+        if (raw === "true" || raw === "false") {
+          override.enableRateLimiter = raw === "true";
+          accepted = true;
+        }
+        break;
+      case "logTraffic":
+        if (raw === "true" || raw === "false") {
+          override.logTraffic = raw === "true";
+          accepted = true;
+        }
+        break;
+      // Advanced rate limiter cache configuration
+      case "rateLimiterMaxEntries": {
+        const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (Number.isFinite(n) && n >= 100 && n <= 100000) {
+          override.rateLimiterMaxEntries = n;
+          accepted = true;
+        }
+        break;
+      }
+      case "rateLimiterCleanupIntervalMs": {
+        const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (Number.isFinite(n) && n >= 1000 && n <= 3600000) {
+          override.rateLimiterCleanupIntervalMs = n;
+          accepted = true;
+        }
+        break;
+      }
+      case "rateLimiterEntryTtlMs": {
+        const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (Number.isFinite(n) && n >= 1000 && n <= 86400000) {
+          override.rateLimiterEntryTtlMs = n;
+          accepted = true;
+        }
+        break;
+      }
+      // Advanced streaming retry cache configuration
+      case "retryMaxEntries": {
+        const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (Number.isFinite(n) && n >= 100 && n <= 100000) {
+          override.retryMaxEntries = n;
+          accepted = true;
+        }
+        break;
+      }
+      case "retryEntryTtlMs": {
+        const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (Number.isFinite(n) && n >= 1000 && n <= 86400000) {
+          override.retryEntryTtlMs = n;
+          accepted = true;
+        }
+        break;
+      }
+      case "retryCleanupIntervalMs": {
+        const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (Number.isFinite(n) && n >= 1000 && n <= 3600000) {
+          override.retryCleanupIntervalMs = n;
+          accepted = true;
+        }
+        break;
+      }
+      case "retryMaxBufferSize": {
+        const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (Number.isFinite(n) && n >= 102400 && n <= 104857600) {
+          override.retryMaxBufferSize = n;
+          accepted = true;
+        }
+        break;
+      }
+      case "retryMaxStreamRetries": {
+        const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (Number.isFinite(n) && n >= 0 && n <= 10) {
+          override.retryMaxStreamRetries = n;
+          accepted = true;
+        }
+        break;
+      }
+      // Proxy configuration
+      case "proxyBindHost":
+        override.proxyBindHost = raw;
+        accepted = true;
+        break;
+      case "proxyPort": {
+        const n = strictInteger(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (Number.isFinite(n) && n >= 1 && n <= 65535) {
+          override.proxyPort = n;
+          accepted = true;
+        }
+        break;
+      }
+      case "proxyAllowTargetOverride":
+        if (raw === "true" || raw === "false") {
+          override.proxyAllowTargetOverride = raw === "true";
+          accepted = true;
+        }
+        break;
+      case "strictUrlForwarding":
+        if (raw === "true" || raw === "false") {
+          override.strictUrlForwarding = raw === "true";
+          accepted = true;
+        }
+        break;
+      case "upstreamOpenRouterUrl":
+        override.upstreamOpenRouterUrl = raw;
+        accepted = true;
+        break;
       default:
         break;
     }
@@ -418,6 +580,27 @@ export const DEFAULT_SETTINGS: Settings = {
     openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
     kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
   },
+  // Feature flags
+  enableLogger: true,
+  enableRedact: true,
+  enableRateLimiter: true,
+  logTraffic: false,
+  // Advanced rate limiter cache configuration
+  rateLimiterMaxEntries: 2000,
+  rateLimiterCleanupIntervalMs: 60000,
+  rateLimiterEntryTtlMs: 300000,
+  // Advanced streaming retry cache configuration
+  retryMaxEntries: 1000,
+  retryEntryTtlMs: 300000,
+  retryCleanupIntervalMs: 30000,
+  retryMaxBufferSize: 5242880,
+  retryMaxStreamRetries: 3,
+  // Proxy configuration
+  proxyBindHost: "0.0.0.0",
+  proxyPort: 4040,
+  proxyAllowTargetOverride: false,
+  strictUrlForwarding: false,
+  upstreamOpenRouterUrl: "",
 };
 
 export function validateSettings(input: unknown): Settings {
@@ -576,6 +759,27 @@ export function validateSettings(input: unknown): Settings {
       }
       return result;
     })(),
+    // Feature flags
+    enableLogger: validateBoolean("enableLogger"),
+    enableRedact: validateBoolean("enableRedact"),
+    enableRateLimiter: validateBoolean("enableRateLimiter"),
+    logTraffic: validateBoolean("logTraffic"),
+    // Advanced rate limiter cache configuration
+    rateLimiterMaxEntries: validateNumber("rateLimiterMaxEntries", 100, 100000),
+    rateLimiterCleanupIntervalMs: validateNumber("rateLimiterCleanupIntervalMs", 1000, 3600000),
+    rateLimiterEntryTtlMs: validateNumber("rateLimiterEntryTtlMs", 1000, 86400000),
+    // Advanced streaming retry cache configuration
+    retryMaxEntries: validateNumber("retryMaxEntries", 100, 100000),
+    retryEntryTtlMs: validateNumber("retryEntryTtlMs", 1000, 86400000),
+    retryCleanupIntervalMs: validateNumber("retryCleanupIntervalMs", 1000, 3600000),
+    retryMaxBufferSize: validateNumber("retryMaxBufferSize", 102400, 104857600),
+    retryMaxStreamRetries: validateNumber("retryMaxStreamRetries", 0, 10),
+    // Proxy configuration
+    proxyBindHost: validateString("proxyBindHost", 0),
+    proxyPort: validateNumber("proxyPort", 1, 65535),
+    proxyAllowTargetOverride: validateBoolean("proxyAllowTargetOverride"),
+    strictUrlForwarding: validateBoolean("strictUrlForwarding"),
+    upstreamOpenRouterUrl: validateString("upstreamOpenRouterUrl", 0),
   };
 }
 
@@ -747,5 +951,104 @@ export function validateSettingsLenient(input: unknown): Settings {
       }
       return result;
     })(),
+    // Feature flags
+    enableLogger:
+      typeof obj.enableLogger === "boolean"
+        ? obj.enableLogger
+        : DEFAULT_SETTINGS.enableLogger,
+    enableRedact:
+      typeof obj.enableRedact === "boolean"
+        ? obj.enableRedact
+        : DEFAULT_SETTINGS.enableRedact,
+    enableRateLimiter:
+      typeof obj.enableRateLimiter === "boolean"
+        ? obj.enableRateLimiter
+        : DEFAULT_SETTINGS.enableRateLimiter,
+    logTraffic:
+      typeof obj.logTraffic === "boolean"
+        ? obj.logTraffic
+        : DEFAULT_SETTINGS.logTraffic,
+    // Advanced rate limiter cache configuration
+    rateLimiterMaxEntries:
+      typeof obj.rateLimiterMaxEntries === "number" &&
+      Number.isInteger(obj.rateLimiterMaxEntries) &&
+      obj.rateLimiterMaxEntries >= 100 &&
+      obj.rateLimiterMaxEntries <= 100000
+        ? obj.rateLimiterMaxEntries
+        : DEFAULT_SETTINGS.rateLimiterMaxEntries,
+    rateLimiterCleanupIntervalMs:
+      typeof obj.rateLimiterCleanupIntervalMs === "number" &&
+      Number.isInteger(obj.rateLimiterCleanupIntervalMs) &&
+      obj.rateLimiterCleanupIntervalMs >= 1000 &&
+      obj.rateLimiterCleanupIntervalMs <= 3600000
+        ? obj.rateLimiterCleanupIntervalMs
+        : DEFAULT_SETTINGS.rateLimiterCleanupIntervalMs,
+    rateLimiterEntryTtlMs:
+      typeof obj.rateLimiterEntryTtlMs === "number" &&
+      Number.isInteger(obj.rateLimiterEntryTtlMs) &&
+      obj.rateLimiterEntryTtlMs >= 1000 &&
+      obj.rateLimiterEntryTtlMs <= 86400000
+        ? obj.rateLimiterEntryTtlMs
+        : DEFAULT_SETTINGS.rateLimiterEntryTtlMs,
+    // Advanced streaming retry cache configuration
+    retryMaxEntries:
+      typeof obj.retryMaxEntries === "number" &&
+      Number.isInteger(obj.retryMaxEntries) &&
+      obj.retryMaxEntries >= 100 &&
+      obj.retryMaxEntries <= 100000
+        ? obj.retryMaxEntries
+        : DEFAULT_SETTINGS.retryMaxEntries,
+    retryEntryTtlMs:
+      typeof obj.retryEntryTtlMs === "number" &&
+      Number.isInteger(obj.retryEntryTtlMs) &&
+      obj.retryEntryTtlMs >= 1000 &&
+      obj.retryEntryTtlMs <= 86400000
+        ? obj.retryEntryTtlMs
+        : DEFAULT_SETTINGS.retryEntryTtlMs,
+    retryCleanupIntervalMs:
+      typeof obj.retryCleanupIntervalMs === "number" &&
+      Number.isInteger(obj.retryCleanupIntervalMs) &&
+      obj.retryCleanupIntervalMs >= 1000 &&
+      obj.retryCleanupIntervalMs <= 3600000
+        ? obj.retryCleanupIntervalMs
+        : DEFAULT_SETTINGS.retryCleanupIntervalMs,
+    retryMaxBufferSize:
+      typeof obj.retryMaxBufferSize === "number" &&
+      Number.isInteger(obj.retryMaxBufferSize) &&
+      obj.retryMaxBufferSize >= 102400 &&
+      obj.retryMaxBufferSize <= 104857600
+        ? obj.retryMaxBufferSize
+        : DEFAULT_SETTINGS.retryMaxBufferSize,
+    retryMaxStreamRetries:
+      typeof obj.retryMaxStreamRetries === "number" &&
+      Number.isInteger(obj.retryMaxStreamRetries) &&
+      obj.retryMaxStreamRetries >= 0 &&
+      obj.retryMaxStreamRetries <= 10
+        ? obj.retryMaxStreamRetries
+        : DEFAULT_SETTINGS.retryMaxStreamRetries,
+    // Proxy configuration
+    proxyBindHost:
+      typeof obj.proxyBindHost === "string"
+        ? obj.proxyBindHost
+        : DEFAULT_SETTINGS.proxyBindHost,
+    proxyPort:
+      typeof obj.proxyPort === "number" &&
+      Number.isInteger(obj.proxyPort) &&
+      obj.proxyPort >= 1 &&
+      obj.proxyPort <= 65535
+        ? obj.proxyPort
+        : DEFAULT_SETTINGS.proxyPort,
+    proxyAllowTargetOverride:
+      typeof obj.proxyAllowTargetOverride === "boolean"
+        ? obj.proxyAllowTargetOverride
+        : DEFAULT_SETTINGS.proxyAllowTargetOverride,
+    strictUrlForwarding:
+      typeof obj.strictUrlForwarding === "boolean"
+        ? obj.strictUrlForwarding
+        : DEFAULT_SETTINGS.strictUrlForwarding,
+    upstreamOpenRouterUrl:
+      typeof obj.upstreamOpenRouterUrl === "string"
+        ? obj.upstreamOpenRouterUrl
+        : DEFAULT_SETTINGS.upstreamOpenRouterUrl,
   };
 }

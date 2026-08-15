@@ -2,7 +2,7 @@
 
 import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
-import type { Settings, SettingMeta, Provider, RateLimitConfig } from "@/lib/settings";
+import type { Settings, SettingMeta, Provider, RateLimitConfig, StreamingRetryConfig } from "@/lib/settings";
 import type { ProviderConfig, ProviderMetadata } from "@/types/api";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "@/components/theme-provider";
@@ -79,6 +79,44 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Rate limiting configuration per provider. Controls max requests, time window, and burst capacity. Requires a proxy restart to apply.",
   streamingRetry:
     "Streaming retry configuration per provider. Controls retry attempts and buffer size for rate-limited streaming responses. Requires a proxy restart to apply.",
+  // Feature flags
+  enableLogger:
+    "Enable or disable request/response logging to capture files. When disabled, no API traffic is captured. Requires a proxy restart to apply.",
+  logTraffic:
+    "Enable detailed raw traffic logging (headers, body). This can be verbose and impact performance. Requires a proxy restart to apply.",
+  enableRedact:
+    "Enable or disable PII/secrets redaction on captured traffic. When disabled, no redaction occurs regardless of preset or policy. Requires a proxy restart to apply.",
+  enableRateLimiter:
+    "Enable or disable rate limiting across all providers. When disabled, no rate limits are enforced. Requires a proxy restart to apply.",
+  // Advanced rate limiter cache
+  rateLimiterMaxEntries:
+    "Maximum number of entries in the rate limiter cache. Higher values use more memory but track more clients. Requires a proxy restart to apply.",
+  rateLimiterCleanupIntervalMs:
+    "How often the rate limiter cache cleanup job runs (milliseconds). Lower values clean more aggressively. Requires a proxy restart to apply.",
+  rateLimiterEntryTtlMs:
+    "Time-to-live for rate limiter cache entries (milliseconds). Entries older than this are eligible for cleanup. Requires a proxy restart to apply.",
+  // Advanced streaming retry cache
+  retryMaxEntries:
+    "Maximum number of entries in the streaming retry cache. Higher values use more memory but track more streams. Requires a proxy restart to apply.",
+  retryEntryTtlMs:
+    "Time-to-live for streaming retry cache entries (milliseconds). Requires a proxy restart to apply.",
+  retryCleanupIntervalMs:
+    "How often the streaming retry cache cleanup job runs (milliseconds). Requires a proxy restart to apply.",
+  retryMaxBufferSize:
+    "Maximum buffer size for streaming response buffering (bytes). Larger values allow bigger responses but use more memory. Requires a proxy restart to apply.",
+  retryMaxStreamRetries:
+    "Maximum number of retry attempts for rate-limited streaming responses. Requires a proxy restart to apply.",
+  // Proxy configuration
+  proxyBindHost:
+    "Host address the proxy binds to. Use 0.0.0.0 to listen on all interfaces, or a specific IP. Requires a proxy restart to apply.",
+  proxyPort:
+    "Port the proxy listens on. Requires a proxy restart to apply.",
+  proxyAllowTargetOverride:
+    "Allow clients to override the target upstream via header. Requires a proxy restart to apply.",
+  strictUrlForwarding:
+    "Enforce strict URL forwarding rules (reject unknown paths). Requires a proxy restart to apply.",
+  upstreamOpenRouterUrl:
+    "Upstream OpenRouter URL for forwarding. If empty, uses default OpenRouter endpoint. Requires a proxy restart to apply.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
@@ -226,14 +264,16 @@ function DetectorModeWarnings({
 }
 
 // Tab configuration (module scope for stability)
-type SettingsTab = "logging" | "redaction" | "security" | "rateLimiter" | "appearance" | "providers";
+type SettingsTab = "logging" | "redaction" | "security" | "rateLimiter" | "appearance" | "providers" | "proxy" | "streamingRetry";
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "logging", label: "Logging", icon: <Database className="h-4 w-4" /> },
   { id: "redaction", label: "Redaction", icon: <EyeOff className="h-4 w-4" /> },
   { id: "security", label: "Security", icon: <Shield className="h-4 w-4" /> },
   { id: "rateLimiter", label: "Rate Limiter", icon: <Gauge className="h-4 w-4" /> },
+  { id: "streamingRetry", label: "Streaming Retry", icon: <Gauge className="h-4 w-4" /> },
   { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
+  { id: "proxy", label: "Proxy", icon: <Server className="h-4 w-4" /> },
   { id: "providers", label: "Providers", icon: <Server className="h-4 w-4" /> },
 ];
 
@@ -319,6 +359,27 @@ export default function SettingsPage() {
       openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
       kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
     },
+    // Feature flags
+    enableLogger: true,
+    logTraffic: false,
+    enableRedact: true,
+    enableRateLimiter: true,
+    // Advanced rate limiter cache
+    rateLimiterMaxEntries: 2000,
+    rateLimiterCleanupIntervalMs: 60000,
+    rateLimiterEntryTtlMs: 300000,
+    // Advanced streaming retry cache
+    retryMaxEntries: 1000,
+    retryEntryTtlMs: 300000,
+    retryCleanupIntervalMs: 30000,
+    retryMaxBufferSize: 5242880,
+    retryMaxStreamRetries: 3,
+    // Proxy configuration
+    proxyBindHost: "0.0.0.0",
+    proxyPort: 4040,
+    proxyAllowTargetOverride: false,
+    strictUrlForwarding: false,
+    upstreamOpenRouterUrl: "",
   });
   const [metadata, setMetadata] = useState<Record<
     keyof Settings,
@@ -397,6 +458,8 @@ export default function SettingsPage() {
             <div className="space-y-4">
               {renderSetting("logDir")}
               {renderSetting("maxSessions")}
+              {renderSetting("enableLogger")}
+              {renderSetting("logTraffic")}
               {renderSetting("captureCleanupEnabled")}
               {settings.captureCleanupEnabled && (
                 <div className="grid gap-4 md:grid-cols-2 pt-2 border-t">
@@ -458,6 +521,7 @@ export default function SettingsPage() {
           <div className="rounded-lg border p-6" role="tabpanel" id="panel-redaction" aria-labelledby="tab-redaction">
             <h3 className="font-semibold mb-4">Redaction</h3>
             <div className="space-y-4">
+              {renderSetting("enableRedact")}
               {renderSetting("redactPreset")}
               {renderSetting("redactReversible")}
               {renderSetting("redactPolicyFile")}
@@ -501,6 +565,7 @@ export default function SettingsPage() {
             <h3 className="font-semibold mb-4">Security</h3>
             <div className="space-y-4">
               {renderSetting("encryptionAtRest")}
+              {renderSetting("enableRateLimiter")}
               {renderSetting("oidcEnabled")}
               {renderSetting("oidcPublicUrl")}
             </div>
@@ -512,6 +577,61 @@ export default function SettingsPage() {
             <h3 className="font-semibold mb-4">Rate Limiter</h3>
             <div className="space-y-4">
               {renderSetting("rateLimiter")}
+
+              {/* Advanced Rate Limiter Cache Settings */}
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Advanced: Rate Limiter Cache</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Configure the internal cache behavior for rate limiting. Changes require a proxy restart.
+                </p>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {renderSetting("rateLimiterMaxEntries")}
+                  {renderSetting("rateLimiterCleanupIntervalMs")}
+                  {renderSetting("rateLimiterEntryTtlMs")}
+                </div>
+              </div>
+
+              {/* Advanced Streaming Retry Cache Settings */}
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Advanced: Streaming Retry Cache</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Configure the internal cache behavior for streaming response retries. Changes require a proxy restart.
+                </p>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {renderSetting("retryMaxEntries")}
+                  {renderSetting("retryEntryTtlMs")}
+                  {renderSetting("retryCleanupIntervalMs")}
+                  {renderSetting("retryMaxBufferSize")}
+                  {renderSetting("retryMaxStreamRetries")}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case "streamingRetry":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-streamingRetry" aria-labelledby="tab-streamingRetry">
+            <h3 className="font-semibold mb-4">Streaming Retry Configuration</h3>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground mb-4">
+                Configure streaming retry behavior per provider. Controls retry attempts and buffer size for rate-limited streaming responses.
+              </p>
+              {renderSetting("streamingRetry")}
+
+              {/* Advanced Streaming Retry Cache Settings */}
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Advanced: Streaming Retry Cache</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Configure the internal cache behavior for streaming response retries. Changes require a proxy restart.
+                </p>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {renderSetting("retryMaxEntries")}
+                  {renderSetting("retryEntryTtlMs")}
+                  {renderSetting("retryCleanupIntervalMs")}
+                  {renderSetting("retryMaxBufferSize")}
+                  {renderSetting("retryMaxStreamRetries")}
+                </div>
+              </div>
             </div>
           </div>
         );
@@ -522,6 +642,27 @@ export default function SettingsPage() {
             <div className="space-y-4">
               {renderSetting("theme")}
               {renderSetting("showPageLoadTime")}
+            </div>
+          </div>
+        );
+      case "proxy":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-proxy" aria-labelledby="tab-proxy">
+            <h3 className="font-semibold mb-4">Proxy</h3>
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground mb-4">
+                Configure proxy server settings. Changes require a proxy restart to apply.
+              </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                {renderSetting("proxyBindHost")}
+                {renderSetting("proxyPort")}
+                {renderSetting("proxyAllowTargetOverride")}
+                {renderSetting("strictUrlForwarding")}
+              </div>
+              <div className="pt-2 border-t">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Upstream Configuration</h4>
+                {renderSetting("upstreamOpenRouterUrl")}
+              </div>
             </div>
           </div>
         );
@@ -855,6 +996,23 @@ export default function SettingsPage() {
         ...prev.rateLimiter,
         [provider]: {
           ...prev.rateLimiter?.[provider],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const updateStreamingRetry = (
+    provider: Provider,
+    field: keyof StreamingRetryConfig,
+    value: number | boolean,
+  ) => {
+    setSettings((prev) => ({
+      ...prev,
+      streamingRetry: {
+        ...prev.streamingRetry,
+        [provider]: {
+          ...prev.streamingRetry?.[provider],
           [field]: value,
         },
       },
@@ -1643,6 +1801,105 @@ export default function SettingsPage() {
                             }
                             disabled={isSettingOverridden("rateLimiter")}
                             className="w-16"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
+      case "streamingRetry": {
+        const providers: Provider[] = [
+          "anthropic",
+          "openai",
+          "chatgpt",
+          "gemini",
+          "vertex",
+          "nvidia",
+          "openrouter",
+          "kilo",
+        ];
+        return (
+          <div className="space-y-4">
+            <h3 className="font-semibold mb-2">Streaming Retry Configuration</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Configure streaming retry behavior per provider. Controls whether retry is enabled, max retry attempts, and max buffer size for rate-limited streaming responses.
+            </p>
+            <SettingHelp
+              meta={getMeta("streamingRetry")}
+              description={SETTING_DESCRIPTIONS.streamingRetry}
+            />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border rounded">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Provider</th>
+                    <th className="px-3 py-2 text-left font-medium">Enabled</th>
+                    <th className="px-3 py-2 text-left font-medium">Max Retries</th>
+                    <th className="px-3 py-2 text-left font-medium">Max Buffer (MB)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {providers.map((provider) => {
+                    const config = settings.streamingRetry?.[provider];
+                    const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1);
+                    const rowId = `streamingRetry-${provider}`;
+                    return (
+                      <tr key={provider} className="border-t">
+                        <td className="px-3 py-2 font-medium">{providerLabel}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`${rowId}-enabled`}
+                              checked={config?.enabled ?? true}
+                              onChange={(e) =>
+                                updateStreamingRetry(provider, "enabled", e.target.checked)
+                              }
+                              disabled={isSettingOverridden("streamingRetry")}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <Label htmlFor={`${rowId}-enabled`} className="text-sm">
+                              Enable
+                            </Label>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Label htmlFor={`${rowId}-maxRetries`} className="sr-only">
+                            {providerLabel} max retries
+                          </Label>
+                          <Input
+                            id={`${rowId}-maxRetries`}
+                            type="number"
+                            min="0"
+                            max="10"
+                            value={config?.maxRetries ?? 3}
+                            onChange={(e) =>
+                              updateStreamingRetry(provider, "maxRetries", parseInt(e.target.value) || 0)
+                            }
+                            disabled={isSettingOverridden("streamingRetry")}
+                            className="w-20"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Label htmlFor={`${rowId}-buffer`} className="sr-only">
+                            {providerLabel} max buffer MB
+                          </Label>
+                          <Input
+                            id={`${rowId}-buffer`}
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={config?.maxBufferSizeMB ?? 10}
+                            onChange={(e) =>
+                              updateStreamingRetry(provider, "maxBufferSizeMB", parseInt(e.target.value) || 1)
+                            }
+                            disabled={isSettingOverridden("streamingRetry")}
+                            className="w-20"
                           />
                         </td>
                       </tr>
