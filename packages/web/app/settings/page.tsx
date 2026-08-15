@@ -462,6 +462,20 @@ export default function SettingsPage() {
               {renderSetting("redactReversible")}
               {renderSetting("redactPolicyFile")}
 
+              {/* Path filtering settings */}
+              <div className="pt-2 border-t">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Path Filtering</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Configure which JSON paths are redacted ("only") and which are skipped ("skip").
+                  Skip paths are checked before only paths. Defaults cover all LLM tool call formats
+                  (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
+                </p>
+                <div className="space-y-4">
+                  {renderSetting("redactPathsOnly")}
+                  {renderSetting("redactPathsSkip")}
+                </div>
+              </div>
+
               {/* Detector mode capabilities & warnings */}
               <DetectorModeWarnings
                 detectorMode={settings.detectorMode}
