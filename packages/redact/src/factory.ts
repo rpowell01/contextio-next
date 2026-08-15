@@ -106,6 +106,7 @@ const config: RedactPluginConfig = {
 		detectorMode: settings.detectorMode || (process.env.REDACT_DETECTOR_MODE as "rules" | "llm" | "hybrid" | "auto") || "rules",
 		detectorConfig: Object.keys(detectorConfig).length > 0 ? detectorConfig : undefined,
 		verbose: process.env.REDACT_VERBOSE === "true",
+		sessionTtlMs: Number.parseInt(process.env.REDACT_SESSION_TTL_MS || "900000", 10),
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
 			upsertRedactionMetadata(metadata);
 		},

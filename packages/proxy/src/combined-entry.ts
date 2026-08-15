@@ -69,6 +69,9 @@ async function main(): Promise<void> {
 		},
 		providers,
 		enabled: rateLimiterEnabled,
+		maxEntries: Number.parseInt(process.env.CONTEXTIO_RATE_LIMIT_MAX_ENTRIES || "2000", 10),
+		cleanupIntervalMs: Number.parseInt(process.env.CONTEXTIO_RATE_LIMIT_CLEANUP_INTERVAL_MS || "60000", 10),
+		entryTtlMs: Number.parseInt(process.env.CONTEXTIO_RATE_LIMIT_ENTRY_TTL_MS || "300000", 10),
 	});
 
 	// Create retry plugin with resolved per-provider config
@@ -91,6 +94,11 @@ async function main(): Promise<void> {
 		jitterFactor: config.retry.openai.jitterFactor,
 		providers: retryProviders,
 		enabled: retryEnabled,
+		maxEntries: Number.parseInt(process.env.CONTEXTIO_RETRY_MAX_ENTRIES || "1000", 10),
+		entryTtlMs: Number.parseInt(process.env.CONTEXTIO_RETRY_ENTRY_TTL_MS || "300000", 10),
+		cleanupIntervalMs: Number.parseInt(process.env.CONTEXTIO_RETRY_CLEANUP_INTERVAL_MS || "30000", 10),
+		maxBufferSize: Number.parseInt(process.env.CONTEXTIO_RETRY_MAX_BUFFER_SIZE || "5242880", 10),
+		maxStreamRetries: Number.parseInt(process.env.CONTEXTIO_RETRY_MAX_STREAM_RETRIES || "3", 10),
 	});
 
 	// Add built-in plugins based on enable flags
@@ -182,6 +190,23 @@ async function main(): Promise<void> {
 	const logTraffic = process.env.LOG_TRAFFIC === "true";
 	const proxy = createCombinedProxy({ plugins, logTraffic });
 	await proxy.start();
+
+	// Periodic garbage collection to prevent memory creep under sustained load
+	// Only runs if --expose-gc flag is set (NODE_OPTIONS=--expose-gc)
+	if (typeof global.gc === "function") {
+		const GC_INTERVAL_MS = 60_000; // Check every minute
+		const HEAP_THRESHOLD_MB = 1024; // Trigger GC if heap exceeds 1GB
+		setInterval(() => {
+			const usage = process.memoryUsage();
+			const heapUsedMB = Math.round(usage.heapUsed / 1024 / 1024);
+			if (heapUsedMB > HEAP_THRESHOLD_MB) {
+				console.log(`[GC] Heap usage ${heapUsedMB}MB > ${HEAP_THRESHOLD_MB}MB, triggering GC`);
+				global.gc!();
+			}
+		}, GC_INTERVAL_MS);
+	} else if (process.env.NODE_OPTIONS?.includes("--expose-gc")) {
+		console.warn("[GC] --expose-gc detected but global.gc not available (may need --expose-gc flag at startup)");
+	}
 
 	// Keep the process alive
 	process.stdin.resume();

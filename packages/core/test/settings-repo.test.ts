@@ -80,6 +80,8 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 		redactPreset: "pii",
 		redactReversible: false,
 		redactPolicyFile: "",
+		redactPathsOnly: ["messages[*].content"],
+		redactPathsSkip: [],
 		encryptionAtRest: false,
 		captureCleanupEnabled: true,
 		captureCleanupIntervalHours: 24,
