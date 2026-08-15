@@ -243,8 +243,8 @@ async function redactWithDetector(
       );
     }
 
-    // In hybrid mode, also apply rule-based redaction
-    if (detectorMode === "hybrid") {
+    // In hybrid and auto modes, also apply rule-based redaction
+    if (detectorMode === "hybrid" || detectorMode === "auto") {
       const { redactString, shouldRedactPath } = await import("./redact.js");
       // Check path filtering
       if (policy.paths.only !== null || policy.paths.skip.length > 0) {
