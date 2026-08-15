@@ -58,8 +58,9 @@ export const DEFAULT_REDACT_SKIP_PATHS = [
   "tool_choice",
   "functions",
   "function_call",
-// Skip tool call IDs and function arguments to prevent NER false positives
+  // Skip tool call IDs and function arguments to prevent NER false positives
   // Full paths from root (path matching is prefix-based)
+  // OpenAI format: messages[*].tool_calls[*]
   "messages[*].tool_calls[*].id",
   "messages[*].tool_calls[*].function.name",
   "messages[*].tool_calls[*].function.arguments",
@@ -79,6 +80,19 @@ export const DEFAULT_REDACT_SKIP_PATHS = [
   "function_call.id",
   "function_call.name",
   "function_call.arguments",
+  // Anthropic/Claude format: messages[*].content[*] with type="tool_use"
+  "messages[*].content[*].id",
+  "messages[*].content[*].name",
+  "messages[*].content[*].input",
+  // Anthropic/Claude tool_result blocks (response from tool calls)
+  "messages[*].content[*].tool_use_id",
+  "messages[*].content[*].content",
+  // Also handle top-level content arrays
+  "content[*].id",
+  "content[*].name",
+  "content[*].input",
+  "content[*].tool_use_id",
+  "content[*].content",
 ];
 
 /** Default only paths - only redact user message content by default. */
