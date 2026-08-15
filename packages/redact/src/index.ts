@@ -44,11 +44,13 @@ import type {
   RedactDetectorConfig,
   DetectorPipelineConfig,
 } from "./detector.js";
+import type { RedactionRule } from "./rules.js";
 import type { RuleDetectorConfig } from "./ruleDetector.js";
 import { detectorRegistry, registerDetector, createDetector } from "./detector.js";
 import { createRuleDetector } from "./ruleDetector.js";
 import { createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";
 import { createPresidioTsDetector, type PresidioTsConfig } from "./presidioTsDetector.js";
+import { EntityType } from "@siddicky/anonymizerts";
 
 /** Default skip paths to prevent redaction of tool call IDs and structured data. */
 export const DEFAULT_REDACT_SKIP_PATHS = [
@@ -478,6 +480,32 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
   const detectorConfig = resolvedDetectorConfig ?? {};
 
   /**
+   * Map rule name to Presidio EntityType if the rule covers the same entity.
+   * This is used to disable overlapping Presidio recognizers when policy rules
+   * already cover the same entity types.
+   */
+  function getPresidioEntityTypesFromRules(rules: RedactionRule[]): Set<EntityType> {
+    const ruleNameToEntityType: Record<string, EntityType> = {
+      "email": EntityType.EMAIL_ADDRESS,
+      "ssn": EntityType.US_SSN,
+      "credit-card": EntityType.CREDIT_CARD,
+      "phone-us": EntityType.PHONE_NUMBER,
+      "phone-eu": EntityType.PHONE_NUMBER,
+      "ipv4": EntityType.IP_ADDRESS,
+      "ipv6": EntityType.IP_ADDRESS,
+      "date-of-birth": EntityType.DATE_TIME,
+    };
+    const entityTypes = new Set<EntityType>();
+    for (const rule of rules) {
+      const entityType = ruleNameToEntityType[rule.name];
+      if (entityType) {
+        entityTypes.add(entityType);
+      }
+    }
+    return entityTypes;
+  }
+
+  /**
    * Initialize the detector pipeline based on detectorMode and detectorConfig.
    * Called lazily on first request that needs it.
    */
@@ -500,18 +528,90 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
           placeholderAllowlist: Array.from(policy.placeholderAllowlist),
         });
 
+        // Determine which Presidio entity types are already covered by policy rules.
+        // We'll exclude these from the Presidio detector to avoid duplicate detection
+        // and conflicting patterns (policy rules use context-gating; Presidio doesn't).
+        const coveredEntityTypes = getPresidioEntityTypesFromRules(policy.rules);
+
+        // Compute effective labels for Presidio: explicit config labels minus covered types
+        // If user explicitly specifies llmLabels, respect that but still filter covered types.
+        // If no explicit labels, Presidio will use all supported types minus covered types.
+        function computePresidioLabels(explicitLabels?: string[]): string[] | undefined {
+          // Get all supported Presidio entity type labels
+          const allSupportedLabels = [
+            EntityType.PERSON,
+            EntityType.LOCATION,
+            EntityType.ORGANIZATION,
+            EntityType.EMAIL_ADDRESS,
+            EntityType.PHONE_NUMBER,
+            EntityType.CREDIT_CARD,
+            EntityType.US_SSN,
+            EntityType.IP_ADDRESS,
+            EntityType.URL,
+            EntityType.DATE_TIME,
+          ];
+
+          // Start with explicit labels or all supported
+          const labelsToUse = explicitLabels && explicitLabels.length > 0
+            ? explicitLabels
+            : allSupportedLabels;
+
+          // Filter out covered entity types (but only if user didn't explicitly request them)
+          // Map entity types to their string labels for comparison
+          const entityTypeToLabel: Record<EntityType, string> = {
+            [EntityType.PERSON]: "PERSON",
+            [EntityType.LOCATION]: "LOCATION",
+            [EntityType.ORGANIZATION]: "ORGANIZATION",
+            [EntityType.EMAIL_ADDRESS]: "EMAIL_ADDRESS",
+            [EntityType.PHONE_NUMBER]: "PHONE_NUMBER",
+            [EntityType.CREDIT_CARD]: "CREDIT_CARD",
+            [EntityType.US_SSN]: "US_SSN",
+            [EntityType.IP_ADDRESS]: "IP_ADDRESS",
+            [EntityType.URL]: "URL",
+            [EntityType.DATE_TIME]: "DATE_TIME",
+          };
+
+          const coveredLabels = new Set<string>();
+          for (const et of coveredEntityTypes) {
+            coveredLabels.add(entityTypeToLabel[et]);
+          }
+          // Also add common aliases that Presidio might use
+          const aliasMap: Record<string, string> = {
+            "EMAIL": "EMAIL_ADDRESS",
+            "PHONE": "PHONE_NUMBER",
+            "SSN": "US_SSN",
+            "IP": "IP_ADDRESS",
+            "DATE": "DATE_TIME",
+            "DATETIME": "DATE_TIME",
+          };
+          for (const [alias, canonical] of Object.entries(aliasMap)) {
+            if (coveredLabels.has(canonical)) {
+              coveredLabels.add(alias);
+            }
+          }
+
+          const filtered = labelsToUse.filter((label) => !coveredLabels.has(label.toUpperCase()));
+          if (verbose && filtered.length < labelsToUse.length) {
+            const removed = labelsToUse.filter((label) => coveredLabels.has(label.toUpperCase()));
+            console.error(`[redact] Disabled overlapping Presidio recognizers (covered by policy rules): ${removed.join(", ")}`);
+          }
+          return filtered.length > 0 ? filtered : undefined;
+        }
+
         let pipeline: Detector;
 
         if (detectorMode === "llm") {
           // LLM-only mode: use Presidio TS detector
           const presidioConfig = detectorConfig as RedactDetectorConfig;
           const modelName = presidioConfig.modelName ?? "Xenova/bert-base-NER";
+          const presidioLabels = computePresidioLabels(presidioConfig.llmLabels);
           const llmDetector = await createPresidioTsDetector({
             name: "presidio-ts",
             modelName,
             threshold: presidioConfig.llmThreshold ?? 0.5,
-            labels: presidioConfig.llmLabels,
+            labels: presidioLabels,
             options: presidioConfig.options,
+            allowlistPatterns: policy.allowlist.patterns,
           });
           pipeline = await createDetectorPipeline({
             detectors: [llmDetector],
@@ -522,12 +622,14 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
           const presidioConfig = detectorConfig as RedactDetectorConfig;
           let llmDetector: Detector | null = null;
           const modelName = presidioConfig.modelName ?? "Xenova/bert-base-NER";
+          const presidioLabels = computePresidioLabels(presidioConfig.llmLabels);
           llmDetector = await createPresidioTsDetector({
             name: "presidio-ts",
             modelName,
             threshold: presidioConfig.llmThreshold ?? 0.5,
-            labels: presidioConfig.llmLabels,
+            labels: presidioLabels,
             options: presidioConfig.options,
+            allowlistPatterns: policy.allowlist.patterns,
           });
 
           // In auto mode, we still use hybrid but could add logic to skip LLM for simple cases

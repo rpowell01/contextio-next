@@ -122,6 +122,105 @@ function SettingHelp({
   );
 }
 
+// Detector Mode Warnings Component
+// Shows which policy features are active/ignored based on the current detector mode
+function DetectorModeWarnings({
+  detectorMode,
+  detectorModelName,
+  detectorThreshold,
+  hasCustomPolicy,
+}: {
+  detectorMode: "rules" | "llm" | "hybrid" | "auto";
+  detectorModelName: string;
+  detectorThreshold: number;
+  hasCustomPolicy: boolean;
+}) {
+  const warnings: Array<{ title: string; description: string; type: "info" | "warning" | "success" }> = [];
+
+  if (detectorMode === "rules") {
+    warnings.push({
+      title: "Detector Mode: Rules Only",
+      description: "Only regex-based pattern matching is active. LLM-based semantic detection (PERSON, ORGANIZATION, LOCATION via NER) is disabled. Detector model name and threshold settings are ignored.",
+      type: "info",
+    });
+  } else if (detectorMode === "llm") {
+    warnings.push({
+      title: "Detector Mode: LLM Only",
+      description: "Only semantic PII detection via transformers.js (NER) is active. Custom regex rules from presets/policy file are ignored. Path filtering (only/skip) is still applied. Context-gated rules will not run.",
+      type: "warning",
+    });
+    if (hasCustomPolicy) {
+      warnings.push({
+        title: "Custom Policy File Detected",
+        description: "A custom policy file is configured but its custom regex rules will be ignored in LLM-only mode. Only path filtering and allowlists from the policy will be applied.",
+        type: "warning",
+      });
+    }
+  } else if (detectorMode === "hybrid") {
+    warnings.push({
+      title: "Detector Mode: Hybrid",
+      description: "Both regex rules and LLM detection run. Rule detections take priority (rules win overlaps). Presidio NER is disabled for entity types already covered by policy rules (e.g., email, phone, SSN) to avoid duplicates. Path filtering and allowlists apply to both.",
+      type: "success",
+    });
+  } else if (detectorMode === "auto") {
+    warnings.push({
+      title: "Detector Mode: Auto",
+      description: "Currently behaves as Hybrid mode. Future enhancement: will automatically choose Rules or Hybrid based on content complexity. Presidio NER disabled for entity types covered by policy rules. Path filtering and allowlists apply.",
+      type: "info",
+    });
+  }
+
+  // Common warnings for LLM modes
+  if (detectorMode !== "rules") {
+    // Model name is user-configurable but only specific models are supported
+    if (!detectorModelName.startsWith("Xenova/")) {
+      warnings.push({
+        title: "Model Name",
+        description: `Using custom model "${detectorModelName}". The preset detector (@siddicky/anonymizerts) only supports Xenova/bert-base-NER based models. Other models may not work correctly.`,
+        type: "warning",
+      });
+    }
+    if (detectorThreshold < 0.3) {
+      warnings.push({
+        title: "Low Confidence Threshold",
+        description: `Threshold is ${detectorThreshold}. Values below 0.3 may produce many false positives. Recommended: 0.5 for balanced precision/recall.`,
+        type: "warning",
+      });
+    }
+  }
+
+  // Custom policy file warnings
+  if (hasCustomPolicy && detectorMode !== "rules") {
+    warnings.push({
+      title: "Policy File Integration",
+      description: "Custom policy file is loaded. Note: detector.options (custom analyzer options) are parsed but not passed to the Presidio analyzer due to library limitations. Custom regex rules with context gating may be redundant with LLM NER for PERSON/ORG/LOCATION.",
+      type: "info",
+    });
+  }
+
+  if (warnings.length === 0) return null;
+
+  return (
+    <div className="space-y-3 mt-4">
+      {warnings.map((w, i) => (
+        <div
+          key={i}
+          className={`rounded-lg border p-3 text-sm ${
+            w.type === "info"
+              ? "border-blue-200 bg-blue-50 text-blue-800"
+              : w.type === "warning"
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-green-200 bg-green-50 text-green-800"
+          }`}
+        >
+          <div className="font-medium mb-1">{w.title}</div>
+          <div className="text-xs">{w.description}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Tab configuration (module scope for stability)
 type SettingsTab = "logging" | "redaction" | "security" | "rateLimiter" | "appearance" | "providers";
 
@@ -315,6 +414,15 @@ export default function SettingsPage() {
               {renderSetting("redactPreset")}
               {renderSetting("redactReversible")}
               {renderSetting("redactPolicyFile")}
+
+              {/* Detector mode capabilities & warnings */}
+              <DetectorModeWarnings
+                detectorMode={settings.detectorMode}
+                detectorModelName={settings.detectorModelName}
+                detectorThreshold={settings.detectorThreshold}
+                hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim())}
+              />
+
               <div className="pt-2 border-t">
                 <h4 className="text-sm font-medium text-muted-foreground mb-3">Detector Settings</h4>
                 <div className="space-y-4">

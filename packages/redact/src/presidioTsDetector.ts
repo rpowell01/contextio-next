@@ -41,6 +41,8 @@ export interface PresidioTsConfig extends DetectorConfig {
   labels?: string[];
   /** Additional options passed to the analyzer for future extensibility. */
   options?: Record<string, unknown>;
+  /** Regex patterns for strings that should never be flagged (allowlist). */
+  allowlistPatterns?: RegExp[];
 }
 
 /**
@@ -108,6 +110,17 @@ export class PresidioTsDetector implements Detector {
       useNER: this.config.useNER ?? true,
       modelName: this.config.modelName ?? "Xenova/bert-base-NER",
     });
+  }
+
+  /**
+   * Check if a matched value is in the allowlist patterns.
+   */
+  private isAllowlisted(match: string, allowlistPatterns: RegExp[]): boolean {
+    for (const pat of allowlistPatterns) {
+      pat.lastIndex = 0;
+      if (pat.test(match)) return true;
+    }
+    return false;
   }
 
   get labels(): readonly string[] {
@@ -267,6 +280,7 @@ export class PresidioTsDetector implements Detector {
 
     const finalConfig = { ...this.config, ...config } as PresidioTsConfig;
     const threshold = finalConfig.threshold ?? 0.5;
+    const allowlistPatterns = finalConfig.allowlistPatterns ?? [];
 
     // Determine which entity types to detect
     let entityTypes: EntityType[] | undefined;
@@ -301,6 +315,7 @@ export class PresidioTsDetector implements Detector {
     // Convert to DetectionResult format
     const spans = analyzerResults
       .filter((result: RecognizerResult) => result.score >= threshold)
+      .filter((result: RecognizerResult) => !this.isAllowlisted(result.text, allowlistPatterns))
       .map((result: RecognizerResult) => this.convertToDetectedSpan(result));
 
     // Sort by start position
