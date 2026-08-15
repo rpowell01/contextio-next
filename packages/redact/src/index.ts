@@ -30,7 +30,7 @@ import type {
 
 import fs from "node:fs";
 import { ReplacementMap } from "./mapping.js";
-import type { CompiledPolicy, PolicyJson } from "./policy.js";
+import type { CompiledPolicy, PolicyJson, PathMatcher } from "./policy.js";
 import { compilePolicy, fromPreset, loadPolicyFile, parsePath } from "./policy.js";
 import type { PresetName } from "./presets.js";
 import { buildRedactMetaPayload, buildFullRedactionMetadata, createStats, recordMatch, redactWithPolicy, type MatchEntry, type RedactionMetadata, type RedactionStats } from "./redact.js";
@@ -303,15 +303,31 @@ function resolvePolicy(config?: RedactPluginConfig): CompiledPolicy {
 /**
  * Merge paths configuration into a compiled policy.
  * Config paths take precedence over policy file paths.
+* For skip paths, we combine both (union) to ensure defaults are always applied.
  */
 function mergePathsIntoPolicy(policy: CompiledPolicy, paths: { only?: string[]; skip?: string[] }): CompiledPolicy {
   const pathsOnly = paths.only
     ? paths.only.map(parsePath)
     : policy.paths.only; // Keep existing if not specified in config
   
-  const pathsSkip = paths.skip
+// For skip paths, combine policy file skip with config/default skip
+  // This ensures defaults like tool_calls are always skipped
+  const policySkip = policy.paths.skip ?? [];
+  const configSkip = paths.skip
     ? paths.skip.map(parsePath)
-    : policy.paths.skip; // Keep existing if not specified in config
+    : [];
+  
+  // Combine and deduplicate by source string
+  const allSkipPaths: PathMatcher[] = [...policySkip, ...configSkip];
+  const seen = new Set<string>();
+  const pathsSkip: PathMatcher[] = [];
+  for (const p of allSkipPaths) {
+    const key = p.source;
+    if (!seen.has(key)) {
+      seen.add(key);
+      pathsSkip.push(p);
+    }
+  }
   
   return {
     ...policy,
