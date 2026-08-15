@@ -115,6 +115,35 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 			openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 			kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 		},
+		// Feature flags (default true)
+		enableLogger: true,
+		enableRedact: true,
+		enableRateLimiter: true,
+		logTraffic: false,
+		// Advanced rate limiter cache configuration
+		rateLimiterMaxEntries: 2000,
+		rateLimiterCleanupIntervalMs: 60000,
+		rateLimiterEntryTtlMs: 300000,
+		// Advanced streaming retry cache configuration
+		retryMaxEntries: 1000,
+		retryEntryTtlMs: 300000,
+		retryCleanupIntervalMs: 30000,
+		retryMaxBufferSize: 5242880,
+		retryMaxStreamRetries: 3,
+		// Proxy configuration
+		proxyBindHost: "[IP_ADDRESS_1786835330040]",
+		proxyPort: 4040,
+		proxyAllowTargetOverride: false,
+		strictUrlForwarding: false,
+		upstreamOpenAiUrl: "",
+		upstreamAnthropicUrl: "",
+		upstreamChatGptUrl: "",
+		upstreamGeminiUrl: "",
+		upstreamVertexUrl: "",
+		upstreamNvidiaUrl: "",
+		upstreamOpenRouterUrl: "",
+		upstreamKiloUrl: "",
+		upstreamGeminiCodeAssistUrl: "",
 	};
 	return { ...base, ...overrides };
 }
@@ -561,10 +590,10 @@ describe("settings-repo.ts", () => {
 	describe("getSettingsWithMeta", () => {
 		it("returns settings with metadata for each field", () => {
 			const result = getSettingsWithMeta();
-			
+
 			assert.ok(result.settings !== null);
 			assert.ok(result.meta);
-			
+
 			// Check all expected fields have metadata
 			const expectedFields: (keyof Settings)[] = [
 				"logDir", "maxSessions", "redactPreset", "redactReversible",
@@ -572,9 +601,22 @@ describe("settings-repo.ts", () => {
 				"captureCleanupIntervalHours", "captureCleanupMaxAgeDays",
 				"theme", "oidcEnabled", "oidcPublicUrl", "showPageLoadTime",
 				"detectorMode", "detectorModelName", "detectorThreshold",
-				"rateLimiter", "streamingRetry"
+				"rateLimiter", "streamingRetry",
+				// Feature flags
+				"enableLogger", "enableRedact", "enableRateLimiter", "logTraffic",
+				// Advanced rate limiter cache configuration
+				"rateLimiterMaxEntries", "rateLimiterCleanupIntervalMs", "rateLimiterEntryTtlMs",
+				// Advanced streaming retry cache configuration
+				"retryMaxEntries", "retryEntryTtlMs", "retryCleanupIntervalMs",
+				"retryMaxBufferSize", "retryMaxStreamRetries",
+				// Proxy configuration
+				"proxyBindHost", "proxyPort", "proxyAllowTargetOverride",
+				"strictUrlForwarding", "upstreamOpenAiUrl", "upstreamAnthropicUrl",
+				"upstreamChatGptUrl", "upstreamGeminiUrl", "upstreamVertexUrl",
+				"upstreamNvidiaUrl", "upstreamOpenRouterUrl", "upstreamKiloUrl",
+				"upstreamGeminiCodeAssistUrl",
 			];
-			
+
 			for (const field of expectedFields) {
 				assert.ok(field in result.meta, `Missing metadata for ${field}`);
 				assert.ok(["settings-file", "environment-variable", "default"].includes(result.meta[field].source));
