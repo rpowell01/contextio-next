@@ -1634,6 +1634,74 @@ export default function SettingsPage() {
             />
           </div>
         );
+      case "enableLogger":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="enableLogger"
+              checked={settings.enableLogger}
+              onChange={(e) => updateSetting("enableLogger", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isSettingOverridden("enableLogger")}
+            />
+            <Label htmlFor="enableLogger" className="text-sm">
+              Enable Request/Response Logging
+            </Label>
+            <SettingHelp meta={getMeta("enableLogger")} description={SETTING_DESCRIPTIONS.enableLogger} />
+          </div>
+        );
+      case "logTraffic":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="logTraffic"
+              checked={settings.logTraffic}
+              onChange={(e) => updateSetting("logTraffic", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isSettingOverridden("logTraffic")}
+            />
+            <Label htmlFor="logTraffic" className="text-sm">
+              Enable Detailed Traffic Logging
+            </Label>
+            <SettingHelp meta={getMeta("logTraffic")} description={SETTING_DESCRIPTIONS.logTraffic} />
+          </div>
+        );
+      case "enableRedact":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="enableRedact"
+              checked={settings.enableRedact}
+              onChange={(e) => updateSetting("enableRedact", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isSettingOverridden("enableRedact")}
+            />
+            <Label htmlFor="enableRedact" className="text-sm">
+              Enable PII/Secrets Redaction
+            </Label>
+            <SettingHelp meta={getMeta("enableRedact")} description={SETTING_DESCRIPTIONS.enableRedact} />
+          </div>
+        );
+      case "enableRateLimiter":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="enableRateLimiter"
+              checked={settings.enableRateLimiter}
+              onChange={(e) => updateSetting("enableRateLimiter", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isSettingOverridden("enableRateLimiter")}
+            />
+            <Label htmlFor="enableRateLimiter" className="text-sm">
+              Enable Rate Limiting
+            </Label>
+            <SettingHelp meta={getMeta("enableRateLimiter")} description={SETTING_DESCRIPTIONS.enableRateLimiter} />
+          </div>
+        );
       case "captureCleanupEnabled":
         return (
           <div className="flex items-center justify-between mb-4">
