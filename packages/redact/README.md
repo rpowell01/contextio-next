@@ -1,6 +1,6 @@
 # @contextio/redact
 
-[![npm](https://img.shields.io/npm/v/@contextio/redact)](https://www.npmjs.com/package/@contextio/redact)
+[![npm](https://img.shields.io/npm/v/@contextio/redact)]
 
 Privacy and redaction plugin for `@contextio/proxy`. Strips PII, secrets, and sensitive data from LLM API requests before they leave your machine.
 
@@ -43,7 +43,7 @@ Each preset builds on the previous one:
 | `pii` | Everything in secrets, plus email, SSN, credit cards, US phone numbers |
 | `strict` | Everything in pii, plus IPv4/IPv6 addresses, dates of birth |
 
-Rules are context-gated where it makes sense. `123-45-6789` on its own is left alone; `My SSN is 123-45-6789` gets redacted.
+Rules are context-gated where it makes sense. `[SSN_1786807757513]` on its own is left alone; `My SSN is [SSN_1786807757513]` gets redacted.
 
 ## Reversible mode
 
@@ -61,6 +61,27 @@ You see:   "I've noted john@test.com as your contact"
 ```
 
 Same value always maps to the same placeholder within a session. Works across Anthropic, OpenAI, and Gemini streaming formats. Session maps are evicted after 30 minutes of inactivity.
+
+## Path filtering
+
+By default, the plugin only redacts user message content (`messages[*].content`) and skips structured data like tool calls, function definitions, and their arguments to prevent NER models from incorrectly classifying IDs, names, and arguments as PII (e.g., tool names like "bash" being detected as PERSON entities).
+
+**Default "only" paths:**
+- `messages[*].content` — user/assistant message content
+
+**Default "skip" paths (checked before "only"):**
+- Top-level: `tools`, `tool_calls`, `toolChoice`, `tool_choice`, `functions`, `function_call`
+- OpenAI tool_calls: `messages[*].tool_calls[*].id`, `.function.name`, `.function.arguments`
+- OpenAI tools: `messages[*].tools[*].id`, `.function.name`, `.function.arguments`
+- OpenAI function_call: `messages[*].function_call.id`, `.name`, `.arguments`
+- Top-level variants: `tool_calls[*].id`, `.function.name`, `.function.arguments`, `tools[*].id`, `.function.name`, `.function.arguments`, `function_call.id`, `.name`, `.arguments`
+- Anthropic content blocks: `messages[*].content[*].id`, `.name`, `.input`, `.tool_use_id`, `.content`, `.thinking`, `.signature`, `.type`
+- Top-level content arrays: `content[*].id`, `.name`, `.input`, `.tool_use_id`, `.content`, `.thinking`, `.signature`, `.type`
+
+These defaults can be overridden via:
+- **Web UI Settings** → Redaction tab → "Redaction Paths (Only)" / "Redaction Paths (Skip)" (stored in SQLite)
+- **Environment variables**: `REDACT_PATHS_ONLY` and `REDACT_PATHS_SKIP` (JSON arrays)
+- **Plugin config**: `paths: { only: [...], skip: [...] }`
 
 ## Custom policies
 
@@ -85,7 +106,7 @@ Same value always maps to the same placeholder within a session. Works across An
 const redact = createRedactPlugin({ policyFile: './my-rules.json' });
 ```
 
-Full policy reference: [redaction-policy.md](https://github.com/larsderidder/contextio-next/blob/main/docs/redaction-policy.md)
+Full policy reference: [redaction-policy.md](https://github.com/russpayne/contextio-next/tree/main/packages/redact/redaction-policy.md)
 
 ## Standalone usage
 

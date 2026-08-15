@@ -51,6 +51,10 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Store originals so redacted values can be restored in responses. Applied dynamically per request.",
   redactPolicyFile:
     "Path to a custom redaction policy YAML file. When set, it overrides the preset dropdown and is applied per request.",
+  redactPathsOnly:
+    "JSON paths where redaction should be applied (e.g., ['messages[*].content']). Only values at these paths will be checked for redaction. Changes apply dynamically per request.",
+  redactPathsSkip:
+    "JSON paths where redaction should be skipped (e.g., tool call IDs, function arguments). These are checked before 'only' paths. Default includes all tool call and structured data paths to prevent NER false positives. Changes apply dynamically per request.",
   encryptionAtRest:
     "Encrypt captured API traffic files at rest using AES-256. Requires a proxy restart to apply.",
   captureCleanupEnabled:
@@ -240,6 +244,49 @@ export default function SettingsPage() {
     redactPreset: "pii",
     redactReversible: false,
     redactPolicyFile: "",
+    redactPathsOnly: ["messages[*].content"],
+    redactPathsSkip: [
+      "tools",
+      "tool_calls",
+      "toolChoice",
+      "tool_choice",
+      "functions",
+      "function_call",
+      "messages[*].tool_calls[*].id",
+      "messages[*].tool_calls[*].function.name",
+      "messages[*].tool_calls[*].function.arguments",
+      "messages[*].tools[*].id",
+      "messages[*].tools[*].function.name",
+      "messages[*].tools[*].function.arguments",
+      "messages[*].function_call.id",
+      "messages[*].function_call.name",
+      "messages[*].function_call.arguments",
+      "tool_calls[*].id",
+      "tool_calls[*].function.name",
+      "tool_calls[*].function.arguments",
+      "tools[*].id",
+      "tools[*].function.name",
+      "tools[*].function.arguments",
+      "function_call.id",
+      "function_call.name",
+      "function_call.arguments",
+      "messages[*].content[*].id",
+      "messages[*].content[*].name",
+      "messages[*].content[*].input",
+      "messages[*].content[*].tool_use_id",
+      "messages[*].content[*].content",
+      "messages[*].content[*].thinking",
+      "messages[*].content[*].signature",
+      "messages[*].content[*].type",
+      "content[*].id",
+      "content[*].name",
+      "content[*].input",
+      "content[*].tool_use_id",
+      "content[*].content",
+      "content[*].thinking",
+      "content[*].signature",
+      "content[*].type",
+    ],
     encryptionAtRest: false,
     captureCleanupEnabled: false,
     captureCleanupIntervalHours: 24,
@@ -1158,6 +1205,70 @@ export default function SettingsPage() {
               meta={getMeta("redactReversible")}
               description={SETTING_DESCRIPTIONS.redactReversible}
             />
+          </div>
+        );
+      case "redactPathsOnly":
+        return (
+          <div>
+            <Label htmlFor="redactPathsOnly" className="block text-sm font-medium mb-2">
+              Redaction Paths (Only)
+            </Label>
+            <textarea
+              id="redactPathsOnly"
+              value={JSON.stringify(settings.redactPathsOnly, null, 2)}
+              onChange={(e) => {
+                try {
+                  updateSetting("redactPathsOnly", JSON.parse(e.target.value));
+                } catch {
+                  // Invalid JSON, ignore
+                }
+              }}
+              placeholder='["messages[*].content"]'
+              disabled={isSettingOverridden("redactPathsOnly")}
+              className={`font-mono text-xs min-h-[80px] w-full p-2 border rounded ${
+                isSettingOverridden("redactPathsOnly") ? "bg-muted cursor-not-allowed" : ""
+              }`}
+              rows={4}
+            />
+            <SettingHelp
+              meta={getMeta("redactPathsOnly")}
+              description={SETTING_DESCRIPTIONS.redactPathsOnly}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Enter a JSON array of path strings (e.g., ["messages[*].content","system"]). Use [*] for array wildcards.
+            </p>
+          </div>
+        );
+      case "redactPathsSkip":
+        return (
+          <div>
+            <Label htmlFor="redactPathsSkip" className="block text-sm font-medium mb-2">
+              Redaction Paths (Skip)
+            </Label>
+            <textarea
+              id="redactPathsSkip"
+              value={JSON.stringify(settings.redactPathsSkip, null, 2)}
+              onChange={(e) => {
+                try {
+                  updateSetting("redactPathsSkip", JSON.parse(e.target.value));
+                } catch {
+                  // Invalid JSON, ignore
+                }
+              }}
+              placeholder='["tools","tool_calls","messages[*].tool_calls[*].id",...]'
+              disabled={isSettingOverridden("redactPathsSkip")}
+              className={`font-mono text-xs min-h-[120px] w-full p-2 border rounded ${
+                isSettingOverridden("redactPathsSkip") ? "bg-muted cursor-not-allowed" : ""
+              }`}
+              rows={6}
+            />
+            <SettingHelp
+              meta={getMeta("redactPathsSkip")}
+              description={SETTING_DESCRIPTIONS.redactPathsSkip}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Enter a JSON array of path strings to skip. Checked before "only" paths. Use [*] for array wildcards.
+            </p>
           </div>
         );
       case "encryptionAtRest":

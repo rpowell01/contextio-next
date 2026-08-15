@@ -9,6 +9,8 @@
  * - REDACT_PRESET: "secrets" | "pii" | "strict" (default: "pii")
  * - REDACT_REVERSIBLE: "true" | "false" (default: "false")
  * - REDACT_POLICY_FILE: path to policy JSON file
+ * - REDACT_PATHS_ONLY: JSON array of paths where redaction applies (default: ["messages[*].content"])
+ * - REDACT_PATHS_SKIP: JSON array of paths to skip redaction (default: tool calls, functions, etc.)
  * - REDACT_DETECTOR_MODE: "rules" | "llm" | "hybrid" | "auto" (default: "rules")
  * - REDACT_DETECTOR_MODEL_NAME: HuggingFace model ID for Presidio TS (default: "Xenova/bert-base-NER")
  * - REDACT_DETECTOR_THRESHOLD: number 0-1 (default: 0.5)
@@ -23,6 +25,8 @@ interface WebUISettings {
 	redactPreset?: string;
 	redactReversible?: boolean;
 	redactPolicyFile?: string;
+	redactPathsOnly?: string[];
+	redactPathsSkip?: string[];
 	detectorMode?: "rules" | "llm" | "hybrid" | "auto";
 	detectorModelName?: string;
 	detectorThreshold?: number;
@@ -38,6 +42,8 @@ async function readWebUISettings(): Promise<WebUISettings> {
 				redactPreset: dbSettings.redactPreset,
 				redactReversible: dbSettings.redactReversible,
 				redactPolicyFile: dbSettings.redactPolicyFile,
+				redactPathsOnly: dbSettings.redactPathsOnly,
+				redactPathsSkip: dbSettings.redactPathsSkip,
 				detectorMode: dbSettings.detectorMode,
 				detectorModelName: dbSettings.detectorModelName,
 				detectorThreshold: dbSettings.detectorThreshold,
@@ -57,6 +63,8 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			redactPreset: parsed.redactPreset,
 			redactReversible: parsed.redactReversible,
 			redactPolicyFile: parsed.redactPolicyFile,
+			redactPathsOnly: parsed.redactPathsOnly,
+			redactPathsSkip: parsed.redactPathsSkip,
 			detectorMode: parsed.detectorMode,
 			detectorModelName: parsed.detectorModelName ?? parsed.detectorModelDir,
 			detectorThreshold: parsed.detectorThreshold,
@@ -91,7 +99,7 @@ async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 		}
 	}
 
-	const config: RedactPluginConfig = {
+const config: RedactPluginConfig = {
 		preset: (settings.redactPreset || process.env.REDACT_PRESET || "pii") as "secrets" | "pii" | "strict",
 		reversible: settings.redactReversible ?? process.env.REDACT_REVERSIBLE === "true",
 		policyFile: settings.redactPolicyFile || process.env.REDACT_POLICY_FILE,
@@ -101,12 +109,10 @@ async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
 			upsertRedactionMetadata(metadata);
 		},
-		// By default, only redact user message content to avoid breaking tool calls
-		// Tool calls contain IDs, timestamps, and structured data that NER models
-		// may incorrectly classify as PII (e.g., PERSON entities)
+		// Path filtering: use settings from database, env vars as fallback, then hardcoded defaults
 		paths: {
-			only: process.env.REDACT_PATHS_ONLY?.split(",") ?? ["messages[*].content"],
-			skip: process.env.REDACT_PATHS_SKIP?.split(",") ?? [
+			only: settings.redactPathsOnly ?? (process.env.REDACT_PATHS_ONLY ? process.env.REDACT_PATHS_ONLY.split(",") : ["messages[*].content"]),
+			skip: settings.redactPathsSkip ?? (process.env.REDACT_PATHS_SKIP ? process.env.REDACT_PATHS_SKIP.split(",") : [
 				"tools",
 				"tool_calls",
 				"toolChoice",
@@ -155,7 +161,7 @@ async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 				"content[*].thinking",
 				"content[*].signature",
 				"content[*].type",
-			],
+			]),
 		},
 	};
 

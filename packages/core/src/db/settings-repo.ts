@@ -40,6 +40,8 @@ export interface SettingsRow {
 	detector_mode: string;
 	detector_model_name: string;
 	detector_threshold: number;
+	redact_paths_only: string | null; // JSON array of path strings
+	redact_paths_skip: string | null; // JSON array of path strings
 	rate_limiter: string; // JSON blob
 	streaming_retry: string; // JSON blob
 	created_at: number;
@@ -56,6 +58,8 @@ export interface Settings {
 	redactPreset: "secrets" | "pii" | "strict";
 	redactReversible: boolean;
 	redactPolicyFile: string;
+	redactPathsOnly: string[]; // JSON array of path strings for "only" filtering
+	redactPathsSkip: string[]; // JSON array of path strings for "skip" filtering
 	encryptionAtRest: boolean;
 	captureCleanupEnabled: boolean;
 	captureCleanupIntervalHours: number;
@@ -144,6 +148,49 @@ const DEFAULT_SETTINGS: Settings = {
 	redactPreset: "pii",
 	redactReversible: false,
 	redactPolicyFile: "",
+	redactPathsOnly: ["messages[*].content"],
+	redactPathsSkip: [
+		"tools",
+		"tool_calls",
+		"toolChoice",
+		"tool_choice",
+		"functions",
+		"function_call",
+		"messages[*].tool_calls[*].id",
+		"messages[*].tool_calls[*].function.name",
+		"messages[*].tool_calls[*].function.arguments",
+		"messages[*].tools[*].id",
+		"messages[*].tools[*].function.name",
+		"messages[*].tools[*].function.arguments",
+		"messages[*].function_call.id",
+		"messages[*].function_call.name",
+		"messages[*].function_call.arguments",
+		"tool_calls[*].id",
+		"tool_calls[*].function.name",
+		"tool_calls[*].function.arguments",
+		"tools[*].id",
+		"tools[*].function.name",
+		"tools[*].function.arguments",
+		"function_call.id",
+		"function_call.name",
+		"function_call.arguments",
+		"messages[*].content[*].id",
+		"messages[*].content[*].name",
+		"messages[*].content[*].input",
+		"messages[*].content[*].tool_use_id",
+		"messages[*].content[*].content",
+		"messages[*].content[*].thinking",
+		"messages[*].content[*].signature",
+		"messages[*].content[*].type",
+		"content[*].id",
+		"content[*].name",
+		"content[*].input",
+		"content[*].tool_use_id",
+		"content[*].content",
+		"content[*].thinking",
+		"content[*].signature",
+		"content[*].type",
+	],
 	encryptionAtRest: false,
 	captureCleanupEnabled: true,
 	captureCleanupIntervalHours: 24,
@@ -179,6 +226,8 @@ function rowToSettings(row: SettingsRow): Settings {
 		redactPreset: row.redact_preset as Settings["redactPreset"],
 		redactReversible: row.redact_reversible === 1,
 		redactPolicyFile: row.redact_policy_file,
+		redactPathsOnly: safeJsonParse<string[]>(row.redact_paths_only, DEFAULT_SETTINGS.redactPathsOnly),
+		redactPathsSkip: safeJsonParse<string[]>(row.redact_paths_skip, DEFAULT_SETTINGS.redactPathsSkip),
 		encryptionAtRest: row.encryption_at_rest === 1,
 		captureCleanupEnabled: row.capture_cleanup_enabled === 1,
 		captureCleanupIntervalHours: row.capture_cleanup_interval_hours,
@@ -209,6 +258,8 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		redact_preset: merged.redactPreset,
 		redact_reversible: merged.redactReversible ? 1 : 0,
 		redact_policy_file: merged.redactPolicyFile,
+		redact_paths_only: JSON.stringify(merged.redactPathsOnly),
+		redact_paths_skip: JSON.stringify(merged.redactPathsSkip),
 		encryption_at_rest: merged.encryptionAtRest ? 1 : 0,
 		capture_cleanup_enabled: merged.captureCleanupEnabled ? 1 : 0,
 		capture_cleanup_interval_hours: merged.captureCleanupIntervalHours,
@@ -285,12 +336,13 @@ export function upsertSettings(settings: Settings): void {
 	const stmt = db.prepare(`
 		INSERT INTO settings (
 			id, log_dir, max_sessions, redact_preset, redact_reversible, redact_policy_file,
+			redact_paths_only, redact_paths_skip,
 			encryption_at_rest, capture_cleanup_enabled, capture_cleanup_interval_hours,
 			capture_cleanup_max_age_days, theme, oidc_enabled, oidc_public_url,
 			show_page_load_time, detector_mode, detector_model_name, detector_threshold,
 			rate_limiter, streaming_retry
 		) VALUES (
-			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 		ON CONFLICT(id) DO UPDATE SET
 			log_dir = excluded.log_dir,
@@ -298,6 +350,8 @@ export function upsertSettings(settings: Settings): void {
 			redact_preset = excluded.redact_preset,
 			redact_reversible = excluded.redact_reversible,
 			redact_policy_file = excluded.redact_policy_file,
+			redact_paths_only = excluded.redact_paths_only,
+			redact_paths_skip = excluded.redact_paths_skip,
 			encryption_at_rest = excluded.encryption_at_rest,
 			capture_cleanup_enabled = excluded.capture_cleanup_enabled,
 			capture_cleanup_interval_hours = excluded.capture_cleanup_interval_hours,
@@ -320,6 +374,8 @@ export function upsertSettings(settings: Settings): void {
 			row.redact_preset,
 			row.redact_reversible,
 			row.redact_policy_file,
+			row.redact_paths_only,
+			row.redact_paths_skip,
 			row.encryption_at_rest,
 			row.capture_cleanup_enabled,
 			row.capture_cleanup_interval_hours,
@@ -361,6 +417,8 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		redactPreset: { envVar: "REDACT_PRESET", dynamic: true },
 		redactReversible: { envVar: "REDACT_REVERSIBLE", dynamic: true },
 		redactPolicyFile: { envVar: "REDACT_POLICY_FILE", dynamic: true },
+		redactPathsOnly: { envVar: "REDACT_PATHS_ONLY", dynamic: true },
+		redactPathsSkip: { envVar: "REDACT_PATHS_SKIP", dynamic: true },
 		encryptionAtRest: { envVar: "CONTEXTIO_LOGGER_ENCRYPTION_ENABLED", dynamic: false },
 		captureCleanupEnabled: { envVar: "LOGGER_CAPTURE_CLEANUP_ENABLED", dynamic: false },
 		captureCleanupIntervalHours: { envVar: "LOGGER_CAPTURE_CLEANUP_INTERVAL", dynamic: false },
@@ -526,12 +584,37 @@ function validateAndMergeSettings(input: unknown): Settings {
 		return result;
 	};
 
+	// Helper to parse JSON array of strings
+	const parseStringArray = (key: string, defaultVal: string[]): string[] => {
+		const v = obj[key];
+		if (!v) return defaultVal;
+		// If it's already an array (from object input), validate it
+		if (Array.isArray(v) && v.every(item => typeof item === "string")) {
+			return v as string[];
+		}
+		// If it's a string, try to parse as JSON
+		if (typeof v === "string") {
+			try {
+				const parsed = JSON.parse(v);
+				if (Array.isArray(parsed) && parsed.every(item => typeof item === "string")) {
+					return parsed as string[];
+				}
+				return defaultVal;
+			} catch {
+				return defaultVal;
+			}
+		}
+		return defaultVal;
+	};
+
 	return {
 		logDir: getString("logDir", DEFAULT_SETTINGS.logDir),
 		maxSessions: getNumber("maxSessions", DEFAULT_SETTINGS.maxSessions, 0, 10000),
 		redactPreset: getEnum("redactPreset", ["secrets", "pii", "strict"], DEFAULT_SETTINGS.redactPreset),
 		redactReversible: getBoolean("redactReversible", DEFAULT_SETTINGS.redactReversible),
 		redactPolicyFile: getString("redactPolicyFile", DEFAULT_SETTINGS.redactPolicyFile),
+		redactPathsOnly: parseStringArray("redactPathsOnly", DEFAULT_SETTINGS.redactPathsOnly),
+		redactPathsSkip: parseStringArray("redactPathsSkip", DEFAULT_SETTINGS.redactPathsSkip),
 		encryptionAtRest: getBoolean("encryptionAtRest", DEFAULT_SETTINGS.encryptionAtRest),
 		captureCleanupEnabled: getBoolean("captureCleanupEnabled", DEFAULT_SETTINGS.captureCleanupEnabled),
 		captureCleanupIntervalHours: getNumber("captureCleanupIntervalHours", DEFAULT_SETTINGS.captureCleanupIntervalHours, 1, 168),

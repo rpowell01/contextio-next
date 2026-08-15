@@ -26,6 +26,8 @@ export interface Settings {
   redactPreset: "secrets" | "pii" | "strict";
   redactReversible: boolean;
   redactPolicyFile: string;
+  redactPathsOnly: string[];
+  redactPathsSkip: string[];
   encryptionAtRest: boolean;
   captureCleanupEnabled: boolean;
   captureCleanupIntervalHours: number;
@@ -81,6 +83,8 @@ export const SETTING_ENV_MAP: Record<
   redactPreset: { envVar: "REDACT_PRESET", dynamic: true },
   redactReversible: { envVar: "REDACT_REVERSIBLE", dynamic: true },
   redactPolicyFile: { envVar: "REDACT_POLICY_FILE", dynamic: true },
+  redactPathsOnly: { envVar: "REDACT_PATHS_ONLY", dynamic: true },
+  redactPathsSkip: { envVar: "REDACT_PATHS_SKIP", dynamic: true },
   encryptionAtRest: {
     envVar: "CONTEXTIO_LOGGER_ENCRYPTION_ENABLED",
     dynamic: false,
@@ -189,6 +193,22 @@ export function applyEnvOverrides(settings: Settings): {
   case "redactPolicyFile":
     override.redactPolicyFile = raw;
     accepted = true;
+    break;
+  case "redactPathsOnly":
+    try {
+      override.redactPathsOnly = JSON.parse(raw);
+      accepted = true;
+    } catch {
+      // Invalid JSON, ignore
+    }
+    break;
+  case "redactPathsSkip":
+    try {
+      override.redactPathsSkip = JSON.parse(raw);
+      accepted = true;
+    } catch {
+      // Invalid JSON, ignore
+    }
     break;
   case "encryptionAtRest":
         if (raw === "true" || raw === "false") {
@@ -322,6 +342,49 @@ export const DEFAULT_SETTINGS: Settings = {
   redactPreset: "pii",
   redactReversible: false,
   redactPolicyFile: "",
+  redactPathsOnly: ["messages[*].content"],
+  redactPathsSkip: [
+    "tools",
+    "tool_calls",
+    "toolChoice",
+    "tool_choice",
+    "functions",
+    "function_call",
+    "messages[*].tool_calls[*].id",
+    "messages[*].tool_calls[*].function.name",
+    "messages[*].tool_calls[*].function.arguments",
+    "messages[*].tools[*].id",
+    "messages[*].tools[*].function.name",
+    "messages[*].tools[*].function.arguments",
+    "messages[*].function_call.id",
+    "messages[*].function_call.name",
+    "messages[*].function_call.arguments",
+    "tool_calls[*].id",
+    "tool_calls[*].function.name",
+    "tool_calls[*].function.arguments",
+    "tools[*].id",
+    "tools[*].function.name",
+    "tools[*].function.arguments",
+    "function_call.id",
+    "function_call.name",
+    "function_call.arguments",
+    "messages[*].content[*].id",
+    "messages[*].content[*].name",
+    "messages[*].content[*].input",
+    "messages[*].content[*].tool_use_id",
+    "messages[*].content[*].content",
+    "messages[*].content[*].thinking",
+    "messages[*].content[*].signature",
+    "messages[*].content[*].type",
+    "content[*].id",
+    "content[*].name",
+    "content[*].input",
+    "content[*].tool_use_id",
+    "content[*].content",
+    "content[*].thinking",
+    "content[*].signature",
+    "content[*].type",
+  ],
   encryptionAtRest: false,
   captureCleanupEnabled: true,
   captureCleanupIntervalHours: 24,
@@ -403,6 +466,20 @@ export function validateSettings(input: unknown): Settings {
     redactPreset: validateEnum("redactPreset", ["secrets", "pii", "strict"]) as "secrets" | "pii" | "strict",
     redactReversible: validateBoolean("redactReversible"),
     redactPolicyFile: validateString("redactPolicyFile", 0),
+    redactPathsOnly: (() => {
+      const v = obj.redactPathsOnly;
+      if (Array.isArray(v) && v.every(item => typeof item === "string")) {
+        return v as string[];
+      }
+      return DEFAULT_SETTINGS.redactPathsOnly;
+    })(),
+    redactPathsSkip: (() => {
+      const v = obj.redactPathsSkip;
+      if (Array.isArray(v) && v.every(item => typeof item === "string")) {
+        return v as string[];
+      }
+      return DEFAULT_SETTINGS.redactPathsSkip;
+    })(),
     encryptionAtRest: validateBoolean("encryptionAtRest"),
     captureCleanupEnabled: validateBoolean("captureCleanupEnabled"),
     captureCleanupIntervalHours: validateNumber(
@@ -537,6 +614,14 @@ export function validateSettingsLenient(input: unknown): Settings {
     typeof obj.redactPolicyFile === "string"
     ? obj.redactPolicyFile
     : DEFAULT_SETTINGS.redactPolicyFile,
+  redactPathsOnly:
+    Array.isArray(obj.redactPathsOnly) && obj.redactPathsOnly.every((item: unknown) => typeof item === "string")
+      ? (obj.redactPathsOnly as string[])
+      : DEFAULT_SETTINGS.redactPathsOnly,
+  redactPathsSkip:
+    Array.isArray(obj.redactPathsSkip) && obj.redactPathsSkip.every((item: unknown) => typeof item === "string")
+      ? (obj.redactPathsSkip as string[])
+      : DEFAULT_SETTINGS.redactPathsSkip,
   encryptionAtRest:
       typeof obj.encryptionAtRest === "boolean"
         ? obj.encryptionAtRest
