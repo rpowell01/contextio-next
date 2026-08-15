@@ -589,7 +589,6 @@ export default function SettingsPage() {
             <h3 className="font-semibold mb-4">Security</h3>
             <div className="space-y-4">
               {renderSetting("encryptionAtRest")}
-              {renderSetting("enableRateLimiter")}
               {renderSetting("oidcEnabled")}
               {renderSetting("oidcPublicUrl")}
             </div>
@@ -600,6 +599,7 @@ export default function SettingsPage() {
           <div className="rounded-lg border p-6" role="tabpanel" id="panel-rateLimiter" aria-labelledby="tab-rateLimiter">
             <h3 className="font-semibold mb-4">Rate Limiter</h3>
             <div className="space-y-4">
+              {renderSetting("enableRateLimiter")}
               {renderSetting("rateLimiter")}
 
               {/* Advanced Rate Limiter Cache Settings */}
