@@ -134,6 +134,27 @@ async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 				"function_call.id",
 				"function_call.name",
 				"function_call.arguments",
+				// Anthropic/Claude format: messages[*].content[*] with type="tool_use"
+				"messages[*].content[*].id",
+				"messages[*].content[*].name",
+				"messages[*].content[*].input",
+				// Anthropic/Claude tool_result blocks (response from tool calls)
+				"messages[*].content[*].tool_use_id",
+				"messages[*].content[*].content",
+				// Anthropic/Claude thinking blocks
+				"messages[*].content[*].thinking",
+				"messages[*].content[*].signature",
+				// Block type discriminator (present on all content blocks)
+				"messages[*].content[*].type",
+				// Also handle top-level content arrays
+				"content[*].id",
+				"content[*].name",
+				"content[*].input",
+				"content[*].tool_use_id",
+				"content[*].content",
+				"content[*].thinking",
+				"content[*].signature",
+				"content[*].type",
 			],
 		},
 	};

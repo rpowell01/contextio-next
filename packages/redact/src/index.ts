@@ -87,12 +87,20 @@ export const DEFAULT_REDACT_SKIP_PATHS = [
   // Anthropic/Claude tool_result blocks (response from tool calls)
   "messages[*].content[*].tool_use_id",
   "messages[*].content[*].content",
+  // Anthropic/Claude thinking blocks
+  "messages[*].content[*].thinking",
+  "messages[*].content[*].signature",
+  // Block type discriminator (present on all content blocks)
+  "messages[*].content[*].type",
   // Also handle top-level content arrays
   "content[*].id",
   "content[*].name",
   "content[*].input",
   "content[*].tool_use_id",
   "content[*].content",
+  "content[*].thinking",
+  "content[*].signature",
+  "content[*].type",
 ];
 
 /** Default only paths - only redact user message content by default. */
@@ -217,11 +225,20 @@ async function redactWithDetector(
   currentPath: string[] = [],
   map: ReplacementMap | null = null,
 ): Promise<unknown> {
+  // Temporary debug logging (enabled via REDACT_DEBUG=true)
+  const DEBUG_REDACT = process.env.REDACT_DEBUG === "true";
+  const pathStr = currentPath.join(".");
+  
   if (typeof value === "string") {
     // Check path filtering
     if (policy.paths.only !== null || policy.paths.skip.length > 0) {
       const { shouldRedactPath } = await import("./redact.js");
-      if (!shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip)) {
+      const shouldRedact = shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip);
+      if (DEBUG_REDACT) {
+        console.error(`[redact-debug] path="${pathStr}" value="${value.substring(0, 100)}" only=${policy.paths.only?.map(p=>p.source).join(",")} skip_count=${policy.paths.skip.length} -> shouldRedact=${shouldRedact}`);
+      }
+      if (!shouldRedact) {
+        if (DEBUG_REDACT) console.error(`[redact-debug] SKIPPED (path filtered): ${pathStr}`);
         return value;
       }
     }
@@ -232,6 +249,9 @@ async function redactWithDetector(
 
     // Apply detector spans
     if (detectionResult.spans.length > 0) {
+      if (DEBUG_REDACT) {
+        console.error(`[redact-debug] DETECTOR MATCHES at ${pathStr}:`, detectionResult.spans.map(s => `${s.label}:${s.text.substring(0, 30)}@${s.start}-${s.end} (${s.score.toFixed(3)})`));
+      }
       redacted = applyDetectorSpans(
         value,
         detectionResult.spans,
@@ -248,7 +268,9 @@ async function redactWithDetector(
       const { redactString, shouldRedactPath } = await import("./redact.js");
       // Check path filtering
       if (policy.paths.only !== null || policy.paths.skip.length > 0) {
-        if (!shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip)) {
+        const shouldRedact = shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip);
+        if (!shouldRedact) {
+          if (DEBUG_REDACT) console.error(`[redact-debug] SKIPPED (hybrid path filtered): ${pathStr}`);
           return value;
         }
       }
