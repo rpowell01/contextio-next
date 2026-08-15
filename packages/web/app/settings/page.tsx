@@ -1229,12 +1229,13 @@ export default function SettingsPage() {
             </Label>
             <textarea
               id="redactPathsOnly"
-              value={JSON.stringify(settings.redactPathsOnly, null, 2)}
-              onChange={(e) => {
+              defaultValue={JSON.stringify(settings.redactPathsOnly, null, 2)}
+              onBlur={(e) => {
                 try {
                   updateSetting("redactPathsOnly", JSON.parse(e.target.value));
                 } catch {
-                  // Invalid JSON, ignore
+                  // Invalid JSON, reset to current value
+                  e.target.value = JSON.stringify(settings.redactPathsOnly, null, 2);
                 }
               }}
               placeholder='["messages[*].content"]'
@@ -1261,12 +1262,13 @@ export default function SettingsPage() {
             </Label>
             <textarea
               id="redactPathsSkip"
-              value={JSON.stringify(settings.redactPathsSkip, null, 2)}
-              onChange={(e) => {
+              defaultValue={JSON.stringify(settings.redactPathsSkip, null, 2)}
+              onBlur={(e) => {
                 try {
                   updateSetting("redactPathsSkip", JSON.parse(e.target.value));
                 } catch {
-                  // Invalid JSON, ignore
+                  // Invalid JSON, reset to current value
+                  e.target.value = JSON.stringify(settings.redactPathsSkip, null, 2);
                 }
               }}
               placeholder='["tools","tool_calls","messages[*].tool_calls[*].id",...]'
