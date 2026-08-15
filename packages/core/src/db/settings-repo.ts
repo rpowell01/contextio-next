@@ -64,7 +64,15 @@ export interface SettingsRow {
 	proxy_port: number;
 	proxy_allow_target_override: number;
 	strict_url_forwarding: number;
+	upstream_openai_url: string;
+	upstream_anthropic_url: string;
+	upstream_chatgpt_url: string;
+	upstream_gemini_url: string;
+	upstream_vertex_url: string;
+	upstream_nvidia_url: string;
 	upstream_openrouter_url: string;
+	upstream_kilo_url: string;
+	upstream_gemini_code_assist_url: string;
 	created_at: number;
 	updated_at: number;
 }
@@ -128,7 +136,15 @@ export interface Settings {
 	proxyPort: number;
 	proxyAllowTargetOverride: boolean;
 	strictUrlForwarding: boolean;
+	upstreamOpenAiUrl: string;
+	upstreamAnthropicUrl: string;
+	upstreamChatGptUrl: string;
+	upstreamGeminiUrl: string;
+	upstreamVertexUrl: string;
+	upstreamNvidiaUrl: string;
 	upstreamOpenRouterUrl: string;
+	upstreamKiloUrl: string;
+	upstreamGeminiCodeAssistUrl: string;
 }
 
 /**
@@ -266,7 +282,15 @@ const DEFAULT_SETTINGS: Settings = {
 	proxyPort: 4040,
 	proxyAllowTargetOverride: false,
 	strictUrlForwarding: false,
+	upstreamOpenAiUrl: "",
+	upstreamAnthropicUrl: "",
+	upstreamChatGptUrl: "",
+	upstreamGeminiUrl: "",
+	upstreamVertexUrl: "",
+	upstreamNvidiaUrl: "",
 	upstreamOpenRouterUrl: "",
+	upstreamKiloUrl: "",
+	upstreamGeminiCodeAssistUrl: "",
 };
 
 /**
@@ -324,7 +348,15 @@ function rowToSettings(row: SettingsRow): Settings {
 		proxyPort: row.proxy_port,
 		proxyAllowTargetOverride: row.proxy_allow_target_override === 1,
 		strictUrlForwarding: row.strict_url_forwarding === 1,
-		upstreamOpenRouterUrl: row.upstream_openrouter_url,
+		upstreamOpenAiUrl: row.upstream_openai_url || "",
+		upstreamAnthropicUrl: row.upstream_anthropic_url || "",
+		upstreamChatGptUrl: row.upstream_chatgpt_url || "",
+		upstreamGeminiUrl: row.upstream_gemini_url || "",
+		upstreamVertexUrl: row.upstream_vertex_url || "",
+		upstreamNvidiaUrl: row.upstream_nvidia_url || "",
+		upstreamOpenRouterUrl: row.upstream_openrouter_url || "",
+		upstreamKiloUrl: row.upstream_kilo_url || "",
+		upstreamGeminiCodeAssistUrl: row.upstream_gemini_code_assist_url || "",
 	};
 }
 
@@ -377,7 +409,15 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		proxy_port: merged.proxyPort,
 		proxy_allow_target_override: merged.proxyAllowTargetOverride ? 1 : 0,
 		strict_url_forwarding: merged.strictUrlForwarding ? 1 : 0,
+		upstream_openai_url: merged.upstreamOpenAiUrl,
+		upstream_anthropic_url: merged.upstreamAnthropicUrl,
+		upstream_chatgpt_url: merged.upstreamChatGptUrl,
+		upstream_gemini_url: merged.upstreamGeminiUrl,
+		upstream_vertex_url: merged.upstreamVertexUrl,
+		upstream_nvidia_url: merged.upstreamNvidiaUrl,
 		upstream_openrouter_url: merged.upstreamOpenRouterUrl,
+		upstream_kilo_url: merged.upstreamKiloUrl,
+		upstream_gemini_code_assist_url: merged.upstreamGeminiCodeAssistUrl,
 	};
 }
 
@@ -595,7 +635,15 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		proxyPort: { envVar: "CONTEXT_PROXY_PORT", dynamic: false },
 		proxyAllowTargetOverride: { envVar: "CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE", dynamic: false },
 		strictUrlForwarding: { envVar: "STRICT_URL_FORWARDING", dynamic: false },
+		upstreamOpenAiUrl: { envVar: "UPSTREAM_OPENAI_URL", dynamic: false },
+		upstreamAnthropicUrl: { envVar: "UPSTREAM_ANTHROPIC_URL", dynamic: false },
+		upstreamChatGptUrl: { envVar: "UPSTREAM_CHATGPT_URL", dynamic: false },
+		upstreamGeminiUrl: { envVar: "UPSTREAM_GEMINI_URL", dynamic: false },
+		upstreamVertexUrl: { envVar: "UPSTREAM_VERTEX_URL", dynamic: false },
+		upstreamNvidiaUrl: { envVar: "UPSTREAM_NVIDIA_URL", dynamic: false },
 		upstreamOpenRouterUrl: { envVar: "UPSTREAM_OPENROUTER_URL", dynamic: false },
+		upstreamKiloUrl: { envVar: "UPSTREAM_KILO_URL", dynamic: false },
+		upstreamGeminiCodeAssistUrl: { envVar: "UPSTREAM_GEMINI_CODE_ASSIST_URL", dynamic: false },
 	};
 
 	const meta = {} as Record<keyof Settings, SettingMeta>;
@@ -816,6 +864,14 @@ function validateAndMergeSettings(input: unknown): Settings {
 		proxyPort: getNumber("proxyPort", DEFAULT_SETTINGS.proxyPort, 1, 65535),
 		proxyAllowTargetOverride: getBoolean("proxyAllowTargetOverride", DEFAULT_SETTINGS.proxyAllowTargetOverride),
 		strictUrlForwarding: getBoolean("strictUrlForwarding", DEFAULT_SETTINGS.strictUrlForwarding),
+		upstreamOpenAiUrl: getString("upstreamOpenAiUrl", DEFAULT_SETTINGS.upstreamOpenAiUrl),
+		upstreamAnthropicUrl: getString("upstreamAnthropicUrl", DEFAULT_SETTINGS.upstreamAnthropicUrl),
+		upstreamChatGptUrl: getString("upstreamChatGptUrl", DEFAULT_SETTINGS.upstreamChatGptUrl),
+		upstreamGeminiUrl: getString("upstreamGeminiUrl", DEFAULT_SETTINGS.upstreamGeminiUrl),
+		upstreamVertexUrl: getString("upstreamVertexUrl", DEFAULT_SETTINGS.upstreamVertexUrl),
+		upstreamNvidiaUrl: getString("upstreamNvidiaUrl", DEFAULT_SETTINGS.upstreamNvidiaUrl),
 		upstreamOpenRouterUrl: getString("upstreamOpenRouterUrl", DEFAULT_SETTINGS.upstreamOpenRouterUrl),
+		upstreamKiloUrl: getString("upstreamKiloUrl", DEFAULT_SETTINGS.upstreamKiloUrl),
+		upstreamGeminiCodeAssistUrl: getString("upstreamGeminiCodeAssistUrl", DEFAULT_SETTINGS.upstreamGeminiCodeAssistUrl),
 	};
 }

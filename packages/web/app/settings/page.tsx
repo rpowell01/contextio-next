@@ -117,6 +117,22 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Enforce strict URL forwarding rules (reject unknown paths). Requires a proxy restart to apply.",
   upstreamOpenRouterUrl:
     "Upstream OpenRouter URL for forwarding. If empty, uses default OpenRouter endpoint. Requires a proxy restart to apply.",
+  upstreamOpenAiUrl:
+    "Upstream OpenAI URL for forwarding. If empty, uses default OpenAI endpoint. Requires a proxy restart to apply.",
+  upstreamAnthropicUrl:
+    "Upstream Anthropic URL for forwarding. If empty, uses default Anthropic endpoint. Requires a proxy restart to apply.",
+  upstreamChatGptUrl:
+    "Upstream ChatGPT URL for forwarding. If empty, uses default ChatGPT endpoint. Requires a proxy restart to apply.",
+  upstreamGeminiUrl:
+    "Upstream Gemini URL for forwarding. If empty, uses default Gemini endpoint. Requires a proxy restart to apply.",
+  upstreamVertexUrl:
+    "Upstream Vertex AI URL for forwarding. If empty, uses default Vertex AI endpoint. Requires a proxy restart to apply.",
+  upstreamNvidiaUrl:
+    "Upstream NVIDIA URL for forwarding. If empty, uses default NVIDIA endpoint. Requires a proxy restart to apply.",
+  upstreamKiloUrl:
+    "Upstream Kilo URL for forwarding. If empty, uses default Kilo endpoint. Requires a proxy restart to apply.",
+  upstreamGeminiCodeAssistUrl:
+    "Upstream Gemini Code Assist URL for forwarding. If empty, uses default Gemini Code Assist endpoint. Requires a proxy restart to apply.",
 };
 
 function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
@@ -379,7 +395,15 @@ export default function SettingsPage() {
     proxyPort: 4040,
     proxyAllowTargetOverride: false,
     strictUrlForwarding: false,
+    upstreamOpenAiUrl: "",
+    upstreamAnthropicUrl: "",
+    upstreamChatGptUrl: "",
+    upstreamGeminiUrl: "",
+    upstreamVertexUrl: "",
+    upstreamNvidiaUrl: "",
     upstreamOpenRouterUrl: "",
+    upstreamKiloUrl: "",
+    upstreamGeminiCodeAssistUrl: "",
   });
   const [metadata, setMetadata] = useState<Record<
     keyof Settings,
@@ -590,21 +614,6 @@ export default function SettingsPage() {
                   {renderSetting("rateLimiterEntryTtlMs")}
                 </div>
               </div>
-
-              {/* Advanced Streaming Retry Cache Settings */}
-              <div className="pt-4 border-t">
-                <h4 className="text-sm font-medium text-muted-foreground mb-3">Advanced: Streaming Retry Cache</h4>
-                <p className="text-xs text-muted-foreground mb-4">
-                  Configure the internal cache behavior for streaming response retries. Changes require a proxy restart.
-                </p>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {renderSetting("retryMaxEntries")}
-                  {renderSetting("retryEntryTtlMs")}
-                  {renderSetting("retryCleanupIntervalMs")}
-                  {renderSetting("retryMaxBufferSize")}
-                  {renderSetting("retryMaxStreamRetries")}
-                </div>
-              </div>
             </div>
           </div>
         );
@@ -661,7 +670,20 @@ export default function SettingsPage() {
               </div>
               <div className="pt-2 border-t">
                 <h4 className="text-sm font-medium text-muted-foreground mb-3">Upstream Configuration</h4>
-                {renderSetting("upstreamOpenRouterUrl")}
+                <p className="text-xs text-muted-foreground mb-4">
+                  Override default upstream API base URLs. Leave empty to use built-in defaults. Environment variables (UPSTREAM_*_URL) take precedence.
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {renderSetting("upstreamOpenAiUrl")}
+                  {renderSetting("upstreamAnthropicUrl")}
+                  {renderSetting("upstreamChatGptUrl")}
+                  {renderSetting("upstreamGeminiUrl")}
+                  {renderSetting("upstreamVertexUrl")}
+                  {renderSetting("upstreamNvidiaUrl")}
+                  {renderSetting("upstreamOpenRouterUrl")}
+                  {renderSetting("upstreamKiloUrl")}
+                  {renderSetting("upstreamGeminiCodeAssistUrl")}
+                </div>
               </div>
             </div>
           </div>
@@ -1911,6 +1933,396 @@ export default function SettingsPage() {
           </div>
         );
       }
+      case "rateLimiterMaxEntries":
+        return (
+          <div>
+            <Label htmlFor="rateLimiterMaxEntries" className="block text-sm font-medium mb-2">
+              Max Entries
+            </Label>
+            <Input
+              id="rateLimiterMaxEntries"
+              type="number"
+              value={settings.rateLimiterMaxEntries}
+              onChange={(e) =>
+                updateSetting("rateLimiterMaxEntries", Math.max(1, parseInt(e.target.value) || 1))
+              }
+              min="1"
+              max="100000"
+              placeholder="2000"
+              disabled={isSettingOverridden("rateLimiterMaxEntries")}
+              className={isSettingOverridden("rateLimiterMaxEntries") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("rateLimiterMaxEntries")} description="Maximum number of entries in the rate limiter cache" />
+          </div>
+        );
+      case "rateLimiterCleanupIntervalMs":
+        return (
+          <div>
+            <Label htmlFor="rateLimiterCleanupIntervalMs" className="block text-sm font-medium mb-2">
+              Cleanup Interval (ms)
+            </Label>
+            <Input
+              id="rateLimiterCleanupIntervalMs"
+              type="number"
+              value={settings.rateLimiterCleanupIntervalMs}
+              onChange={(e) =>
+                updateSetting("rateLimiterCleanupIntervalMs", Math.max(1000, parseInt(e.target.value) || 1000))
+              }
+              min="1000"
+              max="3600000"
+              placeholder="60000"
+              disabled={isSettingOverridden("rateLimiterCleanupIntervalMs")}
+              className={isSettingOverridden("rateLimiterCleanupIntervalMs") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("rateLimiterCleanupIntervalMs")} description="Interval between cache cleanup runs in milliseconds" />
+          </div>
+        );
+      case "rateLimiterEntryTtlMs":
+        return (
+          <div>
+            <Label htmlFor="rateLimiterEntryTtlMs" className="block text-sm font-medium mb-2">
+              Entry TTL (ms)
+            </Label>
+            <Input
+              id="rateLimiterEntryTtlMs"
+              type="number"
+              value={settings.rateLimiterEntryTtlMs}
+              onChange={(e) =>
+                updateSetting("rateLimiterEntryTtlMs", Math.max(1000, parseInt(e.target.value) || 1000))
+              }
+              min="1000"
+              max="86400000"
+              placeholder="300000"
+              disabled={isSettingOverridden("rateLimiterEntryTtlMs")}
+              className={isSettingOverridden("rateLimiterEntryTtlMs") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("rateLimiterEntryTtlMs")} description="Time-to-live for rate limiter cache entries in milliseconds" />
+          </div>
+        );
+      case "retryMaxEntries":
+        return (
+          <div>
+            <Label htmlFor="retryMaxEntries" className="block text-sm font-medium mb-2">
+              Max Entries
+            </Label>
+            <Input
+              id="retryMaxEntries"
+              type="number"
+              value={settings.retryMaxEntries}
+              onChange={(e) => updateSetting("retryMaxEntries", Math.max(1, parseInt(e.target.value) || 1))}
+              min="1"
+              max="100000"
+              placeholder="1000"
+              disabled={isSettingOverridden("retryMaxEntries")}
+              className={isSettingOverridden("retryMaxEntries") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("retryMaxEntries")} description="Maximum number of entries in the streaming retry cache" />
+          </div>
+        );
+      case "retryEntryTtlMs":
+        return (
+          <div>
+            <Label htmlFor="retryEntryTtlMs" className="block text-sm font-medium mb-2">
+              Entry TTL (ms)
+            </Label>
+            <Input
+              id="retryEntryTtlMs"
+              type="number"
+              value={settings.retryEntryTtlMs}
+              onChange={(e) => updateSetting("retryEntryTtlMs", Math.max(1000, parseInt(e.target.value) || 1000))}
+              min="1000"
+              max="86400000"
+              placeholder="300000"
+              disabled={isSettingOverridden("retryEntryTtlMs")}
+              className={isSettingOverridden("retryEntryTtlMs") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("retryEntryTtlMs")} description="Time-to-live for streaming retry cache entries in milliseconds" />
+          </div>
+        );
+      case "retryCleanupIntervalMs":
+        return (
+          <div>
+            <Label htmlFor="retryCleanupIntervalMs" className="block text-sm font-medium mb-2">
+              Cleanup Interval (ms)
+            </Label>
+            <Input
+              id="retryCleanupIntervalMs"
+              type="number"
+              value={settings.retryCleanupIntervalMs}
+              onChange={(e) => updateSetting("retryCleanupIntervalMs", Math.max(1000, parseInt(e.target.value) || 1000))}
+              min="1000"
+              max="3600000"
+              placeholder="30000"
+              disabled={isSettingOverridden("retryCleanupIntervalMs")}
+              className={isSettingOverridden("retryCleanupIntervalMs") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("retryCleanupIntervalMs")} description="Interval between streaming retry cache cleanup runs in milliseconds" />
+          </div>
+        );
+      case "retryMaxBufferSize":
+        return (
+          <div>
+            <Label htmlFor="retryMaxBufferSize" className="block text-sm font-medium mb-2">
+              Max Buffer Size (bytes)
+            </Label>
+            <Input
+              id="retryMaxBufferSize"
+              type="number"
+              value={settings.retryMaxBufferSize}
+              onChange={(e) => updateSetting("retryMaxBufferSize", Math.max(1024, parseInt(e.target.value) || 1024))}
+              min="1024"
+              max="104857600"
+              placeholder="5242880"
+              disabled={isSettingOverridden("retryMaxBufferSize")}
+              className={isSettingOverridden("retryMaxBufferSize") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("retryMaxBufferSize")} description="Maximum buffer size for streaming responses in the retry cache in bytes" />
+          </div>
+        );
+      case "retryMaxStreamRetries":
+        return (
+          <div>
+            <Label htmlFor="retryMaxStreamRetries" className="block text-sm font-medium mb-2">
+              Max Stream Retries
+            </Label>
+            <Input
+              id="retryMaxStreamRetries"
+              type="number"
+              value={settings.retryMaxStreamRetries}
+              onChange={(e) => updateSetting("retryMaxStreamRetries", Math.max(0, parseInt(e.target.value) || 0))}
+              min="0"
+              max="10"
+              placeholder="3"
+              disabled={isSettingOverridden("retryMaxStreamRetries")}
+              className={isSettingOverridden("retryMaxStreamRetries") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("retryMaxStreamRetries")} description="Maximum number of retries for failed streaming responses" />
+          </div>
+        );
+      case "proxyBindHost":
+        return (
+          <div>
+            <Label htmlFor="proxyBindHost" className="block text-sm font-medium mb-2">
+              Bind Host
+            </Label>
+            <Input
+              id="proxyBindHost"
+              value={settings.proxyBindHost}
+              onChange={(e) => updateSetting("proxyBindHost", e.target.value)}
+              placeholder="0.0.0.0"
+              disabled={isSettingOverridden("proxyBindHost")}
+              className={isSettingOverridden("proxyBindHost") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("proxyBindHost")} description={SETTING_DESCRIPTIONS.proxyBindHost} />
+          </div>
+        );
+      case "proxyPort":
+        return (
+          <div>
+            <Label htmlFor="proxyPort" className="block text-sm font-medium mb-2">
+              Proxy Port
+            </Label>
+            <Input
+              id="proxyPort"
+              type="number"
+              value={settings.proxyPort}
+              onChange={(e) => updateSetting("proxyPort", parseInt(e.target.value) || 4040)}
+              min="1"
+              max="65535"
+              placeholder="4040"
+              disabled={isSettingOverridden("proxyPort")}
+              className={isSettingOverridden("proxyPort") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("proxyPort")} description={SETTING_DESCRIPTIONS.proxyPort} />
+          </div>
+        );
+      case "proxyAllowTargetOverride":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="proxyAllowTargetOverride"
+              checked={settings.proxyAllowTargetOverride}
+              onChange={(e) => updateSetting("proxyAllowTargetOverride", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isSettingOverridden("proxyAllowTargetOverride")}
+            />
+            <Label htmlFor="proxyAllowTargetOverride" className="text-sm">
+              Allow Target Override
+            </Label>
+            <SettingHelp meta={getMeta("proxyAllowTargetOverride")} description={SETTING_DESCRIPTIONS.proxyAllowTargetOverride} />
+          </div>
+        );
+      case "strictUrlForwarding":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="strictUrlForwarding"
+              checked={settings.strictUrlForwarding}
+              onChange={(e) => updateSetting("strictUrlForwarding", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isSettingOverridden("strictUrlForwarding")}
+            />
+            <Label htmlFor="strictUrlForwarding" className="text-sm">
+              Strict URL Forwarding
+            </Label>
+            <SettingHelp meta={getMeta("strictUrlForwarding")} description={SETTING_DESCRIPTIONS.strictUrlForwarding} />
+          </div>
+        );
+      case "upstreamOpenAiUrl":
+        return (
+          <div>
+            <Label htmlFor="upstreamOpenAiUrl" className="block text-sm font-medium mb-2">
+              OpenAI Upstream URL
+            </Label>
+            <Input
+              id="upstreamOpenAiUrl"
+              value={settings.upstreamOpenAiUrl}
+              onChange={(e) => updateSetting("upstreamOpenAiUrl", e.target.value)}
+              placeholder="https://api.openai.com/v1"
+              disabled={isSettingOverridden("upstreamOpenAiUrl")}
+              className={isSettingOverridden("upstreamOpenAiUrl") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("upstreamOpenAiUrl")} description="Override the default OpenAI API base URL" />
+          </div>
+        );
+      case "upstreamAnthropicUrl":
+        return (
+          <div>
+            <Label htmlFor="upstreamAnthropicUrl" className="block text-sm font-medium mb-2">
+              Anthropic Upstream URL
+            </Label>
+            <Input
+              id="upstreamAnthropicUrl"
+              value={settings.upstreamAnthropicUrl}
+              onChange={(e) => updateSetting("upstreamAnthropicUrl", e.target.value)}
+              placeholder="https://api.anthropic.com"
+              disabled={isSettingOverridden("upstreamAnthropicUrl")}
+              className={isSettingOverridden("upstreamAnthropicUrl") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("upstreamAnthropicUrl")} description="Override the default Anthropic API base URL" />
+          </div>
+        );
+      case "upstreamChatGptUrl":
+        return (
+          <div>
+            <Label htmlFor="upstreamChatGptUrl" className="block text-sm font-medium mb-2">
+              ChatGPT Upstream URL
+            </Label>
+            <Input
+              id="upstreamChatGptUrl"
+              value={settings.upstreamChatGptUrl}
+              onChange={(e) => updateSetting("upstreamChatGptUrl", e.target.value)}
+              placeholder="https://chatgpt.com/backend-api"
+              disabled={isSettingOverridden("upstreamChatGptUrl")}
+              className={isSettingOverridden("upstreamChatGptUrl") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("upstreamChatGptUrl")} description="Override the default ChatGPT API base URL" />
+          </div>
+        );
+      case "upstreamGeminiUrl":
+        return (
+          <div>
+            <Label htmlFor="upstreamGeminiUrl" className="block text-sm font-medium mb-2">
+              Gemini Upstream URL
+            </Label>
+            <Input
+              id="upstreamGeminiUrl"
+              value={settings.upstreamGeminiUrl}
+              onChange={(e) => updateSetting("upstreamGeminiUrl", e.target.value)}
+              placeholder="https://generativelanguage.googleapis.com"
+              disabled={isSettingOverridden("upstreamGeminiUrl")}
+              className={isSettingOverridden("upstreamGeminiUrl") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("upstreamGeminiUrl")} description="Override the default Gemini API base URL" />
+          </div>
+        );
+      case "upstreamVertexUrl":
+        return (
+          <div>
+            <Label htmlFor="upstreamVertexUrl" className="block text-sm font-medium mb-2">
+              Vertex AI Upstream URL
+            </Label>
+            <Input
+              id="upstreamVertexUrl"
+              value={settings.upstreamVertexUrl}
+              onChange={(e) => updateSetting("upstreamVertexUrl", e.target.value)}
+              placeholder="https://aiplatform.googleapis.com/v1"
+              disabled={isSettingOverridden("upstreamVertexUrl")}
+              className={isSettingOverridden("upstreamVertexUrl") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("upstreamVertexUrl")} description="Override the default Vertex AI API base URL" />
+          </div>
+        );
+      case "upstreamNvidiaUrl":
+        return (
+          <div>
+            <Label htmlFor="upstreamNvidiaUrl" className="block text-sm font-medium mb-2">
+              NVIDIA Upstream URL
+            </Label>
+            <Input
+              id="upstreamNvidiaUrl"
+              value={settings.upstreamNvidiaUrl}
+              onChange={(e) => updateSetting("upstreamNvidiaUrl", e.target.value)}
+              placeholder="https://integrate.api.nvidia.com/v1"
+              disabled={isSettingOverridden("upstreamNvidiaUrl")}
+              className={isSettingOverridden("upstreamNvidiaUrl") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("upstreamNvidiaUrl")} description="Override the default NVIDIA API base URL" />
+          </div>
+        );
+      case "upstreamOpenRouterUrl":
+        return (
+          <div>
+            <Label htmlFor="upstreamOpenRouterUrl" className="block text-sm font-medium mb-2">
+              OpenRouter Upstream URL
+            </Label>
+            <Input
+              id="upstreamOpenRouterUrl"
+              value={settings.upstreamOpenRouterUrl}
+              onChange={(e) => updateSetting("upstreamOpenRouterUrl", e.target.value)}
+              placeholder="https://openrouter.ai/api/v1"
+              disabled={isSettingOverridden("upstreamOpenRouterUrl")}
+              className={isSettingOverridden("upstreamOpenRouterUrl") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("upstreamOpenRouterUrl")} description="Override the default OpenRouter API base URL" />
+          </div>
+        );
+      case "upstreamKiloUrl":
+        return (
+          <div>
+            <Label htmlFor="upstreamKiloUrl" className="block text-sm font-medium mb-2">
+              Kilo Upstream URL
+            </Label>
+            <Input
+              id="upstreamKiloUrl"
+              value={settings.upstreamKiloUrl}
+              onChange={(e) => updateSetting("upstreamKiloUrl", e.target.value)}
+              placeholder="https://api.kilo.ai/v1"
+              disabled={isSettingOverridden("upstreamKiloUrl")}
+              className={isSettingOverridden("upstreamKiloUrl") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("upstreamKiloUrl")} description="Override the default Kilo API base URL" />
+          </div>
+        );
+      case "upstreamGeminiCodeAssistUrl":
+        return (
+          <div>
+            <Label htmlFor="upstreamGeminiCodeAssistUrl" className="block text-sm font-medium mb-2">
+              Gemini Code Assist Upstream URL
+            </Label>
+            <Input
+              id="upstreamGeminiCodeAssistUrl"
+              value={settings.upstreamGeminiCodeAssistUrl}
+              onChange={(e) => updateSetting("upstreamGeminiCodeAssistUrl", e.target.value)}
+              placeholder="https://generativelanguage.googleapis.com"
+              disabled={isSettingOverridden("upstreamGeminiCodeAssistUrl")}
+              className={isSettingOverridden("upstreamGeminiCodeAssistUrl") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp meta={getMeta("upstreamGeminiCodeAssistUrl")} description="Override the default Gemini Code Assist API base URL" />
+          </div>
+        );
       default:
         return null;
     }

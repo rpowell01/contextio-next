@@ -80,7 +80,15 @@ export interface Settings {
   proxyPort: number;
   proxyAllowTargetOverride: boolean;
   strictUrlForwarding: boolean;
+  upstreamOpenAiUrl: string;
+  upstreamAnthropicUrl: string;
+  upstreamChatGptUrl: string;
+  upstreamGeminiUrl: string;
+  upstreamVertexUrl: string;
+  upstreamNvidiaUrl: string;
   upstreamOpenRouterUrl: string;
+  upstreamKiloUrl: string;
+  upstreamGeminiCodeAssistUrl: string;
 }
 
 export type SettingSource =
@@ -178,7 +186,15 @@ export const SETTING_ENV_MAP: Record<
   proxyPort: { envVar: "CONTEXT_PROXY_PORT", dynamic: false },
   proxyAllowTargetOverride: { envVar: "CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE", dynamic: false },
   strictUrlForwarding: { envVar: "STRICT_URL_FORWARDING", dynamic: false },
+  upstreamOpenAiUrl: { envVar: "UPSTREAM_OPENAI_URL", dynamic: false },
+  upstreamAnthropicUrl: { envVar: "UPSTREAM_ANTHROPIC_URL", dynamic: false },
+  upstreamChatGptUrl: { envVar: "UPSTREAM_CHATGPT_URL", dynamic: false },
+  upstreamGeminiUrl: { envVar: "UPSTREAM_GEMINI_URL", dynamic: false },
+  upstreamVertexUrl: { envVar: "UPSTREAM_VERTEX_URL", dynamic: false },
+  upstreamNvidiaUrl: { envVar: "UPSTREAM_NVIDIA_URL", dynamic: false },
   upstreamOpenRouterUrl: { envVar: "UPSTREAM_OPENROUTER_URL", dynamic: false },
+  upstreamKiloUrl: { envVar: "UPSTREAM_KILO_URL", dynamic: false },
+  upstreamGeminiCodeAssistUrl: { envVar: "UPSTREAM_GEMINI_CODE_ASSIST_URL", dynamic: false },
 };
 
 /**
@@ -465,6 +481,38 @@ export function applyEnvOverrides(settings: Settings): {
         override.upstreamOpenRouterUrl = raw;
         accepted = true;
         break;
+      case "upstreamOpenAiUrl":
+        override.upstreamOpenAiUrl = raw;
+        accepted = true;
+        break;
+      case "upstreamAnthropicUrl":
+        override.upstreamAnthropicUrl = raw;
+        accepted = true;
+        break;
+      case "upstreamChatGptUrl":
+        override.upstreamChatGptUrl = raw;
+        accepted = true;
+        break;
+      case "upstreamGeminiUrl":
+        override.upstreamGeminiUrl = raw;
+        accepted = true;
+        break;
+      case "upstreamVertexUrl":
+        override.upstreamVertexUrl = raw;
+        accepted = true;
+        break;
+      case "upstreamNvidiaUrl":
+        override.upstreamNvidiaUrl = raw;
+        accepted = true;
+        break;
+      case "upstreamKiloUrl":
+        override.upstreamKiloUrl = raw;
+        accepted = true;
+        break;
+      case "upstreamGeminiCodeAssistUrl":
+        override.upstreamGeminiCodeAssistUrl = raw;
+        accepted = true;
+        break;
       default:
         break;
     }
@@ -600,7 +648,15 @@ export const DEFAULT_SETTINGS: Settings = {
   proxyPort: 4040,
   proxyAllowTargetOverride: false,
   strictUrlForwarding: false,
+  upstreamOpenAiUrl: "",
+  upstreamAnthropicUrl: "",
+  upstreamChatGptUrl: "",
+  upstreamGeminiUrl: "",
+  upstreamVertexUrl: "",
+  upstreamNvidiaUrl: "",
   upstreamOpenRouterUrl: "",
+  upstreamKiloUrl: "",
+  upstreamGeminiCodeAssistUrl: "",
 };
 
 export function validateSettings(input: unknown): Settings {
@@ -779,7 +835,15 @@ export function validateSettings(input: unknown): Settings {
     proxyPort: validateNumber("proxyPort", 1, 65535),
     proxyAllowTargetOverride: validateBoolean("proxyAllowTargetOverride"),
     strictUrlForwarding: validateBoolean("strictUrlForwarding"),
+    upstreamOpenAiUrl: validateString("upstreamOpenAiUrl", 0),
+    upstreamAnthropicUrl: validateString("upstreamAnthropicUrl", 0),
+    upstreamChatGptUrl: validateString("upstreamChatGptUrl", 0),
+    upstreamGeminiUrl: validateString("upstreamGeminiUrl", 0),
+    upstreamVertexUrl: validateString("upstreamVertexUrl", 0),
+    upstreamNvidiaUrl: validateString("upstreamNvidiaUrl", 0),
     upstreamOpenRouterUrl: validateString("upstreamOpenRouterUrl", 0),
+    upstreamKiloUrl: validateString("upstreamKiloUrl", 0),
+    upstreamGeminiCodeAssistUrl: validateString("upstreamGeminiCodeAssistUrl", 0),
   };
 }
 
@@ -1046,9 +1110,41 @@ export function validateSettingsLenient(input: unknown): Settings {
       typeof obj.strictUrlForwarding === "boolean"
         ? obj.strictUrlForwarding
         : DEFAULT_SETTINGS.strictUrlForwarding,
+    upstreamOpenAiUrl:
+      typeof obj.upstreamOpenAiUrl === "string"
+        ? obj.upstreamOpenAiUrl
+        : DEFAULT_SETTINGS.upstreamOpenAiUrl,
+    upstreamAnthropicUrl:
+      typeof obj.upstreamAnthropicUrl === "string"
+        ? obj.upstreamAnthropicUrl
+        : DEFAULT_SETTINGS.upstreamAnthropicUrl,
+    upstreamChatGptUrl:
+      typeof obj.upstreamChatGptUrl === "string"
+        ? obj.upstreamChatGptUrl
+        : DEFAULT_SETTINGS.upstreamChatGptUrl,
+    upstreamGeminiUrl:
+      typeof obj.upstreamGeminiUrl === "string"
+        ? obj.upstreamGeminiUrl
+        : DEFAULT_SETTINGS.upstreamGeminiUrl,
+    upstreamVertexUrl:
+      typeof obj.upstreamVertexUrl === "string"
+        ? obj.upstreamVertexUrl
+        : DEFAULT_SETTINGS.upstreamVertexUrl,
+    upstreamNvidiaUrl:
+      typeof obj.upstreamNvidiaUrl === "string"
+        ? obj.upstreamNvidiaUrl
+        : DEFAULT_SETTINGS.upstreamNvidiaUrl,
     upstreamOpenRouterUrl:
       typeof obj.upstreamOpenRouterUrl === "string"
         ? obj.upstreamOpenRouterUrl
         : DEFAULT_SETTINGS.upstreamOpenRouterUrl,
+    upstreamKiloUrl:
+      typeof obj.upstreamKiloUrl === "string"
+        ? obj.upstreamKiloUrl
+        : DEFAULT_SETTINGS.upstreamKiloUrl,
+    upstreamGeminiCodeAssistUrl:
+      typeof obj.upstreamGeminiCodeAssistUrl === "string"
+        ? obj.upstreamGeminiCodeAssistUrl
+        : DEFAULT_SETTINGS.upstreamGeminiCodeAssistUrl,
   };
 }
