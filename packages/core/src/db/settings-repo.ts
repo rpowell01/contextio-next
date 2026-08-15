@@ -489,9 +489,12 @@ export function upsertSettings(settings: Settings): void {
 			enable_logger, enable_redact, enable_rate_limiter, log_traffic,
 			rate_limiter_max_entries, rate_limiter_cleanup_interval_ms, rate_limiter_entry_ttl_ms,
 			retry_max_entries, retry_entry_ttl_ms, retry_cleanup_interval_ms, retry_max_buffer_size, retry_max_stream_retries,
-			proxy_bind_host, proxy_port, proxy_allow_target_override, strict_url_forwarding, upstream_openrouter_url
+			proxy_bind_host, proxy_port, proxy_allow_target_override, strict_url_forwarding,
+			upstream_openrouter_url, upstream_openai_url, upstream_anthropic_url, upstream_chatgpt_url,
+			upstream_gemini_url, upstream_vertex_url, upstream_nvidia_url, upstream_kilo_url,
+			upstream_gemini_code_assist_url
 		) VALUES (
-			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 		ON CONFLICT(id) DO UPDATE SET
 			log_dir = excluded.log_dir,
@@ -530,7 +533,15 @@ export function upsertSettings(settings: Settings): void {
 			proxy_port = excluded.proxy_port,
 			proxy_allow_target_override = excluded.proxy_allow_target_override,
 			strict_url_forwarding = excluded.strict_url_forwarding,
-			upstream_openrouter_url = excluded.upstream_openrouter_url
+			upstream_openrouter_url = excluded.upstream_openrouter_url,
+			upstream_openai_url = excluded.upstream_openai_url,
+			upstream_anthropic_url = excluded.upstream_anthropic_url,
+			upstream_chatgpt_url = excluded.upstream_chatgpt_url,
+			upstream_gemini_url = excluded.upstream_gemini_url,
+			upstream_vertex_url = excluded.upstream_vertex_url,
+			upstream_nvidia_url = excluded.upstream_nvidia_url,
+			upstream_kilo_url = excluded.upstream_kilo_url,
+			upstream_gemini_code_assist_url = excluded.upstream_gemini_code_assist_url
 	`);
 
 	try {
@@ -571,7 +582,15 @@ export function upsertSettings(settings: Settings): void {
 			row.proxy_port,
 			row.proxy_allow_target_override,
 			row.strict_url_forwarding,
-			row.upstream_openrouter_url
+			row.upstream_openrouter_url,
+			row.upstream_openai_url,
+			row.upstream_anthropic_url,
+			row.upstream_chatgpt_url,
+			row.upstream_gemini_url,
+			row.upstream_vertex_url,
+			row.upstream_nvidia_url,
+			row.upstream_kilo_url,
+			row.upstream_gemini_code_assist_url
 		);
 	} catch (err) {
 		// Preserve original error stack trace for debugging
