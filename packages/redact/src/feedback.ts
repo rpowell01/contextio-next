@@ -157,7 +157,7 @@ export class SqliteFeedbackStore implements FeedbackStore {
 
 	private selectAllStmt = this.db.prepare(`
 		SELECT * FROM redaction_false_positives
-		WHERE (? IS NULL OR rule_id = ?) AND (? IS NULL OR session_id = ?)
+		WHERE (? IS NULL OR rule_id = ?) AND (? IS NULL OR session_id = ? OR session_id IS NULL)
 		ORDER BY timestamp DESC
 	`);
 
@@ -168,7 +168,7 @@ export class SqliteFeedbackStore implements FeedbackStore {
 
 	private clearStmt = this.db.prepare(`
 		DELETE FROM redaction_false_positives
-		WHERE (? IS NULL OR rule_id = ?) AND (? IS NULL OR session_id = ?)
+		WHERE (? IS NULL OR rule_id = ?) AND (? IS NULL OR session_id = ? OR session_id IS NULL)
 	`);
 
 	async recordFalsePositive(entry: Omit<FalsePositiveEntry, "pattern">): Promise<FalsePositiveEntry> {
@@ -284,8 +284,8 @@ export class MemoryFeedbackStore implements FeedbackStore {
 		return this.entries
 			.filter((entry) => {
 				if (ruleId && entry.ruleId !== ruleId) return false;
-				// Match SQLite behavior: when sessionId provided, only match exact sessionId (not global)
-				if (sessionId && entry.sessionId !== sessionId) return false;
+				// Include session-specific entries AND global entries (sessionId is null/undefined)
+				if (sessionId && entry.sessionId && entry.sessionId !== sessionId) return false;
 				return true;
 			})
 			.sort((a, b) => b.timestamp - a.timestamp);
@@ -311,8 +311,8 @@ export class MemoryFeedbackStore implements FeedbackStore {
 		const initialLength = this.entries.length;
 		this.entries = this.entries.filter((entry) => {
 			if (ruleId && entry.ruleId !== ruleId) return true;
-			// Match SQLite behavior: when sessionId provided, only match exact sessionId (not global)
-			if (sessionId && entry.sessionId !== sessionId) return true;
+			// Include session-specific entries AND global entries (sessionId is null/undefined)
+			if (sessionId && entry.sessionId && entry.sessionId !== sessionId) return true;
 			return false;
 		});
 		return initialLength - this.entries.length;

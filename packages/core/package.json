@@ -44,7 +44,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "postbuild": "cp -r src/db/migrations dist/db/migrations 2>/dev/null || true",
+    "postbuild": "cp src/db/migrations/*.sql dist/db/migrations/ 2>/dev/null || true",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "test": "tsx --test test/*.test.ts",
