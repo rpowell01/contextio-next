@@ -188,6 +188,55 @@ interface DetectorState {
 }
 
 /**
+ * Built-in allowlist for common false positives from NER models.
+ * These are words that are frequently misclassified as entities but shouldn't be redacted.
+ */
+const NER_FALSE_POSITIVE_ALLOWLIST: Record<string, string[]> = {
+  ORGANIZATION: [
+    "Updated", "updates", "Update", "update",
+    "Created", "creates", "Create", "create",
+    "Modified", "modifies", "Modify", "modify",
+    "Deleted", "deletes", "Delete", "delete",
+    "Added", "adds", "Add", "add",
+    "Removed", "removes", "Remove", "remove",
+    "Changed", "changes", "Change", "change",
+    "Fixed", "fixes", "Fix", "fix",
+    "Resolved", "resolves", "Resolve", "resolve",
+    "Closed", "closes", "Close", "close",
+    "Opened", "opens", "Open", "open",
+    "Merged", "merges", "Merge", "merge",
+    "Released", "releases", "Release", "release",
+    "Deployed", "deploys", "Deploy", "deploy",
+    "Started", "starts", "Start", "start",
+    "Stopped", "stops", "Stop", "stop",
+    "Running", "runs", "Run", "run",
+    "Completed", "completes", "Complete", "complete",
+    "Failed", "fails", "Fail", "fail",
+    "Pending", "pending",
+    "Active", "active",
+    "Inactive", "inactive",
+    "Enabled", "enables", "Enable", "enable",
+    "Disabled", "disables", "Disable", "disable",
+    "Valid", "valid",
+    "Invalid", "invalid",
+    "Success", "success",
+    "Error", "error",
+    "Warning", "warning",
+    "Info", "info",
+    "Debug", "debug",
+    "Test", "test",
+    "Pass", "pass",
+    "Fail", "fail",
+  ],
+  PERSON: [
+    "I", "We", "You", "He", "She", "They",
+    "Me", "Us", "Him", "Her", "Them",
+    "My", "Our", "Your", "His", "Her", "Their",
+    "Mine", "Ours", "Yours", "His", "Hers", "Theirs",
+  ],
+};
+
+/**
  * Apply detector spans to a string, returning the redacted string and
  * updating stats/map for reversible mode.
  */
@@ -202,43 +251,70 @@ function applyDetectorSpans(
 ): string {
   if (spans.length === 0) return input;
 
-  // Sort spans by start position (descending) to apply replacements in reverse
-  const sortedSpans = [...spans].sort((a, b) => b.start - a.start);
+  // Sort spans by start position (ascending) for recording matches in natural order
+  // This ensures early matches in the text are recorded first, making them more likely
+  // to be included when MATCHES_LIMIT is applied in buildRedactMetaPayload
+  const spansAscending = [...spans].sort((a, b) => a.start - b.start);
+
+  // Also create descending order for applying replacements (to avoid index shifting)
+  const spansDescending = [...spansAscending].reverse();
 
   // Track per-ruleId counters for non-reversible mode to generate consistent placeholders
   // e.g., [ORGANIZATION_REDACTED], [PERSON_REDACTED] instead of timestamps
   const nonReversibleCounters = new Map<string, number>();
 
-  let result = input;
-  for (const span of sortedSpans) {
+  // Pre-compute replacements for all valid spans (in ascending order) so we can
+  // record matches in the correct order before applying replacements in reverse
+  interface SpanReplacement {
+    span: DetectedSpan;
+    match: string;
+    ruleId: string;
+    replacement: string;
+  }
+  const replacements: SpanReplacement[] = [];
+
+  for (const span of spansAscending) {
     const match = input.slice(span.start, span.end);
     // Skip if match is a known placeholder token (prevent re-redaction)
     if (placeholderAllowlist.has(match)) continue;
-    // Use the span's entity label (e.g., "PERSON", "EMAIL_ADDRESS") as the rule identifier
-    // so each entity type gets its own count and placeholder format
+
+    // Filter common NER false positives
+    const falsePositives = NER_FALSE_POSITIVE_ALLOWLIST[span.label];
+    if (falsePositives && falsePositives.includes(match)) {
+      continue;
+    }
+
+    // Use the span's entity label as the rule identifier
     const ruleId = span.label;
 
     let replacement: string;
     if (map) {
       // Reversible mode: use ReplacementMap which generates [LABEL_N] format
-      // Each unique original value gets a unique placeholder for rehydration
       replacement = map.getOrCreate(match, ruleId);
     } else {
       // Non-reversible mode: use consistent [LABEL_REDACTED] format
-      // All occurrences of the same entity type get the same placeholder
-      // This matches the canonical format used by stats API and diff dialog
       const count = (nonReversibleCounters.get(ruleId) ?? 0) + 1;
       nonReversibleCounters.set(ruleId, count);
       const label = ruleId.toUpperCase().replace(/[^A-Z0-9]/g, "_");
       replacement = `[${label}_REDACTED]`;
     }
 
-    stats.totalReplacements++;
-    stats.byRule[ruleId] = (stats.byRule[ruleId] || 0) + 1;
-    // Record the match for metadata with the entity type as ruleId
-    recordMatch(stats, ruleId, match, replacement, currentPath);
-    result = result.slice(0, span.start) + replacement + result.slice(span.end);
+    replacements.push({ span, match, ruleId, replacement });
   }
+
+  // Record all matches in ascending order (early matches first)
+  for (const r of replacements) {
+    stats.totalReplacements++;
+    stats.byRule[r.ruleId] = (stats.byRule[r.ruleId] || 0) + 1;
+    recordMatch(stats, r.ruleId, r.match, r.replacement, currentPath);
+  }
+
+  // Apply replacements in descending order to avoid index shifting
+  let result = input;
+  for (const r of replacements.reverse()) {
+    result = result.slice(0, r.span.start) + r.replacement + result.slice(r.span.end);
+  }
+
   return result;
 }
 
