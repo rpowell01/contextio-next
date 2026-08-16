@@ -294,6 +294,7 @@ export async function createDefaultHybridDetector(
     allowlistStrings?: string[];
     allowlistPatterns?: string[];
     placeholderAllowlist?: string[];
+    feedbackStore?: import("./feedback.js").FeedbackStore;
   },
   presidioConfig?: {
     modelName?: string;
@@ -313,6 +314,7 @@ export async function createDefaultHybridDetector(
     allowlistStrings: ruleConfig?.allowlistStrings,
     allowlistPatterns: ruleConfig?.allowlistPatterns,
     placeholderAllowlist: ruleConfig?.placeholderAllowlist,
+    feedbackStore: ruleConfig?.feedbackStore,
   });
 
   // Create Presidio detector

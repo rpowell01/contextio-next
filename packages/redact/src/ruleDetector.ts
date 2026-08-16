@@ -14,6 +14,7 @@ import type {
   DetectionResult,
   DetectedSpan,
 } from "./detector.js";
+import type { FeedbackStore } from "./feedback.js";
 
 // --- Context word matching (duplicated from redact.ts for isolation) ---
 
@@ -76,6 +77,8 @@ export interface RuleDetectorConfig extends DetectorConfig {
   allowlistPatterns?: string[];
   /** Placeholder tokens to skip (prevent re-redaction). */
   placeholderAllowlist?: string[];
+  /** Optional FeedbackStore to filter out known false positives. */
+  feedbackStore?: FeedbackStore;
 }
 
 /**
@@ -94,9 +97,11 @@ export class RuleDetector implements Detector {
   private allowlistPatterns: RegExp[] = [];
   private placeholderAllowlist = new Set<string>();
   private initialized = false;
+  private feedbackStore?: FeedbackStore;
 
   constructor(config?: Partial<RuleDetectorConfig>) {
     this.name = config?.name ?? "rules";
+    this.feedbackStore = config?.feedbackStore;
     if (config?.rules) {
       this.rules = config.rules;
     }
@@ -132,6 +137,9 @@ export class RuleDetector implements Detector {
     }
     if (ruleConfig?.placeholderAllowlist) {
       this.placeholderAllowlist = new Set(ruleConfig.placeholderAllowlist);
+    }
+    if (ruleConfig?.feedbackStore !== undefined) {
+      this.feedbackStore = ruleConfig.feedbackStore;
     }
     // Apply threshold from config
     if (ruleConfig?.threshold !== undefined) {
@@ -170,6 +178,9 @@ export class RuleDetector implements Detector {
       ? new Set(ruleConfig.placeholderAllowlist)
       : this.placeholderAllowlist;
     const threshold = config?.threshold ?? this.threshold;
+
+    // Use feedbackStore from runtime config or instance
+    const feedbackStore = ruleConfig?.feedbackStore ?? this.feedbackStore;
 
     const spans: DetectedSpan[] = [];
 
@@ -244,6 +255,33 @@ export class RuleDetector implements Detector {
           }
         }
       }
+    }
+
+    // Filter out known false positives using feedbackStore
+    if (feedbackStore && spans.length > 0) {
+      // Precompute rule name lookup map for O(1) lookups
+      const ruleNameMap = new Map<string, string>();
+      for (const rule of rules) {
+        ruleNameMap.set(rule.name.toUpperCase(), rule.name);
+      }
+
+      // Check all spans in parallel for false positives
+      const fpChecks = spans.map(async (span) => {
+        try {
+          const ruleId = ruleNameMap.get(span.label) ?? span.label.toLowerCase();
+          const isFp = await feedbackStore.isFalsePositive(span.text, ruleId);
+          return isFp ? null : span;
+        } catch (err) {
+          // Log error but don't crash the pipeline - treat as non-false-positive
+          console.error(`[RuleDetector] False positive check failed for "${span.text}":`, err);
+          return span;
+        }
+      });
+
+      const results = await Promise.all(fpChecks);
+      const filteredSpans = results.filter((span): span is DetectedSpan => span !== null);
+      spans.length = 0;
+      spans.push(...filteredSpans);
     }
 
     // Sort by start position

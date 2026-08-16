@@ -43,13 +43,13 @@ import type {
   DetectorMode,
   RedactDetectorConfig,
   DetectorPipelineConfig,
+  RuleDetectorConfig,
 } from "./detector.js";
-import type { RedactionRule } from "./rules.js";
-import type { RuleDetectorConfig } from "./ruleDetector.js";
 import { detectorRegistry, registerDetector, createDetector } from "./detector.js";
 import { createRuleDetector } from "./ruleDetector.js";
 import { createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";
 import { createPresidioTsDetector, type PresidioTsConfig } from "./presidioTsDetector.js";
+import { createFeedbackStore, type FeedbackStore } from "./feedback.js";
 import { EntityType } from "@siddicky/anonymizerts";
 
 /** Default skip paths to prevent redaction of tool call IDs and structured data. */
@@ -165,6 +165,12 @@ export interface RedactPluginConfig {
    * The callback is responsible for persisting metadata (e.g., to SQLite).
    */
   onRedactionMetadata?: (metadata: RedactionMetadata) => void;
+  /**
+   * Optional feedback store for filtering known false positives.
+   * Can be a FeedbackStore instance or "sqlite"/"memory" to auto-create.
+   * Default: undefined (no false positive filtering).
+   */
+  feedbackStore?: FeedbackStore | "sqlite" | "memory";
 }
 
 /** Per-session state for reversible mode: mapping table + stream rehydrator. */
@@ -474,6 +480,15 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
     initializing: null,
   };
 
+  // Create or use provided FeedbackStore for false positive filtering
+  // String shorthand "sqlite"/"memory" auto-creates a store; null disables filtering; undefined uses default SQLite store
+  const feedbackStore: FeedbackStore | null =
+    config?.feedbackStore !== undefined
+      ? typeof config.feedbackStore === "string"
+        ? createFeedbackStore(config.feedbackStore)
+        : config.feedbackStore
+      : createFeedbackStore("sqlite");
+
   // Resolve detector config: plugin config overrides policy file config
   const resolvedDetectorConfig = resolveDetectorConfig(config);
   const detectorMode = resolvedDetectorConfig?.mode ?? config?.detectorMode ?? "rules";
@@ -517,6 +532,16 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
       return detectorState.pipeline;
     }
 
+    // Resolve feedback store
+    let feedbackStore: FeedbackStore | undefined;
+    if (config?.feedbackStore) {
+      if (typeof config.feedbackStore === "string") {
+        feedbackStore = createFeedbackStore(config.feedbackStore);
+      } else {
+        feedbackStore = config.feedbackStore;
+      }
+    }
+
     detectorState.initializing = (async () => {
       try {
         // Create rule detector
@@ -526,6 +551,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
           allowlistStrings: Array.from(policy.allowlist.strings),
           allowlistPatterns: Array.from(policy.allowlist.patterns).map((r) => r.source),
           placeholderAllowlist: Array.from(policy.placeholderAllowlist),
+          feedbackStore: feedbackStore ?? undefined,
         });
 
         // Determine which Presidio entity types are already covered by policy rules.
@@ -612,6 +638,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
             labels: presidioLabels,
             options: presidioConfig.options,
             allowlistPatterns: policy.allowlist.patterns,
+            feedbackStore,
           });
           pipeline = await createDetectorPipeline({
             detectors: [llmDetector],
@@ -630,6 +657,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
             labels: presidioLabels,
             options: presidioConfig.options,
             allowlistPatterns: policy.allowlist.patterns,
+            feedbackStore,
           });
 
           // In auto mode, we still use hybrid but could add logic to skip LLM for simple cases

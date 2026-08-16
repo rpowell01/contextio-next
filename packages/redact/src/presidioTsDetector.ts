@@ -14,6 +14,7 @@ import type {
   DetectionResult,
   DetectedSpan,
 } from "./detector.js";
+import type { FeedbackStore } from "./feedback.js";
 import {
   PresidioAnalyzer,
   type RecognizerResult,
@@ -43,6 +44,8 @@ export interface PresidioTsConfig extends DetectorConfig {
   options?: Record<string, unknown>;
   /** Regex patterns for strings that should never be flagged (allowlist). */
   allowlistPatterns?: RegExp[];
+  /** Optional feedback store to filter out known false positives. */
+  feedbackStore?: FeedbackStore;
 }
 
 /**
@@ -65,6 +68,7 @@ export class PresidioTsDetector implements Detector {
 
   private analyzer: PresidioAnalyzer | null = null;
   private config: PresidioTsConfig;
+  private feedbackStore: FeedbackStore | undefined;
   private initialized = false;
   private initializing: Promise<void> | null = null;
   private shuttingDown = false;
@@ -105,6 +109,7 @@ export class PresidioTsDetector implements Detector {
       threshold: 0.5,
       ...config,
     };
+    this.feedbackStore = config.feedbackStore;
 
     this.analyzer = new PresidioAnalyzer({
       useNER: this.config.useNER ?? true,
@@ -146,6 +151,11 @@ export class PresidioTsDetector implements Detector {
     // Merge runtime config
     if (config) {
       this.config = { ...this.config, ...config } as PresidioTsConfig;
+      // Update feedbackStore if provided in runtime config
+      const presidioConfig = config as PresidioTsConfig;
+      if (presidioConfig.feedbackStore !== undefined) {
+        this.feedbackStore = presidioConfig.feedbackStore;
+      }
     }
 
     // Warn on unsupported labels
@@ -281,6 +291,7 @@ export class PresidioTsDetector implements Detector {
     const finalConfig = { ...this.config, ...config } as PresidioTsConfig;
     const threshold = finalConfig.threshold ?? 0.5;
     const allowlistPatterns = finalConfig.allowlistPatterns ?? [];
+    const feedbackStore = finalConfig.feedbackStore ?? this.feedbackStore;
 
     // Determine which entity types to detect
     let entityTypes: EntityType[] | undefined;
@@ -313,10 +324,24 @@ export class PresidioTsDetector implements Detector {
     const analyzerResults = await this.analyzer.analyze(text, entityTypes);
 
     // Convert to DetectionResult format
-    const spans = analyzerResults
+    let filteredResults = analyzerResults
       .filter((result: RecognizerResult) => result.score >= threshold)
-      .filter((result: RecognizerResult) => !this.isAllowlisted(result.text, allowlistPatterns))
-      .map((result: RecognizerResult) => this.convertToDetectedSpan(result));
+      .filter((result: RecognizerResult) => !this.isAllowlisted(result.text, allowlistPatterns));
+
+    // Apply feedback store filtering if available
+    if (feedbackStore) {
+      // Check all results in parallel for better performance
+      const isFalsePositiveResults = await Promise.all(
+        filteredResults.map((result) =>
+          feedbackStore.isFalsePositive(result.text, this.name)
+        )
+      );
+      filteredResults = filteredResults.filter(
+        (_, index) => !isFalsePositiveResults[index]
+      );
+    }
+
+    const spans = filteredResults.map((result: RecognizerResult) => this.convertToDetectedSpan(result));
 
     // Sort by start position
     spans.sort((a: DetectedSpan, b: DetectedSpan) => a.start - b.start);
