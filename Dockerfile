@@ -98,6 +98,11 @@ COPY --from=build /app/packages/proxy/dist ./dist
 # Copy core dist for migrations (migration runner looks at dist/db/migrations)
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 
+# Verify migrations were copied (fail build if missing)
+RUN ls -la /app/packages/core/dist/db/migrations/ && \
+    test -f /app/packages/core/dist/db/migrations/014_add_feature_flags_and_advanced_config.sql && \
+    test -f /app/packages/core/dist/db/migrations/015_add_upstream_urls.sql
+
 # Copy Next.js standalone build output
 COPY --from=build /app/packages/web/.next/standalone/packages/web ./packages/web
 COPY --from=build /app/packages/web/.next/static ./packages/web/.next/static
