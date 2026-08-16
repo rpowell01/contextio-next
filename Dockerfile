@@ -95,6 +95,9 @@ RUN rm -rf /app/packages/web
 # Copy proxy dist to root for combined entry
 COPY --from=build /app/packages/proxy/dist ./dist
 
+# Copy core dist for migrations (migration runner looks at dist/db/migrations)
+COPY --from=build /app/packages/core/dist ./packages/core/dist
+
 # Copy Next.js standalone build output
 COPY --from=build /app/packages/web/.next/standalone/packages/web ./packages/web
 COPY --from=build /app/packages/web/.next/static ./packages/web/.next/static
