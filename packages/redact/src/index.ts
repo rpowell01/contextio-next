@@ -49,7 +49,7 @@ import { detectorRegistry, registerDetector, createDetector } from "./detector.j
 import { createRuleDetector } from "./ruleDetector.js";
 import { createDetectorPipeline, createHybridDetector, mergeDetectionResults } from "./detectorPipeline.js";
 import { createPresidioTsDetector, type PresidioTsConfig } from "./presidioTsDetector.js";
-import { createFeedbackStore, type FeedbackStore } from "./feedback.js";
+import { createFeedbackStore, type FeedbackStore, type FalsePositiveEntry } from "./feedback.js";
 import { EntityType } from "@siddicky/anonymizerts";
 
 /** Default skip paths to prevent redaction of tool call IDs and structured data. */
@@ -171,6 +171,36 @@ export interface RedactPluginConfig {
    * Default: undefined (no false positive filtering).
    */
   feedbackStore?: FeedbackStore | "sqlite" | "memory";
+}
+
+/** Extended plugin interface for the redact plugin with feedback store methods. */
+interface RedactPlugin extends ProxyPlugin {
+  /**
+   * Report a false positive to the feedback store.
+   * This allows users to mark incorrectly redacted values so they won't be redacted in the future.
+   * @param params - Object containing the false positive details
+   * @param params.value - The original value that was incorrectly redacted
+   * @param params.ruleId - The rule ID that triggered the false positive
+   * @param params.label - The label/category of the detection (e.g., "EMAIL", "PHONE", "CREDIT_CARD")
+   * @param params.path - The JSON path where the value was found (e.g., "$.messages[0].content")
+   * @param params.sessionId - Optional session ID for scoping
+   * @param params.matchMode - How to match this entry: 'exact' or 'pattern' (default: 'exact')
+   * @returns The created false positive entry
+   */
+  reportFalsePositive(params: {
+    value: string;
+    ruleId: string;
+    label: string;
+    path: string;
+    sessionId?: string;
+    matchMode?: "exact" | "pattern";
+  }): Promise<FalsePositiveEntry>;
+
+  /**
+   * Get the feedback store instance for direct access.
+   * @returns The FeedbackStore instance, or undefined if not configured
+   */
+  getFeedbackStore(): FeedbackStore | undefined;
 }
 
 /** Per-session state for reversible mode: mapping table + stream rehydrator. */
@@ -550,7 +580,7 @@ const DEFAULT_SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
  * Each session (identified by the session ID in the URL path) gets its
  * own replacement map.
  */
-export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
+export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
   const policy = resolvePolicy(config);
   const verbose = config?.verbose ?? false;
   const reversible = config?.reversible ?? false;
@@ -798,7 +828,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
       } catch (err) {
         console.error(`[redact] Failed to initialize detector pipeline:`, err);
         detectorState.pipeline = null;
-        throw err;
+        // Return null to allow fall-through to rule-based redaction
       } finally {
         detectorState.initializing = null;
       }
@@ -956,6 +986,48 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
         console.error("[redact] Plugin shutdown complete");
       }
     },
+
+    /**
+     * Report a false positive to the feedback store.
+     * This allows users to mark incorrectly redacted values so they won't be redacted in the future.
+     * @param params - Object containing the false positive details
+     * @param params.value - The original value that was incorrectly redacted
+     * @param params.ruleId - The rule ID that triggered the false positive
+     * @param params.label - The label/category of the detection (e.g., "EMAIL", "PHONE", "CREDIT_CARD")
+     * @param params.path - The JSON path where the value was found (e.g., "$.messages[0].content")
+     * @param params.sessionId - Optional session ID for scoping
+     * @param params.matchMode - How to match this entry: 'exact' or 'pattern' (default: 'exact')
+     * @returns The created false positive entry
+     */
+    async reportFalsePositive(params: {
+      value: string;
+      ruleId: string;
+      label: string;
+      path: string;
+      sessionId?: string;
+      matchMode?: "exact" | "pattern";
+    }): Promise<FalsePositiveEntry> {
+      if (!feedbackStore) {
+        throw new Error("Feedback store not configured. Set feedbackStore in RedactPluginConfig to enable false positive reporting.");
+      }
+      return feedbackStore.recordFalsePositive({
+        value: params.value,
+        ruleId: params.ruleId,
+        label: params.label,
+        path: params.path,
+        timestamp: Date.now(),
+        sessionId: params.sessionId,
+        matchMode: params.matchMode ?? "exact",
+      });
+    },
+
+    /**
+     * Get the feedback store instance for direct access.
+     * @returns The FeedbackStore instance, or undefined if not configured
+     */
+    getFeedbackStore(): FeedbackStore | undefined {
+      return feedbackStore;
+    },
   };
 }
 
@@ -971,6 +1043,7 @@ export type { MappingEntry } from "./mapping.js";
 export { ReplacementMap } from "./mapping.js";
 
 // Feedback API
+export type { RedactPlugin };
 export type {
 	FalsePositiveEntry,
 	MatchMode,

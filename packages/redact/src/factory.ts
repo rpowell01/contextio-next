@@ -17,7 +17,7 @@
  * - CONTEXTIO_ENABLE_REDACT: "true" | "false" (default: "true") - Enable/disable redact plugin
  */
 
-import { createRedactPlugin, type RedactPluginConfig, type RedactionMetadata } from "./index.js";
+import { createRedactPlugin, type RedactPluginConfig, type RedactionMetadata, type RedactPlugin } from "./index.js";
 import type { ProxyPlugin } from "@contextio/core";
 import { upsertRedactionMetadata, getSettings } from "@contextio/core/db";
 
@@ -107,6 +107,16 @@ const config: RedactPluginConfig = {
 		detectorConfig: Object.keys(detectorConfig).length > 0 ? detectorConfig : undefined,
 		verbose: process.env.REDACT_VERBOSE === "true",
 		sessionTtlMs: Number.parseInt(process.env.REDACT_SESSION_TTL_MS || "900000", 10),
+		// Feedback store for false positive filtering
+		feedbackStore: (() => {
+			const fbType = process.env.REDACT_FEEDBACK_STORE;
+			if (fbType === "sqlite" || fbType === "memory") {
+				return fbType;
+			}
+			// Default to sqlite if feedback store is enabled via settings
+			// (web UI settings don't have a feedback store setting yet, so default to undefined)
+			return undefined;
+		})(),
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
 			upsertRedactionMetadata(metadata);
 		},
@@ -178,7 +188,7 @@ const config: RedactPluginConfig = {
 }
 
 /** Factory function for redact plugin (enabled via CONTEXTIO_ENABLE_REDACT env var). */
-export default async function createRedactPluginFactory(): Promise<ProxyPlugin | null> {
+export default async function createRedactPluginFactory(): Promise<RedactPlugin | null> {
 	// Check if redact is explicitly disabled via env var
 	const redactEnabled = process.env.CONTEXTIO_ENABLE_REDACT !== "false";
 	if (!redactEnabled) {
@@ -190,4 +200,4 @@ export default async function createRedactPluginFactory(): Promise<ProxyPlugin |
 }
 
 /** Named export for alternative import style. */
-export { createRedactPluginFactory };
+export { createRedactPluginFactory, type RedactPlugin };
