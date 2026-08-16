@@ -33,6 +33,7 @@ import { ReplacementMap } from "./mapping.js";
 import type { CompiledPolicy, PolicyJson, PathMatcher } from "./policy.js";
 import { compilePolicy, fromPreset, loadPolicyFile, parsePath } from "./policy.js";
 import type { PresetName } from "./presets.js";
+import type { RedactionRule } from "./rules.js";
 import { buildRedactMetaPayload, buildFullRedactionMetadata, createStats, recordMatch, redactWithPolicy, type MatchEntry, type RedactionMetadata, type RedactionStats } from "./redact.js";
 import { createStreamRehydrator } from "./stream.js";
 import type {
@@ -43,7 +44,6 @@ import type {
   DetectorMode,
   RedactDetectorConfig,
   DetectorPipelineConfig,
-  RuleDetectorConfig,
 } from "./detector.js";
 import { detectorRegistry, registerDetector, createDetector } from "./detector.js";
 import { createRuleDetector } from "./ruleDetector.js";
