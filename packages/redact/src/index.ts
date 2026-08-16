@@ -240,7 +240,7 @@ const NER_FALSE_POSITIVE_ALLOWLIST: Record<string, string[]> = {
  * Apply detector spans to a string, returning the redacted string and
  * updating stats/map for reversible mode.
  */
-function applyDetectorSpans(
+async function applyDetectorSpans(
   input: string,
   spans: DetectedSpan[],
   detectorName: string,
@@ -248,16 +248,29 @@ function applyDetectorSpans(
   map: ReplacementMap | null,
   placeholderAllowlist: Set<string>,
   currentPath: string[] = [],
-): string {
+  feedbackStore: FeedbackStore | null = null,
+): Promise<string> {
   if (spans.length === 0) return input;
+
+// Map Presidio entity labels to rule names for consistent false positive filtering
+  // and placeholder naming across detector types (RuleDetector, PresidioTsDetector)
+  const labelToRuleId: Record<string, string> = {
+    "EMAIL_ADDRESS": "email",
+    "PHONE_NUMBER": "phone-us",
+    "CREDIT_CARD": "credit-card",
+    "US_SSN": "ssn",
+    "IP_ADDRESS": "ipv4",
+    "URL": "url",
+    "DATE_TIME": "date-of-birth",
+    "PERSON": "person",
+    "LOCATION": "location",
+    "ORGANIZATION": "organization",
+  };
 
   // Sort spans by start position (ascending) for recording matches in natural order
   // This ensures early matches in the text are recorded first, making them more likely
   // to be included when MATCHES_LIMIT is applied in buildRedactMetaPayload
   const spansAscending = [...spans].sort((a, b) => a.start - b.start);
-
-  // Also create descending order for applying replacements (to avoid index shifting)
-  const spansDescending = [...spansAscending].reverse();
 
   // Track per-ruleId counters for non-reversible mode to generate consistent placeholders
   // e.g., [ORGANIZATION_REDACTED], [PERSON_REDACTED] instead of timestamps
@@ -278,14 +291,25 @@ function applyDetectorSpans(
     // Skip if match is a known placeholder token (prevent re-redaction)
     if (placeholderAllowlist.has(match)) continue;
 
+    // Normalize ruleId: use mapping for Presidio labels, fallback to lowercase label
+    const ruleId = labelToRuleId[span.label] ?? span.label.toLowerCase();
+
     // Filter common NER false positives
-    const falsePositives = NER_FALSE_POSITIVE_ALLOWLIST[span.label];
+    const falsePositives = NER_FALSE_POSITIVE_ALLOWLIST[ruleId.toUpperCase()];
     if (falsePositives && falsePositives.includes(match)) {
       continue;
     }
 
-    // Use the span's entity label as the rule identifier
-    const ruleId = span.label;
+    // Check if this match is a known false positive via FeedbackStore
+    if (feedbackStore) {
+      try {
+        const isFp = await feedbackStore.isFalsePositive(match, ruleId);
+        if (isFp) continue;
+      } catch (err) {
+        // Log error but don't crash - treat as non-false-positive to avoid blocking redaction
+        console.error(`[redact] False positive check failed for "${match}":`, err);
+      }
+    }
 
     let replacement: string;
     if (map) {
@@ -330,6 +354,7 @@ async function redactWithDetector(
   stats: ReturnType<typeof createStats>,
   currentPath: string[] = [],
   map: ReplacementMap | null = null,
+  feedbackStore: FeedbackStore | null = null,
 ): Promise<unknown> {
   // Temporary debug logging (enabled via REDACT_DEBUG=true)
   const DEBUG_REDACT = process.env.REDACT_DEBUG === "true";
@@ -358,7 +383,7 @@ async function redactWithDetector(
       if (DEBUG_REDACT) {
         console.error(`[redact-debug] DETECTOR MATCHES at ${pathStr}:`, detectionResult.spans.map(s => `${s.label}:${s.text.substring(0, 30)}@${s.start}-${s.end} (${s.score.toFixed(3)})`));
       }
-      redacted = applyDetectorSpans(
+      redacted = await applyDetectorSpans(
         value,
         detectionResult.spans,
         detector.name,
@@ -366,6 +391,7 @@ async function redactWithDetector(
         map,
         policy.placeholderAllowlist,
         currentPath,
+        feedbackStore,
       );
     }
 
@@ -380,7 +406,7 @@ async function redactWithDetector(
           return value;
         }
       }
-      redacted = redactString(
+      redacted = await redactString(
         redacted,
         policy.rules,
         policy.allowlist.strings,
@@ -389,6 +415,7 @@ async function redactWithDetector(
         stats,
         map,
         currentPath,
+        feedbackStore,
       );
     }
 
@@ -397,14 +424,14 @@ async function redactWithDetector(
 
   if (Array.isArray(value)) {
     return Promise.all(value.map((item) =>
-      redactWithDetector(item, policy, detector, detectorMode, stats, [...currentPath, "*"], map)
+      redactWithDetector(item, policy, detector, detectorMode, stats, [...currentPath, "*"], map, feedbackStore)
     ));
   }
 
   if (value !== null && typeof value === "object") {
     const result: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      result[key] = await redactWithDetector(val, policy, detector, detectorMode, stats, [...currentPath, key], map);
+      result[key] = await redactWithDetector(val, policy, detector, detectorMode, stats, [...currentPath, key], map, feedbackStore);
     }
     return result;
   }
@@ -579,13 +606,13 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
   };
 
   // Create or use provided FeedbackStore for false positive filtering
-  // String shorthand "sqlite"/"memory" auto-creates a store; null disables filtering; undefined uses default SQLite store
-  const feedbackStore: FeedbackStore | null =
+  // String shorthand "sqlite"/"memory" auto-creates a store; null disables filtering; undefined uses default (no filtering)
+  const feedbackStore: FeedbackStore | undefined =
     config?.feedbackStore !== undefined
       ? typeof config.feedbackStore === "string"
         ? createFeedbackStore(config.feedbackStore)
         : config.feedbackStore
-      : createFeedbackStore("sqlite");
+      : undefined;
 
   // Resolve detector config: plugin config overrides policy file config
   const resolvedDetectorConfig = resolveDetectorConfig(config);
@@ -630,16 +657,6 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
       return detectorState.pipeline;
     }
 
-    // Resolve feedback store
-    let feedbackStore: FeedbackStore | undefined;
-    if (config?.feedbackStore) {
-      if (typeof config.feedbackStore === "string") {
-        feedbackStore = createFeedbackStore(config.feedbackStore);
-      } else {
-        feedbackStore = config.feedbackStore;
-      }
-    }
-
     detectorState.initializing = (async () => {
       try {
         // Create rule detector
@@ -649,7 +666,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
           allowlistStrings: Array.from(policy.allowlist.strings),
           allowlistPatterns: Array.from(policy.allowlist.patterns).map((r) => r.source),
           placeholderAllowlist: Array.from(policy.placeholderAllowlist),
-          feedbackStore: feedbackStore ?? undefined,
+          feedbackStore,
         });
 
         // Determine which Presidio entity types are already covered by policy rules.
@@ -804,7 +821,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
     if (detectorMode !== "rules") {
       const detector = await ensureDetectorInitialized();
       if (detector) {
-        const redacted = await redactWithDetector(ctx.body, policy, detector, detectorMode, stats, [], map);
+        const redacted = await redactWithDetector(ctx.body, policy, detector, detectorMode, stats, [], map, feedbackStore);
         // Reset stream rehydrator for this session (new response coming)
         if (reversible) {
           const session = getSession(ctx.sessionId);
@@ -847,7 +864,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): ProxyPlugin {
     }
 
     // Rule-based redaction (default)
-    const redacted = redactWithPolicy(ctx.body, policy, stats, [], map);
+    const redacted = await redactWithPolicy(ctx.body, policy, stats, [], map, feedbackStore);
     // Reset stream rehydrator for this session (new response coming)
     if (reversible) {
       const session = getSession(ctx.sessionId);

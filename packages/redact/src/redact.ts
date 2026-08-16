@@ -14,6 +14,7 @@ import { shannonEntropy, type Provider } from "@contextio/core";
 import type { ReplacementMap } from "./mapping.js";
 import type { CompiledPolicy } from "./policy.js";
 import type { RedactionRule } from "./rules.js";
+import type { FeedbackStore } from "./feedback.js";
 
 // ---------------------------------------------------------------------------
 // RedactionMetadata schema
@@ -240,7 +241,7 @@ function resolveReplacement(match: string, rule: RedactionRule, map: Replacement
  * Apply redaction rules to a single string, respecting context words
  * and allowlists.
  */
-export function redactString(
+export async function redactString(
   input: string,
   rules: RedactionRule[],
   allowlistStrings: Set<string>,
@@ -249,51 +250,57 @@ export function redactString(
   stats: RedactionStats,
   map: ReplacementMap | null,
   currentPath: string[] = [],
-): string {
+  feedbackStore: FeedbackStore | null = null,
+): Promise<string> {
   let result = input;
   for (const rule of rules) {
     rule.pattern.lastIndex = 0;
 
-    if (rule.context && rule.context.length > 0) {
-      // Context-gated: use exec loop to check context per match
-      const window = rule.contextWindow ?? 100;
-      const matches: { start: number; end: number; match: string; captured: string | undefined }[] = [];
-      rule.pattern.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = rule.pattern.exec(result)) !== null) {
-        matches.push({ start: m.index, end: m.index + m[0].length, match: m[0], captured: m[1] });
-      }
+    // Use exec loop for both context-gated and non-context-gated rules
+    // This allows consistent false positive checking with feedbackStore
+    const window = rule.contextWindow ?? 100;
+    const matches: { start: number; end: number; match: string; captured: string | undefined }[] = [];
+    rule.pattern.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = rule.pattern.exec(result)) !== null) {
+      matches.push({ start: m.index, end: m.index + m[0].length, match: m[0], captured: m[1] });
+    }
 
-      // Apply replacements in reverse order to preserve indices
-      for (let i = matches.length - 1; i >= 0; i--) {
-        const { start, end, match, captured } = matches[i];
-        // Skip if match is a known placeholder token (prevent re-redaction)
-        if (placeholderAllowlist.has(match)) continue;
-        if (isAllowlisted(match, allowlistStrings, allowlistPatterns)) continue;
-        if (rule.allowlist && isRuleAllowlisted(match, captured, rule.allowlist)) continue;
-        if (rule.minEntropy !== undefined && shannonEntropy(captured ?? match) < rule.minEntropy) continue;
+    // First pass: filter matches and check false positives in left-to-right order
+    // to ensure correct placeholder numbering (EMAIL_1, EMAIL_2, etc.)
+    const validMatches: { start: number; end: number; match: string; captured: string | undefined; replacement: string }[] = [];
+    for (const { start, end, match, captured } of matches) {
+      // Skip if match is a known placeholder token (prevent re-redaction)
+      if (placeholderAllowlist.has(match)) continue;
+      if (isAllowlisted(match, allowlistStrings, allowlistPatterns)) continue;
+      if (rule.allowlist && isRuleAllowlisted(match, captured, rule.allowlist)) continue;
+      if (rule.minEntropy !== undefined && shannonEntropy(captured ?? match) < rule.minEntropy) continue;
+      // Context gating check (only for context-gated rules)
+      if (rule.context && rule.context.length > 0) {
         if (!hasContextNearby(result, start, end, rule.context, window)) continue;
-        const replacement = resolveReplacement(match, rule, map);
-        stats.totalReplacements++;
-        stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
-        recordMatch(stats, rule.name, match, replacement, currentPath);
-        result = result.slice(0, start) + replacement + result.slice(end);
       }
-    } else {
-      // No context gating: simple replace
-      result = result.replace(rule.pattern, (matchArg, ...args) => {
-        const captured = typeof args[0] === "string" ? args[0] : undefined;
-        // Skip if match is a known placeholder token (prevent re-redaction)
-        if (placeholderAllowlist.has(matchArg)) return matchArg;
-        if (isAllowlisted(matchArg, allowlistStrings, allowlistPatterns)) return matchArg;
-        if (rule.allowlist && isRuleAllowlisted(matchArg, captured, rule.allowlist)) return matchArg;
-        if (rule.minEntropy !== undefined && shannonEntropy(captured ?? matchArg) < rule.minEntropy) return matchArg;
-      const replacement = resolveReplacement(matchArg, rule, map);
+      // Check if this match is a known false positive
+      if (feedbackStore) {
+        try {
+          const isFp = await feedbackStore.isFalsePositive(match, rule.name);
+          if (isFp) continue;
+        } catch (err) {
+          // Log error but don't crash - treat as non-false-positive to avoid blocking redaction
+          console.error(`[redact] False positive check failed for "${match}":`, err);
+        }
+      }
+      // Compute replacement in left-to-right order for correct numbering
+      const replacement = resolveReplacement(match, rule, map);
+      validMatches.push({ start, end, match, captured, replacement });
+    }
+
+    // Second pass: apply replacements in reverse order to preserve indices
+    for (let i = validMatches.length - 1; i >= 0; i--) {
+      const { start, end, match, captured, replacement } = validMatches[i];
       stats.totalReplacements++;
       stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
-      recordMatch(stats, rule.name, matchArg, replacement, currentPath);
-      return replacement;
-      });
+      recordMatch(stats, rule.name, match, replacement, currentPath);
+      result = result.slice(0, start) + replacement + result.slice(end);
     }
   }
   return result;
@@ -304,13 +311,14 @@ export function redactString(
 /**
  * Recursively walk a JSON value and apply redaction rules to string leaves.
  */
-export function redactWithPolicy(
+export async function redactWithPolicy(
   value: unknown,
   policy: CompiledPolicy,
   stats: RedactionStats,
   currentPath: string[] = [],
   map: ReplacementMap | null = null,
-): unknown {
+  feedbackStore: FeedbackStore | null = null,
+): Promise<unknown> {
   if (typeof value === "string") {
     if (policy.paths.only !== null || policy.paths.skip.length > 0) {
       if (!shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip)) {
@@ -326,17 +334,18 @@ export function redactWithPolicy(
       stats,
       map,
       currentPath,
+      feedbackStore,
     );
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => redactWithPolicy(item, policy, stats, [...currentPath, "*"], map));
+    return Promise.all(value.map((item) => redactWithPolicy(item, policy, stats, [...currentPath, "*"], map, feedbackStore)));
   }
 
   if (value !== null && typeof value === "object") {
     const result: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      result[key] = redactWithPolicy(val, policy, stats, [...currentPath, key], map);
+      result[key] = await redactWithPolicy(val, policy, stats, [...currentPath, key], map, feedbackStore);
     }
     return result;
   }
@@ -350,25 +359,26 @@ export function redactWithPolicy(
 /**
  * Simple redaction without path filtering or context words.
  */
-export function redactValue(
+export async function redactValue(
   value: unknown,
   rules: RedactionRule[],
   allowlist: Set<string>,
   stats: RedactionStats,
   _depth: string[] = [],
-): unknown {
+  feedbackStore: FeedbackStore | null = null,
+): Promise<unknown> {
   if (typeof value === "string") {
-    return redactString(value, rules, allowlist, [], new Set(), stats, null, []);
+    return redactString(value, rules, allowlist, [], new Set(), stats, null, [], feedbackStore);
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => redactValue(item, rules, allowlist, stats));
+    return Promise.all(value.map((item) => redactValue(item, rules, allowlist, stats, _depth, feedbackStore)));
   }
 
   if (value !== null && typeof value === "object") {
     const result: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      result[key] = redactValue(val, rules, allowlist, stats);
+      result[key] = await redactValue(val, rules, allowlist, stats, _depth, feedbackStore);
     }
     return result;
   }

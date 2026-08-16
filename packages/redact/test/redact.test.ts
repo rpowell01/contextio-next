@@ -14,9 +14,9 @@ describe("redactValue (legacy API)", () => {
   const rules = PRESETS.pii;
   const allowlist = new Set<string>();
 
-  it("redacts email addresses", () => {
+  it("redacts email addresses", async () => {
     const stats = createStats();
-    const result = redactValue(
+    const result = await redactValue(
       "Contact me at john.doe@example.com please",
       rules,
       allowlist,
@@ -27,9 +27,9 @@ describe("redactValue (legacy API)", () => {
     assert.equal(stats.byRule["email"], 1);
   });
 
-  it("redacts AWS access keys", () => {
+  it("redacts AWS access keys", async () => {
     const stats = createStats();
-    const result = redactValue(
+    const result = await redactValue(
       "key: AKIAIOSFODNN7EXAMPLE",
       rules,
       allowlist,
@@ -38,9 +38,9 @@ describe("redactValue (legacy API)", () => {
     assert.equal(result, "key: [AWS_KEY_REDACTED]");
   });
 
-  it("redacts GitHub tokens", () => {
+  it("redacts GitHub tokens", async () => {
     const stats = createStats();
-    const result = redactValue(
+    const result = await redactValue(
       "token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn",
       rules,
       allowlist,
@@ -49,11 +49,11 @@ describe("redactValue (legacy API)", () => {
     assert.equal(result, "token: [GITHUB_TOKEN_REDACTED]");
   });
 
-  it("redacts PEM private keys", () => {
+  it("redacts PEM private keys", async () => {
     const stats = createStats();
     const pem =
       "-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRi...\n-----END RSA PRIVATE KEY-----";
-    const result = redactValue(
+    const result = await redactValue(
       `Here is a key: ${pem}`,
       rules,
       allowlist,
@@ -62,10 +62,10 @@ describe("redactValue (legacy API)", () => {
     assert.equal(result, "Here is a key: [PRIVATE_KEY_REDACTED]");
   });
 
-  it("respects allowlist", () => {
+  it("respects allowlist", async () => {
     const stats = createStats();
     const allowed = new Set(["keep@example.com"]);
-    const result = redactValue(
+    const result = await redactValue(
       "Contact keep@example.com or other@example.com",
       rules,
       allowed,
@@ -75,27 +75,27 @@ describe("redactValue (legacy API)", () => {
     assert.equal(stats.totalReplacements, 1);
   });
 
-  it("walks nested objects", () => {
+  it("walks nested objects", async () => {
     const stats = createStats();
     const input = {
       model: "claude-3",
       messages: [{ role: "user", content: "Email me at user@test.com" }],
     };
-    const result = redactValue(input, rules, allowlist, stats) as any;
+    const result = await redactValue(input, rules, allowlist, stats) as any;
     assert.equal(result.messages[0].content, "Email me at [EMAIL_REDACTED]");
   });
 
-  it("passes through non-string primitives", () => {
+  it("passes through non-string primitives", async () => {
     const stats = createStats();
-    assert.equal(redactValue(42, rules, allowlist, stats), 42);
-    assert.equal(redactValue(true, rules, allowlist, stats), true);
-    assert.equal(redactValue(null, rules, allowlist, stats), null);
+    assert.equal(await redactValue(42, rules, allowlist, stats), 42);
+    assert.equal(await redactValue(true, rules, allowlist, stats), true);
+    assert.equal(await redactValue(null, rules, allowlist, stats), null);
   });
 
-  it("does not mutate the original object", () => {
+  it("does not mutate the original object", async () => {
     const stats = createStats();
     const input = { msg: "user@test.com" };
-    const result = redactValue(input, rules, allowlist, stats) as any;
+    const result = await redactValue(input, rules, allowlist, stats) as any;
     assert.equal(input.msg, "user@test.com");
     assert.equal(result.msg, "[EMAIL_REDACTED]");
   });
@@ -104,10 +104,10 @@ describe("redactValue (legacy API)", () => {
 // --- Policy API tests ---
 
 describe("presets", () => {
-  it("secrets preset catches API keys but not emails", () => {
+  it("secrets preset catches API keys but not emails", async () => {
     const policy = fromPreset("secrets");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "key: AKIAIOSFODNN7EXAMPLE and john@test.com",
       policy,
       stats,
@@ -116,10 +116,10 @@ describe("presets", () => {
     assert.equal(stats.totalReplacements, 1);
   });
 
-  it("pii preset catches secrets and emails", () => {
+  it("pii preset catches secrets and emails", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "key: AKIAIOSFODNN7EXAMPLE and john@test.com",
       policy,
       stats,
@@ -128,17 +128,17 @@ describe("presets", () => {
     assert.equal(stats.totalReplacements, 2);
   });
 
-  it("strict preset catches IPs", () => {
+  it("strict preset catches IPs", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy("server at 192.168.1.100", policy, stats);
+    const result = await redactWithPolicy("server at 192.168.1.100", policy, stats);
     assert.equal(result, "server at [IP_REDACTED]");
   });
 
-  it("pii preset catches IBAN with context word", () => {
+  it("pii preset catches IBAN with context word", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "My bank account IBAN is NL91 ABNA 0417 1643 00",
       policy,
       stats,
@@ -147,10 +147,10 @@ describe("presets", () => {
     assert.equal(stats.byRule["iban"], 1);
   });
 
-  it("pii preset catches IBAN without spaces", () => {
+  it("pii preset catches IBAN without spaces", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Transfer to IBAN: DE89370400440532013000 please",
       policy,
       stats,
@@ -158,10 +158,10 @@ describe("presets", () => {
     assert.ok((result as string).includes("[IBAN_REDACTED]"));
   });
 
-  it("pii preset does not redact IBAN without context", () => {
+  it("pii preset does not redact IBAN without context", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "The code NL91ABNA0417164300 is a reference",
       policy,
       stats,
@@ -170,10 +170,10 @@ describe("presets", () => {
     assert.equal(stats.byRule["iban"] ?? 0, 0);
   });
 
-  it("pii preset catches EU phone numbers with context", () => {
+  it("pii preset catches EU phone numbers with context", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "My mobile number is +31 6 12345678",
       policy,
       stats,
@@ -182,10 +182,10 @@ describe("presets", () => {
     assert.ok(stats.byRule["phone-eu"] >= 1);
   });
 
-  it("pii preset catches UK phone number with context", () => {
+  it("pii preset catches UK phone number with context", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Call me at +44 20 7946 0958",
       policy,
     stats,
@@ -193,10 +193,10 @@ describe("presets", () => {
     assert.ok((result as string).includes("[PHONE_REDACTED]"));
   });
 
-  it("pii preset catches German phone number with context", () => {
+  it("pii preset catches German phone number with context", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Phone: +49 170 1234567",
       policy,
       stats,
@@ -204,10 +204,10 @@ describe("presets", () => {
     assert.ok((result as string).includes("[PHONE_REDACTED]"));
   });
 
-  it("pii preset catches French phone number with context", () => {
+  it("pii preset catches French phone number with context", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Call me at +33 6 12 34 56 78",
       policy,
       stats,
@@ -215,10 +215,10 @@ describe("presets", () => {
     assert.ok((result as string).includes("[PHONE_REDACTED]"));
   });
 
-  it("pii preset catches Italian phone number with context", () => {
+  it("pii preset catches Italian phone number with context", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "My mobile is +39 347 1234567",
       policy,
       stats,
@@ -226,10 +226,10 @@ describe("presets", () => {
     assert.ok((result as string).includes("[PHONE_REDACTED]"));
   });
 
-  it("pii preset does not redact EU phone without context", () => {
+  it("pii preset does not redact EU phone without context", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "The product code is +31-612-345-678",
       policy,
       stats,
@@ -237,10 +237,10 @@ describe("presets", () => {
     assert.ok(!(result as string).includes("[PHONE_REDACTED]"));
   });
 
-  it("strict preset catches Dutch BSN with context", () => {
+  it("strict preset catches Dutch BSN with context", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "My BSN is 123456782",
       policy,
       stats,
@@ -249,10 +249,10 @@ describe("presets", () => {
     assert.equal(stats.byRule["bsn-dutch"], 1);
   });
 
-  it("strict preset catches BSN with 'burgerservicenummer' context", () => {
+  it("strict preset catches BSN with 'burgerservicenummer' context", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Burgerservicenummer: 123456782",
       policy,
       stats,
@@ -260,10 +260,10 @@ describe("presets", () => {
     assert.ok((result as string).includes("[BSN_REDACTED]"));
   });
 
-  it("strict preset does not redact BSN without context", () => {
+  it("strict preset does not redact BSN without context", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Order reference: 123456782",
       policy,
       stats,
@@ -272,10 +272,10 @@ describe("presets", () => {
     assert.equal(stats.byRule["bsn-dutch"] ?? 0, 0);
   });
 
-  it("strict preset catches UK NI number with context", () => {
+  it("strict preset catches UK NI number with context", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "My NI number is AB 12 34 56 C",
       policy,
       stats,
@@ -284,10 +284,10 @@ describe("presets", () => {
     assert.equal(stats.byRule["ni-number-uk"], 1);
   });
 
-  it("strict preset catches UK NI number without spaces", () => {
+  it("strict preset catches UK NI number without spaces", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "National Insurance: AB123456C",
       policy,
       stats,
@@ -295,10 +295,10 @@ describe("presets", () => {
     assert.ok((result as string).includes("[NI_NUMBER_REDACTED]"));
   });
 
-  it("strict preset does not redact NI number without context", () => {
+  it("strict preset does not redact NI number without context", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "The code AB123456C is invalid",
       policy,
       stats,
@@ -307,10 +307,10 @@ describe("presets", () => {
     assert.equal(stats.byRule["ni-number-uk"] ?? 0, 0);
   });
 
-  it("strict preset catches passport number with context", () => {
+  it("strict preset catches passport number with context", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "My passport number is X12345678",
       policy,
       stats,
@@ -319,10 +319,10 @@ describe("presets", () => {
     assert.equal(stats.byRule["passport-number"], 1);
   });
 
-  it("strict preset catches passport number with 'paspoort' context", () => {
+  it("strict preset catches passport number with 'paspoort' context", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Paspoort: AB987654",
       policy,
       stats,
@@ -330,10 +330,10 @@ describe("presets", () => {
     assert.ok((result as string).includes("[PASSPORT_REDACTED]"));
   });
 
-  it("strict preset does not redact passport-like strings without context", () => {
+  it("strict preset does not redact passport-like strings without context", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "The product code X12345678 is discontinued",
       policy,
       stats,
@@ -344,10 +344,10 @@ describe("presets", () => {
 });
 
 describe("context words", () => {
-  it("SSN with context word is redacted in pii preset", () => {
+  it("SSN with context word is redacted in pii preset", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "My social security number is 123-45-6789",
       policy,
       stats,
@@ -358,10 +358,10 @@ describe("context words", () => {
     );
   });
 
-  it("SSN-like pattern without context word is not redacted", () => {
+  it("SSN-like pattern without context word is not redacted", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Order number 123-45-6789 shipped",
       policy,
       stats,
@@ -370,10 +370,10 @@ describe("context words", () => {
     assert.equal(stats.totalReplacements, 0);
   });
 
-  it("credit card with context word is redacted", () => {
+  it("credit card with context word is redacted", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Please charge my credit card 4111-1111-1111-1111",
       policy,
       stats,
@@ -381,10 +381,10 @@ describe("context words", () => {
     assert.ok((result as string).includes("[CC_REDACTED]"));
   });
 
-  it("credit card without context word is not redacted", () => {
+  it("credit card without context word is not redacted", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Reference 4111-1111-1111-1111 for tracking",
       policy,
       stats,
@@ -394,7 +394,7 @@ describe("context words", () => {
 });
 
 describe("custom policy", () => {
-  it("compiles custom rules from JSON", () => {
+  it("compiles custom rules from JSON", async () => {
     const policy = compilePolicy({
       rules: [
         {
@@ -405,11 +405,11 @@ describe("custom policy", () => {
       ],
     });
     const stats = createStats();
-    const result = redactWithPolicy("Employee EMP-12345 assigned", policy, stats);
+    const result = await redactWithPolicy("Employee EMP-12345 assigned", policy, stats);
     assert.equal(result, "Employee [EMPLOYEE_REDACTED] assigned");
   });
 
-  it("extends a preset with custom rules", () => {
+  it("extends a preset with custom rules", async () => {
     const policy = compilePolicy({
       extends: "secrets",
       rules: [
@@ -421,7 +421,7 @@ describe("custom policy", () => {
       ],
     });
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Working on Project Atlas with key AKIAIOSFODNN7EXAMPLE",
       policy,
       stats,
@@ -430,13 +430,13 @@ describe("custom policy", () => {
     assert.ok((result as string).includes("[AWS_KEY_REDACTED]"));
   });
 
-  it("allowlist strings prevent redaction", () => {
+  it("allowlist strings prevent redaction", async () => {
     const policy = compilePolicy({
       extends: "pii",
       allowlist: { strings: ["admin@company.com"] },
     });
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Contact admin@company.com or user@test.com",
       policy,
       stats,
@@ -447,13 +447,13 @@ describe("custom policy", () => {
     );
   });
 
-  it("allowlist patterns prevent redaction", () => {
+  it("allowlist patterns prevent redaction", async () => {
     const policy = compilePolicy({
       extends: "pii",
       allowlist: { patterns: ["test-\\d+@example\\.com"] },
     });
     const stats = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Contact test-42@example.com or user@test.com",
       policy,
       stats,
@@ -466,7 +466,7 @@ describe("custom policy", () => {
 });
 
 describe("path filtering", () => {
-  it("skip paths are not redacted", () => {
+  it("skip paths are not redacted", async () => {
     const policy = compilePolicy({
       extends: "pii",
       paths: { skip: ["model", "messages[*].role"] },
@@ -478,7 +478,7 @@ describe("path filtering", () => {
         { role: "user@test.com", content: "My email is real@test.com" },
       ],
     };
-    const result = redactWithPolicy(input, policy, stats) as any;
+    const result = await redactWithPolicy(input, policy, stats) as any;
     // model and role should be untouched
     assert.equal(result.model, input.model);
     assert.equal(result.messages[0].role, "user@test.com");
@@ -486,7 +486,7 @@ describe("path filtering", () => {
     assert.ok(result.messages[0].content.includes("[EMAIL_REDACTED]"));
   });
 
-  it("only paths restricts redaction to those paths", () => {
+  it("only paths restricts redaction to those paths", async () => {
     const policy = compilePolicy({
       extends: "pii",
       paths: { only: ["messages[*].content"] },
@@ -498,7 +498,7 @@ describe("path filtering", () => {
         { role: "user", content: "Email me at real@test.com" },
       ],
     };
-    const result = redactWithPolicy(input, policy, stats) as any;
+    const result = await redactWithPolicy(input, policy, stats) as any;
     // metadata.author should be untouched (not in "only" paths)
     assert.equal(result.metadata.author, "user@test.com");
     // content should be redacted
@@ -507,7 +507,7 @@ describe("path filtering", () => {
 });
 
 describe("error handling", () => {
-  it("unknown preset throws", () => {
+  it("unknown preset throws", async () => {
     assert.throws(
       () => compilePolicy({ extends: "nonexistent" as any }),
       /Unknown preset/,
@@ -518,14 +518,14 @@ describe("error handling", () => {
 // --- ReplacementMap tests ---
 
 describe("ReplacementMap", () => {
-  it("generates numbered placeholders per rule", () => {
+  it("generates numbered placeholders per rule", async () => {
     const map = new ReplacementMap();
     assert.equal(map.getOrCreate("john@test.com", "email"), "[EMAIL_1]");
     assert.equal(map.getOrCreate("jane@test.com", "email"), "[EMAIL_2]");
     assert.equal(map.getOrCreate("123-45-6789", "ssn"), "[SSN_1]");
   });
 
-  it("returns the same placeholder for the same original", () => {
+  it("returns the same placeholder for the same original", async () => {
     const map = new ReplacementMap();
     const first = map.getOrCreate("john@test.com", "email");
     const second = map.getOrCreate("john@test.com", "email");
@@ -533,7 +533,7 @@ describe("ReplacementMap", () => {
     assert.equal(map.size, 1);
   });
 
-  it("rehydrates all placeholders in a string", () => {
+  it("rehydrates all placeholders in a string", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
     map.getOrCreate("123-45-6789", "ssn");
@@ -543,7 +543,7 @@ describe("ReplacementMap", () => {
     assert.equal(restored, "Your email is john@test.com and your SSN is 123-45-6789.");
   });
 
-  it("rehydrates repeated placeholders", () => {
+  it("rehydrates repeated placeholders", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -554,7 +554,7 @@ describe("ReplacementMap", () => {
     );
   });
 
-  it("handles no matches gracefully", () => {
+  it("handles no matches gracefully", async () => {
     const map = new ReplacementMap();
     assert.equal(map.rehydrate("no placeholders here"), "no placeholders here");
   });
@@ -563,12 +563,12 @@ describe("ReplacementMap", () => {
 // --- Reversible redaction (end-to-end with policy) ---
 
 describe("reversible redaction", () => {
-  it("redacts with numbered placeholders when map is provided", () => {
+  it("redacts with numbered placeholders when map is provided", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
     const map = new ReplacementMap();
 
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Email john@test.com and jane@test.com",
       policy,
       stats,
@@ -580,12 +580,12 @@ describe("reversible redaction", () => {
     assert.equal(map.size, 2);
   });
 
-  it("same email in same request gets same placeholder", () => {
+  it("same email in same request gets same placeholder", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
     const map = new ReplacementMap();
 
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "From john@test.com to john@test.com",
       policy,
       stats,
@@ -597,17 +597,17 @@ describe("reversible redaction", () => {
     assert.equal(map.size, 1);
   });
 
-  it("map persists across multiple redaction calls", () => {
+  it("map persists across multiple redaction calls", async () => {
     const policy = fromPreset("pii");
     const map = new ReplacementMap();
 
     // First request
     const stats1 = createStats();
-    redactWithPolicy("From john@test.com", policy, stats1, [], map);
+    await redactWithPolicy("From john@test.com", policy, stats1, [], map);
 
     // Second request (same email should get same placeholder)
     const stats2 = createStats();
-    const result = redactWithPolicy(
+    const result = await redactWithPolicy(
       "Also cc john@test.com and new@test.com",
       policy,
       stats2,
@@ -619,13 +619,13 @@ describe("reversible redaction", () => {
     assert.equal(map.size, 2);
   });
 
-  it("round-trips through redact then rehydrate", () => {
+  it("round-trips through redact then rehydrate", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
     const map = new ReplacementMap();
 
     const original = "Contact john@test.com. My SSN is 123-45-6789.";
-    const redacted = redactWithPolicy(original, policy, stats, [], map) as string;
+    const redacted = await redactWithPolicy(original, policy, stats, [], map) as string;
 
     // Simulate LLM echoing the redacted content
     const llmResponse = `Got it, I'll email ${redacted.includes("[EMAIL_1]") ? "[EMAIL_1]" : "??"} about SSN ${redacted.includes("[SSN_1]") ? "[SSN_1]" : "??"}`;
@@ -637,7 +637,7 @@ describe("reversible redaction", () => {
     );
   });
 
-  it("works with nested objects", () => {
+  it("works with nested objects", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
     const map = new ReplacementMap();
@@ -648,7 +648,7 @@ describe("reversible redaction", () => {
       ],
     };
 
-    const result = redactWithPolicy(input, policy, stats, [], map) as any;
+    const result = await redactWithPolicy(input, policy, stats, [], map) as any;
     assert.equal(result.messages[0].content, "My email is [EMAIL_1]");
 
     // Rehydrate simulated response
@@ -657,65 +657,65 @@ describe("reversible redaction", () => {
     assert.equal(restored, '{"content": "Noted, john@test.com is your email."}');
   });
 
-  it("round-trips IBAN with reversible redaction", () => {
+  it("round-trips IBAN with reversible redaction", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
     const map = new ReplacementMap();
 
     const original = "My IBAN is NL91 ABNA 0417 1643 00 for transfers";
-    const redacted = redactWithPolicy(original, policy, stats, [], map) as string;
+    const redacted = await redactWithPolicy(original, policy, stats, [], map) as string;
 
     assert.ok(redacted.includes("[IBAN_1]"));
     const restored = map.rehydrate(redacted);
     assert.equal(restored, original);
   });
 
-  it("round-trips EU phone number with reversible redaction", () => {
+  it("round-trips EU phone number with reversible redaction", async () => {
     const policy = fromPreset("pii");
     const stats = createStats();
     const map = new ReplacementMap();
 
     const original = "Call +31 6 12345678 for info";
-    const redacted = redactWithPolicy(original, policy, stats, [], map) as string;
+    const redacted = await redactWithPolicy(original, policy, stats, [], map) as string;
 
     assert.ok(redacted.includes("[PHONE_EU_1]"));
     const restored = map.rehydrate(redacted);
     assert.equal(restored, original);
   });
 
-  it("round-trips BSN with reversible redaction in strict preset", () => {
+  it("round-trips BSN with reversible redaction in strict preset", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
     const map = new ReplacementMap();
 
     const original = "BSN: 123456782";
-    const redacted = redactWithPolicy(original, policy, stats, [], map) as string;
+    const redacted = await redactWithPolicy(original, policy, stats, [], map) as string;
 
     assert.ok(redacted.includes("[BSN_DUTCH_1]"));
     const restored = map.rehydrate(redacted);
     assert.equal(restored, original);
   });
 
-  it("round-trips UK NI number with reversible redaction", () => {
+  it("round-trips UK NI number with reversible redaction", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
     const map = new ReplacementMap();
 
     const original = "My NI number is AB123456C";
-    const redacted = redactWithPolicy(original, policy, stats, [], map) as string;
+    const redacted = await redactWithPolicy(original, policy, stats, [], map) as string;
 
     assert.ok(redacted.includes("[NI_NUMBER_UK_1]"));
     const restored = map.rehydrate(redacted);
     assert.equal(restored, original);
   });
 
-  it("round-trips passport number with reversible redaction", () => {
+  it("round-trips passport number with reversible redaction", async () => {
     const policy = fromPreset("strict");
     const stats = createStats();
     const map = new ReplacementMap();
 
     const original = "Passport number: X12345678";
-    const redacted = redactWithPolicy(original, policy, stats, [], map) as string;
+    const redacted = await redactWithPolicy(original, policy, stats, [], map) as string;
 
     assert.ok(redacted.includes("[PASSPORT_NUMBER_1]"));
     const restored = map.rehydrate(redacted);
@@ -790,7 +790,7 @@ describe("stream rehydration", () => {
     return out;
   }
 
-  it("rehydrates a complete placeholder in a single event", () => {
+  it("rehydrates a complete placeholder in a single event", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -800,7 +800,7 @@ describe("stream rehydration", () => {
     assert.ok(!text.includes("[EMAIL_1]"), `got: ${text}`);
   });
 
-  it("rehydrates a placeholder split across two SSE events", () => {
+  it("rehydrates a placeholder split across two SSE events", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("(555) 234-5678", "phone-us");
 
@@ -814,7 +814,7 @@ describe("stream rehydration", () => {
     assert.ok(!text.includes("[PHONE_US_1]"), `got: ${text}`);
   });
 
-  it("rehydrates a placeholder split across three SSE events", () => {
+  it("rehydrates a placeholder split across three SSE events", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("AKIAIOSFODNN7EXAMPLE", "aws-access-key");
 
@@ -829,7 +829,7 @@ describe("stream rehydration", () => {
     assert.ok(!text.includes("[AWS_ACCESS_KEY_1]"), `got: ${text}`);
   });
 
-  it("handles multiple split placeholders in sequence", () => {
+  it("handles multiple split placeholders in sequence", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
     map.getOrCreate("jane@test.com", "email");
@@ -849,7 +849,7 @@ describe("stream rehydration", () => {
     assert.ok(!text.includes("[SSN_"), `got: ${text}`);
   });
 
-  it("handles TCP-level splits within a single SSE line", () => {
+  it("handles TCP-level splits within a single SSE line", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -864,7 +864,7 @@ describe("stream rehydration", () => {
     assert.ok(text.includes("john@test.com"), `got: ${text}`);
   });
 
-  it("passes through non-delta events unchanged", () => {
+  it("passes through non-delta events unchanged", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -874,7 +874,7 @@ describe("stream rehydration", () => {
     assert.ok(sse.includes('"content":[]'), `JSON brackets preserved, got: ${sse}`);
   });
 
-  it("handles empty map without modification", () => {
+  it("handles empty map without modification", async () => {
     const map = new ReplacementMap();
     const input = sseTextDelta("[EMAIL_1]") + "\n";
     const stream = createStreamRehydrator(map);
@@ -882,7 +882,7 @@ describe("stream rehydration", () => {
     assert.equal(out, input);
   });
 
-  it("passes through text with no placeholders", () => {
+  it("passes through text with no placeholders", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -891,7 +891,7 @@ describe("stream rehydration", () => {
     assert.equal(text, "Hello world");
   });
 
-  it("handles text containing [ that is not a placeholder", () => {
+  it("handles text containing [ that is not a placeholder", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -903,7 +903,7 @@ describe("stream rehydration", () => {
     assert.ok(text.includes("john@test.com"), `got: ${text}`);
   });
 
-  it("flushes text buffer when non-delta event arrives", () => {
+  it("flushes text buffer when non-delta event arrives", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -917,7 +917,7 @@ describe("stream rehydration", () => {
     assert.ok(sse.includes("content_block_stop"), `stop event preserved, got: ${sse}`);
   });
 
-  it("rehydrates thinking_delta content", () => {
+  it("rehydrates thinking_delta content", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -928,7 +928,7 @@ describe("stream rehydration", () => {
     assert.ok(text.includes("john@test.com"), `got: ${text}`);
   });
 
-  it("rehydrates thinking_delta split across events", () => {
+  it("rehydrates thinking_delta split across events", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("123-45-6789", "ssn");
 
@@ -941,7 +941,7 @@ describe("stream rehydration", () => {
     assert.ok(!text.includes("[SSN_1]"), `got: ${text}`);
   });
 
-  it("flushes pending buffer on end", () => {
+  it("flushes pending buffer on end", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -952,7 +952,7 @@ describe("stream rehydration", () => {
     assert.ok(flushed.includes("data: incomplete"), `got: ${flushed}`);
   });
 
-  it("handles realistic Claude response with mixed event types", () => {
+  it("handles realistic Claude response with mixed event types", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
     map.getOrCreate("jane@test.com", "email");
@@ -999,7 +999,7 @@ describe("stream rehydration", () => {
     assert.ok(sse.includes("message_stop"), "message_stop preserved");
   });
 
-  it("rehydrates OpenAI streaming format", () => {
+  it("rehydrates OpenAI streaming format", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -1019,7 +1019,7 @@ describe("stream rehydration", () => {
     assert.ok(sse.includes("[DONE]"), "DONE event preserved");
   });
 
-  it("rehydrates Gemini streaming format", () => {
+  it("rehydrates Gemini streaming format", async () => {
     const map = new ReplacementMap();
     map.getOrCreate("john@test.com", "email");
 
@@ -1049,14 +1049,14 @@ describe("stream rehydration", () => {
 // ---------------------------------------------------------------------------
 
 describe("secrets preset — new vendor patterns", () => {
-  function redact(text: string): string {
+  async function redact(text: string): Promise<string> {
     const policy = fromPreset("secrets");
     const stats = createStats();
-    return redactWithPolicy(text, policy, stats) as string;
+    return await redactWithPolicy(text, policy, stats) as string;
   }
 
-  function notRedacted(text: string): boolean {
-    return redact(text) === text;
+  async function notRedacted(text: string): Promise<boolean> {
+    return await redact(text) === text;
   }
 
   // --- GCP API key ---
@@ -1064,32 +1064,32 @@ describe("secrets preset — new vendor patterns", () => {
     // AIza + exactly 35 word/hyphen chars
     const key = "AIzaSyC1234567890abcdefghijklmnopqrstuv";
 
-    it("redacts GCP API key", () => {
-      assert.equal(redact(`apiKey=${key}`), "apiKey=[GCP_API_KEY_REDACTED]");
+    it("redacts GCP API key", async () => {
+      assert.equal(await redact(`apiKey=${key}`), "apiKey=[GCP_API_KEY_REDACTED]");
     });
 
-    it("redacts GCP key in JSON value", () => {
+    it("redacts GCP key in JSON value", async () => {
       assert.equal(
-        redact(`{"key":"${key}"}`),
+        await redact(`{"key":"${key}"}`),
         '{"key":"[GCP_API_KEY_REDACTED]"}',
       );
     });
 
-    it("does not redact all-same-char placeholder (AIzaaaa...)", () => {
+    it("does not redact all-same-char placeholder (AIzaaaa...)", async () => {
       // fps from gitleaks gcp.go — no entropy
-      assert.ok(notRedacted('apiKey: "AIzaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'));
+      assert.ok(await notRedacted('apiKey: "AIzaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'));
     });
   });
 
   // --- GCP service account ---
   describe("credential_gcp_service_account", () => {
-    it('redacts "type": "service_account" literal', () => {
+    it('redacts "type": "service_account" literal', async () => {
       const input = '{"type": "service_account", "project_id": "my-proj"}';
-      assert.ok(redact(input).includes("[GCP_SERVICE_ACCOUNT_REDACTED]"));
+      assert.ok((await redact(input)).includes("[GCP_SERVICE_ACCOUNT_REDACTED]"));
     });
 
-    it("does not redact other type fields", () => {
-      assert.ok(notRedacted('{"type": "oauth2_client"}'));
+    it("does not redact other type fields", async () => {
+      assert.ok(await notRedacted('{"type": "oauth2_client"}'));
     });
   });
 
@@ -1097,15 +1097,15 @@ describe("secrets preset — new vendor patterns", () => {
   describe("credential_gitlab", () => {
     const token = "glpat-abcdefghij1234567890";
 
-    it("redacts glpat- token", () => {
+    it("redacts glpat- token", async () => {
       assert.equal(
-        redact(`GITLAB_TOKEN=${token}`),
+        await redact(`GITLAB_TOKEN=${token}`),
         "GITLAB_TOKEN=[GITLAB_TOKEN_REDACTED]",
       );
     });
 
-    it("does not redact truncated glpat- (too short)", () => {
-      assert.ok(notRedacted("token=glpat-tooshort"));
+    it("does not redact truncated glpat- (too short)", async () => {
+      assert.ok(await notRedacted("token=glpat-tooshort"));
     });
   });
 
@@ -1117,14 +1117,14 @@ describe("secrets preset — new vendor patterns", () => {
       ".eyJzdWIiOiJ1c2VybmFtZTpib2IifQ" +
       ".HcfCW67Uda-0gz54ZWTqmtgJnZeNem0Q757eTa9EZuw";
 
-    it("redacts JWT", () => {
-      const out = redact(`Authorization: Bearer ${jwt}`);
+    it("redacts JWT", async () => {
+      const out = await redact(`Authorization: Bearer ${jwt}`);
       assert.ok(out.includes("[JWT_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes("eyJ"), `should not expose JWT, got: ${out}`);
     });
 
-    it("does not redact plain base64", () => {
-      assert.ok(notRedacted("value: aGVsbG8gd29ybGQ="));
+    it("does not redact plain base64", async () => {
+      assert.ok(await notRedacted("value: aGVsbG8gd29ybGQ="));
     });
   });
 
@@ -1133,104 +1133,104 @@ describe("secrets preset — new vendor patterns", () => {
     const live = "sk_live_" + "51OuEMLAlTWGaDypq4P5cuDHbuKeG4tAGPYHJpEXQabcde";
     const rk = "rk_prod_" + "51OuEMLAlTWGaDypquDn9aZigaJOsa9NR1w1BxZXs9abc";
 
-    it("redacts sk_live_ key", () => {
+    it("redacts sk_live_ key", async () => {
       assert.equal(
-        redact(`STRIPE_KEY=${live}`),
+        await redact(`STRIPE_KEY=${live}`),
         "STRIPE_KEY=[STRIPE_KEY_REDACTED]",
       );
     });
 
-    it("redacts rk_prod_ key", () => {
+    it("redacts rk_prod_ key", async () => {
       assert.equal(
-        redact(`STRIPE_RK=${rk}`),
+        await redact(`STRIPE_RK=${rk}`),
         "STRIPE_RK=[STRIPE_KEY_REDACTED]",
       );
     });
 
-    it("does not redact task_test_ prefix via the stripe pattern", () => {
+    it("does not redact task_test_ prefix via the stripe pattern", async () => {
       // fps from gitleaks stripe.go — task_test_ has no sk_/rk_ prefix so
       // credential_stripe does not fire. credential_generic may still catch it
       // via the 'token' keyword — that's expected behaviour, not a bug.
       const policy = fromPreset("secrets");
       const stats = createStats();
-      const out = redactWithPolicy('nonMatchingToken := "task_test_abcdefghij1234567890"', policy, stats) as string;
+      const out = await redactWithPolicy('nonMatchingToken := "task_test_abcdefghij1234567890"', policy, stats) as string;
       assert.ok(!out.includes("[STRIPE_KEY_REDACTED]"), `stripe rule should not fire, got: ${out}`);
     });
   });
 
   // --- Slack ---
   describe("credential_slack", () => {
-    it("redacts xoxb- bot token", () => {
+    it("redacts xoxb- bot token", async () => {
       const token = ["xoxb", "781236542736", "2364535789652", "GkwFDQoHqzXDVsC6GzqYUypD"].join("-");
-      const out = redact(`bot_token=${token}`);
+      const out = await redact(`bot_token=${token}`);
       assert.ok(out.includes("[SLACK_TOKEN_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes("xoxb"), `got: ${out}`);
     });
 
-    it("redacts xoxp- user token", () => {
+    it("redacts xoxp- user token", async () => {
       const token = ["xoxp", "41684372915", "1320496754", "45609968301", "e708ba56e1517a99f6b5fb07349476ef"].join("-");
-      assert.ok(redact(token).includes("[SLACK_TOKEN_REDACTED]"));
+      assert.ok((await redact(token)).includes("[SLACK_TOKEN_REDACTED]"));
     });
 
-    it("redacts Slack webhook URL", () => {
+    it("redacts Slack webhook URL", async () => {
       const url = "https://hooks.slack.com/services/" + "T0DCUJB1Q/B0DD08H5G/bJtrpFi1fO1JMCcwLx8uZyAg";
-      assert.ok(redact(url).includes("[SLACK_TOKEN_REDACTED]"));
+      assert.ok((await redact(url)).includes("[SLACK_TOKEN_REDACTED]"));
     });
 
-    it("does not redact all-x placeholder", () => {
+    it("does not redact all-x placeholder", async () => {
       // fps from gitleaks slack.go
-      assert.ok(notRedacted("token=xoxb-xxxxxxxxx-xxxxxxxxxx-xxxxxxxxxxxx"));
+      assert.ok(await notRedacted("token=xoxb-xxxxxxxxx-xxxxxxxxxx-xxxxxxxxxxxx"));
     });
 
-    it("does not redact malformed xoxp- (too few segments) via the slack pattern", () => {
+    it("does not redact malformed xoxp- (too few segments) via the slack pattern", async () => {
       // fps from gitleaks slack.go — too few numeric segments for the xox[pe] sub-pattern.
       // credential_generic may still catch it via the 'token' keyword; that's expected.
       const policy = fromPreset("secrets");
       const stats = createStats();
-      const out = redactWithPolicy('"token": "xoxp-1234567890"', policy, stats) as string;
+      const out = await redactWithPolicy('"token": "xoxp-1234567890"', policy, stats) as string;
       assert.ok(!out.includes("[SLACK_TOKEN_REDACTED]"), `slack rule should not fire, got: ${out}`);
     });
   });
 
   // --- HuggingFace ---
   describe("credential_huggingface", () => {
-    it("redacts hf_ access token", () => {
+    it("redacts hf_ access token", async () => {
       const token = "hf_" + "jCBaQngSHiHDRYOcsMcifUcysGyaiybUWz";
-      const out = redact(`HF_TOKEN=${token}`);
+      const out = await redact(`HF_TOKEN=${token}`);
       assert.ok(out.includes("[HUGGINGFACE_TOKEN_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes("hf_"), `got: ${out}`);
     });
 
-    it("redacts api_org_ token", () => {
+    it("redacts api_org_ token", async () => {
       const token = "api_org_" + "PsvVHMtfecsbsdScIMRjhReQYUBOZqOJTs";
-      assert.ok(redact(token).includes("[HUGGINGFACE_TOKEN_REDACTED]"));
+      assert.ok((await redact(token)).includes("[HUGGINGFACE_TOKEN_REDACTED]"));
     });
 
-    it("does not redact all-x placeholder", () => {
+    it("does not redact all-x placeholder", async () => {
       // fps from gitleaks huggingface.go
-      assert.ok(notRedacted("HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
+      assert.ok(await notRedacted("HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
     });
 
-    it("does not redact hf_ in ObjC method name", () => {
-      assert.ok(notRedacted("- (id)hf_requiredCharacteristicTypesForDisplayMetadata;"));
+    it("does not redact hf_ in ObjC method name", async () => {
+      assert.ok(await notRedacted("- (id)hf_requiredCharacteristicTypesForDisplayMetadata;"));
     });
   });
 
   // --- Databricks ---
   describe("credential_databricks", () => {
-    it("redacts dapi token", () => {
+    it("redacts dapi token", async () => {
       const token = "dapi" + "f13ac4b49d1cb31f69f678e39602e381";
-      const out = redact(`token = ${token}-2`);
+      const out = await redact(`token = ${token}-2`);
       assert.ok(out.includes("[DATABRICKS_TOKEN_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes("dapi"), `got: ${out}`);
     });
 
-    it("does not redact malformed dapi token via the databricks pattern", () => {
+    it("does not redact malformed dapi token via the databricks pattern", async () => {
       // fps from gitleaks databricks.go — 'g' is not a hex char so [a-f0-9]{32} fails.
       // credential_generic may still catch it via the 'token' keyword; that's expected.
       const policy = fromPreset("secrets");
       const stats = createStats();
-      const out = redactWithPolicy("DATABRICKS_TOKEN=dapi123456789012345678a9bc01234defg5", policy, stats) as string;
+      const out = await redactWithPolicy("DATABRICKS_TOKEN=dapi123456789012345678a9bc01234defg5", policy, stats) as string;
       assert.ok(!out.includes("[DATABRICKS_TOKEN_REDACTED]"), `databricks rule should not fire, got: ${out}`);
     });
   });
@@ -1239,17 +1239,17 @@ describe("secrets preset — new vendor patterns", () => {
   // Verifies toRule() carries allowlist through to the redaction engine,
   // so FP suppression rules in CredentialPattern are not silently dropped.
   describe("allowlist propagation from CredentialPattern", () => {
-    it("does not redact GCP placeholder through the redact engine", () => {
+    it("does not redact GCP placeholder through the redact engine", async () => {
       // This would fire without allowlist propagation
-      assert.ok(notRedacted("apiKey: AIzaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+      assert.ok(await notRedacted("apiKey: AIzaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
     });
 
-    it("does not redact all-x Slack placeholder through the redact engine", () => {
-      assert.ok(notRedacted("xoxb-xxxxxxxxx-xxxxxxxxxx-xxxxxxxxxxxx"));
+    it("does not redact all-x Slack placeholder through the redact engine", async () => {
+      assert.ok(await notRedacted("xoxb-xxxxxxxxx-xxxxxxxxxx-xxxxxxxxxxxx"));
     });
 
-    it("does not redact all-x HuggingFace placeholder through the redact engine", () => {
-      assert.ok(notRedacted("HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
+    it("does not redact all-x HuggingFace placeholder through the redact engine", async () => {
+      assert.ok(await notRedacted("HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
     });
   });
 });
@@ -1259,23 +1259,23 @@ describe("secrets preset — new vendor patterns", () => {
 // ---------------------------------------------------------------------------
 
 describe("secrets preset — entropy gate on credential_generic", () => {
-  function credentialGenericFires(text: string): boolean {
+  async function credentialGenericFires(text: string): Promise<boolean> {
     const policy = fromPreset("secrets");
     const stats = createStats();
-    const out = redactWithPolicy(text, policy, stats) as string;
+    const out = await redactWithPolicy(text, policy, stats) as string;
     return out !== text && stats.byRule["credential_generic"] > 0;
   }
 
-  it("does not redact all-same-digit value (entropy = 0)", () => {
-    assert.ok(!credentialGenericFires("api_token=11111111111111111111111"));
+  it("does not redact all-same-digit value (entropy = 0)", async () => {
+    assert.ok(!await credentialGenericFires("api_token=11111111111111111111111"));
   });
 
-  it("does not redact nearly-all-same value (entropy ≈ 0.25)", () => {
-    assert.ok(!credentialGenericFires("api_token=aaaa1aaaaaaaaaaaaaaaaaaa"));
+  it("does not redact nearly-all-same value (entropy ≈ 0.25)", async () => {
+    assert.ok(!await credentialGenericFires("api_token=aaaa1aaaaaaaaaaaaaaaaaaa"));
   });
 
-  it("still redacts high-entropy generic secret", () => {
-    assert.ok(credentialGenericFires("api_token=xK9mP2nR4qL7vB3c1wZ5yXa8bN"));
+  it("still redacts high-entropy generic secret", async () => {
+    assert.ok(await credentialGenericFires("api_token=xK9mP2nR4qL7vB3c1wZ5yXa8bN"));
   });
 });
 
@@ -1285,50 +1285,50 @@ describe("secrets preset — entropy gate on credential_generic", () => {
 // ---------------------------------------------------------------------------
 
 describe("secrets preset — dynamic auth detection", () => {
-  function redact(text: string): string {
+  async function redact(text: string): Promise<string> {
     const policy = fromPreset("secrets");
     const stats = createStats();
-    return redactWithPolicy(text, policy, stats) as string;
+    return await redactWithPolicy(text, policy, stats) as string;
   }
 
   // --- bearer-token ---
   describe("bearer-token", () => {
-    it("redacts Bearer token", () => {
-      assert.ok(redact("Authorization: Bearer [BEARER_TOKEN_REDACTED]").includes("[BEARER_TOKEN_REDACTED]"));
+    it("redacts Bearer token", async () => {
+      assert.ok((await redact("Authorization: Bearer [BEARER_TOKEN_REDACTED]")).includes("[BEARER_TOKEN_REDACTED]"));
     });
 
-    it("does not redact short bearer value (too short)", () => {
+    it("does not redact short bearer value (too short)", async () => {
       const text = "Authorization: Bearer short";
-      assert.equal(redact(text), text);
+      assert.equal(await redact(text), text);
     });
   });
 
 // --- authorization-header ---
 describe("authorization-header (Bearer-only)", () => {
-  it("redacts Bearer token in Authorization header", () => {
+  it("redacts Bearer token in Authorization header", async () => {
     const token = "eyJhbGciOi" + "a".repeat(30);
     const text = `Authorization: Bearer ${token}`;
     console.log('input:', text);
-    const out = redact(text);
+    const out = await redact(text);
     console.log('output:', out);
     assert.ok(out.includes("[AUTH_HEADER_REDACTED]"), `got: ${out}`);
     assert.ok(!out.includes(token), `should not expose token, got: ${out}`);
   });
 
-  it("does not redact api-key header (covered by api-key-prefixed)", () => {
+  it("does not redact api-key header (covered by api-key-prefixed)", async () => {
     const token = "sk-" + "a".repeat(40);
-    const out = redact(`api-key: ${token}`);
+    const out = await redact(`api-key: ${token}`);
     assert.ok(!out.includes("[AUTH_HEADER_REDACTED]"), `got: ${out}`);
   });
 
-  it("does not redact x-api-key header (covered by api-key-prefixed)", () => {
+  it("does not redact x-api-key header (covered by api-key-prefixed)", async () => {
     const token = "x-api-" + "a".repeat(40);
-    const out = redact(`x-api-key: ${token}`);
+    const out = await redact(`x-api-key: ${token}`);
     assert.ok(!out.includes("[AUTH_HEADER_REDACTED]"), `got: ${out}`);
   });
 
-  it("does not redact already-redacted placeholder brackets", () => {
-    const out = redact("authorization: bearer [AUTH_HEADER_REDACTED]");
+  it("does not redact already-redacted placeholder brackets", async () => {
+    const out = await redact("authorization: bearer [AUTH_HEADER_REDACTED]");
     // Must not throw / crash and should not double-match
     assert.ok(!out.includes("[AUTH_HEADER_REDACTED][AUTH_HEADER_REDACTED]"), `got: ${out}`);
   });
@@ -1336,59 +1336,59 @@ describe("authorization-header (Bearer-only)", () => {
 
   // --- api-key-prefixed ---
   describe("api-key-prefixed", () => {
-    it("redacts sk_-prefixed key", () => {
-      const out = redact("key=[API_KEY_REDACTED]");
+    it("redacts sk_-prefixed key", async () => {
+      const out = await redact("key=[API_KEY_REDACTED]");
       assert.ok(out.includes("[API_KEY_REDACTED]"), `got: ${out}`);
     });
 
-    it("redacts token_-prefixed value", () => {
-      const out = redact("token=[API_KEY_REDACTED]");
+    it("redacts token_-prefixed value", async () => {
+      const out = await redact("token=[API_KEY_REDACTED]");
       assert.ok(out.includes("[API_KEY_REDACTED]"), `got: ${out}`);
     });
   });
 
   // --- credential_nvidia ---
   describe("credential_nvidia", () => {
-    it("redacts nvapi- key", () => {
+    it("redacts nvapi- key", async () => {
       const token = "nvapi-" + "a".repeat(40);
-      const out = redact(`NVIDIA_API_KEY=${token}`);
+      const out = await redact(`NVIDIA_API_KEY=${token}`);
       assert.ok(out.includes("[NVIDIA_KEY_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes(token), `should not expose token, got: ${out}`);
     });
 
-    it("does not redact short nvapi- (too short)", () => {
+    it("does not redact short nvapi- (too short)", async () => {
       const text = "key=nvapi-tooshort";
-      assert.equal(redact(text), text);
+      assert.equal(await redact(text), text);
     });
   });
 
   // --- credential_openrouter ---
   describe("credential_openrouter", () => {
-    it("redacts sk-or- key", () => {
+    it("redacts sk-or- key", async () => {
       const token = "sk-or-" + "a".repeat(40);
-      const out = redact(`OPENROUTER_KEY=${token}`);
+      const out = await redact(`OPENROUTER_KEY=${token}`);
       assert.ok(out.includes("[OPENROUTER_KEY_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes(token), `should not expose token, got: ${out}`);
     });
 
-    it("does not redact short sk-or- (too short)", () => {
+    it("does not redact short sk-or- (too short)", async () => {
       const text = "key=sk-or-tooshort";
-      assert.equal(redact(text), text);
+      assert.equal(await redact(text), text);
     });
   });
 
   // --- credential_kilo ---
   describe("credential_kilo", () => {
-    it("redacts kilo- key", () => {
+    it("redacts kilo- key", async () => {
       const token = "kilo-" + "a".repeat(40);
-      const out = redact(`KILO_API_KEY=${token}`);
+      const out = await redact(`KILO_API_KEY=${token}`);
       assert.ok(out.includes("[KILO_KEY_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes(token), `should not expose token, got: ${out}`);
     });
 
-    it("does not redact short kilo- (too short)", () => {
+    it("does not redact short kilo- (too short)", async () => {
       const text = "key=kilo-tooshort";
-      assert.equal(redact(text), text);
+      assert.equal(await redact(text), text);
     });
   });
 });
@@ -1398,74 +1398,74 @@ describe("authorization-header (Bearer-only)", () => {
 // ---------------------------------------------------------------------------
 
 describe("secrets preset — npm, PyPI, Vault, SendGrid", () => {
-  function redact(text: string): string {
+  async function redact(text: string): Promise<string> {
     const policy = fromPreset("secrets");
     const stats = createStats();
-    return redactWithPolicy(text, policy, stats) as string;
+    return await redactWithPolicy(text, policy, stats) as string;
   }
 
   describe("npm (credential_npm)", () => {
-    it("redacts npm_ token", () => {
-      const out = redact("NPM_TOKEN=npm_abcdefghij1234567890ABCDEF1234567890");
+    it("redacts npm_ token", async () => {
+      const out = await redact("NPM_TOKEN=npm_abcdefghij1234567890ABCDEF1234567890");
       assert.ok(out.includes("[NPM_TOKEN_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes("npm_"), `should not expose token, got: ${out}`);
     });
 
-    it("does not redact short npm_ token", () => {
+    it("does not redact short npm_ token", async () => {
       const text = "npm_tooshort";
-      assert.equal(redact(text), text);
+      assert.equal(await redact(text), text);
     });
   });
 
   describe("PyPI (credential_pypi)", () => {
     const token = "pypi-AgEIcHlwaS5vcmc" + "a1b2c3d4".repeat(8);
 
-    it("redacts pypi- upload token", () => {
-      const out = redact(`PYPI_TOKEN=${token}`);
+    it("redacts pypi- upload token", async () => {
+      const out = await redact(`PYPI_TOKEN=${token}`);
       assert.ok(out.includes("[PYPI_TOKEN_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes("pypi-"), `should not expose token, got: ${out}`);
     });
   });
 
   describe("HashiCorp Vault (credential_vault)", () => {
-    it("redacts hvs. service token", () => {
+    it("redacts hvs. service token", async () => {
       const token = "hvs." + "CAESIP2jTxc9S2K7Z6CtcFWQv7-044m_oSsxnPE1H3nF89l3GiYKHGh2cy5sQmlIZVNyTWJNcDRsYWJpQjlhYjVlb1cQh6PL8wE";
-      const out = redact(`VAULT_TOKEN=${token}`);
+      const out = await redact(`VAULT_TOKEN=${token}`);
       assert.ok(out.includes("[VAULT_TOKEN_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes("hvs."), `should not expose token, got: ${out}`);
     });
 
-    it("redacts hvb. batch token", () => {
+    it("redacts hvb. batch token", async () => {
       const token =
         "hvb." +
         "AAAAAQJgxDgqsGNorpoOR7hPZ5SU-ynBvCl764jyRP_fnX7WvkdkDzGjbLNGdPdtlY33Als2P36yDZueqzfdGw9RsaTeaYXSH7E4RYSWuRoQ9YRKIw8o7mDDY2ZcT3KOB7RwtW1w1FN2eDqcy_sbCjXPaM1iBVH-mqMSYRmRd2nb5D1SJPeBzIYRqSglLc31wUGN7xEzyrKUczqOKsIcybQA";
-      const out = redact(token);
+      const out = await redact(token);
       assert.ok(out.includes("[VAULT_TOKEN_REDACTED]"), `got: ${out}`);
     });
 
-    it("does not redact s. all-lowercase (low entropy)", () => {
+    it("does not redact s. all-lowercase (low entropy)", async () => {
       const text = "s.thisstringisalllowercase";
-      assert.equal(redact(text), text);
+      assert.equal(await redact(text), text);
     });
 
-    it("does not redact hvs. all-x placeholder", () => {
+    it("does not redact hvs. all-x placeholder", async () => {
       const text = "hvs.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
-      assert.equal(redact(text), text);
+      assert.equal(await redact(text), text);
     });
   });
 
   describe("SendGrid (credential_sendgrid)", () => {
     const token = "SG." + "aBcDeFgH1234".repeat(5) + "aBcDeF";
 
-    it("redacts SG. token", () => {
-      const out = redact(`SENDGRID_API_KEY=${token}`);
+    it("redacts SG. token", async () => {
+      const out = await redact(`SENDGRID_API_KEY=${token}`);
       assert.ok(out.includes("[SENDGRID_TOKEN_REDACTED]"), `got: ${out}`);
       assert.ok(!out.includes("SG."), `should not expose token, got: ${out}`);
     });
 
-    it("does not redact short SG. token", () => {
+    it("does not redact short SG. token", async () => {
       const text = "SG.tooshort";
-      assert.equal(redact(text), text);
+      assert.equal(await redact(text), text);
     });
   });
 });
