@@ -259,16 +259,17 @@ export class RuleDetector implements Detector {
 
     // Filter out known false positives using feedbackStore
     if (feedbackStore && spans.length > 0) {
-      // Precompute rule name lookup map for O(1) lookups
-      const ruleNameMap = new Map<string, string>();
+      // Precompute rule lookup map keyed by uppercase rule name for O(1) lookups
+      const ruleMap = new Map<string, RedactionRule>();
       for (const rule of rules) {
-        ruleNameMap.set(rule.name.toUpperCase(), rule.name);
+        ruleMap.set(rule.name.toUpperCase(), rule);
       }
 
       // Check all spans in parallel for false positives
       const fpChecks = spans.map(async (span) => {
         try {
-          const ruleId = ruleNameMap.get(span.label) ?? span.label.toLowerCase();
+          const rule = ruleMap.get(span.label);
+          const ruleId = rule?.name ?? span.label.toLowerCase();
           const isFp = await feedbackStore.isFalsePositive(span.text, ruleId);
           return isFp ? null : span;
         } catch (err) {
