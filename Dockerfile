@@ -50,12 +50,6 @@ RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     && export GIT_COMMIT BUILD_TIME VERSION \
     && pnpm exec turbo build
 
-# Debug: verify core dist structure after turbo build
-RUN ls -la /app/packages/core/ && \
-    ls -la /app/packages/core/dist/ && \
-    ls -la /app/packages/core/dist/db/ || true && \
-    ls -la /app/packages/core/dist/db/migrations/ || true
-
 # Verify core dist with migrations was created in build stage
 RUN ls -la /app/packages/core/dist/db/migrations/ && \
     test -f /app/packages/core/dist/db/migrations/014_add_feature_flags_and_advanced_config.sql && \
