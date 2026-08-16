@@ -280,17 +280,17 @@ function DetectorModeWarnings({
 }
 
 // Tab configuration (module scope for stability)
-type SettingsTab = "logging" | "redaction" | "security" | "rateLimiter" | "appearance" | "providers" | "proxy" | "streamingRetry";
+type SettingsTab = "appearance" | "logging" | "providers" | "proxy" | "rateLimiter" | "redaction" | "security" | "streamingRetry";
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
   { id: "logging", label: "Logging", icon: <Database className="h-4 w-4" /> },
+  { id: "providers", label: "Providers", icon: <Server className="h-4 w-4" /> },
+  { id: "proxy", label: "Proxy", icon: <Server className="h-4 w-4" /> },
+  { id: "rateLimiter", label: "Rate Limiter", icon: <Gauge className="h-4 w-4" /> },
   { id: "redaction", label: "Redaction", icon: <EyeOff className="h-4 w-4" /> },
   { id: "security", label: "Security", icon: <Shield className="h-4 w-4" /> },
-  { id: "rateLimiter", label: "Rate Limiter", icon: <Gauge className="h-4 w-4" /> },
   { id: "streamingRetry", label: "Streaming Retry", icon: <Gauge className="h-4 w-4" /> },
-  { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
-  { id: "proxy", label: "Proxy", icon: <Server className="h-4 w-4" /> },
-  { id: "providers", label: "Providers", icon: <Server className="h-4 w-4" /> },
 ];
 
 export default function SettingsPage() {
