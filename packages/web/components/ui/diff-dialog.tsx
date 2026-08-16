@@ -119,29 +119,20 @@ function truncateLongLine(
       }
     }
   } else {
-    // Fallback: find [PLACEHOLDER] patterns in either pane
-    const placeholderPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
+    // Fallback: find [PLACEHOLDER] patterns in either pane (both [RULE_REDACTED] and [RULE_N] formats)
+    const placeholderPattern = /\[[A-Z][A-Z0-9_]*(?:_REDACTED|_\d+)\]/g;
     let match;
     while ((match = placeholderPattern.exec(value)) !== null) {
       positions.push({ start: match.index, end: match.index + match[0].length });
     }
   }
 
-  // If no redaction positions found, fallback strategy differs by pane
+  // If no redaction positions found, use symmetric fallback for both panes
+  // Show first and last CONTEXT_CHARS to keep pane sizes consistent
   if (positions.length === 0) {
-    if (isPre) {
-      // For pre-redaction (left pane): show the END of the string where
-      // redactions in long API responses/bodies typically occur, rather than
-      // the beginning which is rarely where sensitive data lives.
-      const trunc = CONTEXT_CHARS * 2;
-      let truncated = "…" + value.slice(-trunc);
-      return { value: truncated, isTruncated: true };
-    } else {
-      // For post-redaction (right pane): show first and last CONTEXT_CHARS
-      const trunc = CONTEXT_CHARS;
-      let truncated = value.slice(0, trunc) + "…" + value.slice(-trunc);
-      return { value: truncated, isTruncated: true };
-    }
+    const trunc = CONTEXT_CHARS;
+    let truncated = value.slice(0, trunc) + "…" + value.slice(-trunc);
+    return { value: truncated, isTruncated: true };
   }
 
   // Sort positions by start
@@ -174,16 +165,81 @@ function truncateLongLine(
 // Return common sensitive patterns for a given rule type
 function getPatternsForRuleType(ruleType: string): string[] {
   const patterns: Record<string, string[]> = {
+    // Rule-based redaction patterns (from presets)
     API_KEY: ["sk_", "pk_", "rk_", "ak_", "sk-", "pk-", "rk-", "ak-", "Bearer ", "token="],
+    API_KEY_PREFIXED: ["sk_", "pk_", "rk_", "ak_", "sk-", "pk-", "rk-", "ak-", "api-", "key-", "token-"],
     AUTH: ["Bearer ", "Authorization", "auth", "password", "secret", "token"],
+    AUTH_HEADER: ["authorization:", "bearer "],
+    BEARER_TOKEN: ["bearer "],
     SECRET: ["secret", "password", "key", "token"],
     TOKEN: ["token", "Bearer ", "access_token", "refresh_token"],
     PASSWORD: ["password", "passwd", "pwd"],
+    PRIVATE_KEY: ["-----BEGIN", "PRIVATE KEY-----"],
+    AWS_KEY: ["AKIA", "aws_key", "aws_secret"],
+    AWS_SECRET: ["aws_secret", "secret_key"],
+    GITHUB_TOKEN: ["ghp_", "ghs_", "github"],
+    ANTHROPIC_KEY: ["sk-ant-", "anthropic"],
+    OPENAI_KEY: ["sk-", "openai"],
+    GCP_API_KEY: ["gcp", "google"],
+    GCP_SERVICE_ACCOUNT: ["service_account", "gcp"],
+    GITLAB_TOKEN: ["glpat-", "gitlab"],
+    JWT: ["eyJ", "jwt"],
+    STRIPE_KEY: ["sk_live_", "rk_live_", "stripe"],
+    SLACK_TOKEN: ["xoxb-", "xoxp-", "slack"],
+    HUGGINGFACE_TOKEN: ["hf_", "huggingface"],
+    DATABRICKS_TOKEN: ["dapi", "databricks"],
+    NPM_TOKEN: ["npm_", "npm"],
+    PYPI_TOKEN: ["pypi-", "pypi"],
+    VAULT_TOKEN: ["vault", "hvs."],
+    SENDGRID_TOKEN: ["SG.", "sendgrid"],
+    NVIDIA_KEY: ["nvapi-", "nvidia"],
+    OPENROUTER_KEY: ["sk-or-", "openrouter"],
+    KILO_KEY: ["kilo", "kilo_"],
+    GENERIC_SECRET: ["secret", "api_key", "token"],
+
+    // PII preset patterns
+    EMAIL: ["@", ".com", ".org", ".net", ".io", ".co", ".edu", ".gov"],
     SSN: [],
-    EMAIL: ["@", ".com", ".org", ".net"],
-    PHONE: ["tel:", "phone", "+1", "("],
-    CREDIT_CARD: [],
-    IP_ADDRESS: [],
+    // CREDIT_CARD: [] - defined below with Presidio entity type patterns
+    PHONE_US: ["tel:", "phone", "+1", "(", "mobile", "cell"],
+    PHONE_EU: ["tel:", "phone", "+", "mobile", "cell"],
+    IBAN: ["iban", "bank", "account"],
+
+    // Strict preset patterns
+    IPV4: ["ip", "address", "ipv4"],
+    IPV6: ["ip", "address", "ipv6"],
+    DOB: ["birth", "birthday", "dob", "born", "age"],
+    BSN_DUTCH: ["bsn", "burgerservice", "sofinummer", "dutch", "netherlands"],
+    NI_NUMBER_UK: ["ni number", "national insurance", "nino", "uk", "british"],
+    PASSPORT_NUMBER: ["passport", "paspoort", "passeport", "reisepass"],
+
+    // Presidio detector entity types (from @siddicky/anonymizerts)
+    // These are the entity types detected by Presidio when using "llm", "hybrid", or "auto" modes
+    PERSON: ["person", "name", "mr.", "mrs.", "ms.", "dr.", "prof."],
+    LOCATION: ["location", "address", "city", "street", "avenue", "blvd", "road", "drive", "lane", "court", "place"],
+    ORGANIZATION: ["organization", "company", "corp", "inc", "llc", "ltd", "gmbh", "org", "institution", "university", "hospital", "bank"],
+    EMAIL_ADDRESS: ["@", ".com", ".org", ".net", ".io", "email", "e-mail", "mail"],
+    PHONE_NUMBER: ["tel:", "phone", "+1", "(", "mobile", "cell", "fax", "contact", "number"],
+    CREDIT_CARD: ["credit", "card", "visa", "mastercard", "amex", "discover", "payment", "billing", "cc"],
+    US_SSN: ["ssn", "social security", "social-security", "tax", "taxpayer"],
+    IP_ADDRESS: ["ip", "address", "ipv4", "ipv6"],
+    URL: ["http://", "https://", "url", "link", "www."],
+    DATE_TIME: ["date", "time", "datetime", "timestamp", "born", "birth", "schedule", "meeting", "appointment"],
+
+    // Pipeline detector (hybrid mode) - when ruleId is "pipeline", we infer from postValue
+    // Include all Presidio entity type patterns since pipeline can detect any of them
+    PIPELINE: [
+      "person", "name", "mr.", "mrs.", "ms.", "dr.", "prof.", // PERSON
+      "location", "address", "city", "street", "avenue", "blvd", "road", "drive", "lane", "court", "place", // LOCATION
+      "organization", "company", "corp", "inc", "llc", "ltd", "gmbh", "org", "institution", "university", "hospital", "bank", // ORGANIZATION
+      "@", ".com", ".org", ".net", ".io", "email", "e-mail", "mail", // EMAIL_ADDRESS
+      "tel:", "phone", "+1", "(", "mobile", "cell", "fax", "contact", "number", // PHONE_NUMBER
+      "credit", "card", "visa", "mastercard", "amex", "discover", "payment", "billing", "cc", // CREDIT_CARD
+      "ssn", "social security", "social-security", "tax", "taxpayer", // US_SSN
+      "ip", "address", "ipv4", "ipv6", // IP_ADDRESS
+      "http://", "https://", "url", "link", "www.", // URL
+      "date", "time", "datetime", "timestamp", "born", "birth", "schedule", "meeting", "appointment", // DATE_TIME
+    ],
   };
   return patterns[ruleType] ?? [];
 }
@@ -241,32 +297,47 @@ export function DiffDialog({
   const isScrollingRef = useRef(false);
 
   // Parse redaction types from the comma-separated string like "[RULE_REDACTED] (count), [RULE2_REDACTED] (count)"
+  // Also handles pipeline detector format "[RULE_N] (count)" where N is a sequence number
   // Supports hyphens in rule names like "API-KEY-PREFIXED_REDACTED"
   const rawRedactionTypes = useMemo(() => {
     if (!redactionType) return [];
-    const matches = redactionType.match(/\[([A-Z][A-Z0-9_-]*_REDACTED)\]\s*\((\d+)\)/g);
+    // Match both [RULE_REDACTED] (count) and [RULE_N] (count) formats
+    const matches = redactionType.match(/\[([A-Z][A-Z0-9_-]*(?:_REDACTED|_\d+))\]\s*\((\d+)\)/g);
     if (!matches) return [];
     return matches.map((m) => {
-      const ruleMatch = m.match(/\[([A-Z][A-Z0-9_-]*_REDACTED)\]/);
+      const ruleMatch = m.match(/\[([A-Z][A-Z0-9_-]*(?:_REDACTED|_\d+))\]/);
       const countMatch = m.match(/\((\d+)\)/);
+      let apiType = ruleMatch ? ruleMatch[1] : "";
+      // Normalize pipeline format [PIPELINE_N] -> PIPELINE_REDACTED for display consistency
+      if (apiType.match(/_\d+$/)) {
+        apiType = apiType.replace(/_\d+$/, "_REDACTED");
+      }
       return {
-        apiType: ruleMatch ? ruleMatch[1] : "",
+        apiType,
         count: countMatch ? parseInt(countMatch[1], 10) : 0,
         display: m,
       };
     }).filter(r => r.apiType);
   }, [redactionType]);
 
-  // Extract actual placeholder types (e.g., [API_KEY_REDACTED]) from post-redaction content
+  // Extract actual placeholder types (e.g., [API_KEY_REDACTED], [PIPELINE_1]) from post-redaction content
   const placeholderTypes = useMemo(() => {
     const types = new Set<string>();
     // Check both pre and post content for placeholders
     const allContent = [diffPreContent, diffPostContent].filter(Boolean).join("\n");
-    const matches = allContent.match(/\[([A-Z][A-Z0-9_]*_REDACTED)\]/g);
+    // Match both [RULE_REDACTED] and [RULE_N] formats
+    const matches = allContent.match(/\[([A-Z][A-Z0-9_]*(?:_REDACTED|_\d+))\]/g);
     if (matches) {
       matches.forEach(m => {
-        const t = m.match(/\[([A-Z][A-Z0-9_]*_REDACTED)\]/);
-        if (t) types.add(t[1]);
+        const t = m.match(/\[([A-Z][A-Z0-9_]*(?:_REDACTED|_\d+))\]/);
+        if (t) {
+          let type = t[1];
+          // Normalize pipeline format [PIPELINE_N] -> PIPELINE_REDACTED
+          if (type.match(/_\d+$/)) {
+            type = type.replace(/_\d+$/, "_REDACTED");
+          }
+          types.add(type);
+        }
       });
     }
     return Array.from(types);
@@ -448,7 +519,8 @@ export function DiffDialog({
     isPre?: boolean;
     matches?: Array<{ preValue: string; postValue: string }>;
   }) => {
-    const placeholderPattern = /\[[A-Z][A-Z0-9_]*_REDACTED\]/g;
+    // Match both [RULE_REDACTED] and [RULE_N] formats (pipeline detector)
+    const placeholderPattern = /\[[A-Z][A-Z0-9_]*(?:_REDACTED|_\d+)\]/g;
     const safeValue = String(value || "");
 
     if (isPre && matches.length > 0) {
@@ -496,11 +568,13 @@ export function DiffDialog({
             const globalMatchIndex = matches.findIndex(m => m.preValue === match);
             const correspondingMatch = matches.find(m => m.preValue === match);
             const postValue = correspondingMatch?.postValue ?? "";
+            // Normalize placeholder for data-redaction attribute (same as post-redaction)
+            const normalizedPostValue = postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted");
             result.push(
               <mark
                 key={`exact-${i}-${matchIndex}`}
                 className="redaction-placeholder pre-redaction-highlight"
-                data-redaction={postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
+                data-redaction={normalizedPostValue}
                 data-match-index={globalMatchIndex >= 0 ? globalMatchIndex : i}
               >
                 {match}
@@ -521,13 +595,33 @@ export function DiffDialog({
     }
 
       // Fallback to generic PII patterns if no matches provided or no exact matches found
+      // Includes patterns for both rule-based redaction and Presidio detector entity types
       const piiPatterns = [
+        // Rule-based patterns (from presets)
         /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, // email
         /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
-        /\b(?:SK|AK|RK|sk|ak|rk)_[A-Za-z0-9]{32,}\b/g, // API keys (non-capturing group)
+        /\b(?:SK|AK|RK|sk|ak|rk)_[A-Za-z0-9]{32,}\b/g, // API keys (sk_, pk_, rk_, ak_ prefixed)
+        /\b(?:sk|pk|api|key|token)[-_][A-Za-z0-9_-]{20,}\b/g, // API key prefixed (generic)
         /\bBearer\s+[A-Za-z0-9._-]+\b/g, // Bearer tokens
-        /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, // phone
+        /\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._-]+\b/gi, // Authorization header
+        /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, // phone (US)
+        /\+\d{1,3}[\s\-\.]?(?:\d[\s\-\.]?){8,11}\b/g, // phone (EU)
         /\b(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)[_-]?[=:]\s*["']?[A-Za-z0-9+/=_-]{20,}["']?/gi, // key=value patterns
+        /\b[A-Z]{2}\d{2}(?:[\s]?[A-Z0-9]){11,26}\b/g, // IBAN
+        /\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b/g, // credit card
+        /\b\d{9}\b/g, // BSN (Dutch)
+        /\b[A-CEGHJ-PR-TW-Z]{2}[\s]?\d{2}[\s]?\d{2}[\s]?\d{2}[\s]?[A-D\s]\b/g, // NI number (UK)
+        /\b[A-Z]{1,2}\d{6,9}\b/g, // Passport number
+        /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g, // IPv4
+        /\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b/g, // IPv6
+        /\b(?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12]\d|3[01])[-/](?:19|20)\d{2}\b/g, // Date of birth
+
+        // Presidio detector entity types (from @siddicky/anonymizerts)
+        // These are broader patterns that may match more than just the specific entities
+        // but help with highlighting when exact postValue placeholders are [PIPELINE_N]
+        /\b(?:https?:\/\/|www\.)[^\s]+\b/g, // URL
+        /\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b/g, // Date patterns
+        /\b\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}\b/g, // ISO datetime
       ];
 
       const parts: (string | React.ReactElement)[] = [safeValue];
@@ -571,7 +665,7 @@ export function DiffDialog({
       return <code className="font-mono text-xs">{parts}</code>;
     }
 
-    // For post-redaction, highlight the [RULE_REDACTED] placeholders
+    // For post-redaction, highlight the [RULE_REDACTED] and [RULE_N] placeholders
     // Use matches array to add data-match-index for scroll alignment
     const partsPost = safeValue.split(placeholderPattern);
     const placeholderMatches = safeValue.match(placeholderPattern);
@@ -584,6 +678,16 @@ export function DiffDialog({
     // This ensures 1st occurrence gets index 0, 2nd gets 1, etc. even for same placeholder
     const placeholderOccurrenceCount = new Map<string, number>();
 
+    // Normalize placeholder for data-redaction attribute:
+    // [API_KEY_REDACTED] -> api-key-redacted
+    // [PIPELINE_1] -> pipeline-redacted (normalize sequence number)
+    function normalizePlaceholderForDataAttr(placeholder: string): string {
+      let normalized = placeholder.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-");
+      // Normalize pipeline format: pipeline-1 -> pipeline-redacted
+      normalized = normalized.replace(/-\d+$/, "-redacted");
+      return normalized;
+    }
+
     return (
       <code className="font-mono text-xs">
         {partsPost.map((part, i) => (
@@ -593,7 +697,7 @@ export function DiffDialog({
               <mark
                 key={`placeholder-${i}-${placeholderMatches[i]}`}
                 className="redaction-placeholder"
-                data-redaction={placeholderMatches[i].replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-")}
+                data-redaction={normalizePlaceholderForDataAttr(placeholderMatches[i])}
                 data-match-index={(() => {
                   const count = placeholderOccurrenceCount.get(placeholderMatches[i]) || 0;
                   placeholderOccurrenceCount.set(placeholderMatches[i], count + 1);
