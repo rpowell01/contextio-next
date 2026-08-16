@@ -194,7 +194,7 @@ interface DetectorState {
 function applyDetectorSpans(
   input: string,
   spans: DetectedSpan[],
-  ruleName: string,
+  detectorName: string,
   stats: ReturnType<typeof createStats>,
   map: ReplacementMap | null,
   placeholderAllowlist: Set<string>,
@@ -210,11 +210,14 @@ function applyDetectorSpans(
     const match = input.slice(span.start, span.end);
     // Skip if match is a known placeholder token (prevent re-redaction)
     if (placeholderAllowlist.has(match)) continue;
-    const replacement = map ? map.getOrCreate(match, ruleName) : `[${span.label}_${Date.now()}]`;
+    // Use the span's entity label (e.g., "PERSON", "EMAIL_ADDRESS") as the rule identifier
+    // so each entity type gets its own count and placeholder format
+    const ruleId = span.label;
+    const replacement = map ? map.getOrCreate(match, ruleId) : `[${span.label}_${Date.now()}]`;
     stats.totalReplacements++;
-    stats.byRule[ruleName] = (stats.byRule[ruleName] || 0) + 1;
-    // Record the match for metadata (matchEntry structure: ruleId, preValue, postValue, path)
-    recordMatch(stats, ruleName, match, replacement, currentPath);
+    stats.byRule[ruleId] = (stats.byRule[ruleId] || 0) + 1;
+    // Record the match for metadata with the entity type as ruleId
+    recordMatch(stats, ruleId, match, replacement, currentPath);
     result = result.slice(0, span.start) + replacement + result.slice(span.end);
   }
   return result;

@@ -59,26 +59,13 @@ const getRedactionsSummary = unstable_cache(
         const byRule = meta.ruleCounts ?? {};
         const totalRedactions = meta.totalRedactions ?? 0;
 
-        // Build ruleId -> placeholder name map from SQLite matches
-        // Matches contain postValue with placeholder (e.g., "[API_KEY_REDACTED]")
-        const ruleToPlaceholder = new Map<string, string>();
-        if (meta.matches && meta.matches.length > 0) {
-          for (const match of meta.matches) {
-            // postValue contains the placeholder (e.g., "[API_KEY_REDACTED]")
-            const rawPlaceholder = match.postValue;
-            if (rawPlaceholder) {
-              const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
-              ruleToPlaceholder.set(match.ruleId, placeholder);
-            }
-          }
-        }
-
-        // Convert byRule to byPlaceholder using matches for placeholder names when available
-        // Fall back to preset-based conversion for rules not in matches
+        // Convert byRule to byPlaceholder using canonical placeholder format
+        // ruleId is now the entity type label (e.g., "PERSON", "EMAIL_ADDRESS") from Presidio
+        // Use ruleNameToPlaceholder to get canonical format "PERSON_REDACTED", "EMAIL_ADDRESS_REDACTED"
         const byPlaceholder: Record<string, number> = {};
         for (const [rule, count] of Object.entries(byRule)) {
           if (typeof count !== "number" || count <= 0) continue;
-          const placeholder = ruleToPlaceholder.get(rule) ?? ruleNameToPlaceholder(rule);
+          const placeholder = ruleNameToPlaceholder(rule);
           byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + count;
         }
 
@@ -150,26 +137,13 @@ async function getRedactionDetailsFromDb(
       const byRule = meta.ruleCounts ?? {};
       const totalRedactions = meta.totalRedactions ?? 0;
 
-      // Build ruleId -> placeholder name map from SQLite matches
-      // Matches contain postValue with placeholder (e.g., "[API_KEY_REDACTED]")
-      const ruleToPlaceholder = new Map<string, string>();
-      if (meta.matches && meta.matches.length > 0) {
-        for (const match of meta.matches) {
-          // postValue contains the placeholder (e.g., "[API_KEY_REDACTED]")
-          const rawPlaceholder = match.postValue;
-          if (rawPlaceholder) {
-            const placeholder = rawPlaceholder.replace(/^\[|\]$/g, "");
-            ruleToPlaceholder.set(match.ruleId, placeholder);
-          }
-        }
-      }
-
-      // Convert byRule to byPlaceholder using matches for placeholder names when available
-      // Fall back to preset-based conversion for rules not in matches
+      // Convert byRule to byPlaceholder using canonical placeholder format
+      // ruleId is now the entity type label (e.g., "PERSON", "EMAIL_ADDRESS") from Presidio
+      // Use ruleNameToPlaceholder to get canonical format "PERSON_REDACTED", "EMAIL_ADDRESS_REDACTED"
       const byPlaceholder: Record<string, number> = {};
       for (const [rule, count] of Object.entries(byRule)) {
         if (typeof count !== "number" || count <= 0) continue;
-        const placeholder = ruleToPlaceholder.get(rule) ?? ruleNameToPlaceholder(rule);
+        const placeholder = ruleNameToPlaceholder(rule);
         byPlaceholder[placeholder] = (byPlaceholder[placeholder] ?? 0) + count;
       }
 
