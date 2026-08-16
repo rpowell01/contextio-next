@@ -205,6 +205,10 @@ function applyDetectorSpans(
   // Sort spans by start position (descending) to apply replacements in reverse
   const sortedSpans = [...spans].sort((a, b) => b.start - a.start);
 
+  // Track per-ruleId counters for non-reversible mode to generate consistent placeholders
+  // e.g., [ORGANIZATION_REDACTED], [PERSON_REDACTED] instead of timestamps
+  const nonReversibleCounters = new Map<string, number>();
+
   let result = input;
   for (const span of sortedSpans) {
     const match = input.slice(span.start, span.end);
@@ -213,7 +217,22 @@ function applyDetectorSpans(
     // Use the span's entity label (e.g., "PERSON", "EMAIL_ADDRESS") as the rule identifier
     // so each entity type gets its own count and placeholder format
     const ruleId = span.label;
-    const replacement = map ? map.getOrCreate(match, ruleId) : `[${span.label}_${Date.now()}]`;
+
+    let replacement: string;
+    if (map) {
+      // Reversible mode: use ReplacementMap which generates [LABEL_N] format
+      // Each unique original value gets a unique placeholder for rehydration
+      replacement = map.getOrCreate(match, ruleId);
+    } else {
+      // Non-reversible mode: use consistent [LABEL_REDACTED] format
+      // All occurrences of the same entity type get the same placeholder
+      // This matches the canonical format used by stats API and diff dialog
+      const count = (nonReversibleCounters.get(ruleId) ?? 0) + 1;
+      nonReversibleCounters.set(ruleId, count);
+      const label = ruleId.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+      replacement = `[${label}_REDACTED]`;
+    }
+
     stats.totalReplacements++;
     stats.byRule[ruleId] = (stats.byRule[ruleId] || 0) + 1;
     // Record the match for metadata with the entity type as ruleId
