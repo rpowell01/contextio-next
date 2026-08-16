@@ -50,6 +50,11 @@ RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     && export GIT_COMMIT BUILD_TIME VERSION \
     && pnpm exec turbo build
 
+# Verify core dist with migrations was created in build stage
+RUN ls -la /app/packages/core/dist/db/migrations/ && \
+    test -f /app/packages/core/dist/db/migrations/014_add_feature_flags_and_advanced_config.sql && \
+    test -f /app/packages/core/dist/db/migrations/015_add_upstream_urls.sql
+
 # Copy default providers config to a known location that persists in the build stage
 RUN cp /app/packages/proxy/public/default-providers.json /app/default-providers.json
 
@@ -89,14 +94,16 @@ RUN corepack enable
 
 # Copy node_modules and packages directory (symlinks in node_modules point here)
 COPY --from=build /app/node_modules ./node_modules
+
+# Copy core dist first (migrations need dist/db/migrations)
+COPY --from=build /app/packages/core/dist ./packages/core/dist
+
+# Copy rest of packages
 COPY --from=build /app/packages ./packages
 RUN rm -rf /app/packages/web
 
 # Copy proxy dist to root for combined entry
 COPY --from=build /app/packages/proxy/dist ./dist
-
-# Copy core dist for migrations (migration runner looks at dist/db/migrations)
-COPY --from=build /app/packages/core/dist ./packages/core/dist
 
 # Verify migrations were copied (fail build if missing)
 RUN ls -la /app/packages/core/dist/db/migrations/ && \
