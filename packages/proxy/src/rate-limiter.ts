@@ -370,7 +370,8 @@ export class RateLimiterPlugin implements ProxyPlugin {
     }
 
     if (cleaned > 0) {
-      console.debug(`[rate-limiter] Cleaned up ${cleaned} stale bucket(s)`);
+      // Cleanup performed silently; enable debug logging if needed for troubleshooting
+      // console.debug(`[rate-limiter] Cleaned up ${cleaned} stale bucket(s)`);
     }
   }
 
@@ -536,11 +537,6 @@ export class RateLimiterPlugin implements ProxyPlugin {
     const key = this.config.keyGenerator(ctx);
     const provider = ctx.provider ?? "unknown";
     const sessionId = ctx.sessionId ?? undefined;
-
-    // Debug: log provider/key for NVIDIA requests
-    if (provider === "nvidia" || key === "nvidia" || ctx.provider === "nvidia") {
-      console.debug(`[rate-limiter] Request: provider=${provider}, key=${key}, ctx.provider=${ctx.provider}, sessionId=${ctx.sessionId}`);
-    }
 
     const bucket = this.getBucket(key, provider, sessionId);
 
