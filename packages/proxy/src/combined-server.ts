@@ -15,6 +15,7 @@ import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
 import { createAuthHandler, validateSession } from "./auth.js";
+import { getOidcPublicUrl } from "./config.js";
 import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
 import { join } from "node:path";
 import fs from "node:fs/promises";

@@ -336,6 +336,19 @@ export interface ResolvedProxyConfig {
   };
 }
 
+/** Get the OIDC public URL from environment variables, falling back to null. */
+export function getOidcPublicUrl(): string | null {
+  // Priority: env vars > fallback > null
+  return (
+    // Environment variable (highest priority)
+    process.env.CONTEXTIO_OIDC_PUBLIC_URL ||
+    // Deprecated alias
+    process.env.CONTEXTIO_PUBLIC_URL ||
+    // No cross-package dependency fallback
+    null
+  );
+}
+
 /**
  * Resolve OIDC configuration from environment variables and overrides.
  *
