@@ -273,7 +273,6 @@ const NER_FALSE_POSITIVE_ALLOWLIST: Record<string, string[]> = {
 async function applyDetectorSpans(
   input: string,
   spans: DetectedSpan[],
-  detectorName: string,
   stats: ReturnType<typeof createStats>,
   map: ReplacementMap | null,
   placeholderAllowlist: Set<string>,
@@ -416,7 +415,6 @@ async function redactWithDetector(
       redacted = await applyDetectorSpans(
         value,
         detectionResult.spans,
-        detector.name,
         stats,
         map,
         policy.placeholderAllowlist,
@@ -847,91 +845,64 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
     const map = reversible ? getSession(ctx.sessionId).map : null;
     const stats = createStats();
 
+    // Helper to run post-redaction logic shared by both detector and rule paths
+    async function finalizeRedaction(
+      redacted: unknown,
+      map: ReplacementMap | null,
+      stats: ReturnType<typeof createStats>,
+    ): Promise<RequestContext> {
+      // Reset stream rehydrator for this session (new response coming)
+      if (reversible) {
+        const session = getSession(ctx.sessionId);
+        session.rehydrator = createStreamRehydrator(session.map);
+      }
+
+      // Call onRedactionMetadata callback if configured
+      if (config?.onRedactionMetadata && ctx.captureId) {
+        const metadata = buildFullRedactionMetadata(ctx.captureId, {
+          provider: ctx.provider,
+          sessionId: ctx.sessionId,
+          targetUrl: ctx.targetUrl,
+          source: ctx.source,
+        }, stats);
+        config.onRedactionMetadata(metadata);
+      }
+
+      if (stats.totalReplacements > 0 && verbose) {
+        const details = Object.entries(stats.byRule)
+          .map(([name, count]) => `${name}=${count}`)
+          .join(", ");
+        const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
+        console.error(
+          `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
+        );
+        if (map) {
+          console.error(
+            `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
+          );
+        }
+      }
+
+      return {
+        ...ctx,
+        redactionStats: buildRedactMetaPayload(stats),
+        body: redacted as Record<string, any>,
+      };
+    }
+
     // Check if we should use detector-based redaction
     if (detectorMode !== "rules") {
       const detector = await ensureDetectorInitialized();
       if (detector) {
         const redacted = await redactWithDetector(ctx.body, policy, detector, detectorMode, stats, [], map, feedbackStore);
-        // Reset stream rehydrator for this session (new response coming)
-        if (reversible) {
-          const session = getSession(ctx.sessionId);
-          session.rehydrator = createStreamRehydrator(session.map);
-        }
-
-        // Call onRedactionMetadata callback if configured
-        if (config?.onRedactionMetadata && ctx.captureId) {
-          const metadata = buildFullRedactionMetadata(ctx.captureId, {
-            provider: ctx.provider,
-            sessionId: ctx.sessionId,
-            targetUrl: ctx.targetUrl,
-            source: ctx.source,
-          }, stats);
-          config.onRedactionMetadata(metadata);
-        }
-
-        if (stats.totalReplacements > 0 && verbose) {
-          const details = Object.entries(stats.byRule)
-          .map(([name, count]) => `${name}=${count}`)
-          .join(", ");
-          const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
-          console.error(
-            `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
-          );
-          if (map) {
-            console.error(
-              `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
-            );
-          }
-        }
-
-        return {
-          ...ctx,
-          redactionStats: buildRedactMetaPayload(stats),
-          body: redacted as Record<string, any>,
-        };
+        return finalizeRedaction(redacted, map, stats);
       }
       // Fall through to rule-based if detector initialization failed
     }
 
     // Rule-based redaction (default)
     const redacted = await redactWithPolicy(ctx.body, policy, stats, [], map, feedbackStore);
-    // Reset stream rehydrator for this session (new response coming)
-    if (reversible) {
-      const session = getSession(ctx.sessionId);
-      session.rehydrator = createStreamRehydrator(session.map);
-    }
-
-    // Call onRedactionMetadata callback if configured
-    if (config?.onRedactionMetadata && ctx.captureId) {
-      const metadata = buildFullRedactionMetadata(ctx.captureId, {
-        provider: ctx.provider,
-        sessionId: ctx.sessionId,
-        targetUrl: ctx.targetUrl,
-        source: ctx.source,
-      }, stats);
-      config.onRedactionMetadata(metadata);
-    }
-
-    if (stats.totalReplacements > 0 && verbose) {
-      const details = Object.entries(stats.byRule)
-      .map(([name, count]) => `${name}=${count}`)
-      .join(", ");
-      const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
-      console.error(
-        `[redact]${sid} Redacted ${stats.totalReplacements} match(es): ${details}`,
-      );
-      if (map) {
-        console.error(
-          `[redact]${sid} Tracking ${map.size} unique value(s) for rehydration`,
-        );
-      }
-    }
-
-    return {
-      ...ctx,
-      redactionStats: buildRedactMetaPayload(stats),
-      body: redacted as Record<string, any>,
-    };
+    return finalizeRedaction(redacted, map, stats);
   },
 
     // Rehydrate placeholders in non-streaming responses.
