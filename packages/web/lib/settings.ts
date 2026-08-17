@@ -28,6 +28,8 @@ export interface Settings {
   redactPolicyFile: string;
   redactPathsOnly: string[];
   redactPathsSkip: string[];
+  /** List of redaction rule names to disable (e.g., ["url", "organization", "person"]) */
+  redactDisabledRules: string[];
   encryptionAtRest: boolean;
   captureCleanupEnabled: boolean;
   captureCleanupIntervalHours: number;
@@ -114,6 +116,8 @@ export const SETTING_ENV_MAP: Record<
   redactPolicyFile: { envVar: "REDACT_POLICY_FILE", dynamic: true },
   redactPathsOnly: { envVar: "REDACT_PATHS_ONLY", dynamic: true },
   redactPathsSkip: { envVar: "REDACT_PATHS_SKIP", dynamic: true },
+  /** List of redaction rule names to disable (e.g., ["url", "organization", "person"]) */
+  redactDisabledRules: { envVar: "REDACT_DISABLED_RULES", dynamic: true },
   encryptionAtRest: {
     envVar: "CONTEXTIO_LOGGER_ENCRYPTION_ENABLED",
     dynamic: false,
@@ -263,6 +267,14 @@ export function applyEnvOverrides(settings: Settings): {
   case "redactPathsSkip":
     try {
       override.redactPathsSkip = JSON.parse(raw);
+      accepted = true;
+    } catch {
+      // Invalid JSON, ignore
+    }
+    break;
+  case "redactDisabledRules":
+    try {
+      override.redactDisabledRules = JSON.parse(raw);
       accepted = true;
     } catch {
       // Invalid JSON, ignore
@@ -595,6 +607,8 @@ export const DEFAULT_SETTINGS: Settings = {
     "content[*].signature",
     "content[*].type",
   ],
+  /** List of redaction rule names to disable (e.g., ["url", "organization", "person"]) */
+  redactDisabledRules: [],
   encryptionAtRest: false,
   captureCleanupEnabled: true,
   captureCleanupIntervalHours: 24,
@@ -718,6 +732,13 @@ export function validateSettings(input: unknown): Settings {
         return v as string[];
       }
       return DEFAULT_SETTINGS.redactPathsSkip;
+    })(),
+    redactDisabledRules: (() => {
+      const v = obj.redactDisabledRules;
+      if (Array.isArray(v) && v.every(item => typeof item === "string")) {
+        return v as string[];
+      }
+      return DEFAULT_SETTINGS.redactDisabledRules;
     })(),
     encryptionAtRest: validateBoolean("encryptionAtRest"),
     captureCleanupEnabled: validateBoolean("captureCleanupEnabled"),
@@ -890,6 +911,10 @@ export function validateSettingsLenient(input: unknown): Settings {
     Array.isArray(obj.redactPathsSkip) && obj.redactPathsSkip.every((item: unknown) => typeof item === "string")
       ? (obj.redactPathsSkip as string[])
       : DEFAULT_SETTINGS.redactPathsSkip,
+  redactDisabledRules:
+    Array.isArray(obj.redactDisabledRules) && obj.redactDisabledRules.every((item: unknown) => typeof item === "string")
+      ? (obj.redactDisabledRules as string[])
+      : DEFAULT_SETTINGS.redactDisabledRules,
   encryptionAtRest:
       typeof obj.encryptionAtRest === "boolean"
         ? obj.encryptionAtRest

@@ -42,6 +42,7 @@ export interface SettingsRow {
 	detector_threshold: number;
 	redact_paths_only: string | null; // JSON array of path strings
 	redact_paths_skip: string | null; // JSON array of path strings
+	redact_disabled_rules: string | null; // JSON array of disabled rule names
 	rate_limiter: string; // JSON blob
 	streaming_retry: string; // JSON blob
 	// Feature flags (migration 014)
@@ -89,6 +90,8 @@ export interface Settings {
 	redactPolicyFile: string;
 	redactPathsOnly: string[]; // JSON array of path strings for "only" filtering
 	redactPathsSkip: string[]; // JSON array of path strings for "skip" filtering
+	/** List of redaction rule names to disable (e.g., ["url", "organization", "person"]) */
+	redactDisabledRules: string[];
 	encryptionAtRest: boolean;
 	captureCleanupEnabled: boolean;
 	captureCleanupIntervalHours: number;
@@ -249,6 +252,8 @@ const DEFAULT_SETTINGS: Settings = {
 		"content[*].signature",
 		"content[*].type",
 	],
+	/** List of redaction rule names to disable (e.g., ["url", "organization", "person"]) */
+	redactDisabledRules: [],
 	encryptionAtRest: false,
 	captureCleanupEnabled: true,
 	captureCleanupIntervalHours: 24,
@@ -315,6 +320,7 @@ function rowToSettings(row: SettingsRow): Settings {
 		redactPolicyFile: row.redact_policy_file,
 		redactPathsOnly: safeJsonParse<string[]>(row.redact_paths_only, DEFAULT_SETTINGS.redactPathsOnly),
 		redactPathsSkip: safeJsonParse<string[]>(row.redact_paths_skip, DEFAULT_SETTINGS.redactPathsSkip),
+		redactDisabledRules: safeJsonParse<string[]>(row.redact_disabled_rules, DEFAULT_SETTINGS.redactDisabledRules),
 		encryptionAtRest: row.encryption_at_rest === 1,
 		captureCleanupEnabled: row.capture_cleanup_enabled === 1,
 		captureCleanupIntervalHours: row.capture_cleanup_interval_hours,
@@ -418,6 +424,7 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		upstream_openrouter_url: merged.upstreamOpenRouterUrl,
 		upstream_kilo_url: merged.upstreamKiloUrl,
 		upstream_gemini_code_assist_url: merged.upstreamGeminiCodeAssistUrl,
+		redact_disabled_rules: JSON.stringify(merged.redactDisabledRules),
 	};
 }
 
@@ -621,6 +628,7 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		redactPolicyFile: { envVar: "REDACT_POLICY_FILE", dynamic: true },
 		redactPathsOnly: { envVar: "REDACT_PATHS_ONLY", dynamic: true },
 		redactPathsSkip: { envVar: "REDACT_PATHS_SKIP", dynamic: true },
+		redactDisabledRules: { envVar: "REDACT_DISABLED_RULES", dynamic: true },
 		encryptionAtRest: { envVar: "CONTEXTIO_LOGGER_ENCRYPTION_ENABLED", dynamic: false },
 		captureCleanupEnabled: { envVar: "LOGGER_CAPTURE_CLEANUP_ENABLED", dynamic: false },
 		captureCleanupIntervalHours: { envVar: "LOGGER_CAPTURE_CLEANUP_INTERVAL", dynamic: false },
@@ -846,6 +854,7 @@ function validateAndMergeSettings(input: unknown): Settings {
 		redactPolicyFile: getString("redactPolicyFile", DEFAULT_SETTINGS.redactPolicyFile),
 		redactPathsOnly: parseStringArray("redactPathsOnly", DEFAULT_SETTINGS.redactPathsOnly),
 		redactPathsSkip: parseStringArray("redactPathsSkip", DEFAULT_SETTINGS.redactPathsSkip),
+		redactDisabledRules: parseStringArray("redactDisabledRules", DEFAULT_SETTINGS.redactDisabledRules),
 		encryptionAtRest: getBoolean("encryptionAtRest", DEFAULT_SETTINGS.encryptionAtRest),
 		captureCleanupEnabled: getBoolean("captureCleanupEnabled", DEFAULT_SETTINGS.captureCleanupEnabled),
 		captureCleanupIntervalHours: getNumber("captureCleanupIntervalHours", DEFAULT_SETTINGS.captureCleanupIntervalHours, 1, 168),

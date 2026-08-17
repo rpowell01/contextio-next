@@ -116,6 +116,8 @@ export interface RedactPluginConfig {
   policyFile?: string;
   /** Pre-compiled policy object. Overrides both `preset` and `policyFile`. */
   policy?: CompiledPolicy;
+  /** Array of rule IDs to disable (e.g., ["url", "organization"]). Rules with these names will be excluded from redaction. */
+  disabledRules?: string[];
   /**
    * Detection mode:
    * - "rules": rule-based only (default, fast, deterministic)
@@ -469,32 +471,42 @@ async function redactWithDetector(
 
 /** Resolve effective policy: explicit policy > policy file > preset (default: "pii"). */
 function resolvePolicy(config?: RedactPluginConfig): CompiledPolicy {
-  if (config?.policy) return config.policy;
+  const disabledRules = new Set(config?.disabledRules ?? []);
+
+  function filterDisabledRules(policy: CompiledPolicy): CompiledPolicy {
+    if (disabledRules.size === 0) return policy;
+    return {
+      ...policy,
+      rules: policy.rules.filter((rule) => !disabledRules.has(rule.name)),
+    };
+  }
+
+  if (config?.policy) return filterDisabledRules(config.policy);
   if (config?.policyFile) {
     const loaded = loadPolicyFile(config.policyFile);
     if (loaded) {
       // Merge paths from config with policy file paths (config takes precedence)
       if (config.paths) {
-        return mergePathsIntoPolicy(loaded, config.paths);
+        return filterDisabledRules(mergePathsIntoPolicy(loaded, config.paths));
       }
       // Apply default paths if not specified in config or policy file
-      return mergePathsIntoPolicy(loaded, {
+      return filterDisabledRules(mergePathsIntoPolicy(loaded, {
         only: DEFAULT_REDACT_ONLY_PATHS,
         skip: DEFAULT_REDACT_SKIP_PATHS,
-      });
+      }));
     }
     // Fall through to preset if policy file doesn't exist
   }
   const presetPolicy = fromPreset(config?.preset ?? "pii");
   // Apply paths from config to preset policy
   if (config?.paths) {
-    return mergePathsIntoPolicy(presetPolicy, config.paths);
+    return filterDisabledRules(mergePathsIntoPolicy(presetPolicy, config.paths));
   }
   // Apply default paths
-  return mergePathsIntoPolicy(presetPolicy, {
+  return filterDisabledRules(mergePathsIntoPolicy(presetPolicy, {
     only: DEFAULT_REDACT_ONLY_PATHS,
     skip: DEFAULT_REDACT_SKIP_PATHS,
-  });
+  }));
 }
 
 /**

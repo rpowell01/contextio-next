@@ -4,6 +4,8 @@ import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
 import type { Settings, SettingMeta, Provider, RateLimitConfig, StreamingRetryConfig } from "@/lib/settings";
 import type { ProviderConfig, ProviderMetadata } from "@/types/api";
+import type { RedactionRule, PresetName } from "@contextio/redact";
+import { PRESETS } from "@contextio/redact";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "@/components/theme-provider";
 
@@ -55,6 +57,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "JSON paths where redaction should be applied (e.g., ['messages[*].content']). Only values at these paths will be checked for redaction. Changes apply dynamically per request.",
   redactPathsSkip:
     "JSON paths where redaction should be skipped (e.g., tool call IDs, function arguments). These are checked before 'only' paths. Default includes all tool call and structured data paths to prevent NER false positives. Changes apply dynamically per request.",
+  redactDisabledRules:
+    "List of redaction rule IDs to disable. Use this to selectively disable specific redaction types (e.g., URL, ORGANIZATION) while keeping others active. Changes apply dynamically per request.",
   encryptionAtRest:
     "Encrypt captured API traffic files at rest using AES-256. Requires a proxy restart to apply.",
   captureCleanupEnabled:
@@ -279,6 +283,142 @@ function DetectorModeWarnings({
   );
 }
 
+// Disabled Rules List Component
+// Shows all available redaction rules grouped by category with checkboxes to enable/disable
+function DisabledRulesList({
+  disabledRules,
+  onChange,
+  disabled,
+  preset,
+  hasCustomPolicy,
+}: {
+  disabledRules: string[];
+  onChange: (rules: string[]) => void;
+  disabled: boolean;
+  preset: PresetName;
+  hasCustomPolicy: boolean;
+}) {
+  const disabledSet = new Set(disabledRules);
+
+  // Build a mapping of rule name to human-readable description
+  const ruleDescriptions: Record<string, string> = {
+    // Secrets rules
+    "private-key": "Private key blocks (RSA, EC, DSA, OPENSSH)",
+    "credential_aws_key": "AWS access keys",
+    "aws-secret-key": "AWS secret access keys",
+    "credential_github": "GitHub tokens",
+    "credential_anthropic": "Anthropic API keys",
+    "credential_openai": "OpenAI API keys",
+    "credential_gcp_api_key": "Google Cloud API keys",
+    "credential_gcp_service_account": "GCP service account JSON",
+    "credential_gitlab": "GitLab tokens",
+    "credential_jwt": "JWT tokens",
+    "credential_stripe": "Stripe keys",
+    "credential_slack": "Slack tokens",
+    "credential_huggingface": "Hugging Face tokens",
+    "credential_databricks": "Databricks tokens",
+    "credential_npm": "NPM tokens",
+    "credential_pypi": "PyPI tokens",
+    "credential_vault": "HashiCorp Vault tokens",
+    "credential_sendgrid": "SendGrid API keys",
+    "credential_nvidia": "NVIDIA API keys",
+    "credential_openrouter": "OpenRouter API keys",
+    "credential_kilo": "Kilo API keys",
+    "authorization-header": "Authorization: Bearer headers",
+    "bearer-token": "Bearer tokens in text",
+    "api-key-prefixed": "Prefixed API keys (sk-, pk-, api-, key-, token-)",
+    "credential_generic": "Generic secret assignments",
+
+    // PII rules
+    "email": "Email addresses",
+    "ssn": "US Social Security Numbers",
+    "credit-card": "Credit card numbers",
+    "phone-us": "US phone numbers",
+    "phone-eu": "European phone numbers",
+    "iban": "IBAN bank account numbers",
+
+    // Strict rules
+    "ipv4": "IPv4 addresses",
+    "ipv6": "IPv6 addresses",
+    "date-of-birth": "Dates of birth (with context)",
+    "bsn-dutch": "Dutch BSN numbers",
+    "ni-number-uk": "UK National Insurance numbers",
+    "passport-number": "Passport numbers",
+  };
+
+  // Group rules by preset/category
+  const categories: Array<{ label: string; preset: "secrets" | "pii" | "strict"; rules: string[] }> = [
+    { label: "Secrets (API keys, tokens, credentials)", preset: "secrets", rules: PRESETS.secrets.map((r) => r.name) },
+    { label: "PII (emails, phones, IDs)", preset: "pii", rules: PRESETS.pii.slice(PRESETS.secrets.length).map((r) => r.name) },
+    { label: "Strict (IPs, dates, international IDs)", preset: "strict", rules: PRESETS.strict.slice(PRESETS.pii.length).map((r) => r.name) },
+  ];
+
+  // Determine which categories are active based on current preset
+  const activePresets: PresetName[] = preset === "strict" ? ["secrets", "pii", "strict"] : preset === "pii" ? ["secrets", "pii"] : ["secrets"];
+
+  const handleToggle = (ruleName: string) => {
+    if (disabled) return;
+    const newDisabled = disabledSet.has(ruleName)
+      ? disabledRules.filter((r) => r !== ruleName)
+      : [...disabledRules, ruleName];
+    onChange(newDisabled);
+  };
+
+  return (
+    <div className="space-y-4">
+      {categories
+        .filter((cat) => activePresets.includes(cat.preset))
+        .map((category) => (
+          <div key={category.preset} className="space-y-2">
+            <h5 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+              {category.label}
+            </h5>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {category.rules.map((ruleName) => {
+                const description = ruleDescriptions[ruleName] ?? ruleName;
+                const isDisabled = disabledSet.has(ruleName);
+                return (
+                  <label
+                    key={ruleName}
+                    className={`flex items-center gap-2 p-3 rounded-lg border transition-colors ${
+                      isDisabled
+                        ? "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50"
+                        : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 hover:border-primary/50"
+                    } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                    title={description}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!isDisabled}
+                      onChange={() => handleToggle(ruleName)}
+                      disabled={disabled}
+                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span className="text-sm font-mono text-primary/80">{ruleName}</span>
+                    <span className="text-xs text-muted-foreground flex-1 min-w-0 truncate">{description}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      {hasCustomPolicy && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <strong>Custom policy file active:</strong> This list shows built-in preset rules. If you use a custom
+          policy file, disabled rules here only affect built-in presets. Custom rules in your policy file
+          must be disabled by editing the policy file directly.
+        </div>
+      )}
+      {disabled && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          This setting is controlled by the <code>CONTEXTIO_REDACT_DISABLED_RULES</code> environment variable
+          and cannot be changed here.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Tab configuration (module scope for stability)
 type SettingsTab = "appearance" | "logging" | "providers" | "proxy" | "rateLimiter" | "redaction" | "security" | "streamingRetry";
 
@@ -343,6 +483,7 @@ export default function SettingsPage() {
       "content[*].signature",
       "content[*].type",
     ],
+    redactDisabledRules: [],
     encryptionAtRest: false,
     captureCleanupEnabled: false,
     captureCleanupIntervalHours: 24,
@@ -562,6 +703,22 @@ export default function SettingsPage() {
                   {renderSetting("redactPathsOnly")}
                   {renderSetting("redactPathsSkip")}
                 </div>
+              </div>
+
+              {/* Disabled Rules Settings */}
+              <div className="pt-2 border-t">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Disabled Redaction Rules</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Selectively disable specific redaction rule types. Uncheck a rule to stop it from
+                  redacting values. Changes apply dynamically per request.
+                </p>
+                <DisabledRulesList
+                  disabledRules={settings.redactDisabledRules}
+                  onChange={(rules) => updateSetting("redactDisabledRules", rules)}
+                  disabled={isSettingOverridden("redactDisabledRules")}
+                  preset={settings.redactPreset}
+                  hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim())}
+                />
               </div>
 
               {/* Detector mode capabilities & warnings */}

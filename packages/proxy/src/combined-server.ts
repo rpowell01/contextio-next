@@ -241,7 +241,7 @@ export function createCombinedProxy(
 
   const adminHandler = createAdminHandler({ plugins, logTraffic, startTime, oidc: resolved.oidc });
 
-const authHandler = resolved.oidc
+  const authHandler = resolved.oidc
     ? createAuthHandler({
         oidc: resolved.oidc,
         baseUrl: resolved.publicUrl || getOidcPublicUrl() || ""

@@ -27,6 +27,7 @@ interface WebUISettings {
 	redactPolicyFile?: string;
 	redactPathsOnly?: string[];
 	redactPathsSkip?: string[];
+	redactDisabledRules?: string[];
 	detectorMode?: "rules" | "llm" | "hybrid" | "auto";
 	detectorModelName?: string;
 	detectorThreshold?: number;
@@ -44,6 +45,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 				redactPolicyFile: dbSettings.redactPolicyFile,
 				redactPathsOnly: dbSettings.redactPathsOnly,
 				redactPathsSkip: dbSettings.redactPathsSkip,
+				redactDisabledRules: dbSettings.redactDisabledRules,
 				detectorMode: dbSettings.detectorMode,
 				detectorModelName: dbSettings.detectorModelName,
 				detectorThreshold: dbSettings.detectorThreshold,
@@ -65,6 +67,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			redactPolicyFile: parsed.redactPolicyFile,
 			redactPathsOnly: parsed.redactPathsOnly,
 			redactPathsSkip: parsed.redactPathsSkip,
+			redactDisabledRules: parsed.redactDisabledRules,
 			detectorMode: parsed.detectorMode,
 			detectorModelName: parsed.detectorModelName ?? parsed.detectorModelDir,
 			detectorThreshold: parsed.detectorThreshold,
@@ -117,6 +120,7 @@ const config: RedactPluginConfig = {
 			// (web UI settings don't have a feedback store setting yet, so default to undefined)
 			return undefined;
 		})(),
+		disabledRules: settings.redactDisabledRules,
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
 			upsertRedactionMetadata(metadata);
 		},

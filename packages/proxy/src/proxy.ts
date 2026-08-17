@@ -10,7 +10,7 @@ import fs from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
-import { upsertRedactionMetadata } from "@contextio/core/db";
+import { upsertRedactionMetadata, getSettings } from "@contextio/core/db";
 
 import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
@@ -103,6 +103,9 @@ export function createProxy(
    const resolved = resolveConfig(config);
    const logTraffic = !!config?.logTraffic;
 
+   // Load settings from database for redact plugin config (disabled rules, etc.)
+   const storedSettings = getSettings();
+
    // Build plugins array from enabled flags and user-provided plugins
    const effectivePlugins: ProxyPlugin[] = [];
    if (resolved.plugins.loggerEnabled) {
@@ -120,6 +123,8 @@ export function createProxy(
          policyFile: process.env.REDACT_POLICY_FILE || "/app/custom-policy/custom-policy.json",
          // Enable feedback store for false positive management
          feedbackStore: "sqlite",
+         // Disable specific redaction rules from settings
+         disabledRules: storedSettings?.redactDisabledRules ?? [],
        })
      );
    }
