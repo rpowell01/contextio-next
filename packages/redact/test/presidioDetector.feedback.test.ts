@@ -308,11 +308,11 @@ function runPresidioDetectorFeedbackTests(
         skipIfHeavy.call(this);
         const initStore = createFeedbackStore("memory");
         // RuleId must match the detector's name (this.name)
-        await initStore.recordFalsePositive(createTestEntry("init@test.com", "presidio-with-store"));
+        await initStore.recordFalsePositive(createTestEntry("init@test.com", "presidio-ts"));
 
         // Create new detector with feedbackStore in config
         const detectorWithStore = await createPresidioTsDetector({
-          name: "presidio-with-store",
+          name: "presidio-ts",
           threshold: 0.5,
           useNER: true,
           feedbackStore: initStore,

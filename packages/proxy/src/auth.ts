@@ -277,10 +277,12 @@ export function getSessionId(req: http.IncomingMessage, sessionSecret: string): 
  */
 export function createAuthHandler(options: AuthOptions): http.RequestListener {
   const { oidc, baseUrl } = options;
-  const callbackUrl = `${baseUrl}/auth/callback`;
+  // Use CONTEXTIO_OIDC_PUBLIC_URL or fallback to CONTEXTIO_PUBLIC_URL for callback URL
+  const publicUrl = process.env.CONTEXTIO_OIDC_PUBLIC_URL || process.env.CONTEXTIO_PUBLIC_URL || baseUrl || "";
+  const callbackUrl = `${publicUrl}/auth/callback`;
 
   return async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
-    const url = new URL(req.url || "", `http://${req.headers.host}`);
+    const url = new URL(req.url || "", publicUrl);
     const path = url.pathname;
 
     // CORS headers for web UI

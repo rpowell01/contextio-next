@@ -301,7 +301,12 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
         case "env": {
           if (req.method !== "GET") {
             res.writeHead(405, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+            res.end(
+              JSON.stringify({
+                error: "Method not allowed",
+                service: SERVICE_IDENTIFIER,
+              }),
+            );
             return;
           }
 
@@ -621,7 +626,12 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
             // GET /admin/redact/false-positives - List all false positives with pagination
             if (isClearEndpoint) {
               res.writeHead(405, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+              res.end(
+                JSON.stringify({
+                  error: "Method not allowed",
+                  service: SERVICE_IDENTIFIER,
+                }),
+              );
               return;
             }
 
@@ -755,7 +765,12 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
             // Uses query parameters: value, ruleId, sessionId (no numeric ID in the store)
             if (isClearEndpoint) {
               res.writeHead(405, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+              res.end(
+                JSON.stringify({
+                  error: "Method not allowed",
+                  service: SERVICE_IDENTIFIER,
+                }),
+              );
               return;
             }
 
@@ -789,13 +804,21 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
 
           // Method not allowed
           res.writeHead(405, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+          res.end(
+            JSON.stringify({
+              error: "Method not allowed",
+              service: SERVICE_IDENTIFIER,
+            }),
+          );
+          return;
+        }
+        default: {
+          console.warn("[admin] Unrecognized API state:", path);
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: `Unknown admin endpoint: /admin/${path}`, service: SERVICE_IDENTIFIER }));
           return;
         }
       }
-      // Handle unknown admin endpoints
-      res.writeHead(404, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: `Unknown admin endpoint: /admin/${path}`, service: SERVICE_IDENTIFIER }));
     } catch (error) {
       console.error("Admin API error:", error);
       // Only write error response if headers haven't been sent yet

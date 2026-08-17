@@ -240,17 +240,17 @@ export function createCombinedProxy(
 
   const adminHandler = createAdminHandler({ plugins, logTraffic, startTime, oidc: resolved.oidc });
 
-  const authHandler = resolved.oidc
+const authHandler = resolved.oidc
     ? createAuthHandler({
         oidc: resolved.oidc,
-        baseUrl: resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`
+        baseUrl: resolved.publicUrl || getOidcPublicUrl() || ""
       })
     : null;
 
   if (resolved.oidc) {
-    const authBaseUrl = (resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`).replace(/\/+$/, "");
+    const authBaseUrl = resolved.publicUrl || getOidcPublicUrl() || "";
     console.log(`[startup] OIDC callback URL: ${authBaseUrl}/auth/callback`);
-    console.log(`[startup] OIDC baseUrl used: ${resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`}`);
+    console.log(`[startup] OIDC baseUrl used: ${getOidcPublicUrl()}`);
     console.log(`[startup] OIDC issuer: ${resolved.oidc.issuer}`);
     console.log(`[startup] OIDC clientId: ${resolved.oidc.clientId}`);
     console.log(`[startup] OIDC scope: ${resolved.oidc.scope.join(" ")}`);
