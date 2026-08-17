@@ -332,9 +332,15 @@ export class PresidioTsDetector implements Detector {
     if (feedbackStore) {
       // Check all results in parallel for better performance
       const isFalsePositiveResults = await Promise.all(
-        filteredResults.map((result) =>
-          feedbackStore.isFalsePositive(result.text, this.name)
-        )
+        filteredResults.map(async (result) => {
+          try {
+            return await feedbackStore.isFalsePositive(result.text, this.name);
+          } catch (err) {
+            // Log error but don't crash the pipeline - treat as non-false-positive
+            console.error(`[presidio-ts] False positive check failed for "${result.text}":`, err);
+            return false;
+          }
+        })
       );
       filteredResults = filteredResults.filter(
         (_, index) => !isFalsePositiveResults[index]

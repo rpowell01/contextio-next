@@ -118,6 +118,8 @@ export function createProxy(
        createRedactPlugin({
          // Use preset from config or environment
          policyFile: process.env.REDACT_POLICY_FILE || "/app/custom-policy/custom-policy.json",
+         // Enable feedback store for false positive management
+         feedbackStore: "sqlite",
        })
      );
    }
@@ -158,21 +160,21 @@ export function createProxy(
   const upstreams = { ...resolved.upstreams };
   const providers = { ...resolved.providers };
 
-   const proxyHandler = createProxyHandler({
-     upstreams,
-     allowTargetOverride: resolved.allowTargetOverride,
-     strictUrlForwarding: resolved.strictUrlForwarding,
-     plugins: effectivePlugins,
-     logTraffic,
-     providers,
-   });
+  const proxyHandler = createProxyHandler({
+    upstreams,
+    allowTargetOverride: resolved.allowTargetOverride,
+    strictUrlForwarding: resolved.strictUrlForwarding,
+    plugins: effectivePlugins,
+    logTraffic,
+    providers,
+  });
 
-   const adminHandler = createAdminHandler({ plugins: effectivePlugins, logTraffic, startTime });
+  const adminHandler = createAdminHandler({ plugins: effectivePlugins, logTraffic, startTime, oidc: resolved.oidc });
 
   const authHandler = resolved.oidc
     ? createAuthHandler({
         oidc: resolved.oidc,
-        baseUrl: resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`,
+        baseUrl: resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`
       })
     : null;
 

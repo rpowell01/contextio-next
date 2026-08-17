@@ -238,12 +238,12 @@ export function createCombinedProxy(
     providers: resolved.providers,
   });
 
-  const adminHandler = createAdminHandler({ plugins, logTraffic, startTime });
+  const adminHandler = createAdminHandler({ plugins, logTraffic, startTime, oidc: resolved.oidc });
 
   const authHandler = resolved.oidc
     ? createAuthHandler({
         oidc: resolved.oidc,
-        baseUrl: resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`,
+        baseUrl: resolved.publicUrl || `http://${resolved.bindHost}:${resolved.port}`
       })
     : null;
 

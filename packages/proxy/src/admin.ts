@@ -7,14 +7,40 @@
 
 import http from "node:http";
 import type { ProxyPlugin } from "@contextio/core";
-import type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics, ProviderConfig, Provider } from "@contextio/core";
+import type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics, ProviderConfig, Provider, OidcProviderConfig } from "@contextio/core";
 import { SERVICE_IDENTIFIER } from "@contextio/core";
 import { getAllMergedProviders, type MergedProvider } from "@contextio/core/db";
+import { validateSession, type AuthSession } from "./auth.js";
+import type { FeedbackStore } from "@contextio/redact";
+
+/**
+ * Extract session from request for admin authentication.
+ * Returns session if valid, null if not authenticated.
+ */
+function getAdminSession(req: http.IncomingMessage, oidc: OidcProviderConfig | null): AuthSession | null {
+  if (!oidc) return null;
+  return validateSession(req, oidc.sessionSecret);
+}
+
+/**
+ * Check if the authenticated user has admin privileges.
+ * Currently checks against ADMIN_EMAILS environment variable (comma-separated).
+ * In the future, this could check for a specific OIDC claim or role.
+ */
+function isAdmin(session: AuthSession): boolean {
+  const adminEmails = process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim().toLowerCase()) ?? [];
+  if (adminEmails.length === 0) {
+    console.warn("[admin] ADMIN_EMAILS environment variable not configured - admin access will be denied for all users");
+    return false;
+  }
+  return session.email !== undefined && adminEmails.includes(session.email.toLowerCase());
+}
 
 export interface AdminOptions {
   plugins: ProxyPlugin[];
   logTraffic: boolean;
   startTime: number;
+  oidc: OidcProviderConfig | null;
 }
 
 export interface ProxyStatus {
@@ -209,11 +235,15 @@ function mapProviderToResponse(p: MergedProvider): ProviderResponse {
 }
 
 export function createAdminHandler(options: AdminOptions): http.RequestListener {
-  const { plugins, logTraffic, startTime } = options;
+  const { plugins, logTraffic, startTime, oidc } = options;
   let sessionCount = 0;
 
   // Track active sessions (simplified - in reality you'd track from plugin state)
   const activeSessions = new Set<string>();
+
+  // Get FeedbackStore from redact plugin
+  const redactPlugin = plugins.find((p) => p.name === "redact") as (ProxyPlugin & { getFeedbackStore?: () => FeedbackStore }) | undefined;
+  const feedbackStore: FeedbackStore | undefined = redactPlugin?.getFeedbackStore?.();
 
   return async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
     const parsedUrl = new URL(req.url || "", `http://${req.headers.host}`);
@@ -226,9 +256,15 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
     }
 
     // CORS headers for web UI
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    // Echo origin for credentialed requests (wildcard not allowed with credentials)
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+    }
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Requested-With, X-CSRF-Token");
+    res.setHeader("Vary", "Origin");
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);
@@ -259,59 +295,59 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
 
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ ...status, service: SERVICE_IDENTIFIER }));
-          break;
+          return;
         }
 
-case "env": {
-  if (req.method !== "GET") {
-    res.writeHead(405, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
-    return;
-  }
+        case "env": {
+          if (req.method !== "GET") {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+            return;
+          }
 
-  // Blacklist keys that look sensitive so their values can't be leaked via the admin API.
-  // Coolify-set variables (e.g. MY_TEST) and production-critical values like CSRF_SECRET
-  // are blocked by the SECRET pattern.
-  const BLACKLISTED_PATTERNS: RegExp[] = [
-    /(^|_)(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DATABASE_URL|CREDENTIAL|ACCESS_KEY|CSRF_SECRET|ENCRYPTION_KEY)(_|$)/i,
-  ];
+          // Blacklist keys that look sensitive so their values can't be leaked via the admin API.
+          // Coolify-set variables (e.g. MY_TEST) and production-critical values like CSRF_SECRET
+          // are blocked by the SECRET pattern.
+          const BLACKLISTED_PATTERNS: RegExp[] = [
+            /(^|_)(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DATABASE_URL|CREDENTIAL|ACCESS_KEY|CSRF_SECRET|ENCRYPTION_KEY)(_|$)/i,
+          ];
 
-  const isBlacklisted = (key: string): boolean => {
-    return BLACKLISTED_PATTERNS.some((pattern) => pattern.test(key));
-  };
+          const isBlacklisted = (key: string): boolean => {
+            return BLACKLISTED_PATTERNS.some((pattern) => pattern.test(key));
+          };
 
-  const MASKED_VALUE = "[REDACTED]";
+          const MASKED_VALUE = "[REDACTED]";
 
-  const envVars: ProxyEnvVar[] = Object.entries(process.env)
-    .map(([key, value]) => ({
-      key,
-      value: isBlacklisted(key) ? MASKED_VALUE : (value ?? ""),
-      source: isBlacklisted(key) ? ("blacklisted" as const) : ("process" as const),
-    }));
+          const envVars: ProxyEnvVar[] = Object.entries(process.env)
+            .map(([key, value]) => ({
+              key,
+              value: isBlacklisted(key) ? MASKED_VALUE : (value ?? ""),
+              source: isBlacklisted(key) ? ("blacklisted" as const) : ("process" as const),
+            }));
 
-  // Add defaults for keys that might not be set, preserving the previous contract
-  // so the env page doesn't regress when the proxy is launched with a minimal env.
-  const defaults: Record<string, string> = {
-    CONTEXT_PROXY_BIND_HOST: "0.0.0.0",
-    CONTEXT_PROXY_PORT: "4040",
-    LOGGER_MAX_SESSIONS: "0",
-    REDACT_REVERSIBLE: "false",
-    REDACT_PRESET: "pii",
-  };
+          // Add defaults for keys that might not be set, preserving the previous contract
+          // so the env page doesn't regress when the proxy is launched with a minimal env.
+          const defaults: Record<string, string> = {
+            CONTEXT_PROXY_BIND_HOST: "0.0.0.0",
+            CONTEXT_PROXY_PORT: "4040",
+            LOGGER_MAX_SESSIONS: "0",
+            REDACT_REVERSIBLE: "false",
+            REDACT_PRESET: "pii",
+          };
 
-  for (const [key, value] of Object.entries(defaults)) {
-    if (!envVars.some((v) => v.key === key)) {
-      envVars.push({ key, value, source: "default" });
-    }
-  }
+          for (const [key, value] of Object.entries(defaults)) {
+            if (!envVars.some((v) => v.key === key)) {
+              envVars.push({ key, value, source: "default" });
+            }
+          }
 
-  res.writeHead(200, {
-    "Content-Type": "application/json",
-    "x-service-identifier": SERVICE_IDENTIFIER,
-  });
-  res.end(JSON.stringify(envVars));
-  break;
-}
+          res.writeHead(200, {
+            "Content-Type": "application/json",
+            "x-service-identifier": SERVICE_IDENTIFIER,
+          });
+          res.end(JSON.stringify(envVars));
+          return;
+        }
 
         case "logs": {
           if (req.method !== "GET") {
@@ -374,7 +410,7 @@ case "env": {
 
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ logs, containerId: "contextio-next", service: SERVICE_IDENTIFIER }));
-          break;
+          return;
         }
 
         case "clear-logs": {
@@ -387,7 +423,7 @@ case "env": {
           clearLogs();
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ success: true, message: "Logs cleared", service: SERVICE_IDENTIFIER }));
-          break;
+          return;
         }
 
         case "providers": {
@@ -407,7 +443,7 @@ case "env": {
             res.writeHead(500, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Failed to load providers", service: SERVICE_IDENTIFIER }));
           }
-          break;
+          return;
         }
 
         case "rate-limiter": {
@@ -537,14 +573,229 @@ case "env": {
               service: SERVICE_IDENTIFIER 
             }));
           }
-          break;
+          return;
         }
+ 
+        // False Positive Management Endpoints
+        // Handle both /redact/false-positives and /redact/false-positives/clear
+        case "redact/false-positives":
+        case "redact/false-positives/clear": {
+          // Require admin authentication
+          const session = getAdminSession(req, oidc);
+          if (!session) {
+            res.writeHead(401, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Unauthorized - admin authentication required", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+ 
+          // Check admin role
+          if (!isAdmin(session)) {
+            res.writeHead(403, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Forbidden - admin role required", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+ 
+          // CSRF protection for state-changing operations (POST, DELETE)
+          // Require a custom header that cannot be set by cross-origin requests
+          if (req.method === "POST" || req.method === "DELETE") {
+            const csrfHeader = req.headers["x-requested-with"] || req.headers["x-csrf-token"];
+            if (!csrfHeader) {
+              res.writeHead(403, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "CSRF token required: include X-Requested-With or X-CSRF-Token header", service: SERVICE_IDENTIFIER }));
+              return;
+            }
+          }
 
-        default: {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: `Unknown admin endpoint: /admin/${path}`, service: SERVICE_IDENTIFIER }));
+          // Check if FeedbackStore is configured
+          if (!feedbackStore) {
+            res.writeHead(503, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Feedback store not configured", code: "FEEDBACK_STORE_NOT_CONFIGURED", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+
+          // Check if this is the /clear endpoint
+          const isClearEndpoint = path === "redact/false-positives/clear";
+
+          // Handle different HTTP methods
+          if (req.method === "GET") {
+            // GET /admin/redact/false-positives - List all false positives with pagination
+            if (isClearEndpoint) {
+              res.writeHead(405, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+              return;
+            }
+
+            const ruleId = parsedUrl.searchParams.get("ruleId") || undefined;
+            const sessionId = parsedUrl.searchParams.get("sessionId") || undefined;
+            const pageParam = parseInt(parsedUrl.searchParams.get("page") || "1", 10);
+            const pageSizeParam = parseInt(parsedUrl.searchParams.get("pageSize") || "50", 10);
+            const page = Number.isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
+            const pageSize = Number.isNaN(pageSizeParam) || pageSizeParam < 1 ? 50 : Math.min(pageSizeParam, 200);
+
+            try {
+              const allEntries = await feedbackStore.getAllFalsePositives(ruleId, sessionId);
+              const total = allEntries.length;
+              const start = (page - 1) * pageSize;
+              const end = start + pageSize;
+              const entries = allEntries.slice(start, end);
+
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({
+                falsePositives: entries,
+                pagination: {
+                  page,
+                  pageSize,
+                  total,
+                  totalPages: Math.ceil(total / pageSize),
+                },
+                service: SERVICE_IDENTIFIER,
+              }));
+            } catch (error) {
+              console.error("[admin] False positives list error:", error);
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Failed to load false positives", service: SERVICE_IDENTIFIER }));
+            }
+            return;
+          }
+
+          if (req.method === "POST") {
+            // POST /admin/redact/false-positives/clear - Clear all false positives
+            if (isClearEndpoint) {
+              const ruleId = parsedUrl.searchParams.get("ruleId") || undefined;
+              const sessionId = parsedUrl.searchParams.get("sessionId") || undefined;
+
+              try {
+                const cleared = await feedbackStore.clear(ruleId, sessionId);
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ success: true, cleared, message: `Cleared ${cleared} false positive(s)`, service: SERVICE_IDENTIFIER }));
+              } catch (error) {
+                console.error("[admin] False positives clear error:", error);
+                res.writeHead(500, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: "Failed to clear false positives", service: SERVICE_IDENTIFIER }));
+              }
+              return;
+            }
+
+            // POST /admin/redact/false-positives - Create new false positive entry
+            // Validate Content-Type
+            const contentType = req.headers["content-type"] || "";
+            if (!contentType.includes("application/json")) {
+              res.writeHead(415, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Content-Type must be application/json", service: SERVICE_IDENTIFIER }));
+              return;
+            }
+
+            // Parse request body with size limit (1 MB)
+            const MAX_BODY_SIZE = 1024 * 1024;
+            let body = "";
+            for await (const chunk of req) {
+              body += chunk;
+              if (body.length > MAX_BODY_SIZE) {
+                res.writeHead(413, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: "Request body too large", service: SERVICE_IDENTIFIER }));
+                return;
+              }
+            }
+
+            let params: {
+              value: string;
+              ruleId: string;
+              label: string;
+              path: string;
+              sessionId?: string;
+              matchMode?: "exact" | "pattern";
+            };
+
+            try {
+              params = JSON.parse(body);
+            } catch (error) {
+              console.error("[admin] False positive JSON parse error:", error);
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Invalid JSON body", service: SERVICE_IDENTIFIER }));
+              return;
+            }
+
+            // Validate required fields
+            if (!params.value || !params.ruleId || !params.label || !params.path) {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Missing required fields: value, ruleId, label, path", service: SERVICE_IDENTIFIER }));
+              return;
+            }
+
+            // Validate matchMode if provided
+            if (params.matchMode !== undefined && params.matchMode !== "exact" && params.matchMode !== "pattern") {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Invalid matchMode: must be 'exact' or 'pattern'", service: SERVICE_IDENTIFIER }));
+              return;
+            }
+
+            try {
+              const entry = await feedbackStore.recordFalsePositive({
+                value: params.value,
+                ruleId: params.ruleId,
+                label: params.label,
+                path: params.path,
+                timestamp: Date.now(),
+                sessionId: params.sessionId,
+                matchMode: params.matchMode ?? "exact",
+              });
+
+              res.writeHead(201, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ success: true, falsePositive: entry, service: SERVICE_IDENTIFIER }));
+            } catch (error) {
+              console.error("[admin] False positive create error:", error);
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Failed to create false positive entry", service: SERVICE_IDENTIFIER }));
+            }
+            return;
+          }
+
+          if (req.method === "DELETE") {
+            // DELETE /admin/redact/false-positives - Remove false positive entry
+            // Uses query parameters: value, ruleId, sessionId (no numeric ID in the store)
+            if (isClearEndpoint) {
+              res.writeHead(405, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+              return;
+            }
+
+            const value = parsedUrl.searchParams.get("value");
+            const ruleId = parsedUrl.searchParams.get("ruleId");
+            const sessionId = parsedUrl.searchParams.get("sessionId") || undefined;
+
+            if (value === null || value === "" || ruleId === null || ruleId === "") {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Missing required query parameters: value, ruleId", service: SERVICE_IDENTIFIER }));
+              return;
+            }
+
+            try {
+              const removed = await feedbackStore.removeFalsePositive(value, ruleId, sessionId);
+              if (!removed) {
+                res.writeHead(404, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: "False positive entry not found", service: SERVICE_IDENTIFIER }));
+                return;
+              }
+
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ success: true, message: "False positive entry removed", service: SERVICE_IDENTIFIER }));
+            } catch (error) {
+              console.error("[admin] False positive delete error:", error);
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "Failed to remove false positive entry", service: SERVICE_IDENTIFIER }));
+            }
+            return;
+          }
+
+          // Method not allowed
+          res.writeHead(405, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+          return;
         }
       }
+      // Handle unknown admin endpoints
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: `Unknown admin endpoint: /admin/${path}`, service: SERVICE_IDENTIFIER }));
     } catch (error) {
       console.error("Admin API error:", error);
       // Only write error response if headers haven't been sent yet

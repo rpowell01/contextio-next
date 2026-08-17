@@ -196,7 +196,7 @@ export class SqliteFeedbackStore implements FeedbackStore {
 	}
 
 	async isFalsePositive(value: string, ruleId: string, sessionId?: string): Promise<boolean> {
-		// First check exact matches
+		// Check exact matches (both exact and pattern mode entries with this exact value)
 		const exactRows = this.selectByValueRuleStmt.all(value, ruleId, sessionId ?? null) as FalsePositiveRow[];
 		
 		for (const row of exactRows) {
@@ -213,6 +213,30 @@ export class SqliteFeedbackStore implements FeedbackStore {
 				} catch {
 					// Invalid regex, skip
 				}
+			}
+		}
+
+		// Also check pattern-mode entries that might match this value (different value but pattern matches)
+		// Need to respect session scoping: global (null) + specific session
+		const patternStmt = this.db.prepare(`
+			SELECT * FROM redaction_false_positives
+			WHERE rule_id = ? AND match_mode = 'pattern' 
+			AND (session_id IS NULL OR session_id = ?)
+		`);
+		const patternRows = patternStmt.all(ruleId, sessionId ?? null) as FalsePositiveRow[];
+
+		for (const row of patternRows) {
+			const entry = rowToEntry(row);
+			// Skip if already checked in exact match (value matches exactly)
+			if (entry.value === value) continue;
+			// Session scoping is handled by the query above
+			try {
+				const regex = new RegExp(entry.pattern);
+				if (regex.test(value)) {
+					return true;
+				}
+			} catch {
+				// Invalid regex, skip
 			}
 		}
 
