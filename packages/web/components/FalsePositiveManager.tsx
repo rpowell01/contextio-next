@@ -180,6 +180,13 @@ export function FalsePositiveManager({
   const handleDelete = useCallback(
     async () => {
       if (!deleteTarget) return;
+      // Find the full entry from the list to get all required properties
+      const fullEntry = falsePositives.find(
+        (fp) =>
+          fp.value === deleteTarget.value &&
+          fp.ruleId === deleteTarget.ruleId &&
+          fp.sessionId === deleteTarget.sessionId
+      );
       setDeleting(true);
       try {
         const result = await apiClient.deleteFalsePositive(
@@ -188,9 +195,9 @@ export function FalsePositiveManager({
           deleteTarget.sessionId,
         );
 
-        if (result.success && onEntryRemoved) {
+        if (result.success && onEntryRemoved && fullEntry) {
           onEntryRemoved({
-            ...deleteTarget,
+            ...fullEntry,
             id: Date.now().toString(),
             timestamp: Date.now(),
           });
