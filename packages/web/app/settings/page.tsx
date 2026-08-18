@@ -1624,6 +1624,28 @@ export default function SettingsPage() {
             )}
           </div>
         );
+      case "redactPolicyEnabled":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="redactPolicyEnabled"
+              checked={settings.redactPolicyEnabled}
+              onChange={(e) =>
+                updateSetting("redactPolicyEnabled", e.target.checked)
+              }
+              className="w-4 h-4"
+              disabled={isSettingOverridden("redactPolicyEnabled")}
+            />
+            <Label htmlFor="redactPolicyEnabled" className="text-sm">
+              Use custom policy file
+            </Label>
+            <SettingHelp
+              meta={getMeta("redactPolicyEnabled")}
+              description={SETTING_DESCRIPTIONS.redactPolicyEnabled}
+            />
+          </div>
+        );
       case "redactReversible":
         return (
           <div className="flex items-center gap-2">
