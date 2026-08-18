@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -104,6 +104,10 @@ function runRuleDetectorFeedbackTests(
       await detector.shutdown();
     });
 
+    afterEach(async () => {
+      await store.clear();
+    });
+
     describe("false positive filtering", () => {
       it("should filter out exact match false positives", async () => {
         // Record a false positive for a specific email
@@ -187,6 +191,27 @@ function runRuleDetectorFeedbackTests(
         assert.equal(emailSpans.length, 1);
         const texts = emailSpans.map(s => s.text).sort();
         assert.deepEqual(texts, ["other@test.com"]);
+      });
+
+"      it("should filter global false positives but not session-specific ones when no sessionId is provided", async () => {
+        await store.clear();
+
+        // Record global false positive
+        await store.recordFalsePositive(createTestEntry("global-fp@test.com", "email"));
+        // Record session-specific false positive
+        await store.recordFalsePositive(createTestEntry("session-fp@test.com", "email", { sessionId: "session-1" }));
+
+        // Detect without sessionId - only global false positives should be filtered
+        const result = await detector.detect(
+          "User emails: global-fp@test.com, session-fp@test.com, and real@test.com"
+        );
+
+        const emailSpans = result.spans.filter((s) => s.label === "EMAIL");
+        // session-fp should NOT be filtered (no sessionId provided)
+        // real should be detected
+        assert.equal(emailSpans.length, 2);
+        const texts = emailSpans.map(s => s.text).sort();
+        assert.deepEqual(texts, ["real@test.com", "session-fp@test.com"]);
       });
 
       it("should handle multiple false positives for same rule", async () => {
