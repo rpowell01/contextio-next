@@ -1,4 +1,4 @@
-import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, RateLimiterMetrics, ProviderConfig, ProviderMetadata } from "@/types/api";
+import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, RateLimiterMetrics, ProviderConfig, ProviderMetadata, FalsePositiveEntry } from "@/types/api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
 /**
@@ -618,10 +618,112 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     });
   }
 
-  // Proxy Admin API methods
+  // False Positive Management API methods
   // These connect to the proxy service on port 4040
+  // Endpoints: GET/POST/DELETE /admin/redact/false-positives
+  //           POST /admin/redact/false-positives/clear
 
-  async getProxyStatus(signal?: AbortSignal): Promise<ProxyStatus> {
+  async getFalsePositives(
+    options?: {
+      ruleId?: string;
+      sessionId?: string;
+      page?: number;
+      pageSize?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<{
+    falsePositives: FalsePositiveEntry[];
+    pagination: {
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const baseUrl = getProxyAdminBaseUrl();
+    const params = new URLSearchParams();
+    if (options?.ruleId) params.set("ruleId", options.ruleId);
+    if (options?.sessionId) params.set("sessionId", options.sessionId);
+    if (options?.page) params.set("page", String(options.page));
+    if (options?.pageSize) params.set("pageSize", String(options.pageSize));
+    return this.requestWithBase<{
+      falsePositives: FalsePositiveEntry[];
+      pagination: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+      };
+    }>(baseUrl, `/admin/redact/false-positives?${params.toString()}`, { signal });
+  }
+
+  async createFalsePositive(
+    value: string,
+    ruleId: string,
+    label: string,
+    path: string,
+    options?: {
+      sessionId?: string;
+      matchMode?: "exact" | "pattern";
+    },
+    signal?: AbortSignal,
+  ): Promise<{ success: boolean; falsePositive: FalsePositiveEntry }> {
+    const baseUrl = getProxyAdminBaseUrl();
+    const body = JSON.stringify({
+      value,
+      ruleId,
+      label,
+      path,
+      ...(options?.sessionId && { sessionId: options.sessionId }),
+      ...(options?.matchMode && { matchMode: options.matchMode }),
+    });
+    return this.requestWithBase<{
+      success: boolean;
+      falsePositive: FalsePositiveEntry;
+    }>(baseUrl, "/admin/redact/false-positives", {
+      method: "POST",
+      body,
+      signal,
+    });
+  }
+
+  async deleteFalsePositive(
+    value: string,
+    ruleId: string,
+    sessionId?: string,
+    signal?: AbortSignal,
+  ): Promise<{ success: boolean }> {
+    const baseUrl = getProxyAdminBaseUrl();
+    const params = new URLSearchParams();
+    params.set("value", value);
+    params.set("ruleId", ruleId);
+    if (sessionId) params.set("sessionId", sessionId);
+    return this.requestWithBase<{ success: boolean }>(
+      baseUrl,
+      `/admin/redact/false-positives?${params.toString()}`,
+      { method: "DELETE", signal }
+    );
+  }
+
+  async clearFalsePositives(
+    options?: {
+      ruleId?: string;
+      sessionId?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<{ success: boolean; cleared: number }> {
+    const baseUrl = getProxyAdminBaseUrl();
+    const params = new URLSearchParams();
+    if (options?.ruleId) params.set("ruleId", options.ruleId);
+    if (options?.sessionId) params.set("sessionId", options.sessionId);
+    return this.requestWithBase<{ success: boolean; cleared: number }>(
+      baseUrl,
+      `/admin/redact/false-positives/clear?${params.toString()}`,
+      { method: "POST", signal }
+    );
+  }
+
+async getProxyStatus(signal?: AbortSignal): Promise<ProxyStatus> {
     const baseUrl = getProxyAdminBaseUrl();
     return this.requestWithBase(baseUrl, "/admin/status", { signal });
   }
@@ -943,3 +1045,9 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
 }
 
 export const apiClient = new APIClient();
+
+/**
+ * Type for a single false positive entry recorded for redaction rule filtering.
+ * These values are exempt from redaction in captured API traffic.
+ */
+export type { FalsePositiveEntry } from "@/types/api";

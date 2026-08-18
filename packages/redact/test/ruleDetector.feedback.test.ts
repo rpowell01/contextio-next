@@ -176,18 +176,17 @@ function runRuleDetectorFeedbackTests(
         // Record session-specific false positive
         await store.recordFalsePositive(createTestEntry("session@test.com", "email", { sessionId: "session-1" }));
 
-        // Detect - RuleDetector doesn't currently pass sessionId to feedbackStore in detect()
-        // So only global entries (sessionId=null) will be matched
+        // Detect with sessionId - both global and session-specific entries should be filtered
         const result = await detector.detect(
           "Contact global@test.com and session@test.com and other@test.com",
-          { feedbackStore: store }
+          { feedbackStore: store, sessionId: "session-1" }
         );
 
         const emailSpans = result.spans.filter((s) => s.label === "EMAIL");
-        // Only global should be filtered (session-specific requires sessionId to be passed)
-        assert.equal(emailSpans.length, 2);
+        // Both global and session-specific false positives should be filtered
+        assert.equal(emailSpans.length, 1);
         const texts = emailSpans.map(s => s.text).sort();
-        assert.deepEqual(texts, ["other@test.com", "session@test.com"]);
+        assert.deepEqual(texts, ["other@test.com"]);
       });
 
       it("should handle multiple false positives for same rule", async () => {

@@ -7,6 +7,7 @@ import type { ProviderConfig, ProviderMetadata } from "@/types/api";
 import type { PresetName } from "@contextio/redact";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "@/components/theme-provider";
+import { FalsePositiveManager } from "@/components/FalsePositiveManager";
 
 /** Preset rule names for UI display (avoids importing @contextio/redact which brings Node.js deps) */
 const PRESET_RULES: Record<PresetName, string[]> = {
@@ -504,7 +505,16 @@ function DisabledRulesList({
 }
 
 // Tab configuration (module scope for stability)
-type SettingsTab = "appearance" | "logging" | "providers" | "proxy" | "rateLimiter" | "redaction" | "security" | "streamingRetry";
+type SettingsTab =
+  | "appearance"
+  | "logging"
+  | "providers"
+  | "proxy"
+  | "rateLimiter"
+  | "redaction"
+  | "security"
+  | "streamingRetry"
+  | "falsePositives";
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
@@ -515,6 +525,7 @@ const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "redaction", label: "Redaction", icon: <EyeOff className="h-4 w-4" /> },
   { id: "security", label: "Security", icon: <Shield className="h-4 w-4" /> },
   { id: "streamingRetry", label: "Streaming Retry", icon: <Gauge className="h-4 w-4" /> },
+  { id: "falsePositives", label: "False Positives", icon: <AlertCircle className="h-4 w-4" /> },
 ];
 
 export default function SettingsPage() {
@@ -889,6 +900,36 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
+        );
+      case "falsePositives":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-falsePositives" aria-labelledby="tab-falsePositives">
+            <h3 className="font-semibold mb-4">False Positives</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Manage false positive entries that exempt specific values from redaction.
+              These values will not be redacted in captured API traffic.
+            </p>
+            <FalsePositiveManager
+              onEntryAdded={(entry) => {
+                setSettings((prev) => ({ ...prev, redactDisabledRules: [...prev.redactDisabledRules, entry.ruleId] }));
+                setMetadata((prev) => ({ ...prev, [entry.ruleId]: { source: "settings-file", envVar: null, dynamic: true } }));
+              }}
+              onEntryRemoved={(entry) => {
+                setSettings((prev) => {
+                  const rules = prev.redactDisabledRules.filter((r) => r !== entry.ruleId);
+                  return { ...prev, redactDisabledRules: rules };
+                });
+                setMetadata((prev) => {
+                  const meta = { ...prev };
+                  delete meta[entry.ruleId];
+                  return meta;
+                });
+              }}
+              onCleared={(cleared) => {
+                // Optionally show a message
+              }}
+            />
           </div>
         );
       case "appearance":

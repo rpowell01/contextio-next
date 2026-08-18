@@ -269,6 +269,8 @@ export async function redactString(
     // First pass: filter matches and check false positives in left-to-right order
     // to ensure correct placeholder numbering (EMAIL_1, EMAIL_2, etc.)
     const validMatches: { start: number; end: number; match: string; captured: string | undefined; replacement: string }[] = [];
+    // Step 1: Collect candidates that pass synchronous checks
+    const candidates: { start: number; end: number; match: string; captured: string | undefined }[] = [];
     for (const { start, end, match, captured } of matches) {
       // Skip if match is a known placeholder token (prevent re-redaction)
       if (placeholderAllowlist.has(match)) continue;
@@ -279,17 +281,19 @@ export async function redactString(
       if (rule.context && rule.context.length > 0) {
         if (!hasContextNearby(result, start, end, rule.context, window)) continue;
       }
-      // Check if this match is a known false positive
-      if (feedbackStore) {
-        try {
-          const isFp = await feedbackStore.isFalsePositive(match, rule.name);
-          if (isFp) continue;
-        } catch (err) {
-          // Log error but don't crash - treat as non-false-positive to avoid blocking redaction
-          console.error(`[redact] False positive check failed for "${match}":`, err);
-        }
-      }
-      // Compute replacement in left-to-right order for correct numbering
+      candidates.push({ start, end, match, captured });
+    }
+
+    // Step 2: Parallel false positive checks using Promise.all
+    const fpPromises = candidates.map(({ match }) =>
+      feedbackStore ? feedbackStore.isFalsePositive(match, rule.name) : Promise.resolve(false)
+    );
+    const fpResults = await Promise.all(fpPromises);
+
+    // Step 3: Build valid matches from candidates that aren't false positives
+    for (let i = 0; i < candidates.length; i++) {
+      const { start, end, match, captured } = candidates[i];
+      if (fpResults[i]) continue; // skip false positives
       const replacement = resolveReplacement(match, rule, map);
       validMatches.push({ start, end, match, captured, replacement });
     }

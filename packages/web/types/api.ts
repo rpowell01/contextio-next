@@ -658,5 +658,30 @@ export interface ProxyLogEntry {
 
 // --- Rate Limiter Metrics ---
 
+// --- False Positive Types ---
+
+/**
+ * A single false positive entry recorded for redaction rule filtering.
+ * These values are exempt from redaction in captured API traffic.
+ */
+export interface FalsePositiveEntry {
+  /** Unique identifier (generated timestamp-based) */
+  id: string;
+  /** The sensitive value that should be excluded from redaction */
+  value: string;
+  /** The redaction rule ID this applies to */
+  ruleId: string;
+  /** Human-readable label/description */
+  label: string;
+  /** JSON path where the value was detected */
+  path: string;
+  /** Optional session ID for session-scoped false positives */
+  sessionId?: string;
+  /** Match mode: "exact" for exact value match, "pattern" for regex-like matching */
+  matchMode?: "exact" | "pattern";
+  /** Timestamp when the false positive was recorded */
+  timestamp: number;
+}
+
 // Re-exported from @contextio/core for the web package
 export type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics, Provider } from "@contextio/core";

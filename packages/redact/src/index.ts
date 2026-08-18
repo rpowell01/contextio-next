@@ -317,6 +317,8 @@ async function applyDetectorSpans(
   }
   const replacements: SpanReplacement[] = [];
 
+  // Step 1: Collect candidates that pass synchronous checks
+  const candidates: { span: DetectedSpan; match: string; ruleId: string }[] = [];
   for (const span of spansAscending) {
     const match = input.slice(span.start, span.end);
     // Skip if match is a known placeholder token (prevent re-redaction)
@@ -331,16 +333,19 @@ async function applyDetectorSpans(
       continue;
     }
 
-    // Check if this match is a known false positive via FeedbackStore
-    if (feedbackStore) {
-      try {
-        const isFp = await feedbackStore.isFalsePositive(match, ruleId);
-        if (isFp) continue;
-      } catch (err) {
-        // Log error but don't crash - treat as non-false-positive to avoid blocking redaction
-        console.error(`[redact] False positive check failed for "${match}":`, err);
-      }
-    }
+    candidates.push({ span, match, ruleId });
+  }
+
+  // Step 2: Parallel false positive checks using Promise.all
+  const fpPromises = candidates.map(({ match, ruleId }) =>
+    feedbackStore ? feedbackStore.isFalsePositive(match, ruleId) : Promise.resolve(false)
+  );
+  const fpResults = await Promise.all(fpPromises);
+
+  // Step 3: Build replacements from candidates that aren't false positives
+  for (let i = 0; i < candidates.length; i++) {
+    const { span, match, ruleId } = candidates[i];
+    if (fpResults[i]) continue; // skip false positives
 
     let replacement: string;
     if (map) {

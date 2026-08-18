@@ -601,7 +601,8 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
           }
  
           // CSRF protection for state-changing operations (POST, DELETE)
-          // Require a custom header that cannot be set by cross-origin requests
+          // Require custom headers to prevent cross-origin request forgery
+          // CORS preflight (OPTIONS) requests must include these headers
           if (req.method === "POST" || req.method === "DELETE") {
             const csrfHeader = req.headers["x-requested-with"] || req.headers["x-csrf-token"];
             if (!csrfHeader) {

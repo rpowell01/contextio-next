@@ -79,6 +79,8 @@ export interface RuleDetectorConfig extends DetectorConfig {
   placeholderAllowlist?: string[];
   /** Optional FeedbackStore to filter out known false positives. */
   feedbackStore?: FeedbackStore;
+  /** Optional session ID for scoping false positive matching. */
+  sessionId?: string;
 }
 
 /**
@@ -270,7 +272,7 @@ export class RuleDetector implements Detector {
         try {
           const rule = ruleMap.get(span.label);
           const ruleId = rule?.name ?? span.label.toLowerCase();
-          const isFp = await feedbackStore.isFalsePositive(span.text, ruleId);
+          const isFp = await feedbackStore.isFalsePositive(span.text, ruleId, ruleConfig?.sessionId);
           return isFp ? null : span;
         } catch (err) {
           // Log error but don't crash the pipeline - treat as non-false-positive
