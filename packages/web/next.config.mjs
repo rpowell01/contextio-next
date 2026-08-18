@@ -72,6 +72,32 @@ const nextConfig = {
   webpack: (config, { isServer }) => {
     config.resolve.alias["@"] = path.join(process.cwd(), "");
 
+    // Handle node: protocol imports (for both server and client)
+    // These are needed because @contextio/core and @contextio/redact use node: imports
+    const nodeProtocolAliases = {
+      "node:crypto": "crypto",
+      "node:fs": "fs",
+      "node:fs/promises": "fs/promises",
+      "node:path": "path",
+      "node:os": "os",
+      "node:stream": "stream",
+      "node:util": "util",
+      "node:buffer": "buffer",
+      "node:querystring": "querystring",
+      "node:url": "url",
+      "node:zlib": "zlib",
+      "node:http": "http",
+      "node:https": "https",
+      "node:assert": "assert",
+      "node:constants": "constants",
+      "node:process": "process",
+    };
+
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      ...nodeProtocolAliases,
+    };
+
     // Handle Node.js built-in modules - only apply fallback for client bundle
     const nodeBuiltinFallback = {
       fs: false,

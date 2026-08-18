@@ -4,10 +4,87 @@ import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
 import type { Settings, SettingMeta, Provider, RateLimitConfig, StreamingRetryConfig } from "@/lib/settings";
 import type { ProviderConfig, ProviderMetadata } from "@/types/api";
-import type { RedactionRule, PresetName } from "@contextio/redact";
-import { PRESETS } from "@contextio/redact";
+import type { PresetName } from "@contextio/redact";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "@/components/theme-provider";
+
+/** Preset rule names for UI display (avoids importing @contextio/redact which brings Node.js deps) */
+const PRESET_RULES: Record<PresetName, string[]> = {
+  secrets: [
+    "private-key",
+    "credential_aws_key",
+    "aws-secret-key",
+    "credential_github",
+    "credential_anthropic",
+    "credential_openai",
+    "credential_gcp_api_key",
+    "credential_gcp_service_account",
+    "credential_gitlab",
+    "credential_jwt",
+    "credential_stripe",
+    "credential_slack",
+    "credential_huggingface",
+    "credential_databricks",
+    "credential_npm",
+    "credential_pypi",
+    "credential_vault",
+    "credential_sendgrid",
+    "credential_nvidia",
+    "credential_openrouter",
+    "credential_kilo",
+    "authorization-header",
+    "bearer-token",
+    "api-key-prefixed",
+    "credential_generic",
+  ],
+  pii: [
+    "EMAIL",
+    "PHONE",
+    "URL",
+    "IP_ADDRESS",
+    "IPV6",
+    "ORGANIZATION",
+    "PERSON",
+    "LOCATION",
+    "DATE_TIME",
+    "US_SSN",
+    "CREDIT_CARD",
+    "IBAN",
+    "PASSPORT",
+    "DRIVERS_LICENSE",
+    "MAC_ADDRESS",
+  ],
+  strict: [
+    "EMAIL",
+    "PHONE",
+    "URL",
+    "IP_ADDRESS",
+    "IPV6",
+    "ORGANIZATION",
+    "PERSON",
+    "LOCATION",
+    "DATE_TIME",
+    "US_SSN",
+    "CREDIT_CARD",
+    "IBAN",
+    "PASSPORT",
+    "DRIVERS_LICENSE",
+    "MAC_ADDRESS",
+    "AGE",
+    "BLOOD_TYPE",
+    "MEDICAL_RECORD",
+    "VEHICLE_ID",
+    "USERNAME",
+    "PASSWORD",
+    "API_KEY",
+    "CRYPTO_WALLET",
+    "US_BANK_ACCOUNT",
+    "US_ROUTING_NUMBER",
+    "SWIFT_BIC",
+    "CVV",
+    "EXPIRY",
+  ],
+};
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -348,9 +425,9 @@ function DisabledRulesList({
 
   // Group rules by preset/category
   const categories: Array<{ label: string; preset: "secrets" | "pii" | "strict"; rules: string[] }> = [
-    { label: "Secrets (API keys, tokens, credentials)", preset: "secrets", rules: PRESETS.secrets.map((r) => r.name) },
-    { label: "PII (emails, phones, IDs)", preset: "pii", rules: PRESETS.pii.slice(PRESETS.secrets.length).map((r) => r.name) },
-    { label: "Strict (IPs, dates, international IDs)", preset: "strict", rules: PRESETS.strict.slice(PRESETS.pii.length).map((r) => r.name) },
+    { label: "Secrets (API keys, tokens, credentials)", preset: "secrets", rules: PRESET_RULES.secrets },
+    { label: "PII (emails, phones, IDs)", preset: "pii", rules: PRESET_RULES.pii },
+    { label: "Strict (IPs, dates, international IDs)", preset: "strict", rules: PRESET_RULES.strict },
   ];
 
   // Determine which categories are active based on current preset
