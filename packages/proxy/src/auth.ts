@@ -16,6 +16,7 @@ import { createCipheriv, createDecipheriv, createHmac, pbkdf2Sync, randomBytes, 
 import { fetchProviderMetadata, validateIdToken, type OidcProviderMetadata } from "@contextio/core/server";
 import type { OidcProviderConfig } from "@contextio/core";
 import { SERVICE_IDENTIFIER } from "@contextio/core";
+import { getOidcPublicUrl, getOidcCallbackUrl } from "./config.js";
 
 export interface AuthSession {
   /** User's subject identifier from the ID token. */
@@ -277,9 +278,9 @@ export function getSessionId(req: http.IncomingMessage, sessionSecret: string): 
  */
 export function createAuthHandler(options: AuthOptions): http.RequestListener {
   const { oidc, baseUrl } = options;
-  // Use CONTEXTIO_OIDC_PUBLIC_URL or fallback to CONTEXTIO_PUBLIC_URL for callback URL
-  const publicUrl = process.env.CONTEXTIO_OIDC_PUBLIC_URL || process.env.CONTEXTIO_PUBLIC_URL || baseUrl || "";
-  const callbackUrl = `${publicUrl}/auth/callback`;
+  // Use centralized config for callback URL construction
+  const callbackUrl = getOidcCallbackUrl(baseUrl);
+  const publicUrl = baseUrl || getOidcPublicUrl() || "";
 
   return async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
     const url = new URL(req.url || "", publicUrl);
@@ -301,11 +302,11 @@ export function createAuthHandler(options: AuthOptions): http.RequestListener {
 
     try {
       if (path === "/auth/login" && req.method === "GET") {
-        await handleLogin(req, res, oidc, callbackUrl);
+        await handleLogin(req, res, oidc, callbackUrl, baseUrl);
       } else if (path === "/auth/callback" && req.method === "GET") {
-        await handleCallback(req, res, oidc, callbackUrl);
+        await handleCallback(req, res, oidc, callbackUrl, baseUrl);
       } else if (path === "/auth/logout" && (req.method === "GET" || req.method === "POST")) {
-        await handleLogout(req, res, oidc);
+        await handleLogout(req, res, oidc, baseUrl);
       } else if (path === "/auth/logged-out" && req.method === "GET") {
         await handleLoggedOut(req, res);
       } else if (path === "/auth/session" && req.method === "GET") {
@@ -330,6 +331,7 @@ async function handleLogin(
   res: http.ServerResponse,
   oidc: OidcProviderConfig,
   callbackUrl: string,
+  baseUrl: string,
 ): Promise<void> {
   try {
     const metadata = await getProviderMetadata(oidc.issuer);
@@ -339,7 +341,8 @@ async function handleLogin(
     storeState(state, nonce);
 
     // Store redirect URL in a cookie for post-login redirect (optional)
-    const redirectUrl = new URL(req.url || "", `http://${req.headers.host}`).searchParams.get("redirect") || "/";
+    const publicUrl = baseUrl || getOidcPublicUrl() || `http://${req.headers.host}`;
+    const redirectUrl = new URL(req.url || "", publicUrl).searchParams.get("redirect") || "/";
 
     const params = new URLSearchParams({
       response_type: "code",
@@ -378,8 +381,10 @@ async function handleCallback(
   res: http.ServerResponse,
   oidc: OidcProviderConfig,
   callbackUrl: string,
+  baseUrl: string,
 ): Promise<void> {
-  const url = new URL(req.url || "", `http://${req.headers.host}`);
+  const publicUrl = baseUrl || getOidcPublicUrl() || `http://${req.headers.host}`;
+  const url = new URL(req.url || "", publicUrl);
 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -527,8 +532,10 @@ async function handleLogout(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   oidc: OidcProviderConfig,
+  baseUrl: string,
 ): Promise<void> {
-  const url = new URL(req.url || "", `http://${req.headers.host}`);
+  const publicUrl = baseUrl || getOidcPublicUrl() || `http://${req.headers.host}`;
+  const url = new URL(req.url || "", publicUrl);
   const redirectUrl = url.searchParams.get("redirect") || "/auth/logged-out";
 
   // Clear session cookie
@@ -540,7 +547,7 @@ async function handleLogout(
     if (metadata.end_session_endpoint) {
       const logoutUrl = new URL(metadata.end_session_endpoint);
       // Redirect to a public "logged out" page on this proxy after provider logout
-      const postLogoutUrl = new URL(redirectUrl, `http://${req.headers.host}`).href;
+      const postLogoutUrl = new URL(redirectUrl, publicUrl).href;
       logoutUrl.searchParams.set("post_logout_redirect_uri", postLogoutUrl);
       logoutUrl.searchParams.set("client_id", oidc.clientId);
 

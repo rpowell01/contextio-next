@@ -352,6 +352,28 @@ export function getOidcPublicUrl(): string | null {
 }
 
 /**
+ * Construct the OIDC callback URL from the base URL and the fixed callback path.
+ *
+ * This replaces the hardcoded `${baseUrl}/auth/callback` pattern with a
+ * configurable base URL that can be set via environment variables or derived
+ * from the request context.
+ *
+ * @param baseUrl - The base URL to use for callback construction. If not provided,
+ *   will attempt to read from CONTEXTIO_OIDC_PUBLIC_URL environment variable or web UI settings.
+ * @returns The full callback URL (e.g., "https://example.com/auth/callback")
+ * @throws Error if no public URL is configured
+ */
+export function getOidcCallbackUrl(baseUrl?: string): string {
+  const publicUrl = baseUrl || getOidcPublicUrl();
+  if (!publicUrl) {
+    throw new Error(
+      "CONTEXTIO_OIDC_PUBLIC_URL must be set for OIDC callback URL construction",
+    );
+  }
+  return `${publicUrl}/auth/callback`;
+}
+
+/**
  * Resolve OIDC configuration from environment variables and overrides.
  *
  * Reads CONTEXTIO_OIDC_* environment variables. If OIDC is enabled but

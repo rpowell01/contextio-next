@@ -15,7 +15,7 @@ import { resolveConfig } from "./config.js";
 import { createProxyHandler } from "./forward.js";
 import { createAdminHandler, enableLogCapture } from "./admin.js";
 import { createAuthHandler, validateSession } from "./auth.js";
-import { getOidcPublicUrl } from "./config.js";
+import { getOidcPublicUrl, getOidcCallbackUrl } from "./config.js";
 import { createRedactionMetaWatcher } from "./redaction-meta-watcher.js";
 import { join } from "node:path";
 import fs from "node:fs/promises";
@@ -249,8 +249,8 @@ export function createCombinedProxy(
     : null;
 
   if (resolved.oidc) {
-    const authBaseUrl = resolved.publicUrl || getOidcPublicUrl() || "";
-    console.log(`[startup] OIDC callback URL: ${authBaseUrl}/auth/callback`);
+    const callbackUrl = getOidcCallbackUrl(resolved.publicUrl || getOidcPublicUrl() || undefined);
+    console.log(`[startup] OIDC callback URL: ${callbackUrl}`);
     console.log(`[startup] OIDC baseUrl used: ${getOidcPublicUrl()}`);
     console.log(`[startup] OIDC issuer: ${resolved.oidc.issuer}`);
     console.log(`[startup] OIDC clientId: ${resolved.oidc.clientId}`);
