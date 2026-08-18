@@ -16,6 +16,7 @@
   "dependencies": {
     "@contextio/core": "workspace:*",
     "@contextio/logger": "workspace:*",
+    "@contextio/redact": "workspace:*",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-alert-dialog": "^1.1.18",
     "@radix-ui/react-dialog": "^1.1.18",

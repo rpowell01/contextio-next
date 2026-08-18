@@ -42,6 +42,7 @@
   "dependencies": {
     "@contextio/core": "workspace:*",
     "@contextio/logger": "workspace:*",
+    "@contextio/redact": "workspace:*",
     "mime-types": "^2.1.35"
   },
   "devDependencies": {
