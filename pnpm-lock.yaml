@@ -126,6 +126,9 @@ importers:
       '@contextio/logger':
         specifier: workspace:*
         version: link:../logger
+      '@contextio/redact':
+        specifier: workspace:*
+        version: link:../redact
       mime-types:
         specifier: ^2.1.35
         version: 2.1.35
@@ -182,6 +185,9 @@ importers:
       '@contextio/logger':
         specifier: workspace:*
         version: link:../logger
+      '@contextio/redact':
+        specifier: workspace:*
+        version: link:../redact
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.55.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
