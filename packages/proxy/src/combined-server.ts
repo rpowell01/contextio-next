@@ -314,7 +314,7 @@ export function createCombinedProxy(
 // Combined handler: routes based on path
   const combinedHandler: http.RequestListener = async (req, res) => {
     const url = req.url || "";
-    const parsedUrl = new URL(url, `http://${req.headers.host}`);
+    const parsedUrl = new URL(url, getOidcPublicUrl());
     const path = parsedUrl.pathname;
 
     // Serve Next.js static assets directly (faster, bypasses Next.js handler)
