@@ -108,7 +108,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Loader2, Trash2, Edit2, Plus, Database, Shield, Gauge, Palette, Server, EyeOff } from "lucide-react";
+import { AlertCircle, Loader2, Trash2, Edit2, Plus, Database, Shield, Gauge, Palette, Server, EyeOff } from "lucide-react";
 
 // NOTE: /api/settings (GET and POST) has no authentication. Any client that can reach
 // the web server can read or overwrite settings. Treat the settings file as sensitive
@@ -912,21 +912,25 @@ export default function SettingsPage() {
             </p>
             <FalsePositiveManager
               onEntryAdded={(entry) => {
-                setSettings((prev) => ({ ...prev, redactDisabledRules: [...prev.redactDisabledRules, entry.ruleId] }));
-                setMetadata((prev) => ({ ...prev, [entry.ruleId]: { source: "settings-file", envVar: null, dynamic: true } }));
+                setSettings((prev: Omit<Settings, "theme">) => ({ ...prev, redactDisabledRules: [...prev.redactDisabledRules, entry.ruleId] }));
+                setMetadata((prev: Record<keyof Settings, SettingMeta> | null) => {
+                  const meta = { ...prev };
+                  meta[(entry.ruleId as keyof Settings)] = { source: "settings-file", envVar: null, dynamic: true };
+                  return meta as Record<keyof Settings, SettingMeta>;
+                });
               }}
               onEntryRemoved={(entry) => {
-                setSettings((prev) => {
-                  const rules = prev.redactDisabledRules.filter((r) => r !== entry.ruleId);
+                setSettings((prev: Omit<Settings, "theme">) => {
+                  const rules = prev.redactDisabledRules.filter((r: string) => r !== entry.ruleId);
                   return { ...prev, redactDisabledRules: rules };
                 });
-                setMetadata((prev) => {
+                setMetadata((prev: Record<keyof Settings, SettingMeta> | null) => {
                   const meta = { ...prev };
-                  delete meta[entry.ruleId];
-                  return meta;
+                  delete meta[(entry.ruleId as keyof Settings)];
+                  return meta as Record<keyof Settings, SettingMeta>;
                 });
               }}
-              onCleared={(cleared) => {
+              onCleared={(_cleared) => {
                 // Optionally show a message
               }}
             />
