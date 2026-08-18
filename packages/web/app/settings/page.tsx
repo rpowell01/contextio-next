@@ -377,6 +377,9 @@ function DisabledRulesList({
 }) {
   const disabledSet = new Set(disabledRules);
 
+  // Custom policy takes precedence - disabled rules are managed in the policy file
+  const isCustomPolicyMode = hasCustomPolicy && Boolean(preset === "strict");
+
   // Build a mapping of rule name to human-readable description
   const ruleDescriptions: Record<string, string> = {
     // Secrets rules
@@ -434,7 +437,7 @@ function DisabledRulesList({
   const activePresets: PresetName[] = preset === "strict" ? ["secrets", "pii", "strict"] : preset === "pii" ? ["secrets", "pii"] : ["secrets"];
 
   const handleToggle = (ruleName: string) => {
-    if (disabled) return;
+    if (disabled || isCustomPolicyMode) return;
     const newDisabled = disabledSet.has(ruleName)
       ? disabledRules.filter((r) => r !== ruleName)
       : [...disabledRules, ruleName];
@@ -443,6 +446,13 @@ function DisabledRulesList({
 
   return (
     <div className="space-y-4">
+      {isCustomPolicyMode && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <strong>Custom policy file active:</strong> Disabled rules are managed in your custom policy file.
+          Edit the policy file directly to enable/disable specific rules. The checkboxes below are disabled
+          because they only apply to built-in presets.
+        </div>
+      )}
       {categories
         .filter((cat) => activePresets.includes(cat.preset))
         .map((category) => (
@@ -454,6 +464,7 @@ function DisabledRulesList({
               {category.rules.map((ruleName) => {
                 const description = ruleDescriptions[ruleName] ?? ruleName;
                 const isDisabled = disabledSet.has(ruleName);
+                const isCheckboxDisabled = disabled || isCustomPolicyMode;
                 return (
                   <label
                     key={ruleName}
@@ -461,14 +472,14 @@ function DisabledRulesList({
                       isDisabled
                         ? "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50"
                         : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 hover:border-primary/50"
-                    } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                    } ${isCheckboxDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                     title={description}
                   >
                     <input
                       type="checkbox"
                       checked={!isDisabled}
                       onChange={() => handleToggle(ruleName)}
-                      disabled={disabled}
+                      disabled={isCheckboxDisabled}
                       className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                     />
                     <span className="text-sm font-mono text-primary/80">{ruleName}</span>
@@ -479,14 +490,7 @@ function DisabledRulesList({
             </div>
           </div>
         ))}
-      {hasCustomPolicy && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          <strong>Custom policy file active:</strong> This list shows built-in preset rules. If you use a custom
-          policy file, disabled rules here only affect built-in presets. Custom rules in your policy file
-          must be disabled by editing the policy file directly.
-        </div>
-      )}
-      {disabled && (
+      {disabled && !isCustomPolicyMode && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           This setting is controlled by the <code>CONTEXTIO_REDACT_DISABLED_RULES</code> environment variable
           and cannot be changed here.
@@ -627,6 +631,10 @@ export default function SettingsPage() {
     keyof Settings,
     SettingMeta
   > | null>(null);
+  const [saveMessage, setSaveMessage] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const [cleanupMessage, setCleanupMessage] = useState<{
     type: "success" | "error";
     message: string;
@@ -1197,7 +1205,7 @@ export default function SettingsPage() {
       };
       const result = await apiClient.saveSettings(mergedSettings);
       if (result.success) {
-        setCleanupMessage({
+        setSaveMessage({
           type: "success",
           message: "Settings saved successfully",
         });
@@ -1205,23 +1213,21 @@ export default function SettingsPage() {
           setMetadata(result.metadata as Record<keyof Settings, SettingMeta>);
         }
       } else {
-        setCleanupMessage({
+        setSaveMessage({
           type: "error",
           message: "Failed to save settings",
         });
       }
     } catch (error) {
-      setCleanupMessage({
+      setSaveMessage({
         type: "error",
         message:
           error instanceof Error ? error.message : "Failed to save settings",
       });
     }
-    if (messageTimeoutRef.current) {
-      clearTimeout(messageTimeoutRef.current);
-    }
-    messageTimeoutRef.current = setTimeout(() => setCleanupMessage(null), 3000);
   };
+
+  const dismissSaveMessage = () => setSaveMessage(null);
 
   const getMeta = (key: keyof Settings): SettingMeta | undefined => {
     return metadata?.[key];
@@ -2720,15 +2726,24 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        {cleanupMessage && (
+        {(cleanupMessage || saveMessage) && (
           <div
-            className={`rounded-lg border p-4 ${
-              cleanupMessage.type === "success"
+            className={`rounded-lg border p-4 flex items-center justify-between gap-4 ${
+              (saveMessage ?? cleanupMessage)?.type === "success"
                 ? "border-green-200 bg-green-50 text-green-800"
                 : "border-red-200 bg-red-50 text-red-800"
             }`}
           >
-            {cleanupMessage.message}
+            <span>{(saveMessage ?? cleanupMessage)?.message}</span>
+            {saveMessage && (
+              <button
+                onClick={dismissSaveMessage}
+                className="flex-shrink-0 text-sm font-medium hover:underline"
+                aria-label="Dismiss"
+              >
+                Dismiss
+              </button>
+            )}
           </div>
         )}
 
