@@ -130,6 +130,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Store originals so redacted values can be restored in responses. Applied dynamically per request.",
   redactPolicyFile:
     "Path to a custom redaction policy YAML file. When set, it overrides the preset dropdown and is applied per request.",
+  redactPolicyEnabled:
+    "Enable or disable the custom policy file. When disabled, the preset dropdown is used instead even if a policy file path is configured. Changes apply dynamically per request.",
   redactPathsOnly:
     "JSON paths where redaction should be applied (e.g., ['messages[*].content']). Only values at these paths will be checked for redaction. Changes apply dynamically per request.",
   redactPathsSkip:
@@ -378,7 +380,8 @@ function DisabledRulesList({
   const disabledSet = new Set(disabledRules);
 
   // Custom policy takes precedence - disabled rules are managed in the policy file
-  const isCustomPolicyMode = hasCustomPolicy && Boolean(preset === "strict");
+  // Only applies when a policy file is configured AND policy file usage is enabled
+  const isCustomPolicyMode = hasCustomPolicy;
 
   // Build a mapping of rule name to human-readable description
   const ruleDescriptions: Record<string, string> = {
@@ -521,6 +524,7 @@ export default function SettingsPage() {
     redactPreset: "pii",
     redactReversible: false,
     redactPolicyFile: "",
+    redactPolicyEnabled: true,
     redactPathsOnly: ["messages[*].content"],
     redactPathsSkip: [
       "tools",
@@ -775,6 +779,7 @@ export default function SettingsPage() {
               {renderSetting("redactPreset")}
               {renderSetting("redactReversible")}
               {renderSetting("redactPolicyFile")}
+              {renderSetting("redactPolicyEnabled")}
 
               {/* Path filtering settings */}
               <div className="pt-2 border-t">
@@ -802,7 +807,7 @@ export default function SettingsPage() {
                   onChange={(rules) => updateSetting("redactDisabledRules", rules)}
                   disabled={isSettingOverridden("redactDisabledRules")}
                   preset={settings.redactPreset}
-                  hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim())}
+                  hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
                 />
               </div>
 
@@ -811,7 +816,7 @@ export default function SettingsPage() {
                 detectorMode={settings.detectorMode}
                 detectorModelName={settings.detectorModelName}
                 detectorThreshold={settings.detectorThreshold}
-                hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim())}
+                hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
               />
 
               <div className="pt-2 border-t">

@@ -26,6 +26,7 @@ export interface Settings {
   redactPreset: "secrets" | "pii" | "strict";
   redactReversible: boolean;
   redactPolicyFile: string;
+  redactPolicyEnabled: boolean;
   redactPathsOnly: string[];
   redactPathsSkip: string[];
   /** List of redaction rule names to disable (e.g., ["url", "organization", "person"]) */
@@ -114,6 +115,7 @@ export const SETTING_ENV_MAP: Record<
   redactPreset: { envVar: "REDACT_PRESET", dynamic: true },
   redactReversible: { envVar: "REDACT_REVERSIBLE", dynamic: true },
   redactPolicyFile: { envVar: "REDACT_POLICY_FILE", dynamic: true },
+  redactPolicyEnabled: { envVar: "REDACT_POLICY_ENABLED", dynamic: true },
   redactPathsOnly: { envVar: "REDACT_PATHS_ONLY", dynamic: true },
   redactPathsSkip: { envVar: "REDACT_PATHS_SKIP", dynamic: true },
   /** List of redaction rule names to disable (e.g., ["url", "organization", "person"]) */
@@ -564,6 +566,7 @@ export const DEFAULT_SETTINGS: Settings = {
   redactPreset: "pii",
   redactReversible: false,
   redactPolicyFile: "",
+  redactPolicyEnabled: true,
   redactPathsOnly: ["messages[*].content"],
   redactPathsSkip: [
     "tools",
@@ -719,6 +722,7 @@ export function validateSettings(input: unknown): Settings {
     redactPreset: validateEnum("redactPreset", ["secrets", "pii", "strict"]) as "secrets" | "pii" | "strict",
     redactReversible: validateBoolean("redactReversible"),
     redactPolicyFile: validateString("redactPolicyFile", 0),
+    redactPolicyEnabled: validateBoolean("redactPolicyEnabled"),
     redactPathsOnly: (() => {
       const v = obj.redactPathsOnly;
       if (Array.isArray(v) && v.every(item => typeof item === "string")) {
@@ -903,6 +907,10 @@ export function validateSettingsLenient(input: unknown): Settings {
     typeof obj.redactPolicyFile === "string"
     ? obj.redactPolicyFile
     : DEFAULT_SETTINGS.redactPolicyFile,
+  redactPolicyEnabled:
+    typeof obj.redactPolicyEnabled === "boolean"
+    ? obj.redactPolicyEnabled
+    : DEFAULT_SETTINGS.redactPolicyEnabled,
   redactPathsOnly:
     Array.isArray(obj.redactPathsOnly) && obj.redactPathsOnly.every((item: unknown) => typeof item === "string")
       ? (obj.redactPathsOnly as string[])

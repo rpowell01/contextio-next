@@ -25,6 +25,7 @@ interface WebUISettings {
 	redactPreset?: string;
 	redactReversible?: boolean;
 	redactPolicyFile?: string;
+	redactPolicyEnabled?: boolean;
 	redactPathsOnly?: string[];
 	redactPathsSkip?: string[];
 	redactDisabledRules?: string[];
@@ -43,6 +44,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 				redactPreset: dbSettings.redactPreset,
 				redactReversible: dbSettings.redactReversible,
 				redactPolicyFile: dbSettings.redactPolicyFile,
+				redactPolicyEnabled: dbSettings.redactPolicyEnabled,
 				redactPathsOnly: dbSettings.redactPathsOnly,
 				redactPathsSkip: dbSettings.redactPathsSkip,
 				redactDisabledRules: dbSettings.redactDisabledRules,
@@ -65,6 +67,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			redactPreset: parsed.redactPreset,
 			redactReversible: parsed.redactReversible,
 			redactPolicyFile: parsed.redactPolicyFile,
+			redactPolicyEnabled: parsed.redactPolicyEnabled,
 			redactPathsOnly: parsed.redactPathsOnly,
 			redactPathsSkip: parsed.redactPathsSkip,
 			redactDisabledRules: parsed.redactDisabledRules,
@@ -105,7 +108,8 @@ async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 const config: RedactPluginConfig = {
 		preset: (settings.redactPreset || process.env.REDACT_PRESET || "pii") as "secrets" | "pii" | "strict",
 		reversible: settings.redactReversible ?? process.env.REDACT_REVERSIBLE === "true",
-		policyFile: settings.redactPolicyFile || process.env.REDACT_POLICY_FILE,
+		// Only use policy file if explicitly enabled (default true for backward compatibility)
+		policyFile: (settings.redactPolicyEnabled !== false) ? (settings.redactPolicyFile || process.env.REDACT_POLICY_FILE) : undefined,
 		detectorMode: settings.detectorMode || (process.env.REDACT_DETECTOR_MODE as "rules" | "llm" | "hybrid" | "auto") || "rules",
 		detectorConfig: Object.keys(detectorConfig).length > 0 ? detectorConfig : undefined,
 		verbose: process.env.REDACT_VERBOSE === "true",

@@ -29,6 +29,7 @@ export interface SettingsRow {
 	redact_preset: string;
 	redact_reversible: number;
 	redact_policy_file: string;
+	redact_policy_enabled: number;
 	encryption_at_rest: number;
 	capture_cleanup_enabled: number;
 	capture_cleanup_interval_hours: number;
@@ -88,6 +89,7 @@ export interface Settings {
 	redactPreset: "secrets" | "pii" | "strict";
 	redactReversible: boolean;
 	redactPolicyFile: string;
+	redactPolicyEnabled: boolean;
 	redactPathsOnly: string[]; // JSON array of path strings for "only" filtering
 	redactPathsSkip: string[]; // JSON array of path strings for "skip" filtering
 	/** List of redaction rule names to disable (e.g., ["url", "organization", "person"]) */
@@ -209,6 +211,7 @@ const DEFAULT_SETTINGS: Settings = {
 	redactPreset: "pii",
 	redactReversible: false,
 	redactPolicyFile: "",
+	redactPolicyEnabled: true,
 	redactPathsOnly: ["messages[*].content"],
 	redactPathsSkip: [
 		"tools",
@@ -318,6 +321,7 @@ function rowToSettings(row: SettingsRow): Settings {
 		redactPreset: row.redact_preset as Settings["redactPreset"],
 		redactReversible: row.redact_reversible === 1,
 		redactPolicyFile: row.redact_policy_file,
+		redactPolicyEnabled: row.redact_policy_enabled === 1,
 		redactPathsOnly: safeJsonParse<string[]>(row.redact_paths_only, DEFAULT_SETTINGS.redactPathsOnly),
 		redactPathsSkip: safeJsonParse<string[]>(row.redact_paths_skip, DEFAULT_SETTINGS.redactPathsSkip),
 		redactDisabledRules: safeJsonParse<string[]>(row.redact_disabled_rules, DEFAULT_SETTINGS.redactDisabledRules),
@@ -380,6 +384,7 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		redact_preset: merged.redactPreset,
 		redact_reversible: merged.redactReversible ? 1 : 0,
 		redact_policy_file: merged.redactPolicyFile,
+		redact_policy_enabled: merged.redactPolicyEnabled ? 1 : 0,
 		redact_paths_only: JSON.stringify(merged.redactPathsOnly),
 		redact_paths_skip: JSON.stringify(merged.redactPathsSkip),
 		encryption_at_rest: merged.encryptionAtRest ? 1 : 0,
@@ -626,6 +631,7 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		redactPreset: { envVar: "REDACT_PRESET", dynamic: true },
 		redactReversible: { envVar: "REDACT_REVERSIBLE", dynamic: true },
 		redactPolicyFile: { envVar: "REDACT_POLICY_FILE", dynamic: true },
+		redactPolicyEnabled: { envVar: "REDACT_POLICY_ENABLED", dynamic: true },
 		redactPathsOnly: { envVar: "REDACT_PATHS_ONLY", dynamic: true },
 		redactPathsSkip: { envVar: "REDACT_PATHS_SKIP", dynamic: true },
 		redactDisabledRules: { envVar: "REDACT_DISABLED_RULES", dynamic: true },
@@ -852,6 +858,7 @@ function validateAndMergeSettings(input: unknown): Settings {
 		redactPreset: getEnum("redactPreset", ["secrets", "pii", "strict"], DEFAULT_SETTINGS.redactPreset),
 		redactReversible: getBoolean("redactReversible", DEFAULT_SETTINGS.redactReversible),
 		redactPolicyFile: getString("redactPolicyFile", DEFAULT_SETTINGS.redactPolicyFile),
+		redactPolicyEnabled: getBoolean("redactPolicyEnabled", DEFAULT_SETTINGS.redactPolicyEnabled),
 		redactPathsOnly: parseStringArray("redactPathsOnly", DEFAULT_SETTINGS.redactPathsOnly),
 		redactPathsSkip: parseStringArray("redactPathsSkip", DEFAULT_SETTINGS.redactPathsSkip),
 		redactDisabledRules: parseStringArray("redactDisabledRules", DEFAULT_SETTINGS.redactDisabledRules),
