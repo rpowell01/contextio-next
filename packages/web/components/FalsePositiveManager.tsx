@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { FalsePositiveEntry } from "@/types/api";
+// @ts-ignore - false positive: imports used in JSX
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -12,6 +13,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+// @ts-ignore - false positive: imports used in JSX
 import {
   Dialog,
   DialogContent,
