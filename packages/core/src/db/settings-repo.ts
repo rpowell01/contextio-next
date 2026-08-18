@@ -493,7 +493,7 @@ export function upsertSettings(settings: Settings): void {
 	const stmt = db.prepare(`
 		INSERT INTO settings (
 			id, log_dir, max_sessions, redact_preset, redact_reversible, redact_policy_file,
-			redact_paths_only, redact_paths_skip,
+			redact_policy_enabled, redact_paths_only, redact_paths_skip, redact_disabled_rules,
 			encryption_at_rest, capture_cleanup_enabled, capture_cleanup_interval_hours,
 			capture_cleanup_max_age_days, theme, oidc_enabled, oidc_public_url,
 			show_page_load_time, detector_mode, detector_model_name, detector_threshold,
@@ -506,7 +506,7 @@ export function upsertSettings(settings: Settings): void {
 			upstream_gemini_url, upstream_vertex_url, upstream_nvidia_url, upstream_kilo_url,
 			upstream_gemini_code_assist_url
 		) VALUES (
-			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 		ON CONFLICT(id) DO UPDATE SET
 			log_dir = excluded.log_dir,
@@ -514,8 +514,10 @@ export function upsertSettings(settings: Settings): void {
 			redact_preset = excluded.redact_preset,
 			redact_reversible = excluded.redact_reversible,
 			redact_policy_file = excluded.redact_policy_file,
+			redact_policy_enabled = excluded.redact_policy_enabled,
 			redact_paths_only = excluded.redact_paths_only,
 			redact_paths_skip = excluded.redact_paths_skip,
+			redact_disabled_rules = excluded.redact_disabled_rules,
 			encryption_at_rest = excluded.encryption_at_rest,
 			capture_cleanup_enabled = excluded.capture_cleanup_enabled,
 			capture_cleanup_interval_hours = excluded.capture_cleanup_interval_hours,
@@ -563,8 +565,10 @@ export function upsertSettings(settings: Settings): void {
 			row.redact_preset,
 			row.redact_reversible,
 			row.redact_policy_file,
+			row.redact_policy_enabled,
 			row.redact_paths_only,
 			row.redact_paths_skip,
+			row.redact_disabled_rules,
 			row.encryption_at_rest,
 			row.capture_cleanup_enabled,
 			row.capture_cleanup_interval_hours,

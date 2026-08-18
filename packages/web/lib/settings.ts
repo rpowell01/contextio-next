@@ -258,6 +258,12 @@ export function applyEnvOverrides(settings: Settings): {
     override.redactPolicyFile = raw;
     accepted = true;
     break;
+  case "redactPolicyEnabled":
+    if (raw === "true" || raw === "false") {
+      override.redactPolicyEnabled = raw === "true";
+      accepted = true;
+    }
+    break;
   case "redactPathsOnly":
     try {
       override.redactPathsOnly = JSON.parse(raw);
