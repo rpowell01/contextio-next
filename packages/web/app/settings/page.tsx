@@ -650,6 +650,7 @@ export default function SettingsPage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [cleanupMessage, setCleanupMessage] = useState<{
     type: "success" | "error";
     message: string;
@@ -1259,6 +1260,7 @@ export default function SettingsPage() {
           type: "success",
           message: "Settings saved successfully",
         });
+        setSaveDialogOpen(true);
         if (result.metadata) {
           setMetadata(result.metadata as Record<keyof Settings, SettingMeta>);
         }
@@ -1267,6 +1269,7 @@ export default function SettingsPage() {
           type: "error",
           message: "Failed to save settings",
         });
+        setSaveDialogOpen(true);
       }
     } catch (error) {
       setSaveMessage({
@@ -1274,10 +1277,24 @@ export default function SettingsPage() {
         message:
           error instanceof Error ? error.message : "Failed to save settings",
       });
+      setSaveDialogOpen(true);
     }
   };
 
-  const dismissSaveMessage = () => setSaveMessage(null);
+  const dismissSaveMessage = () => {
+    setSaveMessage(null);
+    setSaveDialogOpen(false);
+  };
+
+  // Auto-dismiss success dialog after 3 seconds
+  useEffect(() => {
+    if (saveDialogOpen && saveMessage?.type === "success") {
+      const timer = setTimeout(() => {
+        dismissSaveMessage();
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [saveDialogOpen, saveMessage]);
 
   const getMeta = (key: keyof Settings): SettingMeta | undefined => {
     return metadata?.[key];
@@ -2798,26 +2815,43 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        {(cleanupMessage || saveMessage) && (
+        {cleanupMessage && (
           <div
             className={`rounded-lg border p-4 flex items-center justify-between gap-4 ${
-              (saveMessage ?? cleanupMessage)?.type === "success"
+              cleanupMessage.type === "success"
                 ? "border-green-200 bg-green-50 text-green-800"
                 : "border-red-200 bg-red-50 text-red-800"
             }`}
           >
-            <span>{(saveMessage ?? cleanupMessage)?.message}</span>
-            {saveMessage && (
-              <button
-                onClick={dismissSaveMessage}
-                className="flex-shrink-0 text-sm font-medium hover:underline"
-                aria-label="Dismiss"
-              >
-                Dismiss
-              </button>
-            )}
+            <span>{cleanupMessage.message}</span>
           </div>
         )}
+
+        {/* Save Settings Dialog */}
+        <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {saveMessage?.type === "success" ? (
+                  <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+                {saveMessage?.type === "success" ? "Settings Saved" : "Save Failed"}
+              </DialogTitle>
+              <DialogDescription>{saveMessage?.message}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={dismissSaveMessage} variant={saveMessage?.type === "success" ? "default" : "outline"}>
+                {saveMessage?.type === "success" ? "OK" : "Dismiss"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Tab Navigation */}
         <div className="rounded-lg border">
