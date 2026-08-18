@@ -118,7 +118,9 @@ export function FalsePositiveManager({
     }
   };
 
-  useEffect(loadFalsePositives, []);
+  useEffect(() => {
+    loadFalsePositives();
+  }, []);
 
   // Reload when pagination changes externally
   useEffect(
