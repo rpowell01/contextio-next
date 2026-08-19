@@ -181,11 +181,6 @@ export function FalsePositiveManager({
     }
   }, [initialData]);
 
-  // Close dialog and notify parent
-  const handleClose = useCallback(() => {
-    setIsDialogOpen(false);
-    if (onClose) onClose();
-  }, [onClose]);
   const [deleteTarget, setDeleteTarget] = useState<{
     value: string;
     ruleId: string;
