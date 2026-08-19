@@ -211,7 +211,7 @@ export function validateCaptureTimestamp(timestamp: unknown): string | null {
  * Concurrent requests see isolated caches — no cross-request exposure.
  *
  * @param filepath - Path to the capture file
- * @param keyMaterial - Optional encryption key material. If not provided, attempts to read from CONTEXTIO_LOGGER_ENCRYPTION_KEY env var.
+ * @param keyMaterial - Optional encryption key material. If not provided, attempts to read from CONTEXTIO_ENCRYPTION_KEY env var.
  * @returns Parsed capture data
  * @throws {Error} If called outside a `withRequestCache()` boundary (cached access requires isolated per-request state).
  * @throws {CaptureReadError} `kind: "notFound"` when the capture file does not exist or cannot be opened.
@@ -223,7 +223,7 @@ export async function readCaptureFile(
   keyMaterial?: string,
 ): Promise<Record<string, unknown>> {
   const resolvedKey =
-    keyMaterial ?? process.env.CONTEXTIO_LOGGER_ENCRYPTION_KEY ?? "";
+    keyMaterial ?? process.env.CONTEXTIO_ENCRYPTION_KEY ?? "";
   const cacheKey = `${filepath}@${resolvedKey}`;
 
   const { requestCacheStore } = await import("@/lib/request-cache");
