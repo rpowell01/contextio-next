@@ -574,7 +574,7 @@ if (isPre && matches.length > 0) {
           const escapedValues = preValues.map(v => v.replace(/[.*+?^${}()|\[\]\\]/g, '\\$&'));
           combinedPattern = new RegExp(`(?:${escapedValues.join('|')})`, 'g');
         } catch (e) {
-          console.debug("Failed to construct combined regex for preValues, falling back to PII patterns:", e);
+          console.warn("Failed to construct combined regex for preValues, falling back to PII patterns:", e);
         }
 
         if (combinedPattern) {
@@ -628,6 +628,9 @@ if (isPre && matches.length > 0) {
             }
 
             return <code className="font-mono text-xs">{result}</code>;
+          } else {
+            // No matches found with exact pre-values - fall through to PII patterns
+            console.debug("No exact pre-value matches found in pre-content, falling back to PII patterns");
           }
         }
       }
@@ -675,8 +678,10 @@ if (isPre && matches.length > 0) {
                           // Use the captured matchIdx for correct path lookup
                           const correspondingMatch = matches[matchIdx];
                           const path = correspondingMatch?.path ?? "";
+                          // Use the original pre-value (actual content) instead of the placeholder
+                          const value = correspondingMatch?.preValue ?? placeholder.replace(/[\[\]]/g, "");
                           onAddFalsePositive({
-                            value: placeholder.replace(/[\[\]]/g, ""),
+                            value,
                             ruleId: ruleInfo.ruleId,
                             label: ruleInfo.label,
                             path,
