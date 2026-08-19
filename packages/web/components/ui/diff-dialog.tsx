@@ -648,6 +648,71 @@ export function DiffDialog({
       }
     }
 
+      // For post-redaction, highlight the [RULE_REDACTED] and [RULE_N] placeholders first
+      // Use matches array to add data-match-index for scroll alignment
+      // This must be checked before the PII pattern fallback so click handlers fire on placeholders
+      if (!isPre) {
+        const partsPost = safeValue.split(placeholderPattern);
+        const placeholderMatches = safeValue.match(placeholderPattern);
+
+        if (placeholderMatches && placeholderMatches.length > 0) {
+          // Track occurrence index for each placeholder type for data-match-index
+          // This ensures 1st occurrence gets index 0, 2nd gets 1, etc. even for same placeholder
+          const placeholderOccurrenceCount = new Map<string, number>();
+
+          // Normalize placeholder for data-redaction attribute:
+          // [API_KEY_REDACTED] -> api-key-redacted
+          // [PIPELINE_1] -> pipeline-redacted (normalize sequence number)
+          function normalizePlaceholderForDataAttr(placeholder: string): string {
+            let normalized = placeholder.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-");
+            // Normalize pipeline format: pipeline-1 -> pipeline-redacted
+            normalized = normalized.replace(/-\d+$/, "-redacted");
+            return normalized;
+          }
+
+          return (
+            <code className="font-mono text-xs">
+              {partsPost.map((part, i) => (
+                <span key={i}>
+                  {part}
+                  {i < placeholderMatches.length && (
+                    <mark
+                      key={`placeholder-${i}-${placeholderMatches[i]}`}
+                      className="redaction-placeholder cursor-pointer hover:bg-primary/10"
+                      data-redaction={normalizePlaceholderForDataAttr(placeholderMatches[i])}
+                      data-match-index={(() => {
+                        const count = placeholderOccurrenceCount.get(placeholderMatches[i]) || 0;
+                        placeholderOccurrenceCount.set(placeholderMatches[i], count + 1);
+                        return count;
+                      })()}
+                      onClick={() => {
+                        if (onAddFalsePositive) {
+                          const ruleInfo = extractRuleInfo(placeholderMatches[i]);
+                          // Find the corresponding match from the matches array to get path
+                          // The count was already incremented in data-match-index, so subtract 1
+                          const matchIdx = (placeholderOccurrenceCount.get(placeholderMatches[i]) || 1) - 1;
+                          const correspondingMatch = matches[matchIdx];
+                          const path = correspondingMatch?.path ?? "";
+                          onAddFalsePositive({
+                            value: placeholderMatches[i].replace(/[\[\]]/g, ""), // Show the placeholder as the value
+                            ruleId: ruleInfo.ruleId,
+                            label: ruleInfo.label,
+                            path: path,
+                          });
+                        }
+                      }}
+                      title="Click to add as false positive"
+                    >
+                      {placeholderMatches[i]}
+                    </mark>
+                  )}
+                </span>
+              ))}
+            </code>
+          );
+        }
+      }
+
       // Fallback to generic PII patterns if no matches provided or no exact matches found
       // Includes patterns for both rule-based redaction and Presidio detector entity types
       const piiPatterns = [
@@ -753,70 +818,6 @@ export function DiffDialog({
 
       return <code className="font-mono text-xs">{parts}</code>;
     }
-
-    // For post-redaction, highlight the [RULE_REDACTED] and [RULE_N] placeholders
-    // Use matches array to add data-match-index for scroll alignment
-    const partsPost = safeValue.split(placeholderPattern);
-    const placeholderMatches = safeValue.match(placeholderPattern);
-
-    if (!placeholderMatches || placeholderMatches.length === 0) {
-      return <code className="font-mono text-xs">{value}</code>;
-    }
-
-    // Track occurrence index for each placeholder type for data-match-index
-    // This ensures 1st occurrence gets index 0, 2nd gets 1, etc. even for same placeholder
-    const placeholderOccurrenceCount = new Map<string, number>();
-
-    // Normalize placeholder for data-redaction attribute:
-    // [API_KEY_REDACTED] -> api-key-redacted
-    // [PIPELINE_1] -> pipeline-redacted (normalize sequence number)
-    function normalizePlaceholderForDataAttr(placeholder: string): string {
-      let normalized = placeholder.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-");
-      // Normalize pipeline format: pipeline-1 -> pipeline-redacted
-      normalized = normalized.replace(/-\d+$/, "-redacted");
-      return normalized;
-    }
-
-    return (
-      <code className="font-mono text-xs">
-        {partsPost.map((part, i) => (
-          <span key={i}>
-            {part}
-            {i < placeholderMatches.length && (
-              <mark
-                key={`placeholder-${i}-${placeholderMatches[i]}`}
-                className="redaction-placeholder cursor-pointer hover:bg-primary/10"
-                data-redaction={normalizePlaceholderForDataAttr(placeholderMatches[i])}
-                data-match-index={(() => {
-                  const count = placeholderOccurrenceCount.get(placeholderMatches[i]) || 0;
-                  placeholderOccurrenceCount.set(placeholderMatches[i], count + 1);
-                  return count;
-                })()}
-                onClick={() => {
-                  if (onAddFalsePositive) {
-                    const ruleInfo = extractRuleInfo(placeholderMatches[i]);
-                    // Find the corresponding match from the matches array to get path
-                    // The count was already incremented in data-match-index, so subtract 1
-                    const matchIdx = (placeholderOccurrenceCount.get(placeholderMatches[i]) || 1) - 1;
-                    const correspondingMatch = matches[matchIdx];
-                    const path = correspondingMatch?.path ?? "";
-                    onAddFalsePositive({
-                      value: placeholderMatches[i].replace(/[\[\]]/g, ""), // Show the placeholder as the value
-                      ruleId: ruleInfo.ruleId,
-                      label: ruleInfo.label,
-                      path: path,
-                    });
-                  }
-                }}
-                title="Click to add as false positive"
-              >
-                {placeholderMatches[i]}
-              </mark>
-            )}
-          </span>
-        ))}
-      </code>
-    );
   }, []);
 
   // Render a single diff line with redaction highlighting and data attributes for navigation
