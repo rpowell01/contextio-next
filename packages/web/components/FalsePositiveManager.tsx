@@ -156,7 +156,6 @@ export function FalsePositiveManager({
     customPath: "",
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
