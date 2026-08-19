@@ -561,79 +561,68 @@ export function DiffDialog({
     };
 
 if (isPre && matches.length > 0) {
-      // Left pane: highlight exact pre-values from matches
-      const preValues = matches
-        .map(m => m.preValue)
-        .filter((v): v is string => typeof v === "string" && v.length > 0)
-        .slice(0, 20)
-        .map(v => v.slice(0, 500));
+      // Left pane: highlight pre-values using match indices from the right pane's placeholder positions.
+      // We use the matches array directly since it contains both preValue and postValue for each redaction.
+      // Iterate through matches in order and find each preValue in the left content sequentially.
+      
+      const result: (string | React.ReactElement)[] = [];
+      let lastIndex = 0;
 
-      if (preValues.length > 0) {
-        let combinedPattern: RegExp | null = null;
-        try {
-          const escapedValues = preValues.map(v => v.replace(/[.*+?^${}()|\[\]\\]/g, '\\$&'));
-          combinedPattern = new RegExp(`(?:${escapedValues.join('|')})`, 'g');
-        } catch (e) {
-          console.warn("Failed to construct combined regex for preValues, falling back to PII patterns:", e);
+      for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
+        const correspondingMatch = matches[matchIdx];
+        const preValue = correspondingMatch?.preValue ?? "";
+        const postValue = correspondingMatch?.postValue ?? "";
+        
+        if (!preValue || preValue.length === 0) continue;
+
+        // Find this preValue in the left pane content starting from lastIndex
+        const matchIndex = safeValue.indexOf(preValue, lastIndex);
+        if (matchIndex === -1) {
+          // PreValue not found in this fragment (may be truncated or in different diff chunk)
+          // Skip to next match
+          continue;
         }
 
-        if (combinedPattern) {
-          const patternMatches = safeValue.match(combinedPattern) || [];
-          if (patternMatches.length > 0) {
-            const result: (string | React.ReactElement)[] = [];
-            let lastIndex = 0;
+        if (matchIndex > lastIndex) {
+          result.push(safeValue.slice(lastIndex, matchIndex));
+        }
 
-            for (let i = 0; i < patternMatches.length; i++) {
-              const match = patternMatches[i];
-              const matchIndex = safeValue.indexOf(match, lastIndex);
-              if (matchIndex === -1) continue;
+        const ruleInfo = extractRuleInfo(postValue);
+        const ruleId = correspondingMatch?.ruleId ?? ruleInfo.ruleId;
+        const path = correspondingMatch?.path ?? "";
+        const normalizedPostValue = postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted");
 
-              if (matchIndex > lastIndex) {
-                result.push(safeValue.slice(lastIndex, matchIndex));
-              }
-
-              // Use index i to find corresponding match, with fallback to preValue lookup
-              // This handles cases where preValue was truncated (500 char limit) and doesn't match exactly
-              const correspondingMatch = matches[i] ?? matches.find(m => m.preValue === match);
-              const postValue = correspondingMatch?.postValue ?? "";
-              const ruleInfo = extractRuleInfo(postValue);
-              const ruleId = correspondingMatch?.ruleId ?? ruleInfo.ruleId;
-              const path = correspondingMatch?.path ?? "";
-              const normalizedPostValue = postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted");
-
-              const handleClick = () => {
-                if (onAddFalsePositive) {
-                  onAddFalsePositive({ value: match, ruleId, label: ruleInfo.label, path });
-                }
-              };
-
-              result.push(
-                <mark
-                  key={`exact-${i}-${matchIndex}`}
-                  className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
-                  data-redaction={normalizedPostValue}
-                  data-match-index={i}
-                  onClick={handleClick}
-                  title="Click to add as false positive"
-                >
-                  {match}
-                </mark>
-              );
-
-              lastIndex = matchIndex + match.length;
-            }
-
-            if (lastIndex < safeValue.length) {
-              result.push(safeValue.slice(lastIndex));
-            }
-
-            return <code className="font-mono text-xs">{result}</code>;
-          } else {
-            // No matches found with exact pre-values - fall through to PII patterns
-            console.debug("No exact pre-value matches found in pre-content, falling back to PII patterns");
+        const handleClick = () => {
+          if (onAddFalsePositive) {
+            onAddFalsePositive({ value: preValue, ruleId, label: ruleInfo.label, path });
           }
-        }
+        };
+
+        result.push(
+          <mark
+            key={`exact-${matchIdx}-${matchIndex}`}
+            className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
+            data-redaction={normalizedPostValue}
+            data-match-index={matchIdx}
+            onClick={handleClick}
+            title="Click to add as false positive"
+          >
+            {preValue}
+          </mark>
+        );
+
+        lastIndex = matchIndex + preValue.length;
       }
+
+      if (lastIndex < safeValue.length) {
+        result.push(safeValue.slice(lastIndex));
+      }
+
+      // Only return highlighted content if we found at least one match
+      if (result.some(r => typeof r === 'object')) {
+        return <code className="font-mono text-xs">{result}</code>;
+      }
+      // Fall through to PII patterns if no exact matches found
     }
 
     // Right pane (post-redaction, isPre=false): render [RULE_REDACTED] placeholder tokens
