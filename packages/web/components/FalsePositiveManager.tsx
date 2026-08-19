@@ -451,10 +451,10 @@ export function FalsePositiveManager({
       ) : falsePositives.length === 0 ? (
         <div className="p-4 text-center text-muted-foreground">
           No false positives recorded yet.<br />
-          <Button
-            variant="outline"
-            onClick={() => setShowCreateDialog(true)}
-          >
+<Button
+          variant="outline"
+          onClick={() => setIsDialogOpen(true)}
+        >
             <Plus className="mr-2 h-4 w-4" />
             Add your first false positive
           </Button>
