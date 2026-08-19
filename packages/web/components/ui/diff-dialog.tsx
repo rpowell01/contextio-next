@@ -592,7 +592,9 @@ if (isPre && matches.length > 0) {
                 result.push(safeValue.slice(lastIndex, matchIndex));
               }
 
-              const correspondingMatch = matches.find(m => m.preValue === match);
+              // Use index i to find corresponding match, with fallback to preValue lookup
+              // This handles cases where preValue was truncated (500 char limit) and doesn't match exactly
+              const correspondingMatch = matches[i] ?? matches.find(m => m.preValue === match);
               const postValue = correspondingMatch?.postValue ?? "";
               const ruleInfo = extractRuleInfo(postValue);
               const ruleId = correspondingMatch?.ruleId ?? ruleInfo.ruleId;
@@ -653,35 +655,40 @@ if (isPre && matches.length > 0) {
             {partsPost.map((part, i) => (
               <span key={i}>
                 {part}
-                {i < placeholderMatches.length && (
-                  <mark
-                    key={`ph-${i}-${placeholderMatches[i]}`}
-                    className="redaction-placeholder cursor-pointer hover:bg-primary/10"
-                    data-redaction={normalizePlaceholderForDataAttr(placeholderMatches[i])}
-                    data-match-index={(() => {
-                      const count = placeholderOccurrenceCount.get(placeholderMatches[i]) || 0;
-                      placeholderOccurrenceCount.set(placeholderMatches[i], count + 1);
-                      return count;
-                    })()}
-                    onClick={() => {
-                      if (onAddFalsePositive) {
-                        const ruleInfo = extractRuleInfo(placeholderMatches[i]);
-                        const matchIdx = (placeholderOccurrenceCount.get(placeholderMatches[i]) || 1) - 1;
-                        const correspondingMatch = matches[matchIdx];
-                        const path = correspondingMatch?.path ?? "";
-                        onAddFalsePositive({
-                          value: placeholderMatches[i].replace(/[\[\]]/g, ""),
-                          ruleId: ruleInfo.ruleId,
-                          label: ruleInfo.label,
-                          path,
-                        });
-                      }
-                    }}
-                    title="Click to add as false positive"
-                  >
-                    {placeholderMatches[i]}
-                  </mark>
-                )}
+                {i < placeholderMatches.length && (() => {
+                  const placeholder = placeholderMatches[i];
+                  const normalizedPlaceholder = normalizePlaceholderForDataAttr(placeholder);
+                  // Compute occurrence index for this placeholder type (0, 1, 2...)
+                  const occurrenceCount = placeholderOccurrenceCount.get(placeholder) || 0;
+                  placeholderOccurrenceCount.set(placeholder, occurrenceCount + 1);
+                  const matchIdx = occurrenceCount;
+
+                  return (
+                    <mark
+                      key={`ph-${i}-${placeholder}`}
+                      className="redaction-placeholder cursor-pointer hover:bg-primary/10"
+                      data-redaction={normalizedPlaceholder}
+                      data-match-index={matchIdx}
+                      onClick={() => {
+                        if (onAddFalsePositive) {
+                          const ruleInfo = extractRuleInfo(placeholder);
+                          // Use the captured matchIdx for correct path lookup
+                          const correspondingMatch = matches[matchIdx];
+                          const path = correspondingMatch?.path ?? "";
+                          onAddFalsePositive({
+                            value: placeholder.replace(/[\[\]]/g, ""),
+                            ruleId: ruleInfo.ruleId,
+                            label: ruleInfo.label,
+                            path,
+                          });
+                        }
+                      }}
+                      title="Click to add as false positive"
+                    >
+                      {placeholder}
+                    </mark>
+                  );
+                })()}
               </span>
             ))}
           </code>
