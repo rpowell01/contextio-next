@@ -704,7 +704,7 @@ export function FalsePositiveManager({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowCreateDialog(false)}
+                  onClick={() => setIsDialogOpen(false)}
                   disabled={creating}
                 >
                   Cancel
