@@ -560,264 +560,231 @@ export function DiffDialog({
       };
     };
 
-    if (isPre && matches.length > 0) {
-      // Use exact preValues from matches for precise highlighting
-      // Build a combined pattern from all preValues
+if (isPre && matches.length > 0) {
+      // Left pane: highlight exact pre-values from matches
       const preValues = matches
         .map(m => m.preValue)
         .filter((v): v is string => typeof v === "string" && v.length > 0)
-        // Limit each preValue to a reasonable length to avoid massive regex patterns
-        // and limit total number of alternatives to avoid regex complexity limits
         .slice(0, 20)
         .map(v => v.slice(0, 500));
 
       if (preValues.length > 0) {
         let combinedPattern: RegExp | null = null;
         try {
-          // Escape special regex characters in each preValue
           const escapedValues = preValues.map(v => v.replace(/[.*+?^${}()|\[\]\\]/g, '\\$&'));
-          // Create a pattern that matches any of the preValues (non-capturing group to avoid split including matches)
           combinedPattern = new RegExp(`(?:${escapedValues.join('|')})`, 'g');
         } catch (e) {
-          // If regex construction fails (e.g., pattern too complex), fall through to PII patterns
           console.debug("Failed to construct combined regex for preValues, falling back to PII patterns:", e);
         }
 
         if (combinedPattern) {
           const patternMatches = safeValue.match(combinedPattern) || [];
-
           if (patternMatches.length > 0) {
-          const result: (string | React.ReactElement)[] = [];
-          let lastIndex = 0;
+            const result: (string | React.ReactElement)[] = [];
+            let lastIndex = 0;
 
-          for (let i = 0; i < patternMatches.length; i++) {
-            const match = patternMatches[i];
-            // Find the position of this match in the string starting from lastIndex
-            const matchIndex = safeValue.indexOf(match, lastIndex);
-            if (matchIndex === -1) continue;
+            for (let i = 0; i < patternMatches.length; i++) {
+              const match = patternMatches[i];
+              const matchIndex = safeValue.indexOf(match, lastIndex);
+              if (matchIndex === -1) continue;
 
-            // Add text before the match
-            if (matchIndex > lastIndex) {
-              result.push(safeValue.slice(lastIndex, matchIndex));
+              if (matchIndex > lastIndex) {
+                result.push(safeValue.slice(lastIndex, matchIndex));
+              }
+
+              const correspondingMatch = matches.find(m => m.preValue === match);
+              const postValue = correspondingMatch?.postValue ?? "";
+              const ruleInfo = extractRuleInfo(postValue);
+              const ruleId = correspondingMatch?.ruleId ?? ruleInfo.ruleId;
+              const path = correspondingMatch?.path ?? "";
+              const normalizedPostValue = postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted");
+
+              const handleClick = () => {
+                if (onAddFalsePositive) {
+                  onAddFalsePositive({ value: match, ruleId, label: ruleInfo.label, path });
+                }
+              };
+
+              result.push(
+                <mark
+                  key={`exact-${i}-${matchIndex}`}
+                  className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
+                  data-redaction={normalizedPostValue}
+                  data-match-index={i}
+                  onClick={handleClick}
+                  title="Click to add as false positive"
+                >
+                  {match}
+                </mark>
+              );
+
+              lastIndex = matchIndex + match.length;
             }
 
-            // Find the global match index from the matches array
-            const globalMatchIndex = matches.findIndex(m => m.preValue === match);
-            const correspondingMatch = matches.find(m => m.preValue === match);
-            const postValue = correspondingMatch?.postValue ?? "";
-            const ruleInfo = extractRuleInfo(postValue);
-            const ruleId = correspondingMatch?.ruleId ?? ruleInfo.ruleId;
-            const path = correspondingMatch?.path ?? "";
-            // Normalize placeholder for data-redaction attribute (same as post-redaction)
-            const normalizedPostValue = postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted");
-            
+            if (lastIndex < safeValue.length) {
+              result.push(safeValue.slice(lastIndex));
+            }
+
+            return <code className="font-mono text-xs">{result}</code>;
+          }
+        }
+      }
+    }
+
+    // Right pane (post-redaction, isPre=false): render [RULE_REDACTED] placeholder tokens
+    // with click handlers so users can add them as false positives.
+    if (!isPre) {
+      // Reset global regex state before using it
+      placeholderPattern.lastIndex = 0;
+      const partsPost = safeValue.split(placeholderPattern);
+      placeholderPattern.lastIndex = 0;
+      const placeholderMatches = safeValue.match(placeholderPattern);
+
+      if (placeholderMatches && placeholderMatches.length > 0) {
+        const placeholderOccurrenceCount = new Map<string, number>();
+
+        function normalizePlaceholderForDataAttr(placeholder: string): string {
+          let n = placeholder.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-");
+          return n.replace(/-\d+$/, "-redacted");
+        }
+
+        return (
+          <code className="font-mono text-xs">
+            {partsPost.map((part, i) => (
+              <span key={i}>
+                {part}
+                {i < placeholderMatches.length && (
+                  <mark
+                    key={`ph-${i}-${placeholderMatches[i]}`}
+                    className="redaction-placeholder cursor-pointer hover:bg-primary/10"
+                    data-redaction={normalizePlaceholderForDataAttr(placeholderMatches[i])}
+                    data-match-index={(() => {
+                      const count = placeholderOccurrenceCount.get(placeholderMatches[i]) || 0;
+                      placeholderOccurrenceCount.set(placeholderMatches[i], count + 1);
+                      return count;
+                    })()}
+                    onClick={() => {
+                      if (onAddFalsePositive) {
+                        const ruleInfo = extractRuleInfo(placeholderMatches[i]);
+                        const matchIdx = (placeholderOccurrenceCount.get(placeholderMatches[i]) || 1) - 1;
+                        const correspondingMatch = matches[matchIdx];
+                        const path = correspondingMatch?.path ?? "";
+                        onAddFalsePositive({
+                          value: placeholderMatches[i].replace(/[\[\]]/g, ""),
+                          ruleId: ruleInfo.ruleId,
+                          label: ruleInfo.label,
+                          path,
+                        });
+                      }
+                    }}
+                    title="Click to add as false positive"
+                  >
+                    {placeholderMatches[i]}
+                  </mark>
+                )}
+              </span>
+            ))}
+          </code>
+        );
+      }
+    }
+
+    // Fallback: generic PII patterns for both panes
+    // Includes patterns for both rule-based redaction and Presidio detector entity types
+    const piiPatterns = [
+      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, // email
+      /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
+      /\b(?:SK|AK|RK|sk|ak|rk)_[A-Za-z0-9]{32,}\b/g, // API keys
+      /\b(?:sk|pk|api|key|token)[-_][A-Za-z0-9_-]{20,}\b/g, // API key prefixed
+      /\bBearer\s+[A-Za-z0-9._-]+\b/g, // Bearer tokens
+      /\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._-]+\b/gi, // Authorization header
+      /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, // phone US
+      /\+\d{1,3}[\s\-\.]?(?:\d[\s\-\.]?){8,11}\b/g, // phone EU
+      /\b(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)[_-]?[=:]\s*["']?[A-Za-z0-9+/=_-]{20,}["']?/gi, // key=value
+      /\b[A-Z]{2}\d{2}(?:[\s]?[A-Z0-9]){11,26}\b/g, // IBAN
+      /\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b/g, // credit card
+      /\b\d{9}\b/g, // BSN
+      /\b[A-CEGHJ-PR-TW-Z]{2}[\s]?\d{2}[\s]?\d{2}[\s]?\d{2}[\s]?[A-D\s]\b/g, // NI number
+      /\b[A-Z]{1,2}\d{6,9}\b/g, // Passport
+      /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g, // IPv4
+      /\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b/g, // IPv6
+      /\b(?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12]\d|3[01])[-/](?:19|20)\d{2}\b/g, // Date of birth
+      /\b(?:https?:\/\/|www\.)[^\s]+\b/g, // URL
+      /\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b/g, // Date
+      /\b\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}\b/g, // ISO datetime
+    ];
+
+    const parts: (string | React.ReactElement)[] = [safeValue];
+    let piiMatchIdx = 0;
+    for (const pattern of piiPatterns) {
+      const newParts: (string | React.ReactElement)[] = [];
+      for (const part of parts) {
+        if (typeof part === "string") {
+          const matches = [...part.matchAll(pattern)];
+          if (matches.length === 0) {
+            newParts.push(part);
+            continue;
+          }
+          let lastIndex = 0;
+          for (const match of matches) {
+            const matchIndex = match.index ?? 0;
+            if (matchIndex > lastIndex) {
+              newParts.push(part.slice(lastIndex, matchIndex));
+            }
+            let ruleId = "unknown";
+            let label = "Unknown";
+            const matchStr = match[0];
+            if (matchStr.includes("@")) { ruleId = "email"; label = "Email"; }
+            else if (/^\d{3}-\d{2}-\d{4}$/.test(matchStr)) { ruleId = "ssn"; label = "SSN"; }
+            else if (/^(?:SK|AK|RK|sk|ak|rk)_/.test(matchStr)) { ruleId = "api-key-prefixed"; label = "API Key"; }
+            else if (/^(?:sk|pk|api|key|token)[-_]/.test(matchStr)) { ruleId = "api-key-prefixed"; label = "API Key"; }
+            else if (/^Bearer\s+/.test(matchStr)) { ruleId = "bearer-token"; label = "Bearer Token"; }
+            else if (/^Authorization\s*:\s*Bearer\s+/i.test(matchStr)) { ruleId = "authorization-header"; label = "Auth Header"; }
+            else if (/\d{3}[-.]?\d{3}[-.]?\d{4}/.test(matchStr)) { ruleId = "phone-us"; label = "Phone"; }
+            else if (/\+\d{1,3}[\s\-\.]?/.test(matchStr)) { ruleId = "phone-eu"; label = "Phone"; }
+            else if (/(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)[_-]?[=:]\s*["']?[A-Za-z0-9+/=_-]{20,}["']?/i.test(matchStr)) { ruleId = "credential_generic"; label = "Secret"; }
+            else if (/^[A-Z]{2}\d{2}/.test(matchStr)) { ruleId = "iban"; label = "IBAN"; }
+            else if (/^(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))/.test(matchStr)) { ruleId = "credit-card"; label = "Credit Card"; }
+            else if (/^\d{9}$/.test(matchStr)) { ruleId = "bsn-dutch"; label = "BSN"; }
+            else if (/^[A-CEGHJ-PR-TW-Z]{2}[\s]?\d{2}/.test(matchStr)) { ruleId = "ni-number-uk"; label = "NI Number"; }
+            else if (/^[A-Z]{1,2}\d{6,9}$/.test(matchStr)) { ruleId = "passport-number"; label = "Passport"; }
+            else if (/^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}/.test(matchStr)) { ruleId = "ipv4"; label = "IPv4"; }
+            else if (/^(?:[0-9a-fA-F]{1,4}:){7}/.test(matchStr)) { ruleId = "ipv6"; label = "IPv6"; }
+            else if (/^(?:0[1-9]|1[0-2])[-/]/.test(matchStr)) { ruleId = "date-of-birth"; label = "Date of Birth"; }
+            else if (/^(?:https?:\/\/|www\.)/.test(matchStr)) { ruleId = "url"; label = "URL"; }
+            else if (/^\d{4}-\d{2}-\d{2}[T\s]/.test(matchStr)) { ruleId = "date-time"; label = "Date Time"; }
+
             const handleClick = () => {
               if (onAddFalsePositive) {
                 onAddFalsePositive({
-                  value: match,
+                  value: matchStr,
                   ruleId: ruleId,
-                  label: ruleInfo.label,
-                  path: path,
+                  label: label,
+                  path: "",
                 });
               }
             };
-            
-            result.push(
-              <mark
-                key={`exact-${i}-${matchIndex}`}
-                className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
-                data-redaction={normalizedPostValue}
-                data-match-index={globalMatchIndex >= 0 ? globalMatchIndex : i}
-                onClick={handleClick}
-                title="Click to add as false positive"
-              >
-                {match}
+
+            newParts.push(
+              <mark key={`pii-${piiMatchIdx}-${matchIndex}`} className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10" data-match-index={piiMatchIdx} onClick={handleClick} title="Click to add as false positive">
+                {matchStr}
               </mark>
             );
-
-            lastIndex = matchIndex + match.length;
+            piiMatchIdx++;
+            lastIndex = matchIndex + matchStr.length;
           }
-
-          // Add remaining text after last match
-          if (lastIndex < safeValue.length) {
-            result.push(safeValue.slice(lastIndex));
+          if (lastIndex < part.length) {
+            newParts.push(part.slice(lastIndex));
           }
-
-          return <code className="font-mono text-xs">{result}</code>;
+        } else {
+          newParts.push(part);
         }
       }
+      parts.length = 0;
+      parts.push(...newParts);
     }
 
-      // For post-redaction, highlight the [RULE_REDACTED] and [RULE_N] placeholders first
-      // Use matches array to add data-match-index for scroll alignment
-      // This must be checked before the PII pattern fallback so click handlers fire on placeholders
-      if (!isPre) {
-        const partsPost = safeValue.split(placeholderPattern);
-        const placeholderMatches = safeValue.match(placeholderPattern);
-
-        if (placeholderMatches && placeholderMatches.length > 0) {
-          // Track occurrence index for each placeholder type for data-match-index
-          // This ensures 1st occurrence gets index 0, 2nd gets 1, etc. even for same placeholder
-          const placeholderOccurrenceCount = new Map<string, number>();
-
-          // Normalize placeholder for data-redaction attribute:
-          // [API_KEY_REDACTED] -> api-key-redacted
-          // [PIPELINE_1] -> pipeline-redacted (normalize sequence number)
-          function normalizePlaceholderForDataAttr(placeholder: string): string {
-            let normalized = placeholder.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-");
-            // Normalize pipeline format: pipeline-1 -> pipeline-redacted
-            normalized = normalized.replace(/-\d+$/, "-redacted");
-            return normalized;
-          }
-
-          return (
-            <code className="font-mono text-xs">
-              {partsPost.map((part, i) => (
-                <span key={i}>
-                  {part}
-                  {i < placeholderMatches.length && (
-                    <mark
-                      key={`placeholder-${i}-${placeholderMatches[i]}`}
-                      className="redaction-placeholder cursor-pointer hover:bg-primary/10"
-                      data-redaction={normalizePlaceholderForDataAttr(placeholderMatches[i])}
-                      data-match-index={(() => {
-                        const count = placeholderOccurrenceCount.get(placeholderMatches[i]) || 0;
-                        placeholderOccurrenceCount.set(placeholderMatches[i], count + 1);
-                        return count;
-                      })()}
-                      onClick={() => {
-                        if (onAddFalsePositive) {
-                          const ruleInfo = extractRuleInfo(placeholderMatches[i]);
-                          // Find the corresponding match from the matches array to get path
-                          // The count was already incremented in data-match-index, so subtract 1
-                          const matchIdx = (placeholderOccurrenceCount.get(placeholderMatches[i]) || 1) - 1;
-                          const correspondingMatch = matches[matchIdx];
-                          const path = correspondingMatch?.path ?? "";
-                          onAddFalsePositive({
-                            value: placeholderMatches[i].replace(/[\[\]]/g, ""), // Show the placeholder as the value
-                            ruleId: ruleInfo.ruleId,
-                            label: ruleInfo.label,
-                            path: path,
-                          });
-                        }
-                      }}
-                      title="Click to add as false positive"
-                    >
-                      {placeholderMatches[i]}
-                    </mark>
-                  )}
-                </span>
-              ))}
-            </code>
-          );
-        }
-      }
-
-      // Fallback to generic PII patterns if no matches provided or no exact matches found
-      // Includes patterns for both rule-based redaction and Presidio detector entity types
-      const piiPatterns = [
-        // Rule-based patterns (from presets)
-        /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, // email
-        /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
-        /\b(?:SK|AK|RK|sk|ak|rk)_[A-Za-z0-9]{32,}\b/g, // API keys (sk_, pk_, rk_, ak_ prefixed)
-        /\b(?:sk|pk|api|key|token)[-_][A-Za-z0-9_-]{20,}\b/g, // API key prefixed (generic)
-        /\bBearer\s+[A-Za-z0-9._-]+\b/g, // Bearer tokens
-        /\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._-]+\b/gi, // Authorization header
-        /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, // phone (US)
-        /\+\d{1,3}[\s\-\.]?(?:\d[\s\-\.]?){8,11}\b/g, // phone (EU)
-        /\b(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)[_-]?[=:]\s*["']?[A-Za-z0-9+/=_-]{20,}["']?/gi, // key=value patterns
-        /\b[A-Z]{2}\d{2}(?:[\s]?[A-Z0-9]){11,26}\b/g, // IBAN
-        /\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b/g, // credit card
-        /\b\d{9}\b/g, // BSN (Dutch)
-        /\b[A-CEGHJ-PR-TW-Z]{2}[\s]?\d{2}[\s]?\d{2}[\s]?\d{2}[\s]?[A-D\s]\b/g, // NI number (UK)
-        /\b[A-Z]{1,2}\d{6,9}\b/g, // Passport number
-        /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g, // IPv4
-        /\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b/g, // IPv6
-        /\b(?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12]\d|3[01])[-/](?:19|20)\d{2}\b/g, // Date of birth
-
-        // Presidio detector entity types (from @siddicky/anonymizerts)
-        // These are broader patterns that may match more than just the specific entities
-        // but help with highlighting when exact postValue placeholders are [PIPELINE_N]
-        /\b(?:https?:\/\/|www\.)[^\s]+\b/g, // URL
-        /\b\d{1,2}[-/]\d{1,2}[-/]\d{4}\b/g, // Date patterns
-        /\b\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}\b/g, // ISO datetime
-      ];
-
-      const parts: (string | React.ReactElement)[] = [safeValue];
-      let piiMatchIdx = 0;
-      for (const pattern of piiPatterns) {
-        const newParts: (string | React.ReactElement)[] = [];
-        for (const part of parts) {
-          if (typeof part === "string") {
-            // Use matchAll to find all matches with their indices, then build result
-            // This avoids the split-with-capturing-group issue on the API keys pattern
-            const matches = [...part.matchAll(pattern)];
-            if (matches.length === 0) {
-              newParts.push(part);
-              continue;
-            }
-            let lastIndex = 0;
-            for (const match of matches) {
-              const matchIndex = match.index ?? 0;
-              if (matchIndex > lastIndex) {
-                newParts.push(part.slice(lastIndex, matchIndex));
-              }
-              // Try to infer rule from pattern
-              let ruleId = "unknown";
-              let label = "Unknown";
-              const matchStr = match[0];
-              if (matchStr.includes("@")) { ruleId = "email"; label = "Email"; }
-              else if (/^\d{3}-\d{2}-\d{4}$/.test(matchStr)) { ruleId = "ssn"; label = "SSN"; }
-              else if (/^(?:SK|AK|RK|sk|ak|rk)_/.test(matchStr)) { ruleId = "api-key-prefixed"; label = "API Key"; }
-              else if (/^(?:sk|pk|api|key|token)[-_]/.test(matchStr)) { ruleId = "api-key-prefixed"; label = "API Key"; }
-              else if (/^Bearer\s+/.test(matchStr)) { ruleId = "bearer-token"; label = "Bearer Token"; }
-              else if (/^Authorization\s*:\s*Bearer\s+/i.test(matchStr)) { ruleId = "authorization-header"; label = "Auth Header"; }
-              else if (/\d{3}[-.]?\d{3}[-.]?\d{4}/.test(matchStr)) { ruleId = "phone-us"; label = "Phone"; }
-              else if (/\+\d{1,3}[\s\-\.]?/.test(matchStr)) { ruleId = "phone-eu"; label = "Phone"; }
-              else if (/(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)[_-]?[=:]\s*["']?[A-Za-z0-9+/=_-]{20,}["']?/i.test(matchStr)) { ruleId = "credential_generic"; label = "Secret"; }
-              else if (/^[A-Z]{2}\d{2}/.test(matchStr)) { ruleId = "iban"; label = "IBAN"; }
-              else if (/^(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))/.test(matchStr)) { ruleId = "credit-card"; label = "Credit Card"; }
-              else if (/^\d{9}$/.test(matchStr)) { ruleId = "bsn-dutch"; label = "BSN"; }
-              else if (/^[A-CEGHJ-PR-TW-Z]{2}[\s]?\d{2}/.test(matchStr)) { ruleId = "ni-number-uk"; label = "NI Number"; }
-              else if (/^[A-Z]{1,2}\d{6,9}$/.test(matchStr)) { ruleId = "passport-number"; label = "Passport"; }
-              else if (/^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}/.test(matchStr)) { ruleId = "ipv4"; label = "IPv4"; }
-              else if (/^(?:[0-9a-fA-F]{1,4}:){7}/.test(matchStr)) { ruleId = "ipv6"; label = "IPv6"; }
-              else if (/^(?:0[1-9]|1[0-2])[-/]/.test(matchStr)) { ruleId = "date-of-birth"; label = "Date of Birth"; }
-              else if (/^(?:https?:\/\/|www\.)/.test(matchStr)) { ruleId = "url"; label = "URL"; }
-              else if (/^\d{4}-\d{2}-\d{2}[T\s]/.test(matchStr)) { ruleId = "date-time"; label = "Date Time"; }
-              
-              const handleClick = () => {
-                if (onAddFalsePositive) {
-                  onAddFalsePositive({
-                    value: matchStr,
-                    ruleId: ruleId,
-                    label: label,
-                    path: "",
-                  });
-                }
-              };
-              
-              newParts.push(
-                <mark key={`pii-${piiMatchIdx}-${matchIndex}`} className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10" data-match-index={piiMatchIdx} onClick={handleClick} title="Click to add as false positive">
-                  {matchStr}
-                </mark>
-              );
-              piiMatchIdx++;
-              lastIndex = matchIndex + matchStr.length;
-            }
-            if (lastIndex < part.length) {
-              newParts.push(part.slice(lastIndex));
-            }
-          } else {
-            newParts.push(part);
-          }
-        }
-        parts.length = 0;
-        parts.push(...newParts);
-      }
-
-      return <code className="font-mono text-xs">{parts}</code>;
-    }
+    return <code className="font-mono text-xs">{parts}</code>;
   }, []);
 
   // Render a single diff line with redaction highlighting and data attributes for navigation
