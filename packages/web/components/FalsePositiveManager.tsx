@@ -393,7 +393,7 @@ export function FalsePositiveManager({
       <div className="flex flex-col sm:flex-row gap-3">
         <Button
           variant="outline"
-          onClick={() => setShowCreateDialog(true)}
+          onClick={() => setIsDialogOpen(true)}
           disabled={loading || creating}
         >
           <Plus className="mr-2 h-4 w-4" />
