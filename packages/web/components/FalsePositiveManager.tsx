@@ -32,6 +32,7 @@ import {
   Trash2,
   Edit2,
   Plus,
+  ChevronDown,
 } from "lucide-react";
 // @ts-ignore
 import { useSearchParams, useRouter } from "next/navigation";
@@ -43,18 +44,92 @@ type FalsePositiveForm = {
   ruleId: string;
   label: string;
   path: string;
+  customPath?: string;
   sessionId?: string;
   matchMode?: "exact" | "pattern";
 };
+
+// All available redaction rule IDs from presets (secrets, pii, strict)
+const RULE_OPTIONS: { value: string; label: string }[] = [
+  // Secrets preset
+  { value: "private-key", label: "Private Key (private-key)" },
+  { value: "credential_aws_key", label: "AWS Access Key (credential_aws_key)" },
+  { value: "aws-secret-key", label: "AWS Secret Key (aws-secret-key)" },
+  { value: "credential_github", label: "GitHub Token (credential_github)" },
+  { value: "credential_anthropic", label: "Anthropic API Key (credential_anthropic)" },
+  { value: "credential_openai", label: "OpenAI API Key (credential_openai)" },
+  { value: "credential_gcp_api_key", label: "GCP API Key (credential_gcp_api_key)" },
+  { value: "credential_gcp_service_account", label: "GCP Service Account (credential_gcp_service_account)" },
+  { value: "credential_gitlab", label: "GitLab Token (credential_gitlab)" },
+  { value: "credential_jwt", label: "JWT Token (credential_jwt)" },
+  { value: "credential_stripe", label: "Stripe Key (credential_stripe)" },
+  { value: "credential_slack", label: "Slack Token (credential_slack)" },
+  { value: "credential_huggingface", label: "Hugging Face Token (credential_huggingface)" },
+  { value: "credential_databricks", label: "Databricks Token (credential_databricks)" },
+  { value: "credential_npm", label: "NPM Token (credential_npm)" },
+  { value: "credential_pypi", label: "PyPI Token (credential_pypi)" },
+  { value: "credential_vault", label: "Vault Token (credential_vault)" },
+  { value: "credential_sendgrid", label: "SendGrid Token (credential_sendgrid)" },
+  { value: "credential_nvidia", label: "NVIDIA API Key (credential_nvidia)" },
+  { value: "credential_openrouter", label: "OpenRouter API Key (credential_openrouter)" },
+  { value: "credential_kilo", label: "Kilo API Key (credential_kilo)" },
+  { value: "authorization-header", label: "Authorization Header (authorization-header)" },
+  { value: "bearer-token", label: "Bearer Token (bearer-token)" },
+  { value: "api-key-prefixed", label: "Prefixed API Key (api-key-prefixed)" },
+  { value: "credential_generic", label: "Generic Secret (credential_generic)" },
+  // PII preset
+  { value: "email", label: "Email Address (email)" },
+  { value: "ssn", label: "US SSN (ssn)" },
+  { value: "credit-card", label: "Credit Card (credit-card)" },
+  { value: "phone-us", label: "US Phone (phone-us)" },
+  { value: "phone-eu", label: "EU Phone (phone-eu)" },
+  { value: "iban", label: "IBAN (iban)" },
+  // Strict preset
+  { value: "ipv4", label: "IPv4 Address (ipv4)" },
+  { value: "ipv6", label: "IPv6 Address (ipv6)" },
+  { value: "date-of-birth", label: "Date of Birth (date-of-birth)" },
+  { value: "bsn-dutch", label: "Dutch BSN (bsn-dutch)" },
+  { value: "ni-number-uk", label: "UK NI Number (ni-number-uk)" },
+  { value: "passport-number", label: "Passport Number (passport-number)" },
+];
+
+// Common JSON paths for LLM API requests
+const PATH_OPTIONS: { value: string; label: string }[] = [
+  { value: "messages[*].content", label: "messages[*].content (OpenAI/Anthropic)" },
+  { value: "messages[*].tool_calls[*].function.arguments", label: "messages[*].tool_calls[*].function.arguments" },
+  { value: "messages[*].tool_calls[*].function.name", label: "messages[*].tool_calls[*].function.name" },
+  { value: "messages[*].tool_calls[*].id", label: "messages[*].tool_calls[*].id" },
+  { value: "messages[*].function_call.arguments", label: "messages[*].function_call.arguments" },
+  { value: "messages[*].function_call.name", label: "messages[*].function_call.name" },
+  { value: "messages[*].content[*].text", label: "messages[*].content[*].text (Anthropic)" },
+  { value: "messages[*].content[*].input", label: "messages[*].content[*].input (Anthropic)" },
+  { value: "prompt", label: "prompt (legacy/completions)" },
+  { value: "input", label: "input (various)" },
+  { value: "tools[*].function.parameters", label: "tools[*].function.parameters" },
+  { value: "tool_choice", label: "tool_choice" },
+  { value: "system", label: "system message" },
+  { value: "$.messages[*].content", label: "$.messages[*].content (JSONPath)" },
+  { value: "$..content", label: "$..content (recursive)" },
+  { value: "custom", label: "Custom path..." },
+];
 
 export function FalsePositiveManager({
   onEntryAdded,
   onEntryRemoved,
   onCleared,
+  initialData,
+  onClose,
 }: {
   onEntryAdded?: (entry: FalsePositiveEntry) => void;
   onEntryRemoved?: (entry: FalsePositiveEntry) => void;
   onCleared?: (cleared: number) => void;
+  initialData?: {
+    value: string;
+    ruleId: string;
+    label: string;
+    path: string;
+  };
+  onClose?: () => void;
 }) {
   const [falsePositives, setFalsePositives] = useState<FalsePositiveEntry[]>([]);
   const [pagination, setPagination] = useState<{
@@ -77,9 +152,44 @@ export function FalsePositiveManager({
     ruleId: "",
     label: "",
     path: "",
+    customPath: "",
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+
+  // Populate form with initial data when provided
+  useEffect(() => {
+    if (initialData) {
+      // Find the matching rule option to get the correct label
+      const ruleOption = RULE_OPTIONS.find(r => r.value === initialData.ruleId);
+      // Find the matching path option
+      const pathOption = PATH_OPTIONS.find(p => p.value === initialData.path);
+      
+      setForm({
+        value: initialData.value,
+        ruleId: initialData.ruleId,
+        label: ruleOption ? ruleOption.label.split(" (")[0] : initialData.label,
+        path: pathOption ? initialData.path : "custom",
+        customPath: pathOption ? "" : initialData.path,
+      });
+      setShowCreateDialog(true);
+    }
+  }, [initialData]);
+
+  // Reset form when dialog closes
+  useEffect(() => {
+    if (!showCreateDialog) {
+      setForm({
+        value: "",
+        ruleId: "",
+        label: "",
+        path: "",
+        customPath: "",
+      });
+      setFormErrors({});
+      if (onClose) onClose();
+    }
+  }, [showCreateDialog, onClose]);
   const [deleteTarget, setDeleteTarget] = useState<{
     value: string;
     ruleId: string;
@@ -162,6 +272,7 @@ export function FalsePositiveManager({
             ruleId: "",
             label: "",
             path: "",
+            customPath: "",
           });
           setFormErrors({});
           setShowCreateDialog(false);
@@ -401,15 +512,21 @@ export function FalsePositiveManager({
 
                 <div>
                   <Label htmlFor="fp-ruleId">Rule ID</Label>
-                  <Input
+                  <select
                     id="fp-ruleId"
                     name="ruleId"
-                    type="text"
                     value={form.ruleId}
-                    onChange={handleRuleIdChange}
-                    placeholder="e.g., email"
+                    onChange={(e) => setForm((prev) => ({ ...prev, ruleId: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     required
-                  />
+                  >
+                    <option value="">Select a rule...</option>
+                    {RULE_OPTIONS.map((rule) => (
+                      <option key={rule.value} value={rule.value}>
+                        {rule.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -429,15 +546,49 @@ export function FalsePositiveManager({
 
                 <div>
                   <Label htmlFor="fp-path">JSON Path</Label>
-                  <Input
-                    id="fp-path"
-                    name="path"
-                    type="text"
-                    value={form.path}
-                    onChange={handleChange}
-                    placeholder="e.g., messages[*].content"
-                    required
-                  />
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <select
+                        id="fp-path-select"
+                        name="pathSelect"
+                        value={form.path === "custom" ? "custom" : form.path}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === "custom") {
+                            setForm((prev) => ({ ...prev, path: "custom" }));
+                          } else {
+                            setForm((prev) => ({ ...prev, path: value }));
+                          }
+                        }}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none pr-10"
+                        required
+                      >
+                        {PATH_OPTIONS.map((path) => (
+                          <option key={path.value} value={path.value}>
+                            {path.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    </div>
+                    {form.path === "custom" && (
+                      <Input
+                        id="fp-path-custom"
+                        name="path"
+                        type="text"
+                        value={form.customPath || ""}
+                        onChange={(e) => setForm((prev) => ({ ...prev, customPath: e.target.value, path: e.target.value }))}
+                        placeholder="e.g., messages[*].content"
+                        required
+                      />
+                    )}
+                    {(form.path !== "custom" && form.path !== "") && (
+                      <p className="text-xs text-muted-foreground">Selected: {PATH_OPTIONS.find(p => p.value === form.path)?.label || form.path}</p>
+                    )}
+                    {form.path === "" && (
+                      <p className="text-xs text-muted-foreground">Select a common path or choose "Custom path..." to enter your own</p>
+                    )}
+                  </div>
                 </div>
               </div>
 

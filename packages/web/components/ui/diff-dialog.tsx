@@ -32,6 +32,13 @@ interface DiffDialogProps {
     postValue: string;
     path: string;
   }>;
+  // Callback when user clicks on a redaction to add as false positive
+  onAddFalsePositive?: (data: {
+    value: string;
+    ruleId: string;
+    label: string;
+    path: string;
+  }) => void;
 }
 
 type ViewMode = "diff" | "syntax";
@@ -269,6 +276,7 @@ export function DiffDialog({
   targetUrl,
   timestamp,
   matches,
+  onAddFalsePositive,
 }: DiffDialogProps) {
   // Use full body content for diff if available, otherwise use match snippets
   const diffPreContent = fullOriginal ?? preContent;
@@ -514,14 +522,43 @@ export function DiffDialog({
     value,
     isPre = false,
     matches = [],
+    onAddFalsePositive,
   }: {
     value: string | undefined | null;
     isPre?: boolean;
-    matches?: Array<{ preValue: string; postValue: string }>;
+    matches?: Array<{ preValue: string; postValue: string; ruleId?: string; path?: string }>;
+    onAddFalsePositive?: (data: { value: string; ruleId: string; label: string; path: string }) => void;
   }) => {
     // Match both [RULE_REDACTED] and [RULE_N] formats (pipeline detector)
     const placeholderPattern = /\[[A-Z][A-Z0-9_]*(?:_REDACTED|_\d+)\]/g;
     const safeValue = String(value || "");
+
+    // Helper to extract rule info from postValue placeholder
+    const extractRuleInfo = (postValue: string) => {
+      // Try to match [RULE_REDACTED] format
+      const redactedMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_REDACTED\]/);
+      if (redactedMatch) {
+        const ruleType = redactedMatch[1];
+        return {
+          ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
+          label: ruleType.replace(/_/g, " "),
+        };
+      }
+      // Try to match [RULE_N] format (pipeline)
+      const pipelineMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_\d+\]/);
+      if (pipelineMatch) {
+        const ruleType = pipelineMatch[1];
+        return {
+          ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
+          label: ruleType.replace(/_/g, " "),
+        };
+      }
+      // Fallback
+      return {
+        ruleId: "unknown",
+        label: postValue.replace(/[\[\]]/g, ""),
+      };
+    };
 
     if (isPre && matches.length > 0) {
       // Use exact preValues from matches for precise highlighting
@@ -568,14 +605,31 @@ export function DiffDialog({
             const globalMatchIndex = matches.findIndex(m => m.preValue === match);
             const correspondingMatch = matches.find(m => m.preValue === match);
             const postValue = correspondingMatch?.postValue ?? "";
+            const ruleInfo = extractRuleInfo(postValue);
+            const ruleId = correspondingMatch?.ruleId ?? ruleInfo.ruleId;
+            const path = correspondingMatch?.path ?? "";
             // Normalize placeholder for data-redaction attribute (same as post-redaction)
             const normalizedPostValue = postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted");
+            
+            const handleClick = () => {
+              if (onAddFalsePositive) {
+                onAddFalsePositive({
+                  value: match,
+                  ruleId: ruleId,
+                  label: ruleInfo.label,
+                  path: path,
+                });
+              }
+            };
+            
             result.push(
               <mark
                 key={`exact-${i}-${matchIndex}`}
-                className="redaction-placeholder pre-redaction-highlight"
+                className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
                 data-redaction={normalizedPostValue}
                 data-match-index={globalMatchIndex >= 0 ? globalMatchIndex : i}
+                onClick={handleClick}
+                title="Click to add as false positive"
               >
                 {match}
               </mark>
@@ -643,13 +697,48 @@ export function DiffDialog({
               if (matchIndex > lastIndex) {
                 newParts.push(part.slice(lastIndex, matchIndex));
               }
+              // Try to infer rule from pattern
+              let ruleId = "unknown";
+              let label = "Unknown";
+              const matchStr = match[0];
+              if (matchStr.includes("@")) { ruleId = "email"; label = "Email"; }
+              else if (/^\d{3}-\d{2}-\d{4}$/.test(matchStr)) { ruleId = "ssn"; label = "SSN"; }
+              else if (/^(?:SK|AK|RK|sk|ak|rk)_/.test(matchStr)) { ruleId = "api-key-prefixed"; label = "API Key"; }
+              else if (/^(?:sk|pk|api|key|token)[-_]/.test(matchStr)) { ruleId = "api-key-prefixed"; label = "API Key"; }
+              else if (/^Bearer\s+/.test(matchStr)) { ruleId = "bearer-token"; label = "Bearer Token"; }
+              else if (/^Authorization\s*:\s*Bearer\s+/i.test(matchStr)) { ruleId = "authorization-header"; label = "Auth Header"; }
+              else if (/\d{3}[-.]?\d{3}[-.]?\d{4}/.test(matchStr)) { ruleId = "phone-us"; label = "Phone"; }
+              else if (/\+\d{1,3}[\s\-\.]?/.test(matchStr)) { ruleId = "phone-eu"; label = "Phone"; }
+              else if (/(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)[_-]?[=:]\s*["']?[A-Za-z0-9+/=_-]{20,}["']?/i.test(matchStr)) { ruleId = "credential_generic"; label = "Secret"; }
+              else if (/^[A-Z]{2}\d{2}/.test(matchStr)) { ruleId = "iban"; label = "IBAN"; }
+              else if (/^(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))/.test(matchStr)) { ruleId = "credit-card"; label = "Credit Card"; }
+              else if (/^\d{9}$/.test(matchStr)) { ruleId = "bsn-dutch"; label = "BSN"; }
+              else if (/^[A-CEGHJ-PR-TW-Z]{2}[\s]?\d{2}/.test(matchStr)) { ruleId = "ni-number-uk"; label = "NI Number"; }
+              else if (/^[A-Z]{1,2}\d{6,9}$/.test(matchStr)) { ruleId = "passport-number"; label = "Passport"; }
+              else if (/^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}/.test(matchStr)) { ruleId = "ipv4"; label = "IPv4"; }
+              else if (/^(?:[0-9a-fA-F]{1,4}:){7}/.test(matchStr)) { ruleId = "ipv6"; label = "IPv6"; }
+              else if (/^(?:0[1-9]|1[0-2])[-/]/.test(matchStr)) { ruleId = "date-of-birth"; label = "Date of Birth"; }
+              else if (/^(?:https?:\/\/|www\.)/.test(matchStr)) { ruleId = "url"; label = "URL"; }
+              else if (/^\d{4}-\d{2}-\d{2}[T\s]/.test(matchStr)) { ruleId = "date-time"; label = "Date Time"; }
+              
+              const handleClick = () => {
+                if (onAddFalsePositive) {
+                  onAddFalsePositive({
+                    value: matchStr,
+                    ruleId: ruleId,
+                    label: label,
+                    path: "",
+                  });
+                }
+              };
+              
               newParts.push(
-                <mark key={`pii-${piiMatchIdx}-${matchIndex}`} className="redaction-placeholder pre-redaction-highlight" data-match-index={piiMatchIdx}>
-                  {match[0]}
+                <mark key={`pii-${piiMatchIdx}-${matchIndex}`} className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10" data-match-index={piiMatchIdx} onClick={handleClick} title="Click to add as false positive">
+                  {matchStr}
                 </mark>
               );
               piiMatchIdx++;
-              lastIndex = matchIndex + match[0].length;
+              lastIndex = matchIndex + matchStr.length;
             }
             if (lastIndex < part.length) {
               newParts.push(part.slice(lastIndex));
@@ -696,13 +785,30 @@ export function DiffDialog({
             {i < placeholderMatches.length && (
               <mark
                 key={`placeholder-${i}-${placeholderMatches[i]}`}
-                className="redaction-placeholder"
+                className="redaction-placeholder cursor-pointer hover:bg-primary/10"
                 data-redaction={normalizePlaceholderForDataAttr(placeholderMatches[i])}
                 data-match-index={(() => {
                   const count = placeholderOccurrenceCount.get(placeholderMatches[i]) || 0;
                   placeholderOccurrenceCount.set(placeholderMatches[i], count + 1);
                   return count;
                 })()}
+                onClick={() => {
+                  if (onAddFalsePositive) {
+                    const ruleInfo = extractRuleInfo(placeholderMatches[i]);
+                    // Find the corresponding match from the matches array to get path
+                    // The count was already incremented in data-match-index, so subtract 1
+                    const matchIdx = (placeholderOccurrenceCount.get(placeholderMatches[i]) || 1) - 1;
+                    const correspondingMatch = matches[matchIdx];
+                    const path = correspondingMatch?.path ?? "";
+                    onAddFalsePositive({
+                      value: placeholderMatches[i].replace(/[\[\]]/g, ""), // Show the placeholder as the value
+                      ruleId: ruleInfo.ruleId,
+                      label: ruleInfo.label,
+                      path: path,
+                    });
+                  }
+                }}
+                title="Click to add as false positive"
               >
                 {placeholderMatches[i]}
               </mark>
@@ -742,9 +848,18 @@ export function DiffDialog({
     // Truncate very long lines to show context around redactions
     const rawValue = item.value ?? "";
     const { value: displayValue } = truncateLongLine(rawValue, isLeft, matches ?? []);
+    
+    // Convert matches to include ruleId and path for the click handler
+    const enhancedMatches = (matches ?? []).map(m => ({
+      preValue: m.preValue,
+      postValue: m.postValue,
+      ruleId: m.ruleId,
+      path: m.path,
+    }));
+    
     const renderValue = isLeft
-      ? <RedactionHighlight value={displayValue} isPre matches={matches} />
-      : <RedactionHighlight value={displayValue} />;
+      ? <RedactionHighlight value={displayValue} isPre matches={enhancedMatches} onAddFalsePositive={onAddFalsePositive} />
+      : <RedactionHighlight value={displayValue} matches={enhancedMatches} onAddFalsePositive={onAddFalsePositive} />;
 
     return (
       <div

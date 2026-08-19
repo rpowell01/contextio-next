@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState, useEffect, useRef, useCallback } from "react";
 
 import { DiffDialog } from "@/components/ui/diff-dialog";
+import { FalsePositiveManager } from "@/components/FalsePositiveManager";
 
 interface RedactionSummary {
   totalRedactions: number;
@@ -73,6 +74,15 @@ export default function RedactionsPage() {
   const [resizingKey, setResizingKey] = useState<string | null>(null);
   const [resizeStartX, setResizeStartX] = useState<number>(0);
   const [resizeStartWidth, setResizeStartWidth] = useState<number>(0);
+  
+  // False positive dialog state
+  const [fpDialogOpen, setFpDialogOpen] = useState(false);
+  const [fpDialogData, setFpDialogData] = useState<{
+    value: string;
+    ruleId: string;
+    label: string;
+    path: string;
+  } | null>(null);
 
   const lastFocusedTrigger = useRef<HTMLElement | null>(null);
 
@@ -264,6 +274,17 @@ export default function RedactionsPage() {
       setPage(newPage);
     }
   };
+
+  // Handle click on redaction in diff dialog to add as false positive
+  const handleAddFalsePositive = useCallback((data: {
+    value: string;
+    ruleId: string;
+    label: string;
+    path: string;
+  }) => {
+    setFpDialogData(data);
+    setFpDialogOpen(true);
+  }, []);
 
   const handleResizeStart = (key: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -638,7 +659,25 @@ export default function RedactionsPage() {
         provider={diffDialogData?.provider || ""}
         targetUrl={diffDialogData?.targetUrl || ""}
         timestamp={diffDialogData?.timestamp || ""}
+        onAddFalsePositive={handleAddFalsePositive}
       />
+
+      {/* Add False Positive Dialog - triggered from diff dialog */}
+      {fpDialogOpen && fpDialogData && (
+        <FalsePositiveManager
+          initialData={fpDialogData}
+          onEntryAdded={(entry) => {
+            // Optionally refresh or show success message
+            console.log("False positive added:", entry);
+          }}
+          onEntryRemoved={() => {}}
+          onCleared={() => {}}
+          onClose={() => {
+            setFpDialogOpen(false);
+            setFpDialogData(null);
+          }}
+        />
+      )}
     </>
   );
 }
