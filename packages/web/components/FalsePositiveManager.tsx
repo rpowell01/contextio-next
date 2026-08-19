@@ -539,7 +539,7 @@ export function FalsePositiveManager({
         </div>
       )}
 
-      /* Create False Positive Dialog */}
+      {/* Create False Positive Dialog */}
       {initialData && isDialogOpen && (
         <Dialog open={isDialogOpen} onOpenChange={(open) => {
           setIsDialogOpen(open);
