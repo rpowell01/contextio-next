@@ -243,12 +243,14 @@ export function FalsePositiveManager({
     }
   };
 
-  // Reload when pagination changes externally
+  // Reload when pagination changes externally (only when not in "add new entry" mode)
   useEffect(
     () => {
-      loadFalsePositives(pagination.page);
+      if (!initialData) {
+        loadFalsePositives(pagination.page);
+      }
     },
-    [pagination.page],
+    [pagination.page, initialData],
   );
 
   // Handle form submit
