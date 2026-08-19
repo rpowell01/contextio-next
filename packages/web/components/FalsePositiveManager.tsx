@@ -160,6 +160,9 @@ export function FalsePositiveManager({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Dialog open state - controlled by initialData presence
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
   // Populate form with initial data when provided
   useEffect(() => {
     if (initialData) {
@@ -175,24 +178,15 @@ export function FalsePositiveManager({
         path: pathOption ? initialData.path : "custom",
         customPath: pathOption ? "" : initialData.path,
       });
-      setShowCreateDialog(true);
+      setIsDialogOpen(true);
     }
   }, [initialData]);
 
-  // Reset form when dialog closes
-  useEffect(() => {
-    if (!showCreateDialog) {
-      setForm({
-        value: "",
-        ruleId: "",
-        label: "",
-        path: "",
-        customPath: "",
-      });
-      setFormErrors({});
-      if (onClose) onClose();
-    }
-  }, [showCreateDialog, onClose]);
+  // Close dialog and notify parent
+  const handleClose = useCallback(() => {
+    setIsDialogOpen(false);
+    if (onClose) onClose();
+  }, [onClose]);
   const [deleteTarget, setDeleteTarget] = useState<{
     value: string;
     ruleId: string;
@@ -288,7 +282,7 @@ export function FalsePositiveManager({
             customPath: "",
           });
           setFormErrors({});
-          setShowCreateDialog(false);
+          setIsDialogOpen(false);
           loadFalsePositives();
         }
       } catch (error) {
@@ -551,9 +545,12 @@ export function FalsePositiveManager({
         </div>
       )}
 
-      {/* Create False Positive Dialog */}
-      {showCreateDialog && (
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      /* Create False Positive Dialog */}
+      {initialData && isDialogOpen && (
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open && onClose) onClose();
+        }}>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add False Positive</DialogTitle>

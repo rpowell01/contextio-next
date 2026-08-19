@@ -691,6 +691,34 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
   }
 
   /**
+   * Map disabled rule names to Presidio EntityType.
+   * This covers LLM-only entity types that don't have corresponding policy rules
+   * (e.g., "url", "organization", "person", "location").
+   */
+  function getPresidioEntityTypesFromDisabledRules(disabledRules: string[]): Set<EntityType> {
+    const disabledRuleNameToEntityType: Record<string, EntityType> = {
+      "url": EntityType.URL,
+      "organization": EntityType.ORGANIZATION,
+      "person": EntityType.PERSON,
+      "location": EntityType.LOCATION,
+      "email": EntityType.EMAIL_ADDRESS,
+      "phone": EntityType.PHONE_NUMBER,
+      "credit-card": EntityType.CREDIT_CARD,
+      "ssn": EntityType.US_SSN,
+      "ip": EntityType.IP_ADDRESS,
+      "date": EntityType.DATE_TIME,
+    };
+    const entityTypes = new Set<EntityType>();
+    for (const ruleName of disabledRules) {
+      const entityType = disabledRuleNameToEntityType[ruleName.toLowerCase()];
+      if (entityType) {
+        entityTypes.add(entityType);
+      }
+    }
+    return entityTypes;
+  }
+
+  /**
    * Initialize the detector pipeline based on detectorMode and detectorConfig.
    * Called lazily on first request that needs it.
    */
@@ -718,6 +746,10 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
         // We'll exclude these from the Presidio detector to avoid duplicate detection
         // and conflicting patterns (policy rules use context-gating; Presidio doesn't).
         const coveredEntityTypes = getPresidioEntityTypesFromRules(policy.rules);
+
+        // Also get entity types from disabled rules (LLM-only types like "url", "organization")
+        const disabledRules = config?.disabledRules ?? [];
+        const disabledEntityTypes = getPresidioEntityTypesFromDisabledRules(disabledRules);
 
         // Compute effective labels for Presidio: explicit config labels minus covered types
         // If user explicitly specifies llmLabels, respect that but still filter covered types.
@@ -761,6 +793,10 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
           for (const et of coveredEntityTypes) {
             coveredLabels.add(entityTypeToLabel[et]);
           }
+          // Also add entity types from disabled rules
+          for (const et of disabledEntityTypes) {
+            coveredLabels.add(entityTypeToLabel[et]);
+          }
           // Also add common aliases that Presidio might use
           const aliasMap: Record<string, string> = {
             "EMAIL": "EMAIL_ADDRESS",
@@ -779,7 +815,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
           const filtered = labelsToUse.filter((label) => !coveredLabels.has(label.toUpperCase()));
           if (verbose && filtered.length < labelsToUse.length) {
             const removed = labelsToUse.filter((label) => coveredLabels.has(label.toUpperCase()));
-            console.error(`[redact] Disabled overlapping Presidio recognizers (covered by policy rules): ${removed.join(", ")}`);
+            console.error(`[redact] Disabled Presidio recognizers (covered by policy rules or disabled in settings): ${removed.join(", ")}`);
           }
           return filtered.length > 0 ? filtered : undefined;
         }
