@@ -200,10 +200,12 @@ export function FalsePositiveManager({
   } | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // Load false positives on mount
+  // Load false positives on mount (only when not in "add new entry" mode)
   useEffect(() => {
-    loadFalsePositives();
-  }, []);
+    if (!initialData) {
+      loadFalsePositives();
+    }
+  }, [initialData]);
 
   const loadFalsePositives = async (
     page?: number,
@@ -240,10 +242,6 @@ export function FalsePositiveManager({
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadFalsePositives();
-  }, []);
 
   // Reload when pagination changes externally
   useEffect(
