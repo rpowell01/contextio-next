@@ -33,6 +33,7 @@ import {
   Edit2,
   Plus,
   ChevronDown,
+  X,
 } from "lucide-react";
 // @ts-ignore
 import { useSearchParams, useRouter } from "next/navigation";
@@ -156,6 +157,8 @@ export function FalsePositiveManager({
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Populate form with initial data when provided
   useEffect(() => {
@@ -208,6 +211,7 @@ export function FalsePositiveManager({
     sessionId?: string,
   ) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const result = await apiClient.getFalsePositives({
         page: page || 1,
@@ -222,7 +226,16 @@ export function FalsePositiveManager({
         totalPages: result.pagination.totalPages,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       console.error("Failed to load false positives:", error);
+      // Provide helpful message for common error cases
+      if (errorMessage.includes("403") || errorMessage.includes("admin role required")) {
+        setLoadError("Access denied: Admin role required. Please configure ADMIN_EMAILS environment variable and ensure you are logged in with an admin account.");
+      } else if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+        setLoadError("Authentication required. Please log in to access false positives.");
+      } else {
+        setLoadError(`Failed to load false positives: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -279,7 +292,15 @@ export function FalsePositiveManager({
           loadFalsePositives();
         }
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("Failed to create false positive:", error);
+        if (errorMessage.includes("403") || errorMessage.includes("admin role required")) {
+          setActionError("Access denied: Admin role required to create false positives.");
+        } else if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+          setActionError("Authentication required. Please log in.");
+        } else {
+          setActionError(`Failed to create false positive: ${errorMessage}`);
+        }
       } finally {
         setCreating(false);
       }
@@ -317,7 +338,15 @@ export function FalsePositiveManager({
         setDeleteTarget(null);
         loadFalsePositives();
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("Failed to delete false positive:", error);
+        if (errorMessage.includes("403") || errorMessage.includes("admin role required")) {
+          setActionError("Access denied: Admin role required to delete false positives.");
+        } else if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+          setActionError("Authentication required. Please log in.");
+        } else {
+          setActionError(`Failed to delete false positive: ${errorMessage}`);
+        }
       } finally {
         setDeleting(false);
       }
@@ -329,6 +358,7 @@ export function FalsePositiveManager({
   const handleClearAll = useCallback(
     async () => {
       setClearing(true);
+      setActionError(null);
       try {
         const result = await apiClient.clearFalsePositives({});
         if (result.success && onCleared) {
@@ -336,7 +366,15 @@ export function FalsePositiveManager({
         }
         loadFalsePositives();
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("Failed to clear false positives:", error);
+        if (errorMessage.includes("403") || errorMessage.includes("admin role required")) {
+          setActionError("Access denied: Admin role required to clear false positives.");
+        } else if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+          setActionError("Authentication required. Please log in.");
+        } else {
+          setActionError(`Failed to clear false positives: ${errorMessage}`);
+        }
       } finally {
         setClearing(false);
       }
@@ -384,11 +422,43 @@ export function FalsePositiveManager({
         </Button>
       </div>
 
+      {/* Action Error Display */}
+      {actionError && (
+        <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <span>{actionError}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setActionError(null)}
+            className="text-red-600 hover:text-red-800"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       {/* Table */}
       {loading ? (
         <div className="p-4 text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto" />
           <p className="mt-2 text-muted-foreground">Loading false positives...</p>
+        </div>
+      ) : loadError ? (
+        <div className="p-4 text-center text-red-600 bg-red-50 border border-red-200 rounded-lg">
+          <p className="font-medium">Failed to load false positives</p>
+          <p className="mt-2 text-sm">{loadError}</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Configure ADMIN_EMAILS environment variable in the proxy service and ensure you are logged in with an admin account.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => loadFalsePositives()}
+            className="mt-4"
+            disabled={loading}
+          >
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Retry
+          </Button>
         </div>
       ) : falsePositives.length === 0 ? (
         <div className="p-4 text-center text-muted-foreground">
