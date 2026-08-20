@@ -152,7 +152,7 @@ export function createLoggerPlugin(config?: LoggerConfig): LoggerPlugin {
       case "env":
       default:
         keyMaterial =
-          process.env[enc.keyEnvVar ?? "CONTEXTIO_ENCRYPTION_KEY"];
+          process.env[enc.keyEnvVar ?? "CONTEXTIO_LOGGER_ENCRYPTION_KEY"];
         break;
       case "kms":
         throw new Error(

@@ -275,7 +275,7 @@ export interface EncryptionAtRestConfig {
    * (e.g. as a hex/base64-encoded key).
    */
   staticKey?: string;
-  /** Environment variable name holding the encryption key. Defaults to 'CONTEXTIO_ENCRYPTION_KEY'. */
+  /** Environment variable name holding the encryption key. Defaults to 'CONTEXTIO_LOGGER_ENCRYPTION_KEY'. */
   keyEnvVar?: string;
   /** Encryption key length in bytes. Defaults to 32 (AES-256). */
   keyLength: number;
