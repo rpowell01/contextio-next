@@ -281,12 +281,58 @@ export function DiffDialog({
   // Use full body content for diff if available, otherwise use match snippets
   const diffPreContent = fullOriginal ?? preContent;
   const diffPostContent = fullRedacted ?? postContent;
-  const fullDiff = useMemo(() => computeDiff(diffPreContent, diffPostContent), [diffPreContent, diffPostContent]);
+
+  // Normalize post-content by replacing redaction placeholders with their pre-values.
+  // This ensures the diff algorithm treats redactions as "equal" chunks instead of
+  // delete+insert pairs, so both panes show the same structure with highlights.
+  const normalizedPostContent = useMemo(() => {
+    if (!matches || matches.length === 0) return diffPostContent;
+    let normalized = diffPostContent;
+    // Sort matches by postValue length descending to avoid partial replacements
+    const sortedMatches = [...matches].sort((a, b) => 
+      (b.postValue?.length ?? 0) - (a.postValue?.length ?? 0)
+    );
+    for (const match of sortedMatches) {
+      if (match.postValue && match.preValue) {
+        const escapedPostValue = match.postValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(escapedPostValue, 'g');
+        normalized = normalized.replace(regex, match.preValue);
+      }
+    }
+    return normalized;
+  }, [diffPostContent, matches]);
+
+  const fullDiff = useMemo(() => computeDiff(diffPreContent, normalizedPostContent), [diffPreContent, normalizedPostContent]);
 
   // Filter diff to show only changes with context
   const { chunks: diff, hasHiddenLines } = useMemo(
-    () => filterDiffWithContext(fullDiff, 3),
-    [fullDiff]
+    () => {
+      const { chunks, hasHiddenLines } = filterDiffWithContext(fullDiff, 3);
+      
+      // Enrich diff chunks with redaction metadata for highlighting
+      // This maps redaction positions from matches to diff chunks
+      const enrichedChunks = chunks.map((chunk) => {
+        if (!matches || matches.length === 0) return chunk;
+        
+        // Check if any match falls within this chunk's content
+        const chunkMatches = matches.filter((match) => {
+          if (!match.preValue || !match.postValue) return false;
+          // Check if this chunk's value contains the preValue (left) or postValue (right)
+          return chunk.value.includes(match.preValue) || chunk.value.includes(match.postValue);
+        });
+        
+        if (chunkMatches.length > 0) {
+          return {
+            ...chunk,
+            _redactionMatches: chunkMatches,
+          };
+        }
+        return chunk;
+      });
+      
+      return { chunks: enrichedChunks, hasHiddenLines };
+    },
+    [fullDiff, matches],
   );
 
   // Detect if content is valid JSON for syntax highlighting
@@ -826,9 +872,13 @@ if (isPre && matches.length > 0) {
       path: m.path,
     }));
     
+    // Use enriched chunk's redaction matches if available, otherwise fall back to all matches
+    const chunkRedactionMatches = (item as any)._redactionMatches || [];
+    const effectiveMatches = chunkRedactionMatches.length > 0 ? chunkRedactionMatches : enhancedMatches;
+    
     const renderValue = isLeft
-      ? <RedactionHighlight value={displayValue} isPre matches={enhancedMatches} onAddFalsePositive={onAddFalsePositive} />
-      : <RedactionHighlight value={displayValue} matches={enhancedMatches} onAddFalsePositive={onAddFalsePositive} />;
+      ? <RedactionHighlight value={displayValue} isPre matches={effectiveMatches} onAddFalsePositive={onAddFalsePositive} />
+      : <RedactionHighlight value={displayValue} matches={effectiveMatches} onAddFalsePositive={onAddFalsePositive} />;
 
     return (
       <div
