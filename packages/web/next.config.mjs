@@ -130,6 +130,25 @@ const nextConfig = {
       nativeModules.forEach((mod) => {
         config.resolve.alias[mod] = false;
       });
+      // Externalize server-only packages for client bundle
+      config.externals = config.externals || [];
+      config.externals.push({
+        "@contextio/core": "commonjs @contextio/core",
+        "@contextio/logger": "commonjs @contextio/logger",
+        "@contextio/redact": "commonjs @contextio/redact",
+      });
+      // Externalize all @contextio/core submodules
+      config.externals.push((context, request, callback) => {
+        if (request.startsWith("@contextio/core")) {
+          return callback(null, `commonjs ${request}`);
+        }
+        callback();
+      });
+      nativeModules.forEach((mod) => {
+        config.externals.push({
+          [mod]: `commonjs ${mod}`,
+        });
+      });
     } else {
       // For server bundle, do NOT apply node:* fallbacks - let Node.js handle native modules
       // Only apply non-node: fallbacks to avoid bundling issues
