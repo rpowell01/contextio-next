@@ -103,11 +103,32 @@ export function DiffDialog({
       
       // Find position in pre-content
       const preIndex = diffPreContent.indexOf(match.preValue);
-      // Find position in post-content
-      const postIndex = diffPostContent.indexOf(match.postValue);
+      // Find position in post-content - try exact match first, then try placeholder pattern
+      let postIndex = diffPostContent.indexOf(match.postValue);
+      
+      // If exact postValue not found, try to find the placeholder pattern
+      if (postIndex === -1 && match.postValue) {
+        // Try to find the placeholder in the post content
+        const placeholderPattern = /\[[A-Z][A-Z0-9_-]*(?:_REDACTED|_\d+)\]/g;
+        const placeholderMatches = diffPostContent.match(placeholderPattern);
+        if (placeholderMatches && placeholderMatches.length > 0) {
+          // Use the first placeholder found as the position
+          postIndex = diffPostContent.indexOf(placeholderMatches[0]);
+        }
+      }
       
       // If we can't find exact positions, skip this match
-      if (preIndex === -1 || postIndex === -1) continue;
+      if (preIndex === -1 || postIndex === -1) {
+        console.debug("Skipping match - couldn't find positions", {
+          preValue: match.preValue?.slice(0, 50),
+          postValue: match.postValue?.slice(0, 50),
+          preIndex,
+          postIndex,
+          preContentLen: diffPreContent.length,
+          postContentLen: diffPostContent.length
+        });
+        continue;
+      }
       
       // Extract context around the redaction
       const preStart = Math.max(0, preIndex - CONTEXT_LENGTH);
