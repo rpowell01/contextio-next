@@ -147,6 +147,7 @@ function collectStrings(value: unknown, out: string[]): void {
 interface RawRedactionStats {
   totalRedactions?: unknown;
   byRule?: unknown;
+  matches?: Array<{ ruleId: string; preValue: string; postValue: string; path: string }>;
 }
 
 /**
@@ -265,7 +266,9 @@ function computeCaptureRedactionCounts(rawData: unknown): {
 function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedactionMetadata | null {
   try {
     const counts = computeCaptureRedactionCounts(rawData);
-    const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
+    const rawCapture = (rawData ?? null) as Record<string, unknown> & {
+      redactionStats?: RawRedactionStats;
+    } | null;
     const rawTimings =
       rawCapture?.timings && typeof rawCapture.timings === "object"
         ? (rawCapture.timings as Record<string, unknown>)
@@ -321,7 +324,12 @@ function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedacti
       byRule: counts.byRule,
       generatedAt: new Date().toISOString(),
       // Include matches from redact plugin if available (we can extract from rawData if present)
-      matches: extractRedactionMatches(rawData),
+      matches: rawCapture?.redactionStats?.matches?.map((m): RedactionMatch => ({
+        ruleId: m.ruleId,
+        original: m.preValue,
+        placeholder: m.postValue,
+        path: m.path,
+      })) ?? extractRedactionMatches(rawData),
       source: (rawCapture?.source as string) ?? undefined,
       provider: (rawCapture?.provider as string) ?? "unknown",
       targetUrl: (rawCapture?.targetUrl as string) ?? "",
