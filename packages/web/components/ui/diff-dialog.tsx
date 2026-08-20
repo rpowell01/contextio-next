@@ -9,7 +9,7 @@ import {
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
-import { computeDiff, type DiffChunk, filterDiffWithContext } from "@/lib/diff";
+import { computeDiff, filterDiffWithContext } from "@/lib/diff";
 import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
 
 interface DiffDialogProps {
@@ -43,214 +43,6 @@ interface DiffDialogProps {
 
 type ViewMode = "diff" | "syntax";
 
-const lineStyle = {
-  padding: "2px 8px",
-  borderRadius: "4px",
-  minHeight: "1.25rem",
-} as const;
-
-// Threshold for truncating long lines (chars)
-const TRUNCATE_THRESHOLD = 500;
-// Context to show around redactions (chars)
-const CONTEXT_CHARS = 200;
-
-// Truncate a long line to show context around redactions
-// Returns { value: truncated string, isTruncated: boolean }
-function truncateLongLine(
-  value: string,
-  isPre: boolean,
-  matches: Array<{ preValue: string; postValue: string }> | undefined
-): { value: string; isTruncated: boolean } {
-  // Only truncate if longer than threshold
-  if (value.length <= TRUNCATE_THRESHOLD) {
-    return { value, isTruncated: false };
-  }
-
-  // Find all redaction positions in the value
-  const positions: Array<{ start: number; end: number }> = [];
-
-  if (isPre && matches && matches.length > 0) {
-    // For left pane: find exact preValues
-    for (const match of matches) {
-      if (match.preValue) {
-        let searchStart = 0;
-        const preValue = match.preValue;
-        while (true) {
-          const idx = value.indexOf(preValue, searchStart);
-          if (idx === -1) break;
-          positions.push({ start: idx, end: idx + preValue.length });
-          // Fix: advance past the matched substring to avoid overlapping/infinite loops
-          searchStart = idx + preValue.length;
-        }
-      }
-    }
-
-    // If no exact preValue matches found (common when preValue is the entire
-    // original leaf string rather than just the matched substring), fall back
-    // to searching for common sensitive patterns that correspond to the
-    // placeholder types in postValue.
-    if (positions.length === 0) {
-      for (const match of matches) {
-        if (match.postValue) {
-          // Extract rule type from placeholder (e.g., "API_KEY" from "[API_KEY_REDACTED]")
-          const ruleMatch = match.postValue.match(/\[([A-Z][A-Z0-9_]*)_REDACTED\]/);
-          if (ruleMatch) {
-            const ruleType = ruleMatch[1];
-            // Search for patterns associated with this rule type
-            const patterns = getPatternsForRuleType(ruleType);
-            for (const pattern of patterns) {
-              let searchStart = 0;
-              while (true) {
-                const idx = value.indexOf(pattern, searchStart);
-                if (idx === -1) break;
-                positions.push({ start: idx, end: idx + pattern.length });
-                searchStart = idx + pattern.length;
-              }
-            }
-          }
-        }
-      }
-    }
-  } else if (!isPre && matches && matches.length > 0) {
-    // For right pane: find postValues (placeholders)
-    for (const match of matches) {
-      if (match.postValue) {
-        let searchStart = 0;
-        const postValue = match.postValue;
-        while (true) {
-          const idx = value.indexOf(postValue, searchStart);
-          if (idx === -1) break;
-          positions.push({ start: idx, end: idx + postValue.length });
-          searchStart = idx + postValue.length;
-        }
-      }
-    }
-  } else {
-    // Fallback: find [PLACEHOLDER] patterns in either pane (both [RULE_REDACTED] and [RULE_N] formats)
-    const placeholderPattern = /\[[A-Z][A-Z0-9_]*(?:_REDACTED|_\d+)\]/g;
-    let match;
-    while ((match = placeholderPattern.exec(value)) !== null) {
-      positions.push({ start: match.index, end: match.index + match[0].length });
-    }
-  }
-
-  // If no redaction positions found, use symmetric fallback for both panes
-  // Show first and last CONTEXT_CHARS to keep pane sizes consistent
-  if (positions.length === 0) {
-    const trunc = CONTEXT_CHARS;
-    let truncated = value.slice(0, trunc) + "…" + value.slice(-trunc);
-    return { value: truncated, isTruncated: true };
-  }
-
-  // Sort positions by start
-  positions.sort((a, b) => a.start - b.start);
-
-  // Calculate truncation bounds
-  const firstRedactionStart = positions[0].start;
-  const lastRedactionEnd = positions[positions.length - 1].end;
-
-  const truncateStart = Math.max(0, firstRedactionStart - CONTEXT_CHARS);
-  const truncateEnd = Math.min(value.length, lastRedactionEnd + CONTEXT_CHARS);
-
-  // If the truncation window covers most of the string, don't truncate
-  if (truncateStart === 0 && truncateEnd === value.length) {
-    return { value, isTruncated: false };
-  }
-
-  let truncated = "";
-  if (truncateStart > 0) {
-    truncated += "…";
-  }
-  truncated += value.slice(truncateStart, truncateEnd);
-  if (truncateEnd < value.length) {
-    truncated += "…";
-  }
-
-  return { value: truncated, isTruncated: true };
-}
-
-// Return common sensitive patterns for a given rule type
-function getPatternsForRuleType(ruleType: string): string[] {
-  const patterns: Record<string, string[]> = {
-    // Rule-based redaction patterns (from presets)
-    API_KEY: ["sk_", "pk_", "rk_", "ak_", "sk-", "pk-", "rk-", "ak-", "Bearer ", "token="],
-    API_KEY_PREFIXED: ["sk_", "pk_", "rk_", "ak_", "sk-", "pk-", "rk-", "ak-", "api-", "key-", "token-"],
-    AUTH: ["Bearer ", "Authorization", "auth", "password", "secret", "token"],
-    AUTH_HEADER: ["authorization:", "bearer "],
-    BEARER_TOKEN: ["bearer "],
-    SECRET: ["secret", "password", "key", "token"],
-    TOKEN: ["token", "Bearer ", "access_token", "refresh_token"],
-    PASSWORD: ["password", "passwd", "pwd"],
-    PRIVATE_KEY: ["-----BEGIN", "PRIVATE KEY-----"],
-    AWS_KEY: ["AKIA", "aws_key", "aws_secret"],
-    AWS_SECRET: ["aws_secret", "secret_key"],
-    GITHUB_TOKEN: ["ghp_", "ghs_", "github"],
-    ANTHROPIC_KEY: ["sk-ant-", "anthropic"],
-    OPENAI_KEY: ["sk-", "openai"],
-    GCP_API_KEY: ["gcp", "google"],
-    GCP_SERVICE_ACCOUNT: ["service_account", "gcp"],
-    GITLAB_TOKEN: ["glpat-", "gitlab"],
-    JWT: ["eyJ", "jwt"],
-    STRIPE_KEY: ["sk_live_", "rk_live_", "stripe"],
-    SLACK_TOKEN: ["xoxb-", "xoxp-", "slack"],
-    HUGGINGFACE_TOKEN: ["hf_", "huggingface"],
-    DATABRICKS_TOKEN: ["dapi", "databricks"],
-    NPM_TOKEN: ["npm_", "npm"],
-    PYPI_TOKEN: ["pypi-", "pypi"],
-    VAULT_TOKEN: ["vault", "hvs."],
-    SENDGRID_TOKEN: ["SG.", "sendgrid"],
-    NVIDIA_KEY: ["nvapi-", "nvidia"],
-    OPENROUTER_KEY: ["sk-or-", "openrouter"],
-    KILO_KEY: ["kilo", "kilo_"],
-    GENERIC_SECRET: ["secret", "api_key", "token"],
-
-    // PII preset patterns
-    EMAIL: ["@", ".com", ".org", ".net", ".io", ".co", ".edu", ".gov"],
-    SSN: [],
-    // CREDIT_CARD: [] - defined below with Presidio entity type patterns
-    PHONE_US: ["tel:", "phone", "+1", "(", "mobile", "cell"],
-    PHONE_EU: ["tel:", "phone", "+", "mobile", "cell"],
-    IBAN: ["iban", "bank", "account"],
-
-    // Strict preset patterns
-    IPV4: ["ip", "address", "ipv4"],
-    IPV6: ["ip", "address", "ipv6"],
-    DOB: ["birth", "birthday", "dob", "born", "age"],
-    BSN_DUTCH: ["bsn", "burgerservice", "sofinummer", "dutch", "netherlands"],
-    NI_NUMBER_UK: ["ni number", "national insurance", "nino", "uk", "british"],
-    PASSPORT_NUMBER: ["passport", "paspoort", "passeport", "reisepass"],
-
-    // Presidio detector entity types (from @siddicky/anonymizerts)
-    // These are the entity types detected by Presidio when using "llm", "hybrid", or "auto" modes
-    PERSON: ["person", "name", "mr.", "mrs.", "ms.", "dr.", "prof."],
-    LOCATION: ["location", "address", "city", "street", "avenue", "blvd", "road", "drive", "lane", "court", "place"],
-    ORGANIZATION: ["organization", "company", "corp", "inc", "llc", "ltd", "gmbh", "org", "institution", "university", "hospital", "bank"],
-    EMAIL_ADDRESS: ["@", ".com", ".org", ".net", ".io", "email", "e-mail", "mail"],
-    PHONE_NUMBER: ["tel:", "phone", "+1", "(", "mobile", "cell", "fax", "contact", "number"],
-    CREDIT_CARD: ["credit", "card", "visa", "mastercard", "amex", "discover", "payment", "billing", "cc"],
-    US_SSN: ["ssn", "social security", "social-security", "tax", "taxpayer"],
-    IP_ADDRESS: ["ip", "address", "ipv4", "ipv6"],
-    URL: ["http://", "https://", "url", "link", "www."],
-    DATE_TIME: ["date", "time", "datetime", "timestamp", "born", "birth", "schedule", "meeting", "appointment"],
-
-    // Pipeline detector (hybrid mode) - when ruleId is "pipeline", we infer from postValue
-    // Include all Presidio entity type patterns since pipeline can detect any of them
-    PIPELINE: [
-      "person", "name", "mr.", "mrs.", "ms.", "dr.", "prof.", // PERSON
-      "location", "address", "city", "street", "avenue", "blvd", "road", "drive", "lane", "court", "place", // LOCATION
-      "organization", "company", "corp", "inc", "llc", "ltd", "gmbh", "org", "institution", "university", "hospital", "bank", // ORGANIZATION
-      "@", ".com", ".org", ".net", ".io", "email", "e-mail", "mail", // EMAIL_ADDRESS
-      "tel:", "phone", "+1", "(", "mobile", "cell", "fax", "contact", "number", // PHONE_NUMBER
-      "credit", "card", "visa", "mastercard", "amex", "discover", "payment", "billing", "cc", // CREDIT_CARD
-      "ssn", "social security", "social-security", "tax", "taxpayer", // US_SSN
-      "ip", "address", "ipv4", "ipv6", // IP_ADDRESS
-      "http://", "https://", "url", "link", "www.", // URL
-      "date", "time", "datetime", "timestamp", "born", "birth", "schedule", "meeting", "appointment", // DATE_TIME
-    ],
-  };
-  return patterns[ruleType] ?? [];
-}
-
 function isValidJson(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
@@ -282,60 +74,65 @@ export function DiffDialog({
   const diffPreContent = fullOriginal ?? preContent;
   const diffPostContent = fullRedacted ?? postContent;
 
-  // Normalize post-content by replacing redaction placeholders with their pre-values.
-  // This ensures the diff algorithm treats redactions as "equal" chunks instead of
-  // delete+insert pairs, so both panes show the same structure with highlights.
-  const normalizedPostContent = useMemo(() => {
-    if (!matches || matches.length === 0) return diffPostContent;
+  // Build focused view segments around each redaction
+  // Each segment shows ~100 chars before/after the redaction
+  const redactionSegments = useMemo((): Array<{
+    preContext: string;
+    postContext: string;
+    preValue: string;
+    postValue: string;
+    ruleId: string;
+    label: string;
+    path: string;
+  }> => {
+    if (!matches || matches.length === 0) return [];
     
-    // Safety: limit total normalized content size to prevent "Invalid string length" errors
-    const MAX_NORMALIZED_LENGTH = 500000; // ~500KB max
-    let normalized = diffPostContent;
+    const CONTEXT_LENGTH = 100;
+    const segments: Array<{
+      preContext: string;
+      postContext: string;
+      preValue: string;
+      postValue: string;
+      ruleId: string;
+      label: string;
+      path: string;
+    }> = [];
     
-    // Early exit if content is already too large
-    if (normalized.length > MAX_NORMALIZED_LENGTH) {
-      console.warn("Post content too large for normalization, skipping");
-      return diffPostContent;
+    for (const match of matches) {
+      if (!match.preValue || !match.postValue) continue;
+      
+      // Find position in pre-content
+      const preIndex = diffPreContent.indexOf(match.preValue);
+      // Find position in post-content
+      const postIndex = diffPostContent.indexOf(match.postValue);
+      
+      // If we can't find exact positions, skip this match
+      if (preIndex === -1 || postIndex === -1) continue;
+      
+      // Extract context around the redaction
+      const preStart = Math.max(0, preIndex - CONTEXT_LENGTH);
+      const preEnd = Math.min(diffPreContent.length, preIndex + match.preValue.length + CONTEXT_LENGTH);
+      const postStart = Math.max(0, postIndex - CONTEXT_LENGTH);
+      const postEnd = Math.min(diffPostContent.length, postIndex + match.postValue.length + CONTEXT_LENGTH);
+      
+      const ruleInfo = extractRuleInfo(match.postValue);
+      
+      segments.push({
+        preContext: diffPreContent.slice(preStart, preEnd),
+        postContext: diffPostContent.slice(postStart, postEnd),
+        preValue: match.preValue,
+        postValue: match.postValue,
+        ruleId: match.ruleId ?? ruleInfo.ruleId,
+        label: ruleInfo.label,
+        path: match.path ?? "",
+      });
     }
     
-    // Sort matches by postValue length descending to avoid partial replacements
-    const sortedMatches = [...matches].sort((a, b) => 
-      (b.postValue?.length ?? 0) - (a.postValue?.length ?? 0)
-    );
-    
-    for (const match of sortedMatches) {
-      if (!match.postValue || !match.preValue) continue;
-      
-      // Safety: skip if preValue is excessively large (would bloat normalized string)
-      if (match.preValue.length > 10000) {
-        console.debug("Skipping large preValue normalization", { preValueLength: match.preValue.length });
-        continue;
-      }
-      
-      const escapedPostValue = match.postValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedPostValue, 'g');
-      
-      // Perform replacement with safety check
-      const beforeLength = normalized.length;
-      normalized = normalized.replace(regex, match.preValue);
-      
-      // Safety: abort if string grows too large
-      if (normalized.length > MAX_NORMALIZED_LENGTH) {
-        console.warn("Normalized content exceeded max length, reverting to original");
-        return diffPostContent;
-      }
-      
-      // Safety: prevent infinite replacement loops
-      if (normalized.length === beforeLength && match.preValue.includes(match.postValue)) {
-        console.warn("Replacement would cause infinite loop, skipping");
-        continue;
-      }
-    }
-    
-    return normalized;
-  }, [diffPostContent, matches]);
+    return segments;
+  }, [diffPreContent, diffPostContent, matches]);
 
-  const fullDiff = useMemo(() => computeDiff(diffPreContent, normalizedPostContent), [diffPreContent, normalizedPostContent]);
+  // Also compute full diff for overview (optional, for non-redaction changes)
+  const fullDiff = useMemo(() => computeDiff(diffPreContent, diffPostContent), [diffPreContent, diffPostContent]);
 
   // Filter diff to show only changes with context
   const { chunks: diff, hasHiddenLines } = useMemo(
@@ -367,6 +164,30 @@ export function DiffDialog({
     },
     [fullDiff, matches],
   );
+
+  // Helper to extract rule info from postValue placeholder
+  const extractRuleInfo = useCallback((postValue: string) => {
+    const redactedMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_REDACTED\]/);
+    if (redactedMatch) {
+      const ruleType = redactedMatch[1];
+      return {
+        ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
+        label: ruleType.replace(/_/g, " "),
+      };
+    }
+    const pipelineMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_\d+\]/);
+    if (pipelineMatch) {
+      const ruleType = pipelineMatch[1];
+      return {
+        ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
+        label: ruleType.replace(/_/g, " "),
+      };
+    }
+    return {
+      ruleId: "unknown",
+      label: postValue.replace(/[\[\]]/g, ""),
+    };
+  }, []);
 
   // Detect if content is valid JSON for syntax highlighting
   const isJsonContent = useMemo(() => {
@@ -612,33 +433,6 @@ export function DiffDialog({
     const placeholderPattern = /\[[A-Z][A-Z0-9_]*(?:_REDACTED|_\d+)\]/g;
     const safeValue = String(value || "");
 
-    // Helper to extract rule info from postValue placeholder
-    const extractRuleInfo = (postValue: string) => {
-      // Try to match [RULE_REDACTED] format
-      const redactedMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_REDACTED\]/);
-      if (redactedMatch) {
-        const ruleType = redactedMatch[1];
-        return {
-          ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
-          label: ruleType.replace(/_/g, " "),
-        };
-      }
-      // Try to match [RULE_N] format (pipeline)
-      const pipelineMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_\d+\]/);
-      if (pipelineMatch) {
-        const ruleType = pipelineMatch[1];
-        return {
-          ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
-          label: ruleType.replace(/_/g, " "),
-        };
-      }
-      // Fallback
-      return {
-        ruleId: "unknown",
-        label: postValue.replace(/[\[\]]/g, ""),
-      };
-    };
-
 if (isPre && matches.length > 0) {
       // Left pane: highlight pre-values using match indices from the right pane's placeholder positions.
       // We use the matches array directly since it contains both preValue and postValue for each redaction.
@@ -867,77 +661,54 @@ if (isPre && matches.length > 0) {
     return <code className="font-mono text-xs">{parts}</code>;
   }, []);
 
-  // Render a single diff line with redaction highlighting and data attributes for navigation
-  const renderLine = (item: DiffChunk, side: "left" | "right", diffIndex: number) => {
-    const isLeft = side === "left";
-    const showLine = isLeft ? item.type !== "insert" : item.type !== "delete";
-
-    if (!showLine) {
-      return <div style={lineStyle} data-diff-index={diffIndex} />;
-    }
-
-    const lineNum = isLeft ? item.oldLineNum : item.newLineNum;
-    const lineClass = `font-mono text-xs whitespace-pre-wrap ${
-      isLeft
-        ? item.type === "delete"
-          ? "diff-line-delete"
-          : item.type === "insert"
-          ? "diff-line-insert"
-          : "bg-transparent"
-        : item.type === "delete"
-        ? "diff-line-delete"
-        : item.type === "insert"
-        ? "diff-line-insert"
-        : "bg-transparent"
-    }`;
-
-    // For right pane (post-redaction), use RedactionHighlight to highlight placeholders
-    // For left pane (pre-redaction), use RedactionHighlight with isPre=true and pass matches for exact highlighting
-    // Truncate very long lines to show context around redactions
-    const rawValue = item.value ?? "";
-    const { value: displayValue } = truncateLongLine(rawValue, isLeft, matches ?? []);
-    
-    // Convert matches to include ruleId and path for the click handler
-    const enhancedMatches = (matches ?? []).map(m => ({
-      preValue: m.preValue,
-      postValue: m.postValue,
-      ruleId: m.ruleId,
-      path: m.path,
-    }));
-    
-    // Use enriched chunk's redaction matches if available, otherwise fall back to all matches
-    const chunkRedactionMatches = (item as any)._redactionMatches || [];
-    const effectiveMatches = chunkRedactionMatches.length > 0 ? chunkRedactionMatches : enhancedMatches;
-    
-    const renderValue = isLeft
-      ? <RedactionHighlight value={displayValue} isPre matches={effectiveMatches} onAddFalsePositive={onAddFalsePositive} />
-      : <RedactionHighlight value={displayValue} matches={effectiveMatches} onAddFalsePositive={onAddFalsePositive} />;
-
-    return (
-      <div
-        className={lineClass}
-        style={lineStyle}
-        data-diff-index={diffIndex}
-      >
-        <span className="text-muted-foreground mr-2 select-none" style={{ width: "3rem", display: "inline-block", textAlign: "right" }}>
-          {lineNum ?? ""}
-        </span>
-        {renderValue}
-      </div>
-    );
-  };
-
-  const renderDiffPane = (diffChunks: typeof diff, side: "left" | "right") => (
-    <div className="font-mono text-xs">
-      {diffChunks.map((chunk, idx) => (
-        <div key={idx}>{renderLine(chunk, side, idx)}</div>
-      ))}
-    </div>
-  );
-
   const renderSyntaxPane = (content: string) => (
     <SyntaxHighlighter code={content} lang="json" />
   );
+
+  // Render focused redaction segments - each shows ~100 chars context around the redaction
+  const renderRedactionSegments = (side: "left" | "right") => {
+    if (!redactionSegments || redactionSegments.length === 0) {
+      return (
+        <div className="p-4 text-center text-muted-foreground">
+          No redactions found in this capture.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {redactionSegments.map((segment, index) => (
+          <div key={index} className="border border-border rounded-lg bg-background p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono text-primary">
+                {segment.ruleId}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {segment.path && <span className="font-mono">{segment.path}</span>}
+              </span>
+            </div>
+            <div className="font-mono text-xs bg-muted/50 rounded p-3 overflow-x-auto">
+              {side === "left" ? (
+                <RedactionHighlight
+                  value={segment.preContext}
+                  isPre
+                  matches={[{ preValue: segment.preValue, postValue: segment.postValue, ruleId: segment.ruleId, path: segment.path }]}
+                  onAddFalsePositive={onAddFalsePositive}
+                />
+              ) : (
+                <RedactionHighlight
+                  value={segment.postContext}
+                  isPre={false}
+                  matches={[{ preValue: segment.preValue, postValue: segment.postValue, ruleId: segment.ruleId, path: segment.path }]}
+                  onAddFalsePositive={onAddFalsePositive}
+                />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -1087,7 +858,7 @@ if (isPre && matches.length > 0) {
                   id="left-panel-diff"
                   aria-labelledby="diff-tab"
                 >
-                  {renderDiffPane(diff, "left")}
+                  {renderRedactionSegments("left")}
                 </div>
               </div>
               <div className="w-full md:w-1/2 min-w-0 flex flex-col min-h-0">
@@ -1102,7 +873,7 @@ if (isPre && matches.length > 0) {
                   id="right-panel-diff"
                   aria-labelledby="diff-tab"
                 >
-                  {renderDiffPane(diff, "right")}
+                  {renderRedactionSegments("right")}
                 </div>
               </div>
             </div>
