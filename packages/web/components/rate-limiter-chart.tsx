@@ -10,7 +10,7 @@ import { formatNumber } from "@/lib/utils";
 function formatPercent(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
-import type { RateLimiterBucketState } from "@/types/api";
+import type { RateLimiterBucketState } from "@/types/client-api";
 import {
   BarChart,
   Bar,

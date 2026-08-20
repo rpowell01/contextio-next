@@ -1,4 +1,5 @@
-import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, RateLimiterMetrics, ProviderConfig, ProviderMetadata, FalsePositiveEntry } from "@/types/api";
+import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, ProviderConfig, ProviderMetadata, FalsePositiveEntry } from "@/types/api";
+import type { RateLimiterMetrics } from "@/types/client-api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
 /**

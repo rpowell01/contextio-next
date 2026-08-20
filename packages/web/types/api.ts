@@ -682,6 +682,3 @@ export interface FalsePositiveEntry {
   /** Timestamp when the false positive was recorded */
   timestamp: number;
 }
-
-// Re-exported from @contextio/core for the web package
-export type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics, Provider } from "@contextio/core";

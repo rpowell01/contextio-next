@@ -6,8 +6,8 @@ import { apiClient, RequestAbortedError } from "@/lib/api";
 import type {
   MetricsData,
   TimeRange,
-  RateLimiterMetrics,
 } from "@/types/api";
+import type { RateLimiterMetrics } from "@/types/client-api";
 import { TrafficChart } from "@/components/traffic-chart";
 import { RateLimiterChart } from "@/components/rate-limiter-chart";
 import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";

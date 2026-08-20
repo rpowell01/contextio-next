@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { RateLimiterMetrics } from "@/types/api";
+import type { RateLimiterMetrics } from "@contextio/core";
 import { createSuccessResponse } from "@contextio/core";
 
 // Proxy admin API URL (for server-side requests)
