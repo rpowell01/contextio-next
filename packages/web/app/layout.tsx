@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/theme-provider";
 import "../globals.css";
-import { getSettingsWithMeta } from "@contextio/core/db";
 import { DEFAULT_SETTINGS, applyEnvOverrides } from "@/lib/settings";
 
 export const metadata: Metadata = {
@@ -29,6 +28,7 @@ export const metadata: Metadata = {
 async function getServerTheme(): Promise<string> {
   try {
     // Get settings from database (no env keys yet)
+    const { getSettingsWithMeta } = await import("@contextio/core/db");
     const { settings: dbSettings } = getSettingsWithMeta();
     
     // Handle case where settings might be null (database empty)
