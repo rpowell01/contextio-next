@@ -130,13 +130,10 @@ const nextConfig = {
       nativeModules.forEach((mod) => {
         config.resolve.alias[mod] = false;
       });
-      // Externalize server-only packages for client bundle
-      config.externals = config.externals || [];
-      config.externals.push({
-        "@contextio/core": "commonjs @contextio/core",
-        "@contextio/logger": "commonjs @contextio/logger",
-        "@contextio/redact": "commonjs @contextio/redact",
-      });
+      // Alias server-only packages to false for client bundle (prevents bundling)
+      config.resolve.alias["@contextio/core"] = false;
+      config.resolve.alias["@contextio/logger"] = false;
+      config.resolve.alias["@contextio/redact"] = false;
       // Externalize all @contextio/core submodules
       config.externals.push((context, request, callback) => {
         if (request.startsWith("@contextio/core")) {
