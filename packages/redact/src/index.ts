@@ -34,7 +34,7 @@ import type { CompiledPolicy, PolicyJson, PathMatcher } from "./policy.js";
 import { compilePolicy, fromPreset, loadPolicyFile, parsePath } from "./policy.js";
 import type { PresetName } from "./presets.js";
 import type { RedactionRule } from "./rules.js";
-import { buildRedactMetaPayload, buildFullRedactionMetadata, createStats, recordMatch, redactWithPolicy, type MatchEntry, type RedactionMetadata, type RedactionStats } from "./redact.js";
+import { buildRedactMetaPayload, buildFullRedactionMetadata, createStats, getLineAndCharIndex, recordMatch, redactWithPolicy, type MatchEntry, type RedactionMetadata, type RedactionStats } from "./redact.js";
 import { createStreamRehydrator } from "./stream.js";
 import type {
   Detector,
@@ -366,7 +366,10 @@ async function applyDetectorSpans(
   for (const r of replacements) {
     stats.totalReplacements++;
     stats.byRule[r.ruleId] = (stats.byRule[r.ruleId] || 0) + 1;
-    recordMatch(stats, r.ruleId, r.match, r.replacement, currentPath);
+    // Calculate line number and character positions for detector spans
+    const { lineNumber, charIndex: startCharIndex } = getLineAndCharIndex(input, r.span.start);
+    const { charIndex: endCharIndex } = getLineAndCharIndex(input, r.span.end - 1);
+    recordMatch(stats, r.ruleId, r.match, r.replacement, currentPath, lineNumber, startCharIndex, endCharIndex);
   }
 
   // Apply replacements in descending order to avoid index shifting

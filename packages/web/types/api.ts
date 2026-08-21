@@ -369,6 +369,12 @@ export interface RedactionMatch {
   placeholder: string;
   /** JSON path where the match was found */
   path: string;
+  /** Line number where the redaction occurs in the capture file (1-indexed). */
+  lineNumber?: number;
+  /** Index of the first character of the redaction match within the line (0-indexed). */
+  startCharIndex?: number;
+  /** Index of the last character of the redaction match within the line (0-indexed, inclusive). */
+  endCharIndex?: number;
 }
 
 /**

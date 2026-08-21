@@ -31,6 +31,9 @@ interface DiffDialogProps {
     preValue: string;
     postValue: string;
     path: string;
+    lineNumber?: number;
+    startCharIndex?: number;
+    endCharIndex?: number;
   }>;
   // Callback when user clicks on a redaction to add as false positive
   onAddFalsePositive?: (data: {
@@ -448,14 +451,14 @@ export function DiffDialog({
   }: {
     value: string | undefined | null;
     isPre?: boolean;
-    matches?: Array<{ preValue: string; postValue: string; ruleId?: string; path?: string }>;
+    matches?: Array<{ preValue: string; postValue: string; ruleId?: string; path?: string; lineNumber?: number; startCharIndex?: number; endCharIndex?: number }>;
     onAddFalsePositive?: (data: { value: string; ruleId: string; label: string; path: string }) => void;
   }) => {
     // Match both [RULE_REDACTED] and [RULE_N] formats (pipeline detector)
     const placeholderPattern = /\[[A-Z][A-Z0-9_]*(?:_REDACTED|_\d+)\]/g;
     const safeValue = String(value || "");
 
-if (isPre && matches.length > 0) {
+  if (isPre && matches.length > 0) {
       // Left pane: highlight pre-values using match indices from the right pane's placeholder positions.
       // We use the matches array directly since it contains both preValue and postValue for each redaction.
       // Iterate through matches in order and find each preValue in the left content sequentially.

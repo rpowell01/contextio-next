@@ -45,6 +45,9 @@ export interface RedactionMatch {
 	preValue: string;
 	postValue: string;
 	path: string;
+	lineNumber?: number;
+	startCharIndex?: number;
+	endCharIndex?: number;
 }
 
 export interface RedactionMetadata {

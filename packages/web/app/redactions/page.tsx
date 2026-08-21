@@ -276,14 +276,36 @@ export default function RedactionsPage() {
   };
 
   // Handle click on redaction in diff dialog to add as false positive
-  const handleAddFalsePositive = useCallback((data: {
+  const handleAddFalsePositive = useCallback(async (fpData: {
     value: string;
     ruleId: string;
     label: string;
     path: string;
   }) => {
-    setFpDialogData(data);
-    setFpDialogOpen(true);
+    // Check if user has admin role before opening the false positive dialog
+    try {
+      const response = await fetch("/api/auth/check-admin");
+      const adminData = await response.json();
+      
+      if (!adminData.authenticated) {
+        // User not authenticated, show login required dialog
+        alert("You must be logged in to add false positives. Please log in first.");
+        return;
+      }
+      
+      if (!adminData.isAdmin) {
+        // User is not admin, show admin required dialog
+        alert("Admin role required: Only users with admin privileges can add false positives. Please contact your administrator to request admin access.");
+        return;
+      }
+      
+      // User is admin, proceed to open the false positive dialog
+      setFpDialogData(fpData);
+      setFpDialogOpen(true);
+    } catch (error) {
+      console.error("Failed to check admin status:", error);
+      alert("Failed to verify admin status. Please try again.");
+    }
   }, []);
 
   const handleResizeStart = (key: string, e: React.MouseEvent) => {

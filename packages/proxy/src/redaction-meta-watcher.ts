@@ -63,6 +63,9 @@ export interface RedactionMatch {
   original: string;
   placeholder: string;
   path: string;
+  lineNumber?: number;
+  startCharIndex?: number;
+  endCharIndex?: number;
 }
 
 export interface CaptureRedactionMetadata {
@@ -415,15 +418,18 @@ export function createRedactionMetaWatcher(
         tokensPerSecond: metadata.tokensPerSecond,
         successCount: metadata.successCount,
         errorCount: metadata.errorCount,
-        model: metadata.model,
-	        // Convert watcher's match format (original/placeholder) to DB format (preValue/postValue)
-	        matches: metadata.matches?.map((m) => ({
-	          ruleId: m.ruleId,
-	          preValue: m.original,
-	          postValue: m.placeholder,
-	          path: m.path,
-	        })),
-	      };
+                model: metadata.model,
+                // Convert watcher's match format (original/placeholder) to DB format (preValue/postValue)
+                matches: metadata.matches?.map((m) => ({
+                  ruleId: m.ruleId,
+                  preValue: m.original,
+                  postValue: m.placeholder,
+                  path: m.path,
+                  lineNumber: m.lineNumber,
+                  startCharIndex: m.startCharIndex,
+                  endCharIndex: m.endCharIndex,
+                })),
+              };
       opts.persistToSqlite(sqliteMetadata);
     } catch (err) {
       console.error(

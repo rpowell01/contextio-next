@@ -12,6 +12,12 @@ export interface RedactionMatch {
   original: string;
   placeholder: string;
   path: string;
+  /** Line number where the redaction occurs in the capture file (1-indexed). */
+  lineNumber?: number;
+  /** Index of the first character of the redaction match within the line (0-indexed). */
+  startCharIndex?: number;
+  /** Index of the last character of the redaction match within the line (0-indexed, inclusive). */
+  endCharIndex?: number;
 }
 
 /** Aggregate redaction counts per rule. */
@@ -319,6 +325,9 @@ export function extractRedactionMatches(rawData: Record<string, unknown>): Array
   original: string;
   placeholder: string;
   path: string;
+  lineNumber?: number;
+  startCharIndex?: number;
+  endCharIndex?: number;
 }> {
   const requestBody = rawData.requestBody;
   const responseBody = rawData.responseBody;
@@ -328,8 +337,8 @@ export function extractRedactionMatches(rawData: Record<string, unknown>): Array
   const resCounts = countRedactionsInResponse(responseBody as string | undefined, undefined, true);
 
   return [
-    ...reqCounts.matches.map(m => ({ ruleId: m.ruleId, original: m.original, placeholder: m.placeholder, path: m.path })),
-    ...resCounts.matches.map(m => ({ ruleId: m.ruleId, original: m.original, placeholder: m.placeholder, path: m.path })),
+    ...reqCounts.matches.map(m => ({ ruleId: m.ruleId, original: m.original, placeholder: m.placeholder, path: m.path, lineNumber: m.lineNumber, startCharIndex: m.startCharIndex, endCharIndex: m.endCharIndex })),
+    ...resCounts.matches.map(m => ({ ruleId: m.ruleId, original: m.original, placeholder: m.placeholder, path: m.path, lineNumber: m.lineNumber, startCharIndex: m.startCharIndex, endCharIndex: m.endCharIndex })),
   ];
 }
 

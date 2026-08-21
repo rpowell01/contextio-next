@@ -32,6 +32,12 @@ export interface MatchEntry {
   postValue: string;
   /** JSON path to the affected leaf, dot-delimited. */
   path: string;
+  /** Line number where the redaction occurs in the capture file (1-indexed). */
+  lineNumber?: number;
+  /** Index of the first character of the redaction match within the line (0-indexed). */
+  startCharIndex?: number;
+  /** Index of the last character of the redaction match within the line (0-indexed, inclusive). */
+  endCharIndex?: number;
 }
 
 /**
@@ -56,9 +62,12 @@ export function recordMatch(
   preValue: string,
   postValue: string,
   path: string[],
+  lineNumber?: number,
+  startCharIndex?: number,
+  endCharIndex?: number,
 ): void {
   if (!stats.matches) stats.matches = [];
-  stats.matches.push({ ruleId, preValue, postValue, path: path.join(".") });
+  stats.matches.push({ ruleId, preValue, postValue, path: path.join("."), lineNumber, startCharIndex, endCharIndex });
 }
 
 export function buildRedactMetaPayload(
@@ -230,6 +239,23 @@ export function shouldRedactPath(
 // --- String redaction ---
 
 /**
+ * Convert a character index in a string to line number (1-indexed) and character index within that line (0-indexed).
+ */
+export function getLineAndCharIndex(text: string, charIndex: number): { lineNumber: number; charIndex: number } {
+  const lines = text.split('\n');
+  let currentPos = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const lineLength = lines[i].length;
+    if (charIndex <= currentPos + lineLength) {
+      return { lineNumber: i + 1, charIndex: charIndex - currentPos };
+    }
+    currentPos += lineLength + 1; // +1 for the newline character
+  }
+  // If charIndex is past the end, return the last line
+  return { lineNumber: lines.length, charIndex: lines[lines.length - 1].length };
+}
+
+/**
  * Resolve the replacement string for a matched value.
  */
 function resolveReplacement(match: string, rule: RedactionRule, map: ReplacementMap | null): string {
@@ -303,7 +329,10 @@ export async function redactString(
       const { start, end, match, captured, replacement } = validMatches[i];
       stats.totalReplacements++;
       stats.byRule[rule.name] = (stats.byRule[rule.name] || 0) + 1;
-      recordMatch(stats, rule.name, match, replacement, currentPath);
+      // Calculate line number and character positions within the string
+      const { lineNumber, charIndex: startCharIndex } = getLineAndCharIndex(result, start);
+      const { charIndex: endCharIndex } = getLineAndCharIndex(result, end - 1);
+      recordMatch(stats, rule.name, match, replacement, currentPath, lineNumber, startCharIndex, endCharIndex);
       result = result.slice(0, start) + replacement + result.slice(end);
     }
   }
