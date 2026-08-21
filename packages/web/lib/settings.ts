@@ -1,6 +1,15 @@
-import type { Provider } from "@contextio/core";
-
-export type { Provider };
+// Provider type defined locally to avoid importing from @contextio/core (server-only)
+// Must match @contextio/core's Provider type exactly
+export type Provider =
+  | "anthropic"
+  | "openai"
+  | "chatgpt"
+  | "gemini"
+  | "geminiCodeAssist"
+  | "vertex"
+  | "nvidia"
+  | "openrouter"
+  | "kilo";
 
 export interface RateLimitConfig {
   /** Maximum requests allowed within the time window. */
