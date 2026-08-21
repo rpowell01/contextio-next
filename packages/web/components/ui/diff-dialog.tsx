@@ -74,6 +74,31 @@ export function DiffDialog({
   const diffPreContent = fullOriginal ?? preContent;
   const diffPostContent = fullRedacted ?? postContent;
 
+  // Helper to extract rule info from postValue placeholder
+  // Defined as a regular function (not a hook) to avoid TDZ issues when called from useMemo
+  const extractRuleInfo = (postValue: string) => {
+    const redactedMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_REDACTED\]/);
+    if (redactedMatch) {
+      const ruleType = redactedMatch[1];
+      return {
+        ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
+        label: ruleType.replace(/_/g, " "),
+      };
+    }
+    const pipelineMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_\d+\]/);
+    if (pipelineMatch) {
+      const ruleType = pipelineMatch[1];
+      return {
+        ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
+        label: ruleType.replace(/_/g, " "),
+      };
+    }
+    return {
+      ruleId: "unknown",
+      label: postValue.replace(/[\[\]]/g, ""),
+    };
+  };
+
   // Build focused view segments around each redaction
   // Each segment shows ~100 chars before/after the redaction
   const redactionSegments = useMemo((): Array<{
@@ -185,30 +210,6 @@ export function DiffDialog({
     },
     [fullDiff, matches],
   );
-
-  // Helper to extract rule info from postValue placeholder
-  const extractRuleInfo = useCallback((postValue: string) => {
-    const redactedMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_REDACTED\]/);
-    if (redactedMatch) {
-      const ruleType = redactedMatch[1];
-      return {
-        ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
-        label: ruleType.replace(/_/g, " "),
-      };
-    }
-    const pipelineMatch = postValue.match(/\[([A-Z][A-Z0-9_-]*)_\d+\]/);
-    if (pipelineMatch) {
-      const ruleType = pipelineMatch[1];
-      return {
-        ruleId: ruleType.toLowerCase().replace(/-/g, "-"),
-        label: ruleType.replace(/_/g, " "),
-      };
-    }
-    return {
-      ruleId: "unknown",
-      label: postValue.replace(/[\[\]]/g, ""),
-    };
-  }, []);
 
   // Detect if content is valid JSON for syntax highlighting
   const isJsonContent = useMemo(() => {
