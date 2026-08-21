@@ -134,13 +134,8 @@ const nextConfig = {
       config.resolve.alias["@contextio/core"] = false;
       config.resolve.alias["@contextio/logger"] = false;
       config.resolve.alias["@contextio/redact"] = false;
-      // Externalize all @contextio/core submodules
-      config.externals.push((context, request, callback) => {
-        if (request.startsWith("@contextio/core")) {
-          return callback(null, `commonjs ${request}`);
-        }
-        callback();
-      });
+      // DO NOT add @contextio/core externals function for client bundle
+      // The alias:false above is sufficient and avoids CommonJS require() in browser
       nativeModules.forEach((mod) => {
         config.externals.push({
           [mod]: `commonjs ${mod}`,
