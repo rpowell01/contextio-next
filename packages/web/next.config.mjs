@@ -177,4 +177,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default nextConfig;# Force rebuild Fri Aug 21 00:44:14 UTC 2026
