@@ -40,7 +40,7 @@ export async function GET(): Promise<NextResponse> {
 
       if (adminEmails.length === 0) {
         return NextResponse.json(
-          { isAdmin: false, authenticated: true, error: "ADMIN_EMAILS not configured" },
+          { isAdmin: false, authenticated: true, error: "ADMIN_EMAILS not configured on server" },
           { status: 200 }
         );
       }

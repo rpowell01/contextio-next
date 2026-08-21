@@ -289,13 +289,13 @@ export default function RedactionsPage() {
       
       if (!adminData.authenticated) {
         // User not authenticated, show login required dialog
-        alert("You must be logged in to add false positives. Please log in first.");
+        alert("You must be logged in with an admin account to add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please log in with an admin account or contact your administrator.");
         return;
       }
       
       if (!adminData.isAdmin) {
         // User is not admin, show admin required dialog
-        alert("Admin role required: Only users with admin privileges can add false positives. Please contact your administrator to request admin access.");
+        alert("Admin role required: Only users with admin privileges can add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please contact your administrator to request admin access.");
         return;
       }
       
