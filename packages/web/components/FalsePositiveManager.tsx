@@ -405,7 +405,7 @@ export function FalsePositiveManager({
           onClick={handleClearAll}
           disabled={loading || clearing}
         >
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          {clearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {clearing ? "Clearing..." : "Clear All"}
         </Button>
       </div>
@@ -713,7 +713,7 @@ export function FalsePositiveManager({
                   type="submit"
                   disabled={creating}
                 >
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {creating ? "Saving..." : "Add False Positive"}
                 </Button>
               </DialogFooter>

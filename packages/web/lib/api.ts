@@ -986,6 +986,7 @@ async getProxyStatus(signal?: AbortSignal): Promise<ProxyStatus> {
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest", // CSRF protection for proxy admin endpoints
             ...this.csrfHeaders(),
             ...(options?.headers || {}),
           },
