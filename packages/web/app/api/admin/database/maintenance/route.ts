@@ -44,10 +44,10 @@ function runMaintenanceOperation(
       case "vacuum": {
         // VACUUM reclaims unused space and defragments the database
         // Cannot run inside a transaction
-        const beforeSize = db.pragma("page_count") as number;
-        const pageSize = db.pragma("page_size") as number;
+        const beforeSize = db.pragma("page_count", { simple: true }) as number;
+        const pageSize = db.pragma("page_size", { simple: true }) as number;
         db.exec("VACUUM");
-        const afterSize = db.pragma("page_count") as number;
+        const afterSize = db.pragma("page_count", { simple: true }) as number;
         const pagesFreed = beforeSize - afterSize;
         const bytesFreed = pagesFreed * pageSize;
         message = `VACUUM completed. Freed ${pagesFreed} pages (${formatBytes(bytesFreed)}).`;
@@ -184,11 +184,11 @@ export async function GET(): Promise<NextResponse> {
     }
     const db = getDb();
 
-    const pageCount = db.pragma("page_count") as number;
-    const pageSize = db.pragma("page_size") as number;
-    const freelistCount = db.pragma("freelist_count") as number;
-    const journalMode = db.pragma("journal_mode") as string;
-    const synchronous = db.pragma("synchronous") as number;
+    const pageCount = db.pragma("page_count", { simple: true }) as number;
+    const pageSize = db.pragma("page_size", { simple: true }) as number;
+    const freelistCount = db.pragma("freelist_count", { simple: true }) as number;
+    const journalMode = db.pragma("journal_mode", { simple: true }) as string;
+    const synchronous = db.pragma("synchronous", { simple: true }) as number;
 
     return NextResponse.json(
       createSuccessResponse({
