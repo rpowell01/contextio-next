@@ -37,6 +37,7 @@ export interface SettingsRow {
 	theme: string;
 	oidc_enabled: number;
 	oidc_public_url: string;
+	oidc_issuer: string;
 	show_page_load_time: number;
 	detector_mode: string;
 	detector_model_name: string;
@@ -265,6 +266,7 @@ const DEFAULT_SETTINGS: Settings = {
 	theme: "system",
 	oidcEnabled: false,
 	oidcPublicUrl: "",
+	oidcIssuer: "",
 	showPageLoadTime: false,
 	detectorMode: "rules",
 	detectorModelName: "Xenova/bert-base-NER",
@@ -333,6 +335,7 @@ function rowToSettings(row: SettingsRow): Settings {
 		theme: row.theme as Settings["theme"],
 		oidcEnabled: row.oidc_enabled === 1,
 		oidcPublicUrl: row.oidc_public_url,
+		oidcIssuer: row.oidc_issuer,
 		showPageLoadTime: row.show_page_load_time === 1,
 		detectorMode: row.detector_mode as Settings["detectorMode"],
 		detectorModelName: row.detector_model_name,
@@ -395,6 +398,7 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		theme: merged.theme,
 		oidc_enabled: merged.oidcEnabled ? 1 : 0,
 		oidc_public_url: merged.oidcPublicUrl,
+		oidc_issuer: merged.oidcIssuer,
 		show_page_load_time: merged.showPageLoadTime ? 1 : 0,
 		detector_mode: merged.detectorMode,
 		detector_model_name: merged.detectorModelName,
@@ -496,7 +500,7 @@ export function upsertSettings(settings: Settings): void {
 			id, log_dir, max_sessions, redact_preset, redact_reversible, redact_policy_file,
 			redact_policy_enabled, redact_paths_only, redact_paths_skip, redact_disabled_rules,
 			encryption_at_rest, capture_cleanup_enabled, capture_cleanup_interval_hours,
-			capture_cleanup_max_age_days, theme, oidc_enabled, oidc_public_url,
+			capture_cleanup_max_age_days, theme, oidc_enabled, oidc_public_url, oidc_issuer,
 			show_page_load_time, detector_mode, detector_model_name, detector_threshold,
 			rate_limiter, streaming_retry,
 			enable_logger, enable_redact, enable_rate_limiter, log_traffic,
@@ -526,6 +530,7 @@ export function upsertSettings(settings: Settings): void {
 			theme = excluded.theme,
 			oidc_enabled = excluded.oidc_enabled,
 			oidc_public_url = excluded.oidc_public_url,
+			oidc_issuer = excluded.oidc_issuer,
 			show_page_load_time = excluded.show_page_load_time,
 			detector_mode = excluded.detector_mode,
 			detector_model_name = excluded.detector_model_name,
@@ -577,6 +582,7 @@ export function upsertSettings(settings: Settings): void {
 			row.theme,
 			row.oidc_enabled,
 			row.oidc_public_url,
+			row.oidc_issuer,
 			row.show_page_load_time,
 			row.detector_mode,
 			row.detector_model_name,
@@ -647,6 +653,7 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		theme: { envVar: "CONTEXTIO_THEME", dynamic: true },
 		oidcEnabled: { envVar: "CONTEXTIO_OIDC_ENABLED", dynamic: false },
 		oidcPublicUrl: { envVar: "CONTEXTIO_OIDC_PUBLIC_URL", dynamic: false },
+		oidcIssuer: { envVar: "CONTEXTIO_OIDC_ISSUER", dynamic: false },
 		showPageLoadTime: { envVar: "", dynamic: true },
 		detectorMode: { envVar: "REDACT_DETECTOR_MODE", dynamic: true },
 		detectorModelName: { envVar: "REDACT_DETECTOR_MODEL_NAME", dynamic: true },
@@ -878,6 +885,7 @@ function validateAndMergeSettings(input: unknown): Settings {
 		], DEFAULT_SETTINGS.theme),
 		oidcEnabled: getBoolean("oidcEnabled", DEFAULT_SETTINGS.oidcEnabled),
 		oidcPublicUrl: getString("oidcPublicUrl", DEFAULT_SETTINGS.oidcPublicUrl),
+		oidcIssuer: getString("oidcIssuer", DEFAULT_SETTINGS.oidcIssuer),
 		showPageLoadTime: getBoolean("showPageLoadTime", DEFAULT_SETTINGS.showPageLoadTime),
 		detectorMode: getEnum("detectorMode", ["rules", "llm", "hybrid", "auto"], DEFAULT_SETTINGS.detectorMode),
 		detectorModelName: getString("detectorModelName", DEFAULT_SETTINGS.detectorModelName),

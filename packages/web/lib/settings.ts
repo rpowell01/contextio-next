@@ -813,6 +813,7 @@ export function validateSettings(input: unknown): Settings {
       | "monokai",
     oidcEnabled: validateBoolean("oidcEnabled"),
     oidcPublicUrl: validateString("oidcPublicUrl", 0),
+    oidcIssuer: validateString("oidcIssuer", 0),
     showPageLoadTime: validateBoolean("showPageLoadTime"),
     detectorMode: validateEnum("detectorMode", ["rules", "llm", "hybrid", "auto"]) as "rules" | "llm" | "hybrid" | "auto",
     detectorModelName: validateString("detectorModelName", 0),

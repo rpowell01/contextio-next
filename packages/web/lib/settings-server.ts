@@ -65,6 +65,7 @@ export async function writeSettingsFile(settings: unknown): Promise<void> {
 export interface OidcSettings {
   oidcEnabled: boolean;
   oidcPublicUrl: string | null;
+  oidcIssuer: string;
 }
 
 /** @deprecated Use database-backed settings via @contextio/core/db instead */
@@ -76,10 +77,11 @@ export async function getOidcSettings(): Promise<OidcSettings> {
       return {
         oidcEnabled: settings.oidcEnabled,
         oidcPublicUrl: settings.oidcPublicUrl,
+        oidcIssuer: settings.oidcIssuer,
       };
     }
   } catch {
     // Ignore settings read errors
   }
-  return { oidcEnabled: false, oidcPublicUrl: null };
- }
+  return { oidcEnabled: false, oidcPublicUrl: null, oidcIssuer: "" };
+}

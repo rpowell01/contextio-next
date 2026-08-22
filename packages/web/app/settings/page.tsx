@@ -151,6 +151,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Enable OpenID Connect authentication for the web UI. Requires a proxy restart and valid OIDC config (issuer, client ID, client secret, session secret) via environment variables.",
   oidcPublicUrl:
     "Public-facing URL for the proxy (e.g., https://contextio.example.com). Used for OIDC callback URLs when behind a reverse proxy. Requires a proxy restart to apply.",
+  oidcIssuer:
+    "OIDC issuer URL (e.g., https://accounts.google.com). Used to discover OIDC configuration and validate tokens. Requires a proxy restart to apply.",
   showPageLoadTime:
     "Display page load time in the bottom-left corner. Measures time from navigation start to fully interactive page (hydration + data fetch + render complete). Changes apply immediately.",
   detectorMode:
@@ -588,6 +590,7 @@ export default function SettingsPage() {
     captureCleanupMaxAgeDays: 30,
     oidcEnabled: false,
     oidcPublicUrl: "",
+    oidcIssuer: "",
     showPageLoadTime: false,
     detectorMode: "rules",
     detectorModelName: "Xenova/bert-base-NER",
@@ -852,6 +855,7 @@ export default function SettingsPage() {
               {renderSetting("encryptionAtRest")}
               {renderSetting("oidcEnabled")}
               {renderSetting("oidcPublicUrl")}
+              {renderSetting("oidcIssuer")}
             </div>
           </div>
         );
@@ -1870,6 +1874,28 @@ export default function SettingsPage() {
             <SettingHelp
               meta={getMeta("oidcPublicUrl")}
               description={SETTING_DESCRIPTIONS.oidcPublicUrl}
+            />
+          </div>
+        );
+      case "oidcIssuer":
+        return (
+          <div>
+            <Label htmlFor="oidcIssuer" className="block text-sm font-medium mb-2">
+              OIDC Issuer URL
+            </Label>
+            <Input
+              id="oidcIssuer"
+              value={settings.oidcIssuer}
+              onChange={(e) => updateSetting("oidcIssuer", e.target.value)}
+              placeholder="https://accounts.google.com"
+              disabled={isSettingOverridden("oidcIssuer")}
+              className={
+                isSettingOverridden("oidcIssuer") ? "bg-muted cursor-not-allowed" : ""
+              }
+            />
+            <SettingHelp
+              meta={getMeta("oidcIssuer")}
+              description={SETTING_DESCRIPTIONS.oidcIssuer}
             />
           </div>
         );
