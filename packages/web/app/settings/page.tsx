@@ -527,15 +527,15 @@ type SettingsTab =
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
+  { id: "database", label: "Database", icon: <Database className="h-4 w-4" /> },
+  { id: "falsePositives", label: "False Positives", icon: <AlertCircle className="h-4 w-4" /> },
   { id: "logging", label: "Logging", icon: <Database className="h-4 w-4" /> },
-  { id: "providers", label: "Providers", icon: <Server className="h-4 w-4" /> },
   { id: "proxy", label: "Proxy", icon: <Server className="h-4 w-4" /> },
+  { id: "providers", label: "Providers", icon: <Server className="h-4 w-4" /> },
   { id: "rateLimiter", label: "Rate Limiter", icon: <Gauge className="h-4 w-4" /> },
   { id: "redaction", label: "Redaction", icon: <EyeOff className="h-4 w-4" /> },
   { id: "security", label: "Security", icon: <Shield className="h-4 w-4" /> },
   { id: "streamingRetry", label: "Streaming Retry", icon: <Gauge className="h-4 w-4" /> },
-  { id: "falsePositives", label: "False Positives", icon: <AlertCircle className="h-4 w-4" /> },
-  { id: "database", label: "Database", icon: <Database className="h-4 w-4" /> },
 ];
 
 export default function SettingsPage() {
