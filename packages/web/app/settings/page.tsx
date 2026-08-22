@@ -8,6 +8,8 @@ import type { PresetName } from "@contextio/redact";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "@/components/theme-provider";
 import { FalsePositiveManager } from "@/components/FalsePositiveManager";
+import { LogsViewer } from "@/components/logs-viewer";
+import { EnvironmentVariablesPanel } from "@/components/environment-variables-panel";
 
 /** Preset rule names for UI display (avoids importing @contextio/redact which brings Node.js deps) */
 const PRESET_RULES: Record<PresetName, string[]> = {
@@ -515,19 +517,24 @@ function DisabledRulesList({
 // Tab configuration (module scope for stability)
 type SettingsTab =
   | "appearance"
+  | "database"
+  | "envVars"
+  | "falsePositives"
   | "logging"
-  | "providers"
   | "proxy"
+  | "providers"
   | "rateLimiter"
   | "redaction"
   | "security"
-  | "streamingRetry"
-  | "falsePositives"
-  | "database";
+  | "streamingRetry";
+
+// Logging sub-tab types
+type LoggingSubTab = "captureLogging" | "containerLogs";
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
   { id: "database", label: "Database", icon: <Database className="h-4 w-4" /> },
+  { id: "envVars", label: "Environment Variables", icon: <Server className="h-4 w-4" /> },
   { id: "falsePositives", label: "False Positives", icon: <AlertCircle className="h-4 w-4" /> },
   { id: "logging", label: "Logging", icon: <Database className="h-4 w-4" /> },
   { id: "proxy", label: "Proxy", icon: <Server className="h-4 w-4" /> },
@@ -536,6 +543,11 @@ const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "redaction", label: "Redaction", icon: <EyeOff className="h-4 w-4" /> },
   { id: "security", label: "Security", icon: <Shield className="h-4 w-4" /> },
   { id: "streamingRetry", label: "Streaming Retry", icon: <Gauge className="h-4 w-4" /> },
+];
+
+const loggingSubTabs: { id: LoggingSubTab; label: string }[] = [
+  { id: "captureLogging", label: "Capture Logging" },
+  { id: "containerLogs", label: "Container Logs" },
 ];
 
 export default function SettingsPage() {
@@ -676,6 +688,7 @@ export default function SettingsPage() {
   const messageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [envContainerId, setEnvContainerId] = useState("contextio-next");
 
   // Initialize active tab from localStorage or default to "logging"
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
@@ -688,10 +701,26 @@ export default function SettingsPage() {
     return "logging";
   });
 
+  // Initialize active logging sub-tab from localStorage or default to "captureLogging"
+  const [activeLoggingSubTab, setActiveLoggingSubTab] = useState<LoggingSubTab>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("settings-logging-subtab");
+      if (saved && loggingSubTabs.some((t) => t.id === saved)) {
+        return saved as LoggingSubTab;
+      }
+    }
+    return "captureLogging";
+  });
+
   // Persist active tab to localStorage
   useEffect(() => {
     localStorage.setItem("settings-active-tab", activeTab);
   }, [activeTab]);
+
+  // Persist active logging sub-tab to localStorage
+  useEffect(() => {
+    localStorage.setItem("settings-logging-subtab", activeLoggingSubTab);
+  }, [activeLoggingSubTab]);
 
   // Keyboard navigation for tabs
   const handleTabKeyDown = (event: React.KeyboardEvent, _tabId: SettingsTab, index: number) => {
@@ -721,6 +750,7 @@ export default function SettingsPage() {
 
   // Focus the active tab when it changes (handles keyboard navigation focus)
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const loggingSubTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => {
     const activeIndex = tabs.findIndex((t) => t.id === activeTab);
     if (activeIndex >= 0 && tabRefs.current[activeIndex]) {
@@ -728,72 +758,155 @@ export default function SettingsPage() {
     }
   }, [activeTab]);
 
+  // Focus the active logging sub-tab when it changes
+  useEffect(() => {
+    const activeIndex = loggingSubTabs.findIndex((t) => t.id === activeLoggingSubTab);
+    if (activeIndex >= 0 && loggingSubTabRefs.current[activeIndex]) {
+      loggingSubTabRefs.current[activeIndex]?.focus();
+    }
+  }, [activeLoggingSubTab]);
+
+  // Keyboard navigation for logging sub-tabs
+  const handleLoggingSubTabKeyDown = (event: React.KeyboardEvent, _subTabId: LoggingSubTab, index: number) => {
+    let newIndex = index;
+    switch (event.key) {
+      case "ArrowRight":
+        event.preventDefault();
+        newIndex = (index + 1) % loggingSubTabs.length;
+        break;
+      case "ArrowLeft":
+        event.preventDefault();
+        newIndex = (index - 1 + loggingSubTabs.length) % loggingSubTabs.length;
+        break;
+      case "Home":
+        event.preventDefault();
+        newIndex = 0;
+        break;
+      case "End":
+        event.preventDefault();
+        newIndex = loggingSubTabs.length - 1;
+        break;
+      default:
+        return;
+    }
+    setActiveLoggingSubTab(loggingSubTabs[newIndex].id);
+  };
+
   // Render tab panel content
   const renderTabPanel = () => {
     switch (activeTab) {
       case "logging":
         return (
           <div className="rounded-lg border p-6" role="tabpanel" id="panel-logging" aria-labelledby="tab-logging">
-            <h3 className="font-semibold mb-4">Logging</h3>
-            <div className="space-y-4">
-              {renderSetting("logDir")}
-              {renderSetting("maxSessions")}
-              {renderSetting("enableLogger")}
-              {renderSetting("logTraffic")}
-              {renderSetting("captureCleanupEnabled")}
-              {settings.captureCleanupEnabled && (
-                <div className="grid gap-4 md:grid-cols-2 pt-2 border-t">
-                  {renderSetting("captureCleanupIntervalHours")}
-                  {renderSetting("captureCleanupMaxAgeDays")}
-                </div>
-              )}
-
-              <div className="pt-4 border-t">
-                <AlertDialog
-                  open={deleteDialogOpen}
-                  onOpenChange={setDeleteDialogOpen}
-                >
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      className="flex items-center gap-2"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Remove All Captures
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete ALL capture files in the
-                        capture directory. This action cannot be undone. All
-                        captured API requests and responses will be lost.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <Button
-                        variant="destructive"
-                        disabled={isCleaning}
-                        onClick={handleCleanupAll}
-                        className="flex items-center gap-2"
-                      >
-                        {isCleaning ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            Cleaning...
-                          </>
-                        ) : (
-                          "Yes, delete all captures"
-                        )}
-                      </Button>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
+            {/* Logging sub-tabs */}
+            <div className="mb-4">
+              <nav className="flex gap-1 bg-muted rounded-lg p-1" role="tablist" aria-label="Logging options">
+                {loggingSubTabs.map((subTab, index) => (
+                  <button
+                    key={subTab.id}
+                    ref={(el) => { loggingSubTabRefs.current[index] = el; }}
+                    role="tab"
+                    aria-selected={activeLoggingSubTab === subTab.id}
+                    aria-controls={`panel-logging-${subTab.id}`}
+                    id={`tab-logging-${subTab.id}`}
+                    onClick={() => setActiveLoggingSubTab(subTab.id)}
+                    onKeyDown={(e) => handleLoggingSubTabKeyDown(e, subTab.id, index)}
+                    className={`
+                      flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors
+                      ${activeLoggingSubTab === subTab.id
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-background/50"
+                      }
+                    `}
+                  >
+                    {subTab.label}
+                  </button>
+                ))}
+              </nav>
             </div>
+
+            {/* Sub-tab panels */}
+            {activeLoggingSubTab === "captureLogging" && (
+              <div
+                role="tabpanel"
+                id="panel-logging-captureLogging"
+                aria-labelledby="tab-logging-captureLogging"
+                className="space-y-4"
+              >
+                <h3 className="font-semibold mb-4">Capture Logging</h3>
+                <div className="space-y-4">
+                  {renderSetting("logDir")}
+                  {renderSetting("maxSessions")}
+                  {renderSetting("enableLogger")}
+                  {renderSetting("logTraffic")}
+                  {renderSetting("captureCleanupEnabled")}
+                  {settings.captureCleanupEnabled && (
+                    <div className="grid gap-4 md:grid-cols-2 pt-2 border-t">
+                      {renderSetting("captureCleanupIntervalHours")}
+                      {renderSetting("captureCleanupMaxAgeDays")}
+                    </div>
+                  )}
+
+                  <div className="pt-4 border-t">
+                    <AlertDialog
+                      open={deleteDialogOpen}
+                      onOpenChange={setDeleteDialogOpen}
+                    >
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          className="flex items-center gap-2"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Remove All Captures
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will permanently delete ALL capture files in the
+                            capture directory. This action cannot be undone. All
+                            captured API requests and responses will be lost.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <Button
+                            variant="destructive"
+                            disabled={isCleaning}
+                            onClick={handleCleanupAll}
+                            className="flex items-center gap-2"
+                          >
+                            {isCleaning ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Cleaning...
+                              </>
+                            ) : (
+                              "Yes, delete all captures"
+                            )}
+                          </Button>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              </div>
+            )}
+            {activeLoggingSubTab === "containerLogs" && (
+              <div
+                role="tabpanel"
+                id="panel-logging-containerLogs"
+                aria-labelledby="tab-logging-containerLogs"
+              >
+                <h3 className="font-semibold mb-4">Container Logs</h3>
+                <div className="h-[calc(100vh-300px)]">
+                  <LogsViewer containerId="contextio-next" />
+                </div>
+              </div>
+            )}
           </div>
         );
       case "redaction":
@@ -979,6 +1092,31 @@ export default function SettingsPage() {
               These operations run directly on the SQLite database file used for metadata storage.
             </p>
             <DatabaseMaintenance />
+          </div>
+        );
+      case "envVars":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-envVars" aria-labelledby="tab-envVars">
+            <h3 className="font-semibold mb-4">Environment Variables</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              View environment variables for containers
+            </p>
+            <div className="flex items-end gap-4 mb-4">
+              <div>
+                <label htmlFor="envContainerId" className="block text-sm font-medium mb-1">
+                  Container ID
+                </label>
+                <input
+                  id="envContainerId"
+                  type="text"
+                  placeholder="Enter container ID..."
+                  value={envContainerId}
+                  onChange={(e) => setEnvContainerId(e.target.value)}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-sm min-w-[200px]"
+                />
+              </div>
+            </div>
+            <EnvironmentVariablesPanel containerId={envContainerId} />
           </div>
         );
       case "appearance":

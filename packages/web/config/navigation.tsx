@@ -147,47 +147,7 @@ export const defaultNavigation: NavigationItem[] = [
       </svg>
     ),
   },
-  {
-    name: "Env Vars",
-    href: "/env-vars",
-    icon: (
-      <svg
-        className="h-5 w-5"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-        aria-label="Env Vars"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M4 6h16M4 12h16M4 18h16"
-        />
-      </svg>
-    ),
-  },
-  {
-    name: "Logs",
-    href: "/logs",
-    icon: (
-      <svg
-        className="h-5 w-5"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-        aria-label="Logs"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M9 12h6m-6 4h4m5-6v-4a1 1 0 00-1-1h-4a1 1 0 00-1 1v4m-6 4h2m8 0h2"
-        />
-      </svg>
-    ),
-  },
-];
+  ];
 
 /**
  * Default navigation configuration with all items enabled.
