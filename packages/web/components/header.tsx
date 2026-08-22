@@ -24,6 +24,7 @@ export function Header({ navigationConfig }: HeaderProps) {
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [oidcEnabled, setOidcEnabled] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Fetch OIDC configuration on mount
   async function fetchOidcConfig() {
@@ -64,6 +65,11 @@ export function Header({ navigationConfig }: HeaderProps) {
     }
   }
 
+  // Fetch admin status when user changes
+  useEffect(() => {
+    fetchAdminStatus();
+  }, [user]);
+
   async function handleLogout() {
     try {
       await fetch("/api/auth/logout", {
@@ -71,6 +77,7 @@ export function Header({ navigationConfig }: HeaderProps) {
         credentials: "include",
       });
       setUser(null);
+      setIsAdmin(false);
       // Redirect to proxy's /auth/logout which will clear proxy session
       // and redirect to OIDC provider logout, then to /auth/logged-out
       window.location.href = "/auth/logout?redirect=" + encodeURIComponent("/auth/logged-out");
@@ -78,6 +85,29 @@ export function Header({ navigationConfig }: HeaderProps) {
       console.error("Logout failed:", error);
     }
     setShowMenu(false);
+  }
+
+  // Fetch admin status when user is authenticated
+  async function fetchAdminStatus() {
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+    try {
+      const response = await fetch("/api/auth/check-admin", {
+        credentials: "include",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setIsAdmin(data.isAdmin === true);
+      } else {
+        // Non-ok response (403, 401, 500, etc.) - user is not admin
+        setIsAdmin(false);
+      }
+    } catch (error) {
+      console.debug("Admin status fetch failed:", error);
+      setIsAdmin(false);
+    }
   }
 
   // Fetch OIDC config first, then session
@@ -143,7 +173,17 @@ export function Header({ navigationConfig }: HeaderProps) {
                         {user.name?.[0] || user.email?.[0] || "U"}
                       </div>
                     )}
-                    <span className="hidden sm:block">{user.name || user.email || "User"}</span>
+                    <span className="hidden sm:block flex items-center gap-1.5">
+                      {user.name || user.email || "User"}
+                      {isAdmin && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
+                          <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3 3a.75.75 0 001.06 1.061l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06l-3-3z" clipRule="evenodd" />
+                          </svg>
+                          Admin
+                        </span>
+                      )}
+                    </span>
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
@@ -167,6 +207,14 @@ export function Header({ navigationConfig }: HeaderProps) {
                           )}
                           <p className="mt-1 text-sm font-medium">{user.name || "User"}</p>
                           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                          {isAdmin && (
+                            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
+                              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3 3a.75.75 0 001.06 1.061l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06l-3-3z" clipRule="evenodd" />
+                              </svg>
+                              Admin
+                            </span>
+                          )}
                         </div>
                         <button
                           onClick={handleLogout}
