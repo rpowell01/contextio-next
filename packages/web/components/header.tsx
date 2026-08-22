@@ -34,9 +34,9 @@ export function Header({ navigationConfig }: HeaderProps) {
       if (response.ok) {
         const data = await response.json();
         console.log("[Header] providers response data:", JSON.stringify(data, null, 2));
-        if (data.success && data.data?.providers) {
-          setOidcEnabled(data.data.providers.length > 0);
-        }
+        const hasProviders = data.success && data.data?.providers?.length > 0;
+        console.log("[Header] setting oidcEnabled to:", hasProviders);
+        setOidcEnabled(hasProviders);
       }
     } catch (error) {
       console.debug("OIDC config fetch failed:", error);
@@ -45,6 +45,7 @@ export function Header({ navigationConfig }: HeaderProps) {
 
   // Fetch user session on mount (only if OIDC is enabled)
   async function fetchSession() {
+    console.log("[Header] fetchSession called, oidcEnabled:", oidcEnabled);
     if (!oidcEnabled) {
       setLoading(false);
       return;
@@ -54,8 +55,10 @@ export function Header({ navigationConfig }: HeaderProps) {
       const response = await fetch("/auth/session", {
         credentials: "include", // Include cookies
       });
+      console.log("[Header] /auth/session response status:", response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log("[Header] session data:", JSON.stringify(data, null, 2));
         if (data.authenticated && data.user) {
           setUser(data.user);
         }
@@ -121,6 +124,8 @@ export function Header({ navigationConfig }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {/* Debug: log render state */}
+      {(() => { console.log("[Header] render:", { oidcEnabled, loading, user, isAdmin, showMenu }); return null; })()}
       <div className="container flex h-14 items-center justify-between">
         <div className="flex items-center gap-2">
           <img
