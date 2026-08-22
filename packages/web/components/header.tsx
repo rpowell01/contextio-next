@@ -238,12 +238,12 @@ export function Header({ navigationConfig }: HeaderProps) {
                   )}
                 </div>
               ) : (
-                <Link
+                <a
                   href="/auth/login"
                   className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
                 >
                   Sign in
-                </Link>
+                </a>
               )}
             </>
           )}
