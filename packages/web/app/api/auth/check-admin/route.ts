@@ -3,61 +3,56 @@ import { cookies } from "next/headers";
 
 /**
  * Check if the current authenticated user has admin privileges.
- * This mirrors the proxy's admin check logic using ADMIN_EMAILS environment variable.
+ * Uses the proxy's /auth/session endpoint to validate session and get user info.
  */
 export async function GET(): Promise<NextResponse> {
   try {
-    // Get the session cookie
+    // Forward cookies to the proxy's /auth/session endpoint
     const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("session");
+    const cookieHeader = cookieStore.getAll()
+      .map((c) => `${c.name}=${c.value}`)
+      .join("; ");
 
-    if (!sessionCookie?.value) {
+    const response = await fetch("/auth/session", {
+      headers: {
+        Cookie: cookieHeader,
+      },
+    });
+
+    if (!response.ok) {
       return NextResponse.json(
-        { isAdmin: false, authenticated: false, error: "No session found" },
+        { isAdmin: false, authenticated: false, error: "No valid session" },
         { status: 401 }
       );
     }
 
-    // Decode the session cookie to get user info
-    // The session cookie is a JWT or similar format
-    try {
-      const sessionData = JSON.parse(
-        Buffer.from(sessionCookie.value.split(".")[1], "base64").toString()
-      );
+    const data = await response.json();
 
-      const userEmail = sessionData.email?.toLowerCase();
-
-      if (!userEmail) {
-        return NextResponse.json(
-          { isAdmin: false, authenticated: true, error: "No email in session" },
-          { status: 200 }
-        );
-      }
-
-      // Check against ADMIN_EMAILS environment variable (same logic as proxy)
-      const adminEmails =
-        process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim().toLowerCase()) ?? [];
-
-      if (adminEmails.length === 0) {
-        return NextResponse.json(
-          { isAdmin: false, authenticated: true, error: "ADMIN_EMAILS not configured on server" },
-          { status: 200 }
-        );
-      }
-
-      const isAdmin = adminEmails.includes(userEmail);
-
+    if (!data.authenticated || !data.user?.email) {
       return NextResponse.json(
-        { isAdmin, authenticated: true, email: userEmail },
+        { isAdmin: false, authenticated: data.authenticated || false, error: "No user email in session" },
+        { status: data.authenticated ? 200 : 401 }
+      );
+    }
+
+    // Check against ADMIN_EMAILS environment variable (same logic as proxy)
+    const adminEmails =
+      process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim().toLowerCase()) ?? [];
+
+    if (adminEmails.length === 0) {
+      return NextResponse.json(
+        { isAdmin: false, authenticated: true, error: "ADMIN_EMAILS not configured on server" },
         { status: 200 }
       );
-    } catch (parseError) {
-      console.error("Failed to parse session cookie:", parseError);
-      return NextResponse.json(
-        { isAdmin: false, authenticated: false, error: "Invalid session format" },
-        { status: 401 }
-      );
     }
+
+    const userEmail = data.user.email.toLowerCase();
+    const isAdmin = adminEmails.includes(userEmail);
+
+    return NextResponse.json(
+      { isAdmin, authenticated: true, email: userEmail },
+      { status: 200 }
+    );
   } catch (error) {
     console.error("Error checking admin status:", error);
     return NextResponse.json(
