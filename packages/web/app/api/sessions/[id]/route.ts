@@ -6,6 +6,7 @@ import {
   getCaptureDir,
   MAX_FILE_SIZE,
   readCaptureFile,
+  CaptureReadError,
 } from "@/lib/sessions/server-utils";
 import {
   computeContextValues,
@@ -246,8 +247,16 @@ export async function GET(
           const stats = await fs.stat(filepath);
           if (stats.size > MAX_FILE_SIZE) continue;
 
-          const data = await readCaptureFile(filepath);
-          if (!data) continue;
+          let data: Record<string, unknown>;
+          try {
+            data = await readCaptureFile(filepath);
+          } catch (error) {
+            if (error instanceof CaptureReadError) {
+              console.warn(`Skipping capture ${filename}: ${error.kind} - ${error.message}`);
+              continue;
+            }
+            throw error;
+          }
 
           // Check if this file belongs to the requested session
           if (

@@ -4,6 +4,7 @@ import {
   getCaptureDir,
   listCaptureFiles,
   readCaptureFile,
+  CaptureReadError,
 } from "@/lib/sessions/server-utils";
 import {
   computeCaptureRedactionCounts,
@@ -56,7 +57,17 @@ export async function POST(request: NextRequest) {
 
     for (const file of files) {
       const capturePath = `${captureDir}/${file}`;
-      const captureData = await readCaptureFile(capturePath);
+      let captureData: Record<string, unknown> | null = null;
+      try {
+        captureData = await readCaptureFile(capturePath);
+      } catch (error) {
+        if (error instanceof CaptureReadError) {
+          console.warn(`Backfill: Capture file not readable for ${file}: ${error.kind} - ${error.message}`);
+          errors++;
+          continue;
+        }
+        throw error;
+      }
 
       if (!captureData) {
         errors++;

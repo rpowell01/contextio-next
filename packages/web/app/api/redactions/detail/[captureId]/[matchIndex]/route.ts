@@ -3,6 +3,7 @@ import { join } from "path";
 import {
   getCaptureDir,
   readCaptureFile,
+  CaptureReadError,
 } from "@/lib/sessions/server-utils";
 import {
   getRedactionMetadataByCaptureIdFromDb,
@@ -58,7 +59,20 @@ export async function GET(
       // Load the capture file (metadata + body content)
       const captureFileName = captureId.replace(/\.json$/, "") + ".json";
       const capturePath = join(captureDir, captureFileName);
-      const captureData = await readCaptureFile(capturePath);
+      let captureData: Record<string, unknown>;
+      try {
+        captureData = await readCaptureFile(capturePath);
+      } catch (error) {
+        if (error instanceof CaptureReadError) {
+          // Return 404 for corrupt/missing captures instead of 500
+          console.warn(`Capture file not readable for ${captureId}: ${error.kind} - ${error.message}`);
+          return Response.json(
+            createErrorResponse({ message: "Capture file not found or corrupted", status: 404 }),
+            { status: 404 }
+          );
+        }
+        throw error;
+      }
 
       if (!captureData) {
         return Response.json(createErrorResponse({ message: "Capture file not found", status: 404 }), { status: 404 });

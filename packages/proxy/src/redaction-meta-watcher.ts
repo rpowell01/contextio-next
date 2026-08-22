@@ -474,73 +474,93 @@ export function createRedactionMetaWatcher(
     }
     if (!isValidFilename(captureFilename)) return;
 
-    try {
-      // Stat to avoid reading files that vanished between the fs.watch
-      // event and our handler.
-      let fileStats: fs.Stats;
+    // Retry logic to handle potential race condition where file is not fully flushed after rename
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 50;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        fileStats = await stat(path);
-      } catch {
-        // File was deleted; drop any pending work for it.
-        pending.delete(captureFilename);
-        return;
-      }
-
-      const MAX_FILE_SIZE = 25 * 1024 * 1024;
-      if (fileStats.size > MAX_FILE_SIZE) return;
-
-      const rawBytes = await readFile(path, "utf8");
-      let rawData: unknown;
-      try {
-        rawData = JSON.parse(rawBytes);
-      } catch {
-        // Could not parse JSON, skip
-        return;
-      }
-
-      // If the capture is encrypted at rest, decrypt it before extracting
-      // metadata so requestBytes/responseBytes and other fields are available.
-      const encryptedEnvelope = rawData as Record<string, unknown> | null;
-      const isEncrypted =
-        !!encryptedEnvelope &&
-        typeof encryptedEnvelope.ciphertext === "string" &&
-        typeof encryptedEnvelope.salt === "string" &&
-        typeof encryptedEnvelope.iv === "string";
-
-      if (isEncrypted) {
-        if (!opts.encryptionKey) {
-          console.warn(
-            `[redaction-meta-watcher] Skipping encrypted capture ${captureFilename}: no encryption key provided`,
-          );
-          return;
-        }
+        // Stat to avoid reading files that vanished between the fs.watch
+        // event and our handler.
+        let fileStats: fs.Stats;
         try {
-          const plaintext = await decrypt(
-            rawBytes,
-            opts.encryptionKey,
-          );
-          rawData = JSON.parse(plaintext);
-        } catch (err) {
-          console.warn(
-            `[redaction-meta-watcher] Failed to decrypt capture ${captureFilename}:`,
-            err instanceof Error ? err.message : String(err),
-          );
+          fileStats = await stat(path);
+        } catch {
+          // File was deleted; drop any pending work for it.
+          pending.delete(captureFilename);
           return;
         }
-      }
 
-      const captureId = captureFilename.replace(/\.json$/, "");
-      const metadata = computeCaptureMeta(captureId, rawData);
+        const MAX_FILE_SIZE = 25 * 1024 * 1024;
+        if (fileStats.size > MAX_FILE_SIZE) return;
 
-      if (metadata) {
-        schedule(captureFilename, metadata);
+        const rawBytes = await readFile(path, "utf8");
+        if (!rawBytes || rawBytes.length === 0) {
+          // File is empty, retry
+          throw new Error("File is empty");
+        }
+
+        let rawData: unknown;
+        try {
+          rawData = JSON.parse(rawBytes);
+        } catch {
+          // Could not parse JSON, retry on next attempt
+          throw new Error("Invalid JSON");
+        }
+
+        // If we got here, file is valid - process it
+        // If the capture is encrypted at rest, decrypt it before extracting
+        // metadata so requestBytes/responseBytes and other fields are available.
+        const encryptedEnvelope = rawData as Record<string, unknown> | null;
+        const isEncrypted =
+          !!encryptedEnvelope &&
+          typeof encryptedEnvelope.ciphertext === "string" &&
+          typeof encryptedEnvelope.salt === "string" &&
+          typeof encryptedEnvelope.iv === "string";
+
+        if (isEncrypted) {
+          if (!opts.encryptionKey) {
+            console.warn(
+              `[redaction-meta-watcher] Skipping encrypted capture ${captureFilename}: no encryption key provided`,
+            );
+            return;
+          }
+          try {
+            const plaintext = await decrypt(
+              rawBytes,
+              opts.encryptionKey,
+            );
+            rawData = JSON.parse(plaintext);
+          } catch (err) {
+            console.warn(
+              `[redaction-meta-watcher] Failed to decrypt capture ${captureFilename}:`,
+              err instanceof Error ? err.message : String(err),
+            );
+            return;
+          }
+        }
+
+        const captureId = captureFilename.replace(/\.json$/, "");
+        const metadata = computeCaptureMeta(captureId, rawData);
+
+        if (metadata) {
+          schedule(captureFilename, metadata);
+        }
+        return; // Success, exit the retry loop
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < MAX_RETRIES - 1) {
+          // Wait before retrying
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        }
       }
-    } catch (err) {
-      console.error(
-        `[redaction-meta-watcher] Error processing ${captureFilename}:`,
-        err instanceof Error ? err.message : String(err),
-      );
     }
+
+    // All retries failed
+    console.warn(
+      `[redaction-meta-watcher] Failed to process ${captureFilename} after ${MAX_RETRIES} attempts: ${lastError?.message}`,
+    );
   };
 
   async function scanExistingCaptures(): Promise<void> {
@@ -577,6 +597,9 @@ export function createRedactionMetaWatcher(
     filename: string | null,
   ): Promise<void> => {
     if (!filename) return;
+    // Only process on "rename" events (file creation via atomic rename from .tmp)
+    // "change" events can fire during write before the rename is complete
+    if (eventType !== "rename") return;
     await processCaptureFile(filename);
   };
 

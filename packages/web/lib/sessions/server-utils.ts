@@ -241,6 +241,25 @@ export async function readCaptureFile(
     return current.get(cacheKey) as Record<string, unknown>;
   }
 
+  // Check if file exists first
+  const { stat } = await import("fs/promises");
+  try {
+    await stat(filepath);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      throw new CaptureReadError(
+        "notFound",
+        `Capture file not found: ${filepath}`,
+        error,
+      );
+    }
+    throw new CaptureReadError(
+      "unexpected",
+      `Capture file could not be accessed: ${filepath}`,
+      error instanceof Error ? error : undefined,
+    );
+  }
+
   let result: Record<string, unknown> | null = null;
   try {
     const logger = await getLoggerModule();
@@ -260,9 +279,35 @@ export async function readCaptureFile(
     return result;
   }
 
+  // File exists but decryptCapture returned null - check if it's encrypted without key
+  try {
+    const { readFile } = await import("fs/promises");
+    const raw = await readFile(filepath, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const isEncrypted =
+      typeof parsed.ciphertext === "string" &&
+      typeof parsed.salt === "string" &&
+      typeof parsed.iv === "string";
+
+    if (isEncrypted && (!resolvedKey || resolvedKey.length === 0)) {
+      throw new CaptureReadError(
+        "corrupt",
+        `Capture file is encrypted but no decryption key is available: ${filepath}`,
+      );
+    }
+  } catch (parseError) {
+    if (parseError instanceof CaptureReadError) throw parseError;
+    // Invalid JSON or other parse error
+    throw new CaptureReadError(
+      "corrupt",
+      `Capture file contains invalid JSON or is corrupted: ${filepath}`,
+      parseError instanceof Error ? parseError : undefined,
+    );
+  }
+
   throw new CaptureReadError(
     "corrupt",
-    `Capture file is empty, unreadable, or could not be decrypted: ${filepath}`,
+    `Capture file could not be decrypted (wrong key or corrupted data): ${filepath}`,
   );
 }
 

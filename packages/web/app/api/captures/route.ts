@@ -12,6 +12,7 @@ import {
   MAX_FILE_SIZE,
   listCaptureFiles,
   readCaptureFile,
+  CaptureReadError,
 } from "@/lib/sessions/server-utils";
 import { consumeToken } from "@/lib/csrf";
 import { withRequestCache } from "@/lib/request-cache";
@@ -139,9 +140,23 @@ async function handleGetCaptures(
           return Response.json(createErrorResponse({ message: "Capture file too large", status: 413 }), { status: 413 });
         }
 
-        const data = await readCaptureFile(filepath);
-        if (!data) {
-          return Response.json(createErrorResponse({ message: "Failed to read capture file", status: 500 }), { status: 500 });
+        let data: Record<string, unknown>;
+        try {
+          data = await readCaptureFile(filepath);
+        } catch (error) {
+          if (error instanceof CaptureReadError) {
+            const status =
+              error.kind === "notFound"
+                ? 404
+                : error.kind === "corrupt"
+                  ? 422
+                  : 500;
+            return Response.json(
+              createErrorResponse({ message: error.message, code: error.kind, status }),
+              { status },
+            );
+          }
+          throw error;
         }
         const capture = extractCaptureMetadata(id, data);
 
@@ -183,15 +198,23 @@ async function handleGetCaptures(
         let capture: Capture | null = null;
         let redaction: RedactionDetails | null = null;
 
-        try {
-          const stats = await fs.stat(filepath);
-          if (stats.size > MAX_FILE_SIZE) {
-            console.warn(`Capture file too large, skipping: ${filename}`);
-            continue;
-          }
+try {
+            const stats = await fs.stat(filepath);
+            if (stats.size > MAX_FILE_SIZE) {
+              console.warn(`Capture file too large, skipping: ${filename}`);
+              continue;
+            }
 
-          const data = await readCaptureFile(filepath);
-          if (!data) continue;
+            let data: Record<string, unknown>;
+            try {
+              data = await readCaptureFile(filepath);
+            } catch (error) {
+              if (error instanceof CaptureReadError) {
+                console.warn(`Skipping capture ${filename}: ${error.kind} - ${error.message}`);
+                continue;
+              }
+              throw error;
+            }
 
           capture = extractCaptureMetadata(filename, data);
 

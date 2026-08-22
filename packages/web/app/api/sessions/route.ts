@@ -7,6 +7,7 @@ import {
   getCaptureDir,
   MAX_FILE_SIZE,
   readCaptureFile,
+  CaptureReadError,
 } from "@/lib/sessions/server-utils";
 import {
   aggregateRedactionMetaBySessionFromDb,
@@ -209,8 +210,17 @@ async function handleGet(request: Request): Promise<Response> {
       const filepath = join(captureDir, filename);
       const stats = await fs.stat(filepath);
       if (stats.size > MAX_FILE_SIZE) continue;
-      const data = await readCaptureFile(filepath);
-      if (!data) continue;
+
+      let data: Record<string, unknown>;
+      try {
+        data = await readCaptureFile(filepath);
+      } catch (error) {
+        if (error instanceof CaptureReadError) {
+          console.warn(`Skipping capture ${filename}: ${error.kind} - ${error.message}`);
+          continue;
+        }
+        throw error;
+      }
       const session = await getSessionMetadata(filename, data);
       sessions.push(session);
     } catch (error) {
