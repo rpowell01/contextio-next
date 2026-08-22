@@ -1,4 +1,4 @@
-import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, ProviderConfig, ProviderMetadata, FalsePositiveEntry } from "@/types/api";
+import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, ProviderConfig, ProviderMetadata, FalsePositiveEntry, MaintenanceOperation, MaintenanceResponse } from "@/types/api";
 import type { RateLimiterMetrics } from "@/types/client-api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
@@ -749,6 +749,29 @@ async getProxyStatus(signal?: AbortSignal): Promise<ProxyStatus> {
 
   async getRateLimiterMetrics(signal?: AbortSignal): Promise<RateLimiterMetrics> {
     return this.request("/api/admin/rate-limiter", { signal });
+  }
+
+  async getDatabaseMaintenanceInfo(signal?: AbortSignal): Promise<{
+    availableOperations: MaintenanceOperation[];
+    databaseInfo: {
+      pageCount: number;
+      pageSize: number;
+      totalSizeBytes: number;
+      freelistCount: number;
+      freelistBytes: number;
+      journalMode: string;
+      synchronous: number;
+    };
+  }> {
+    return this.request("/api/admin/database/maintenance", { signal });
+  }
+
+  async runDatabaseMaintenance(operations: MaintenanceOperation[], signal?: AbortSignal): Promise<MaintenanceResponse> {
+    return this.request("/api/admin/database/maintenance", {
+      method: "POST",
+      body: JSON.stringify({ operations }),
+      signal,
+    });
   }
 
   async getMetrics(hours: number = 24, maxPoints?: number, page?: number, pageSize?: number, signal?: AbortSignal): Promise<MetricsData> {

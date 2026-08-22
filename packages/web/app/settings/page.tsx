@@ -3,7 +3,7 @@
 import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
 import type { Settings, SettingMeta, Provider, RateLimitConfig, StreamingRetryConfig } from "@/lib/settings";
-import type { ProviderConfig, ProviderMetadata } from "@/types/api";
+import type { ProviderConfig, ProviderMetadata, MaintenanceOperation, MaintenanceResult } from "@/types/api";
 import type { PresetName } from "@contextio/redact";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "@/components/theme-provider";
@@ -108,7 +108,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { AlertCircle, Loader2, Trash2, Edit2, Plus, Database, Shield, Gauge, Palette, Server, EyeOff } from "lucide-react";
+import { AlertCircle, Loader2, Trash2, Edit2, Plus, Database, Shield, Gauge, Palette, Server, EyeOff, HardDrive } from "lucide-react";
 
 // NOTE: /api/settings (GET and POST) has no authentication. Any client that can reach
 // the web server can read or overwrite settings. Treat the settings file as sensitive
@@ -514,7 +514,8 @@ type SettingsTab =
   | "redaction"
   | "security"
   | "streamingRetry"
-  | "falsePositives";
+  | "falsePositives"
+  | "database";
 
 const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
@@ -526,6 +527,7 @@ const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "security", label: "Security", icon: <Shield className="h-4 w-4" /> },
   { id: "streamingRetry", label: "Streaming Retry", icon: <Gauge className="h-4 w-4" /> },
   { id: "falsePositives", label: "False Positives", icon: <AlertCircle className="h-4 w-4" /> },
+  { id: "database", label: "Database", icon: <Database className="h-4 w-4" /> },
 ];
 
 export default function SettingsPage() {
@@ -935,6 +937,17 @@ export default function SettingsPage() {
                 // Optionally show a message
               }}
             />
+          </div>
+        );
+      case "database":
+        return (
+          <div className="rounded-lg border p-6" role="tabpanel" id="panel-database" aria-labelledby="tab-database">
+            <h3 className="font-semibold mb-4">Database Maintenance</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Perform SQLite database maintenance operations to optimize performance and reclaim space.
+              These operations run directly on the SQLite database file used for metadata storage.
+            </p>
+            <DatabaseMaintenance />
           </div>
         );
       case "appearance":
@@ -3160,5 +3173,218 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
     </MainLayout>
+  );
+}
+
+// Database Maintenance Component
+function DatabaseMaintenance() {
+  const [operations, setOperations] = useState<MaintenanceOperation[]>([
+    "vacuum",
+    "analyze",
+    "reindex",
+    "integrity_check",
+    "quick_check",
+  ]);
+  const [results, setResults] = useState<MaintenanceResult[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [dbInfo, setDbInfo] = useState<{
+    pageCount: number;
+    pageSize: number;
+    totalSizeBytes: number;
+    freelistCount: number;
+    freelistBytes: number;
+    journalMode: string;
+    synchronous: number;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
+  const fetchDbInfo = async () => {
+    try {
+      const response = await apiClient.getDatabaseMaintenanceInfo();
+      setDbInfo(response.databaseInfo);
+    } catch (err) {
+      console.error("Failed to fetch database info:", err);
+    }
+  };
+
+  const handleRunMaintenance = async () => {
+    setLoading(true);
+    setError(null);
+    setResults(null);
+    try {
+      const response = await apiClient.runDatabaseMaintenance(operations);
+      setResults(response.results);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run maintenance");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDbInfo();
+  }, []);
+
+  const handleToggleOperation = (op: MaintenanceOperation) => {
+    setOperations((prev) =>
+      prev.includes(op) ? prev.filter((o) => o !== op) : [...prev, op]
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Database Info */}
+      {dbInfo && (
+        <div className="rounded-lg border bg-muted/30 p-4">
+          <h4 className="font-medium mb-3 flex items-center gap-2">
+            <HardDrive className="h-4 w-4" />
+            Database Information
+          </h4>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+            <div>
+              <p className="text-muted-foreground">Total Size</p>
+              <p className="font-mono font-medium">{formatBytes(dbInfo.totalSizeBytes)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Page Count</p>
+              <p className="font-mono font-medium">{dbInfo.pageCount.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Free Pages</p>
+              <p className="font-mono font-medium">{dbInfo.freelistCount.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Reclaimable Space</p>
+              <p className="font-mono font-medium">{formatBytes(dbInfo.freelistBytes)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Journal Mode</p>
+              <p className="font-mono font-medium">{dbInfo.journalMode}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Synchronous</p>
+              <p className="font-mono font-medium">{dbInfo.synchronous}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Operation Selection */}
+      <div className="rounded-lg border p-4">
+        <h4 className="font-medium mb-3">Select Operations</h4>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            { id: "vacuum", label: "VACUUM", description: "Reclaim unused space & defragment", warning: "May take time on large DBs" },
+            { id: "analyze", label: "ANALYZE", description: "Update query planner statistics", warning: "Fast, safe to run anytime" },
+            { id: "reindex", label: "REINDEX", description: "Rebuild all indexes", warning: "Can be slow on large DBs" },
+            { id: "integrity_check", label: "Integrity Check", description: "Full database integrity verification", warning: "Slow on large DBs" },
+            { id: "quick_check", label: "Quick Check", description: "Fast integrity check (less thorough)", warning: "Fast, good for regular use" },
+          ].map((op) => (
+            <label
+              key={op.id}
+              className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                operations.includes(op.id as MaintenanceOperation)
+                  ? "border-primary bg-primary/5"
+                  : "border-gray-200 bg-white hover:border-primary/50 dark:border-gray-700 dark:bg-gray-900"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={operations.includes(op.id as MaintenanceOperation)}
+                onChange={() => handleToggleOperation(op.id as MaintenanceOperation)}
+                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <div>
+                <p className="font-medium text-sm">{op.label}</p>
+                <p className="text-xs text-muted-foreground">{op.description}</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{op.warning}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Run Button */}
+      <Button
+        onClick={handleRunMaintenance}
+        disabled={loading || operations.length === 0}
+        className="w-full"
+        size="lg"
+      >
+        {loading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            Running Maintenance...
+          </>
+        ) : (
+          "Run Selected Operations"
+        )}
+      </Button>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {error}
+        </div>
+      )}
+
+      {/* Results */}
+      {results && (
+        <div className="rounded-lg border p-4">
+          <h4 className="font-medium mb-3">Results</h4>
+          <div className="space-y-2">
+            {results.map((result, i) => (
+              <div
+                key={i}
+                className={`rounded-lg p-3 ${
+                  result.success
+                    ? "border-green-200 bg-green-50"
+                    : "border-red-200 bg-red-50"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium capitalize">{result.operation.replace("_", " ")}</span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      result.success
+                        ? "bg-green-100 text-green-800"
+                        : "bg-red-100 text-red-800"
+                    }`}
+                  >
+                    {result.success ? "Success" : "Failed"}
+                  </span>
+                </div>
+                <p className="text-sm mt-1">{result.message}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Duration: {result.durationMs}ms
+                </p>
+                {result.details && (
+                  <pre className="mt-2 text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-auto">
+                    {JSON.stringify(result.details, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ))}
+            <div className="pt-2 border-t">
+              <p className="font-medium">
+                Overall:{" "}
+                <span className={results.every((r) => r.success) ? "text-green-600" : "text-red-600"}>
+                  {results.every((r) => r.success) ? "All operations succeeded" : "Some operations failed"}
+                </span>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Total duration: {results.reduce((sum, r) => sum + r.durationMs, 0)}ms
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -688,3 +688,43 @@ export interface FalsePositiveEntry {
   /** Timestamp when the false positive was recorded */
   timestamp: number;
 }
+
+// --- Database Maintenance ---
+
+/**
+ * Database maintenance operation types.
+ */
+export type MaintenanceOperation =
+  | "vacuum"
+  | "analyze"
+  | "reindex"
+  | "integrity_check"
+  | "quick_check";
+
+/**
+ * Result of a single database maintenance operation.
+ */
+export interface MaintenanceResult {
+  /** The operation that was performed */
+  operation: MaintenanceOperation;
+  /** Whether the operation succeeded */
+  success: boolean;
+  /** Human-readable message about the result */
+  message: string;
+  /** Duration of the operation in milliseconds */
+  durationMs: number;
+  /** Additional operation-specific details */
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Full response from database maintenance API.
+ */
+export interface MaintenanceResponse {
+  /** Results for each operation performed */
+  results: MaintenanceResult[];
+  /** Whether all operations succeeded */
+  overallSuccess: boolean;
+  /** Total duration of all operations in milliseconds */
+  totalDurationMs: number;
+}
