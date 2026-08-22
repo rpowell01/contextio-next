@@ -39,6 +39,9 @@ export interface SettingsRow {
 	oidc_public_url: string;
 	oidc_issuer: string;
 	show_page_load_time: number;
+	feedback_store_enabled: number;
+	feedback_store_type: string;
+	feedback_store_path: string;
 	detector_mode: string;
 	detector_model_name: string;
 	detector_threshold: number;
@@ -128,6 +131,10 @@ export interface Settings {
 	enableRedact: boolean;
 	enableRateLimiter: boolean;
 	logTraffic: boolean;
+	// Feedback store settings (for false positive management)
+	feedbackStoreEnabled: boolean;
+	feedbackStoreType: "sqlite" | "memory";
+	feedbackStorePath: string;
 	// Advanced rate limiter cache configuration
 	rateLimiterMaxEntries: number;
 	rateLimiterCleanupIntervalMs: number;
@@ -268,6 +275,9 @@ const DEFAULT_SETTINGS: Settings = {
 	oidcPublicUrl: "",
 	oidcIssuer: "",
 	showPageLoadTime: false,
+	feedbackStoreEnabled: true,
+	feedbackStoreType: "sqlite",
+	feedbackStorePath: "",
 	detectorMode: "rules",
 	detectorModelName: "Xenova/bert-base-NER",
 	detectorThreshold: 0.5,
@@ -337,6 +347,9 @@ function rowToSettings(row: SettingsRow): Settings {
 		oidcPublicUrl: row.oidc_public_url,
 		oidcIssuer: row.oidc_issuer,
 		showPageLoadTime: row.show_page_load_time === 1,
+		feedbackStoreEnabled: row.feedback_store_enabled === 1,
+		feedbackStoreType: row.feedback_store_type as Settings["feedbackStoreType"],
+		feedbackStorePath: row.feedback_store_path,
 		detectorMode: row.detector_mode as Settings["detectorMode"],
 		detectorModelName: row.detector_model_name,
 		detectorThreshold: row.detector_threshold,
@@ -400,6 +413,9 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		oidc_public_url: merged.oidcPublicUrl,
 		oidc_issuer: merged.oidcIssuer,
 		show_page_load_time: merged.showPageLoadTime ? 1 : 0,
+		feedback_store_enabled: merged.feedbackStoreEnabled ? 1 : 0,
+		feedback_store_type: merged.feedbackStoreType,
+		feedback_store_path: merged.feedbackStorePath,
 		detector_mode: merged.detectorMode,
 		detector_model_name: merged.detectorModelName,
 		detector_threshold: merged.detectorThreshold,
@@ -501,7 +517,8 @@ export function upsertSettings(settings: Settings): void {
 			redact_policy_enabled, redact_paths_only, redact_paths_skip, redact_disabled_rules,
 			encryption_at_rest, capture_cleanup_enabled, capture_cleanup_interval_hours,
 			capture_cleanup_max_age_days, theme, oidc_enabled, oidc_public_url, oidc_issuer,
-			show_page_load_time, detector_mode, detector_model_name, detector_threshold,
+			show_page_load_time, feedback_store_enabled, feedback_store_type, feedback_store_path,
+			detector_mode, detector_model_name, detector_threshold,
 			rate_limiter, streaming_retry,
 			enable_logger, enable_redact, enable_rate_limiter, log_traffic,
 			rate_limiter_max_entries, rate_limiter_cleanup_interval_ms, rate_limiter_entry_ttl_ms,
@@ -532,6 +549,9 @@ export function upsertSettings(settings: Settings): void {
 			oidc_public_url = excluded.oidc_public_url,
 			oidc_issuer = excluded.oidc_issuer,
 			show_page_load_time = excluded.show_page_load_time,
+			feedback_store_enabled = excluded.feedback_store_enabled,
+			feedback_store_type = excluded.feedback_store_type,
+			feedback_store_path = excluded.feedback_store_path,
 			detector_mode = excluded.detector_mode,
 			detector_model_name = excluded.detector_model_name,
 			detector_threshold = excluded.detector_threshold,
@@ -584,6 +604,9 @@ export function upsertSettings(settings: Settings): void {
 			row.oidc_public_url,
 			row.oidc_issuer,
 			row.show_page_load_time,
+			row.feedback_store_enabled,
+			row.feedback_store_type,
+			row.feedback_store_path,
 			row.detector_mode,
 			row.detector_model_name,
 			row.detector_threshold,
@@ -655,6 +678,9 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		oidcPublicUrl: { envVar: "CONTEXTIO_OIDC_PUBLIC_URL", dynamic: false },
 		oidcIssuer: { envVar: "CONTEXTIO_OIDC_ISSUER", dynamic: false },
 		showPageLoadTime: { envVar: "", dynamic: true },
+		feedbackStoreEnabled: { envVar: "REDACT_FEEDBACK_STORE_ENABLED", dynamic: false },
+		feedbackStoreType: { envVar: "REDACT_FEEDBACK_STORE_TYPE", dynamic: false },
+		feedbackStorePath: { envVar: "REDACT_FEEDBACK_STORE_PATH", dynamic: false },
 		detectorMode: { envVar: "REDACT_DETECTOR_MODE", dynamic: true },
 		detectorModelName: { envVar: "REDACT_DETECTOR_MODEL_NAME", dynamic: true },
 		detectorThreshold: { envVar: "REDACT_DETECTOR_THRESHOLD", dynamic: true },
@@ -887,6 +913,9 @@ function validateAndMergeSettings(input: unknown): Settings {
 		oidcPublicUrl: getString("oidcPublicUrl", DEFAULT_SETTINGS.oidcPublicUrl),
 		oidcIssuer: getString("oidcIssuer", DEFAULT_SETTINGS.oidcIssuer),
 		showPageLoadTime: getBoolean("showPageLoadTime", DEFAULT_SETTINGS.showPageLoadTime),
+		feedbackStoreEnabled: getBoolean("feedbackStoreEnabled", DEFAULT_SETTINGS.feedbackStoreEnabled),
+		feedbackStoreType: getEnum("feedbackStoreType", ["sqlite", "memory"], DEFAULT_SETTINGS.feedbackStoreType),
+		feedbackStorePath: getString("feedbackStorePath", DEFAULT_SETTINGS.feedbackStorePath),
 		detectorMode: getEnum("detectorMode", ["rules", "llm", "hybrid", "auto"], DEFAULT_SETTINGS.detectorMode),
 		detectorModelName: getString("detectorModelName", DEFAULT_SETTINGS.detectorModelName),
 		detectorThreshold: getFloat("detectorThreshold", DEFAULT_SETTINGS.detectorThreshold, 0, 1),

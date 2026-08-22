@@ -155,6 +155,12 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "OIDC issuer URL (e.g., https://accounts.google.com). Used to discover OIDC configuration and validate tokens. Requires a proxy restart to apply.",
   showPageLoadTime:
     "Display page load time in the bottom-left corner. Measures time from navigation start to fully interactive page (hydration + data fetch + render complete). Changes apply immediately.",
+  feedbackStoreEnabled:
+    "Enable the feedback store for persisting false positive entries. When enabled, false positives are stored and survive proxy restarts. Requires a proxy restart to apply.",
+  feedbackStoreType:
+    "Storage backend for false positives: 'sqlite' (persistent, file-based) or 'memory' (in-memory, lost on restart). Requires a proxy restart to apply.",
+  feedbackStorePath:
+    "File path for SQLite feedback store (e.g., /app/data/false-positives.db). Only used when type is 'sqlite'. Leave empty for default location. Requires a proxy restart to apply.",
   detectorMode:
     "Detection mode: 'rules' (fast, deterministic patterns), 'llm' (semantic PII detection via LLM), 'hybrid' (rules + LLM with priority merge), or 'auto' (automatically choose). Changes apply dynamically per request.",
   detectorModelName:
@@ -592,6 +598,9 @@ export default function SettingsPage() {
     oidcPublicUrl: "",
     oidcIssuer: "",
     showPageLoadTime: false,
+    feedbackStoreEnabled: true,
+    feedbackStoreType: "sqlite",
+    feedbackStorePath: "",
     detectorMode: "rules",
     detectorModelName: "Xenova/bert-base-NER",
     detectorThreshold: 0.5,
@@ -917,6 +926,24 @@ export default function SettingsPage() {
               Manage false positive entries that exempt specific values from redaction.
               These values will not be redacted in captured API traffic.
             </p>
+
+            {/* Feedback Store Configuration */}
+            <div className="rounded-lg border bg-muted/30 p-4 mb-6">
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Feedback Store Configuration
+              </h4>
+              <p className="text-sm text-muted-foreground mb-4">
+                Configure the storage backend for false positive entries. The feedback store persists
+                false positive records so they survive proxy restarts.
+              </p>
+              <div className="grid gap-4 md:grid-cols-3">
+                {renderSetting("feedbackStoreEnabled")}
+                {renderSetting("feedbackStoreType")}
+                {renderSetting("feedbackStorePath")}
+              </div>
+            </div>
+
             <FalsePositiveManager
               onEntryAdded={(entry) => {
                 setSettings((prev: Omit<Settings, "theme">) => ({ ...prev, redactDisabledRules: [...prev.redactDisabledRules, entry.ruleId] }));

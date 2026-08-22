@@ -32,6 +32,9 @@ interface WebUISettings {
 	detectorMode?: "rules" | "llm" | "hybrid" | "auto";
 	detectorModelName?: string;
 	detectorThreshold?: number;
+	feedbackStoreEnabled?: boolean;
+	feedbackStoreType?: "sqlite" | "memory";
+	feedbackStorePath?: string;
 }
 
 /** Read web UI settings from SQLite database (with JSON file fallback for backward compatibility). */
@@ -51,6 +54,9 @@ async function readWebUISettings(): Promise<WebUISettings> {
 				detectorMode: dbSettings.detectorMode,
 				detectorModelName: dbSettings.detectorModelName,
 				detectorThreshold: dbSettings.detectorThreshold,
+				feedbackStoreEnabled: dbSettings.feedbackStoreEnabled,
+				feedbackStoreType: dbSettings.feedbackStoreType,
+				feedbackStorePath: dbSettings.feedbackStorePath,
 			};
 		}
 	} catch (err) {
@@ -74,6 +80,9 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			detectorMode: parsed.detectorMode,
 			detectorModelName: parsed.detectorModelName ?? parsed.detectorModelDir,
 			detectorThreshold: parsed.detectorThreshold,
+			feedbackStoreEnabled: parsed.feedbackStoreEnabled,
+			feedbackStoreType: parsed.feedbackStoreType,
+			feedbackStorePath: parsed.feedbackStorePath,
 		};
 	} catch {
 		return {};
@@ -115,15 +124,7 @@ const config: RedactPluginConfig = {
 		verbose: process.env.REDACT_VERBOSE === "true",
 		sessionTtlMs: Number.parseInt(process.env.REDACT_SESSION_TTL_MS || "900000", 10),
 		// Feedback store for false positive filtering
-		feedbackStore: (() => {
-			const fbType = process.env.REDACT_FEEDBACK_STORE;
-			if (fbType === "sqlite" || fbType === "memory") {
-				return fbType;
-			}
-			// Default to sqlite if feedback store is enabled via settings
-			// (web UI settings don't have a feedback store setting yet, so default to undefined)
-			return undefined;
-		})(),
+		feedbackStore: settings.feedbackStoreEnabled !== false ? (settings.feedbackStoreType || "sqlite") : undefined,
 		disabledRules: settings.redactDisabledRules,
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
 			upsertRedactionMetadata(metadata);

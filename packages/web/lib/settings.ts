@@ -78,6 +78,10 @@ export interface Settings {
   enableRedact: boolean;
   enableRateLimiter: boolean;
   logTraffic: boolean;
+  // Feedback store settings (for false positive management)
+  feedbackStoreEnabled: boolean;
+  feedbackStoreType: "sqlite" | "memory";
+  feedbackStorePath: string;
   // Advanced rate limiter cache configuration
   rateLimiterMaxEntries: number;
   rateLimiterCleanupIntervalMs: number;
@@ -165,6 +169,18 @@ export const SETTING_ENV_MAP: Record<
   showPageLoadTime: {
     envVar: "", // No env var override - controlled via settings UI only
     dynamic: true,
+  },
+  feedbackStoreEnabled: {
+    envVar: "REDACT_FEEDBACK_STORE_ENABLED",
+    dynamic: false,
+  },
+  feedbackStoreType: {
+    envVar: "REDACT_FEEDBACK_STORE_TYPE",
+    dynamic: false,
+  },
+  feedbackStorePath: {
+    envVar: "REDACT_FEEDBACK_STORE_PATH",
+    dynamic: false,
   },
   detectorMode: {
     envVar: "REDACT_DETECTOR_MODE",
@@ -645,6 +661,9 @@ export const DEFAULT_SETTINGS: Settings = {
   oidcPublicUrl: "",
   oidcIssuer: "",
   showPageLoadTime: false,
+  feedbackStoreEnabled: true,
+  feedbackStoreType: "sqlite",
+  feedbackStorePath: "",
   detectorMode: "rules",
   detectorModelName: "Xenova/bert-base-NER",
   detectorThreshold: 0.5,
@@ -815,6 +834,9 @@ export function validateSettings(input: unknown): Settings {
     oidcPublicUrl: validateString("oidcPublicUrl", 0),
     oidcIssuer: validateString("oidcIssuer", 0),
     showPageLoadTime: validateBoolean("showPageLoadTime"),
+    feedbackStoreEnabled: validateBoolean("feedbackStoreEnabled"),
+    feedbackStoreType: validateEnum("feedbackStoreType", ["sqlite", "memory"]) as "sqlite" | "memory",
+    feedbackStorePath: validateString("feedbackStorePath", 0),
     detectorMode: validateEnum("detectorMode", ["rules", "llm", "hybrid", "auto"]) as "rules" | "llm" | "hybrid" | "auto",
     detectorModelName: validateString("detectorModelName", 0),
     detectorThreshold: (() => {
@@ -1021,6 +1043,18 @@ export function validateSettingsLenient(input: unknown): Settings {
       typeof obj.showPageLoadTime === "boolean"
         ? obj.showPageLoadTime
         : DEFAULT_SETTINGS.showPageLoadTime,
+    feedbackStoreEnabled:
+      typeof obj.feedbackStoreEnabled === "boolean"
+        ? obj.feedbackStoreEnabled
+        : DEFAULT_SETTINGS.feedbackStoreEnabled,
+    feedbackStoreType:
+      typeof obj.feedbackStoreType === "string" && ["sqlite", "memory"].includes(obj.feedbackStoreType)
+        ? (obj.feedbackStoreType as "sqlite" | "memory")
+        : DEFAULT_SETTINGS.feedbackStoreType,
+    feedbackStorePath:
+      typeof obj.feedbackStorePath === "string"
+        ? obj.feedbackStorePath
+        : DEFAULT_SETTINGS.feedbackStorePath,
     detectorMode:
       typeof obj.detectorMode === "string" &&
       ["rules", "llm", "hybrid", "auto"].includes(obj.detectorMode)
