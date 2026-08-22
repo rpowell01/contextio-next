@@ -34,7 +34,8 @@ export function Header({ navigationConfig }: HeaderProps) {
       if (response.ok) {
         const data = await response.json();
         console.log("[Header] providers response data:", JSON.stringify(data, null, 2));
-        const hasProviders = data.success && data.data?.providers?.length > 0;
+        // API returns { providers: [...], service: "..." } directly (no success/data wrapper)
+        const hasProviders = Array.isArray(data.providers) && data.providers.length > 0;
         console.log("[Header] setting oidcEnabled to:", hasProviders);
         setOidcEnabled(hasProviders);
       }
