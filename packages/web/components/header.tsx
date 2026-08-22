@@ -30,13 +30,13 @@ export function Header({ navigationConfig }: HeaderProps) {
   async function fetchOidcConfig() {
     try {
       const response = await fetch("/api/auth/providers");
-      console.log("[Header] providers response status:", response.status);
+      console.log("[Header] fetchOidcConfig: providers response status:", response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log("[Header] providers response data:", JSON.stringify(data, null, 2));
+        console.log("[Header] fetchOidcConfig: providers response data:", JSON.stringify(data, null, 2));
         // API returns { providers: [...], service: "..." } directly (no success/data wrapper)
         const hasProviders = Array.isArray(data.providers) && data.providers.length > 0;
-        console.log("[Header] setting oidcEnabled to:", hasProviders);
+        console.log("[Header] fetchOidcConfig: setting oidcEnabled to:", hasProviders);
         setOidcEnabled(hasProviders);
       }
     } catch (error) {
@@ -48,20 +48,25 @@ export function Header({ navigationConfig }: HeaderProps) {
   async function fetchSession() {
     console.log("[Header] fetchSession called, oidcEnabled:", oidcEnabled);
     if (!oidcEnabled) {
+      console.log("[Header] fetchSession: oidcEnabled is false, returning early");
       setLoading(false);
       return;
     }
     try {
       // Using the proxy's /auth/session endpoint via the combined server
+      console.log("[Header] fetchSession: fetching /auth/session with credentials: include");
       const response = await fetch("/auth/session", {
         credentials: "include", // Include cookies
       });
-      console.log("[Header] /auth/session response status:", response.status);
+      console.log("[Header] fetchSession: /auth/session response status:", response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log("[Header] session data:", JSON.stringify(data, null, 2));
+        console.log("[Header] fetchSession: session data:", JSON.stringify(data, null, 2));
         if (data.authenticated && data.user) {
+          console.log("[Header] fetchSession: setting user:", data.user);
           setUser(data.user);
+        } else {
+          console.log("[Header] fetchSession: not authenticated or no user");
         }
       }
     } catch (error) {
@@ -118,7 +123,9 @@ export function Header({ navigationConfig }: HeaderProps) {
 
   // Fetch OIDC config first, then session
   useEffect(() => {
+    console.log("[Header] useEffect triggered, pathname:", pathname);
     fetchOidcConfig().then(() => {
+      console.log("[Header] fetchOidcConfig resolved, calling fetchSession");
       fetchSession();
     });
   }, [pathname]);
