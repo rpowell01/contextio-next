@@ -2786,6 +2786,72 @@ export default function SettingsPage() {
             <SettingHelp meta={getMeta("upstreamGeminiCodeAssistUrl")} description="Override the default Gemini Code Assist API base URL" />
           </div>
         );
+      case "feedbackStoreEnabled":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="feedbackStoreEnabled"
+              checked={settings.feedbackStoreEnabled}
+              onChange={(e) => updateSetting("feedbackStoreEnabled", e.target.checked)}
+              className="w-4 h-4"
+              disabled={isSettingOverridden("feedbackStoreEnabled")}
+            />
+            <Label htmlFor="feedbackStoreEnabled" className="text-sm">
+              Enable Feedback Store
+            </Label>
+            <SettingHelp
+              meta={getMeta("feedbackStoreEnabled")}
+              description={SETTING_DESCRIPTIONS.feedbackStoreEnabled}
+            />
+          </div>
+        );
+      case "feedbackStoreType":
+        return (
+          <div>
+            <Label htmlFor="feedbackStoreType" className="block text-sm font-medium mb-2">
+              Feedback Store Type
+            </Label>
+            <select
+              id="feedbackStoreType"
+              value={settings.feedbackStoreType}
+              onChange={(e) => updateSetting("feedbackStoreType", e.target.value as "sqlite" | "memory")}
+              disabled={isSettingOverridden("feedbackStoreType")}
+              className={`w-full rounded-md px-3 py-2 text-sm border ${
+                isSettingOverridden("feedbackStoreType")
+                  ? "bg-muted cursor-not-allowed"
+                  : "focus:outline-none focus:ring-2 focus:ring-primary"
+              }`}
+            >
+              <option value="sqlite">SQLite (persistent, file-based)</option>
+              <option value="memory">Memory (in-memory, lost on restart)</option>
+            </select>
+            <SettingHelp
+              meta={getMeta("feedbackStoreType")}
+              description={SETTING_DESCRIPTIONS.feedbackStoreType}
+            />
+          </div>
+        );
+      case "feedbackStorePath":
+        return (
+          <div>
+            <Label htmlFor="feedbackStorePath" className="block text-sm font-medium mb-2">
+              Feedback Store Path
+            </Label>
+            <Input
+              id="feedbackStorePath"
+              value={settings.feedbackStorePath}
+              onChange={(e) => updateSetting("feedbackStorePath", e.target.value)}
+              placeholder="/app/data/false-positives.db"
+              disabled={isSettingOverridden("feedbackStorePath")}
+              className={isSettingOverridden("feedbackStorePath") ? "bg-muted cursor-not-allowed" : ""}
+            />
+            <SettingHelp
+              meta={getMeta("feedbackStorePath")}
+              description={SETTING_DESCRIPTIONS.feedbackStorePath}
+            />
+          </div>
+        );
       default:
         return null;
     }
