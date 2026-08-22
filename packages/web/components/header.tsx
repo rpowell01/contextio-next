@@ -44,14 +44,9 @@ export function Header({ navigationConfig }: HeaderProps) {
     }
   }
 
-  // Fetch user session on mount (only if OIDC is enabled)
+  // Fetch user session (only if OIDC is enabled)
   async function fetchSession() {
     console.log("[Header] fetchSession called, oidcEnabled:", oidcEnabled);
-    if (!oidcEnabled) {
-      console.log("[Header] fetchSession: oidcEnabled is false, returning early");
-      setLoading(false);
-      return;
-    }
     try {
       // Using the proxy's /auth/session endpoint via the combined server
       console.log("[Header] fetchSession: fetching /auth/session with credentials: include");
@@ -121,13 +116,20 @@ export function Header({ navigationConfig }: HeaderProps) {
     }
   }
 
-  // Fetch OIDC config first, then session
+  // Fetch user session when oidcEnabled changes
+  useEffect(() => {
+    console.log("[Header] oidcEnabled effect, oidcEnabled:", oidcEnabled);
+    if (oidcEnabled) {
+      fetchSession();
+    } else {
+      setLoading(false);
+    }
+  }, [oidcEnabled]);
+
+  // Fetch OIDC config on mount
   useEffect(() => {
     console.log("[Header] useEffect triggered, pathname:", pathname);
-    fetchOidcConfig().then(() => {
-      console.log("[Header] fetchOidcConfig resolved, calling fetchSession");
-      fetchSession();
-    });
+    fetchOidcConfig();
   }, [pathname]);
 
   return (
