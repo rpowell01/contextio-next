@@ -30,8 +30,10 @@ export function Header({ navigationConfig }: HeaderProps) {
   async function fetchOidcConfig() {
     try {
       const response = await fetch("/api/auth/providers");
+      console.log("[Header] providers response status:", response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log("[Header] providers response data:", JSON.stringify(data, null, 2));
         if (data.success && data.data?.providers) {
           setOidcEnabled(data.data.providers.length > 0);
         }

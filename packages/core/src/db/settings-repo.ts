@@ -115,6 +115,7 @@ export interface Settings {
 		| "monokai";
 	oidcEnabled: boolean;
 	oidcPublicUrl: string;
+	oidcIssuer: string;
 	showPageLoadTime: boolean;
 	detectorMode: "rules" | "llm" | "hybrid" | "auto";
 	detectorModelName: string;

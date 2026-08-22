@@ -62,6 +62,7 @@ export interface Settings {
   // OIDC Authentication settings
   oidcEnabled: boolean;
   oidcPublicUrl: string;
+  oidcIssuer: string;
   // Display settings
   showPageLoadTime: boolean;
   // Detector settings
@@ -155,6 +156,10 @@ export const SETTING_ENV_MAP: Record<
   },
   oidcPublicUrl: {
     envVar: "CONTEXTIO_OIDC_PUBLIC_URL",
+    dynamic: false,
+  },
+  oidcIssuer: {
+    envVar: "CONTEXTIO_OIDC_ISSUER",
     dynamic: false,
   },
   showPageLoadTime: {
@@ -370,6 +375,10 @@ export function applyEnvOverrides(settings: Settings): {
         break;
       case "oidcPublicUrl":
         override.oidcPublicUrl = raw;
+        accepted = true;
+        break;
+      case "oidcIssuer":
+        override.oidcIssuer = raw;
         accepted = true;
         break;
       case "detectorMode":
@@ -634,6 +643,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   oidcEnabled: false,
   oidcPublicUrl: "",
+  oidcIssuer: "",
   showPageLoadTime: false,
   detectorMode: "rules",
   detectorModelName: "Xenova/bert-base-NER",
@@ -1002,6 +1012,10 @@ export function validateSettingsLenient(input: unknown): Settings {
       typeof obj.oidcPublicUrl === "string"
         ? obj.oidcPublicUrl
         : DEFAULT_SETTINGS.oidcPublicUrl,
+    oidcIssuer:
+      typeof obj.oidcIssuer === "string"
+        ? obj.oidcIssuer
+        : DEFAULT_SETTINGS.oidcIssuer,
     showPageLoadTime:
       typeof obj.showPageLoadTime === "boolean"
         ? obj.showPageLoadTime
