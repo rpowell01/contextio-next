@@ -7,17 +7,29 @@ import { cookies } from "next/headers";
  */
 export async function GET(): Promise<NextResponse> {
   try {
+    console.log("[check-admin] Starting admin check");
+    
     // Forward cookies to the proxy's /auth/session endpoint
     const cookieStore = await cookies();
     const cookieHeader = cookieStore.getAll()
       .map((c) => `${c.name}=${c.value}`)
       .join("; ");
+    
+    console.log("[check-admin] Cookie header:", cookieHeader);
 
-    const response = await fetch("/auth/session", {
+    // Use absolute URL since this runs in Next.js server context
+    const baseUrl = process.env.CONTEXTIO_OIDC_PUBLIC_URL || "http://localhost:4040";
+    const sessionUrl = new URL("/auth/session", baseUrl).href;
+    
+    console.log("[check-admin] Fetching:", sessionUrl);
+
+    const response = await fetch(sessionUrl, {
       headers: {
         Cookie: cookieHeader,
       },
     });
+
+    console.log("[check-admin] /auth/session response status:", response.status);
 
     if (!response.ok) {
       return NextResponse.json(
@@ -27,6 +39,7 @@ export async function GET(): Promise<NextResponse> {
     }
 
     const data = await response.json();
+    console.log("[check-admin] Session data:", JSON.stringify(data, null, 2));
 
     if (!data.authenticated || !data.user?.email) {
       return NextResponse.json(
@@ -39,6 +52,8 @@ export async function GET(): Promise<NextResponse> {
     const adminEmails =
       process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim().toLowerCase()) ?? [];
 
+    console.log("[check-admin] Admin emails:", adminEmails);
+
     if (adminEmails.length === 0) {
       return NextResponse.json(
         { isAdmin: false, authenticated: true, error: "ADMIN_EMAILS not configured on server" },
@@ -48,6 +63,8 @@ export async function GET(): Promise<NextResponse> {
 
     const userEmail = data.user.email.toLowerCase();
     const isAdmin = adminEmails.includes(userEmail);
+
+    console.log("[check-admin] User email:", userEmail, "isAdmin:", isAdmin);
 
     return NextResponse.json(
       { isAdmin, authenticated: true, email: userEmail },
