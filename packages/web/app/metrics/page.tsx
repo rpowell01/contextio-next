@@ -7,14 +7,14 @@ import type {
   MetricsData,
   TimeRange,
 } from "@/types/api";
-import type { RateLimiterMetrics } from "@/types/client-api";
+import type { RateLimiterMetrics, RateLimiterBucketState } from "@/types/client-api";
 import { TrafficChart } from "@/components/traffic-chart";
 import { RateLimiterChart } from "@/components/rate-limiter-chart";
 import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
 import { usePageLoad } from "@/components/page-load-context";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Gauge, TrendingUp } from "lucide-react";
+import { Gauge, TrendingUp, RefreshCw, Loader2 } from "lucide-react";
 
 /**
  * Checks if an error is a connection error that should stop polling.
@@ -46,13 +46,143 @@ const MAX_DATA_POINTS_OPTIONS = [
 ];
 
 // Tab configuration
-type MetricsTab = "rateLimiter" | "traffic";
+type MetricsTab = "rateLimiter" | "traffic" | "providerRetry";
 
 const tabs: { id: MetricsTab; label: string; icon: React.ReactNode }[] = [
   { id: "rateLimiter", label: "Rate Limiter", icon: <Gauge className="h-4 w-4" /> },
   { id: "traffic", label: "Traffic", icon: <TrendingUp className="h-4 w-4" /> },
+  { id: "providerRetry", label: "Provider Retries", icon: <RefreshCw className="h-4 w-4" /> },
 ];
-
+ 
+// Chart components for Provider Retry Metrics tab
+interface ProviderRetryChartProps {
+  buckets: RateLimiterBucketState[];
+  upstream429Counts: Record<string, number>;
+  nvidiaWorkerRetryCount: number;
+  loading?: boolean;
+}
+ 
+function ProviderRetryChart({ buckets, upstream429Counts, nvidiaWorkerRetryCount, loading = false }: ProviderRetryChartProps) {
+  if (loading) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-2 text-sm text-muted-foreground">Loading retry metrics...</p>
+      </div>
+    );
+  }
+ 
+  const providerMap = useMemo(() => {
+    const map = new Map<string, { upstream429s: number; nvidiaRetries: number }>();
+    buckets.forEach((bucket: RateLimiterBucketState) => {
+      const provider = bucket.provider ?? "unknown";
+      const existing = map.get(provider);
+      // upstream429Counts and nvidiaWorkerRetryCount are global per-provider, not per-bucket
+      // Only set on first encounter to avoid overcounting
+      if (!existing) {
+        const upstream429s = upstream429Counts[provider] ?? 0;
+        const nvidiaRetries = provider === "nvidia" ? nvidiaWorkerRetryCount : 0;
+        map.set(provider, { upstream429s, nvidiaRetries });
+      }
+    });
+    return Array.from(map.entries()).map(([provider, data]: [string, { upstream429s: number; nvidiaRetries: number }]) => ({ provider, upstream429s: data.upstream429s, nvidiaRetries: data.nvidiaRetries }));
+  }, [buckets, upstream429Counts, nvidiaWorkerRetryCount]);
+ 
+  if (providerMap.length === 0) {
+    return (
+      <div className="rounded-lg border p-8 text-center">
+        <p className="text-muted-foreground">No provider retry data available</p>
+      </div>
+    );
+  }
+ 
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {providerMap.map((p: { provider: string; upstream429s: number; nvidiaRetries: number }) => (
+          <div key={p.provider} className="rounded-lg border p-3">
+            <div className="font-medium text-sm">{p.provider}</div>
+            <div className="flex gap-4 mt-2 text-sm">
+              <span className={p.upstream429s > 0 ? "font-bold text-red-700" : "text-muted-foreground"}>
+                429s: {formatNumber(p.upstream429s)}
+              </span>
+              <span className={p.provider === "nvidia" && p.nvidiaRetries > 0 ? "font-bold text-amber-700" : "text-muted-foreground"}>
+                NVIDIA Retries: {formatNumber(p.nvidiaRetries)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+ 
+interface BufferUsageChartProps {
+  buckets: RateLimiterBucketState[];
+  loading?: boolean;
+}
+ 
+function BufferUsageChart({ buckets, loading = false }: BufferUsageChartProps) {
+  if (loading) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-2 text-sm text-muted-foreground">Loading buffer metrics...</p>
+      </div>
+    );
+  }
+ 
+  const providerMap = useMemo(() => {
+    const map = new Map<string, { bufferCapacity: number; entriesInUse: number; maxTokens: number }>();
+    buckets.forEach((bucket: RateLimiterBucketState) => {
+      const provider = bucket.provider ?? "unknown";
+      const existing = map.get(provider);
+      if (!existing) {
+        map.set(provider, {
+          bufferCapacity: bucket.bufferCapacity ?? 0,
+          entriesInUse: bucket.requestsInWindow ?? 0,
+          maxTokens: bucket.maxTokens ?? 0,
+        });
+      } else {
+        existing.bufferCapacity += bucket.bufferCapacity ?? 0;
+        existing.entriesInUse += bucket.requestsInWindow ?? 0;
+        existing.maxTokens += bucket.maxTokens ?? 0;
+      }
+    });
+    return Array.from(map.entries()).map(([provider, data]: [string, { bufferCapacity: number; entriesInUse: number; maxTokens: number }]) => ({ provider, bufferCapacity: data.bufferCapacity, entriesInUse: data.entriesInUse, maxTokens: data.maxTokens }));
+  }, [buckets]);
+ 
+  if (providerMap.length === 0) {
+    return (
+      <div className="rounded-lg border p-8 text-center">
+        <p className="text-muted-foreground">No buffer data available</p>
+      </div>
+    );
+  }
+ 
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {providerMap.map((p: { provider: string; bufferCapacity: number; entriesInUse: number; maxTokens: number }) => {
+          const utilizationPercent = p.maxTokens > 0 ? ((p.entriesInUse / p.maxTokens) * 100) : 0;
+          return (
+            <div key={p.provider} className="rounded-lg border p-3">
+              <div className="font-medium text-sm">{p.provider}</div>
+              <div className="space-y-1 mt-2 text-sm">
+                <div>Buffers: {formatNumber(p.bufferCapacity)}</div>
+                <div>Entries in Use: {formatNumber(p.entriesInUse)}</div>
+                <div className={utilizationPercent >= 90 ? "text-destructive font-medium" : utilizationPercent >= 70 ? "text-amber-700 font-medium" : "text-muted-foreground"}>
+                  Utilization: {utilizationPercent.toFixed(1)}%
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+ 
 /**
  * Inner content component that uses usePageLoad and useSearchParams.
  * Must be rendered inside a Suspense boundary.
@@ -124,6 +254,49 @@ function MetricsContent() {
         : [],
     [rateLimiterMetrics?.buckets],
   );
+
+  // Provider retry summary for the new tab
+  const providerRetrySummary = useMemo(() => {
+    const providerMap = new Map<string, {
+      provider: string;
+      upstream429s: number;
+      nvidiaRetries: number;
+      bufferCapacity: number;
+      entriesInUse: number;
+      queueLength: number;
+      maxTokens: number;
+    }>();
+
+    rateLimiterMetrics?.buckets?.forEach((bucket: RateLimiterBucketState) => {
+      const provider = bucket.provider ?? "unknown";
+      const existing = providerMap.get(provider);
+      const upstream429s = (rateLimiterMetrics?.upstream429Counts?.[provider] ?? 0);
+      const nvidiaRetries = provider === "nvidia" ? (rateLimiterMetrics?.nvidiaWorkerRetryCount ?? 0) : 0;
+
+      if (!existing) {
+        providerMap.set(provider, {
+          provider,
+          upstream429s,
+          nvidiaRetries,
+          bufferCapacity: bucket.bufferCapacity ?? 0,
+          entriesInUse: bucket.requestsInWindow ?? 0,
+          queueLength: bucket.queueLength ?? 0,
+          maxTokens: bucket.maxTokens ?? 0,
+        });
+      } else {
+        existing.bufferCapacity += bucket.bufferCapacity ?? 0;
+        existing.entriesInUse += bucket.requestsInWindow ?? 0;
+        existing.queueLength += bucket.queueLength ?? 0;
+        existing.maxTokens += bucket.maxTokens ?? 0;
+      }
+    });
+
+    return Array.from(providerMap.values()).map((p) => ({
+      ...p,
+      bufferSizeMB: p.bufferCapacity, // Buffer count (MB conversion factor unknown)
+      utilizationPercent: p.maxTokens > 0 ? ((p.entriesInUse / p.maxTokens) * 100) : 0,
+    })).sort((a, b) => b.entriesInUse - a.entriesInUse);
+  }, [rateLimiterMetrics?.buckets, rateLimiterMetrics?.upstream429Counts, rateLimiterMetrics?.nvidiaWorkerRetryCount]);
 
   // Page load tracking for footer
   const { registerPageReady } = usePageLoad();
@@ -828,6 +1001,143 @@ function MetricsContent() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Provider Retry Metrics Tab Panel */}
+      {activeTab === "providerRetry" && rateLimiterMetrics && (
+        <div className="space-y-6" role="tabpanel" id="panel-providerRetry" aria-labelledby="tab-providerRetry">
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Provider Retry & Buffer Metrics</h3>
+            {rateLimiterError && (
+              <div className="rounded-lg border border-destructive bg-destructive/10 p-4 mb-4">
+                <p className="text-destructive">{rateLimiterError}</p>
+              </div>
+            )}
+            {!rateLimiterMetrics.config.enabled && (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">
+                  Rate limiter is not enabled. Enable it in the proxy configuration to see metrics.
+                </p>
+              </div>
+            )}
+            {rateLimiterMetrics && rateLimiterMetrics.config.enabled && (
+              <div className="space-y-6">
+                {/* Summary Cards */}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                  <div className="rounded-lg border p-4">
+                    <div className="text-sm text-muted-foreground">Total Upstream 429s</div>
+                    <div className="text-2xl font-bold text-red-600">
+                      {formatNumber(
+                        Object.values(rateLimiterMetrics.upstream429Counts ?? {}).reduce((sum, v) => sum + v, 0)
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4 bg-amber-50 border-amber-200">
+                    <div className="text-sm text-muted-foreground">NVIDIA Worker Retries</div>
+                    <div className="text-2xl font-bold text-amber-700">
+                      {formatNumber(rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-sm text-muted-foreground">Total Buffers Configured</div>
+                    <div className="text-2xl font-bold">
+                      {formatNumber(
+                        rateLimiterMetrics.buckets.reduce((sum, b) => sum + (b.bufferCapacity ?? 0), 0)
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-sm text-muted-foreground">Total Entries in Use</div>
+                    <div className="text-2xl font-bold">
+                      {formatNumber(
+                        rateLimiterMetrics.buckets.reduce((sum, b) => sum + (b.requestsInWindow ?? 0), 0)
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4 bg-blue-50 border-blue-200">
+                    <div className="text-sm text-muted-foreground">Total Buffers</div>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {formatNumber(
+                        rateLimiterMetrics.buckets.reduce((sum, b) => sum + (b.bufferCapacity ?? 0), 0)
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Provider Retry Chart */}
+                <div className="rounded-lg border p-4">
+                  <h4 className="text-md font-medium mb-3">Upstream 429 Responses by Provider</h4>
+                  <ProviderRetryChart
+                    buckets={rateLimiterMetrics.buckets}
+                    upstream429Counts={rateLimiterMetrics.upstream429Counts ?? {}}
+                    nvidiaWorkerRetryCount={rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0}
+                    loading={rateLimiterLoading}
+                  />
+                </div>
+
+                {/* Buffer Usage Chart */}
+                <div className="rounded-lg border p-4">
+                  <h4 className="text-md font-medium mb-3">Buffer Utilization by Provider</h4>
+                  <BufferUsageChart
+                    buckets={rateLimiterMetrics.buckets}
+                    loading={rateLimiterLoading}
+                  />
+                </div>
+
+                {/* Detailed Table */}
+                <div className="rounded-lg border p-4">
+                  <h4 className="text-md font-medium mb-3">Provider Details</h4>
+                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left p-2 font-medium">Provider</th>
+                          <th className="text-right p-2 font-medium">Upstream 429s</th>
+                          <th className="text-right p-2 font-medium">NVIDIA Retries</th>
+                          <th className="text-right p-2 font-medium">Buffers Configured</th>
+                          <th className="text-right p-2 font-medium">Entries in Use</th>
+                          <th className="text-right p-2 font-medium">Buffers</th>
+                          <th className="text-right p-2 font-medium">Queue Length</th>
+                          <th className="text-right p-2 font-medium">Utilization %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {providerRetrySummary.map((provider) => (
+                          <tr key={provider.provider} className="border-b last:border-0">
+                            <td className="p-2 font-medium">{provider.provider}</td>
+                            <td className="p-2 text-right">
+                              <span className={provider.upstream429s > 0 ? "font-bold text-red-700" : "text-muted-foreground"}>
+                                {formatNumber(provider.upstream429s)}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right">
+                              <span className={provider.provider === "nvidia" && provider.nvidiaRetries > 0 ? "font-bold text-amber-700" : "text-muted-foreground"}>
+                                {formatNumber(provider.nvidiaRetries)}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right text-muted-foreground">{formatNumber(provider.bufferCapacity)}</td>
+                            <td className="p-2 text-right text-muted-foreground">{formatNumber(provider.entriesInUse)}</td>
+                            <td className="p-2 text-right text-blue-600 font-mono">{formatNumber(provider.bufferCapacity)}</td>
+                            <td className="p-2 text-right">
+                              <span className={provider.queueLength > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>
+                                {formatNumber(provider.queueLength)}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right">
+                              <span className={provider.utilizationPercent >= 90 ? "text-destructive font-medium" : provider.utilizationPercent >= 70 ? "text-amber-700 font-medium" : "text-muted-foreground"}>
+                                {provider.utilizationPercent.toFixed(1)}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

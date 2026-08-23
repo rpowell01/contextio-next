@@ -127,7 +127,14 @@ const config: RedactPluginConfig = {
 		feedbackStore: settings.feedbackStoreEnabled !== false ? (settings.feedbackStoreType || "sqlite") : undefined,
 		disabledRules: settings.redactDisabledRules,
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
-			upsertRedactionMetadata(metadata);
+			// Only persist redaction metadata when the capture session metadata is fully populated.
+			// If source, provider, or targetUrl are null/undefined, the capture session is still
+			// being written and the metadata would have incomplete data, which would cause the
+			// redaction diff dialog to show invalid data in the left and right panes.
+			// buildFullRedactionMetadata converts undefined to null, so we check for null here.
+			if (metadata.source !== null && metadata.provider !== null && metadata.targetUrl !== null) {
+				upsertRedactionMetadata(metadata);
+			}
 		},
 		// Path filtering: use settings from database, env vars as fallback, then hardcoded defaults
 		paths: {
