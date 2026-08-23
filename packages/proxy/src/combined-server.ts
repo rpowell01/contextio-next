@@ -416,6 +416,12 @@ export function createCombinedProxy(
 
     stop() {
       if (!started) return Promise.resolve();
+      // Stop background redaction metadata watcher
+      redactionMetaWatcher.stop();
+      // Clear capture cleanup timer
+      if (cleanupTimer) {
+        clearInterval(cleanupTimer as unknown as NodeJS.Timeout);
+      }
       return new Promise<void>((resolve) => {
         const forceTimer = setTimeout(() => resolve(), 500);
         server.close(() => {

@@ -787,6 +787,14 @@ export function createProxyHandler(
         let requestSentTime = 0;
         const reqBytes = forwardBuffer.length;
 
+        // Response buffers (declared here so error/end handlers can access them)
+        let respBytes = 0;
+        const respChunks: Buffer[] = [];
+        let jsonBuffer = "";
+        const streamBufferChunks: Buffer[] = [];
+        let streamBufferSize = 0;
+        let streamBufferOverflow = false;
+
         const proxyReq = protocol.request(
           {
             hostname: targetParsed.hostname,
@@ -804,11 +812,7 @@ export function createProxyHandler(
 
             const isStreaming =
               proxyRes.headers["content-type"]?.includes("text/event-stream");
-            let respBytes = 0;
-            const respChunks: Buffer[] = [];
-
-            // Buffer data to handle partial JSON objects across chunk boundaries
-            let jsonBuffer = "";
+            respBytes = 0;
 
             // Check if retry plugin is active
             const hasRetryPlugin = plugins.some((p) => p.name === "retry");
@@ -825,10 +829,6 @@ export function createProxyHandler(
             // Get max buffer size for streaming retry from provider config (default 10MB)
             const providerConfig = opts.providers[provider];
             const maxStreamBufferSize = providerConfig?.retry?.maxResponseBufferSize ?? 10 * 1024 * 1024;
-            
-            const streamBufferChunks: Buffer[] = [];
-            let streamBufferSize = 0;
-            let streamBufferOverflow = false;
 
             // Helper to flush buffered chunks and start streaming directly to client
             const flushBufferAndStream = (chunkToWrite: Buffer): void => {
@@ -1092,6 +1092,12 @@ export function createProxyHandler(
                   res.end();
                 }
 
+                // Clean up buffers after response is sent
+                respChunks.length = 0;
+                streamBufferChunks.length = 0;
+                streamBufferSize = 0;
+                jsonBuffer = "";
+
                 // Build capture and run capture plugins
                 if (hasCapturePlugins) {
                   const timings: CaptureData["timings"] = {
@@ -1350,6 +1356,18 @@ export function createProxyHandler(
             proxyRes.on("error", (err) => {
               console.error("Upstream response error:", err.message);
               if (!res.destroyed) res.end();
+              respChunks.length = 0;
+              streamBufferChunks.length = 0;
+              streamBufferSize = 0;
+              jsonBuffer = "";
+            });
+
+            // Ensure buffers are cleaned up when the upstream response ends
+            proxyRes.on("end", () => {
+              respChunks.length = 0;
+              streamBufferChunks.length = 0;
+              streamBufferSize = 0;
+              jsonBuffer = "";
             });
           },
         );

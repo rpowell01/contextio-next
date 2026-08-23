@@ -298,6 +298,59 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
           return;
         }
 
+        case "memory": {
+          if (req.method !== "GET") {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+
+          const memUsage = process.memoryUsage();
+          const memStats = {
+            rss: Math.round(memUsage.rss / 1024 / 1024), // MB
+            heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
+            heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
+            external: Math.round(memUsage.external / 1024 / 1024), // MB
+            arrayBuffers: Math.round(memUsage.arrayBuffers / 1024 / 1024), // MB
+            heapUsedPercent: Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100),
+            gcAvailable: typeof global.gc === "function",
+            nodeOptions: process.env.NODE_OPTIONS || "",
+            timestamp: new Date().toISOString(),
+          };
+
+          // Also include plugin-specific memory info if available
+          const rateLimiterPlugin = plugins.find((p) => p.name === "rate-limiter");
+          const retryPlugin = plugins.find((p) => p.name === "retry");
+          
+          let rateLimiterStats: any = null;
+          let retryStats: any = null;
+          
+          if (rateLimiterPlugin && (rateLimiterPlugin as any)._internal?.getAllBucketStates) {
+            const buckets = (rateLimiterPlugin as any)._internal.getAllBucketStates();
+            rateLimiterStats = {
+              totalBuckets: buckets.length,
+              totalQueued: buckets.reduce((sum: number, b: any) => sum + b.queueLength, 0),
+              bucketsWithRequests: buckets.filter((b: any) => b.requestsInWindow > 0).length,
+            };
+          }
+          
+          if (retryPlugin && (retryPlugin as any)._internal?.getRequestStoreSize) {
+            retryStats = {
+              requestStoreSize: (retryPlugin as any)._internal.getRequestStoreSize(),
+              streamStateSize: (retryPlugin as any)._internal.getStreamStateSize?.() || 0,
+            };
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            process: memStats,
+            rateLimiter: rateLimiterStats,
+            retry: retryStats,
+            service: SERVICE_IDENTIFIER,
+          }));
+          return;
+        }
+
         case "env": {
           if (req.method !== "GET") {
             res.writeHead(405, { "Content-Type": "application/json" });

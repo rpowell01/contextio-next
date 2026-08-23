@@ -148,13 +148,14 @@ interface BucketState {
 
 /**
  * Default configuration values.
+ * Tuned for aggressive memory reclamation in long-running containers.
  */
 const DEFAULT_MAX_REQUESTS = 60;
 const DEFAULT_WINDOW_MS = 60_000; // 1 minute
 const DEFAULT_BUFFER_CAPACITY = 10;
-const DEFAULT_MAX_ENTRIES = 10_000;
-const DEFAULT_CLEANUP_INTERVAL_MS = 300_000; // 5 minutes
-const DEFAULT_ENTRY_TTL_MS = 600_000; // 10 minutes
+const DEFAULT_MAX_ENTRIES = 1_000; // Reduced from 10k to limit memory growth
+const DEFAULT_CLEANUP_INTERVAL_MS = 30_000; // 30 seconds (was 5 minutes)
+const DEFAULT_ENTRY_TTL_MS = 120_000; // 2 minutes (was 10 minutes)
 
 /**
  * Generate a rate limit key using sessionId and provider.

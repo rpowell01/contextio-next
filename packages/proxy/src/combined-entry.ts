@@ -194,14 +194,17 @@ async function main(): Promise<void> {
 	// Periodic garbage collection to prevent memory creep under sustained load
 	// Only runs if --expose-gc flag is set (NODE_OPTIONS=--expose-gc)
 	if (typeof global.gc === "function") {
-		const GC_INTERVAL_MS = 60_000; // Check every minute
-		const HEAP_THRESHOLD_MB = 1024; // Trigger GC if heap exceeds 1GB
+		const GC_INTERVAL_MS = 30_000; // Check every 30 seconds (was 60s)
+		const HEAP_THRESHOLD_MB = 512; // Trigger GC if heap exceeds 512MB (was 1GB)
 		setInterval(() => {
 			const usage = process.memoryUsage();
 			const heapUsedMB = Math.round(usage.heapUsed / 1024 / 1024);
 			if (heapUsedMB > HEAP_THRESHOLD_MB) {
 				console.log(`[GC] Heap usage ${heapUsedMB}MB > ${HEAP_THRESHOLD_MB}MB, triggering GC`);
 				global.gc!();
+				// Log post-GC stats
+				const after = process.memoryUsage();
+				console.log(`[GC] Post-GC heap: ${Math.round(after.heapUsed / 1024 / 1024)}MB (freed ${heapUsedMB - Math.round(after.heapUsed / 1024 / 1024)}MB)`);
 			}
 		}, GC_INTERVAL_MS);
 	} else if (process.env.NODE_OPTIONS?.includes("--expose-gc")) {

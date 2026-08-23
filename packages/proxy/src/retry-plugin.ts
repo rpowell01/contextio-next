@@ -63,16 +63,17 @@ export interface RetryConfig extends Partial<CoreRetryConfig> {
 
 /**
  * Default configuration values.
+ * Tuned for aggressive memory reclamation in long-running containers.
  */
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BASE_DELAY_MS = 500;
 const DEFAULT_MAX_DELAY_MS = 30_000; // 30 seconds
 const DEFAULT_RETRYABLE_STATUSES: number[] = [429, 500, 502, 503, 504];
 const DEFAULT_JITTER_FACTOR = 0.1;
-const DEFAULT_MAX_ENTRIES = 10_000;
+const DEFAULT_MAX_ENTRIES = 500; // Reduced from 10k to limit memory growth
 const DEFAULT_CLEANUP_INTERVAL_MS = 60_000; // 1 minute
-const DEFAULT_ENTRY_TTL_MS = 600_000; // 10 minutes
-const DEFAULT_MAX_BUFFER_SIZE = 10 * 1024 * 1024; // 10 MB
+const DEFAULT_ENTRY_TTL_MS = 120_000; // 2 minutes (was 10 minutes)
+const DEFAULT_MAX_BUFFER_SIZE = 2 * 1024 * 1024; // 2 MB (was 10 MB)
 const DEFAULT_MAX_STREAM_RETRIES = 3;
 
 /**
@@ -314,6 +315,21 @@ export class RetryPlugin implements ProxyPlugin {
   shutdown(): void {
     this.stopCleanupTimer();
     this.requestStore.clear();
+    this.streamState.clear();
+  }
+
+  /**
+   * Get the current size of the request store (for monitoring).
+   */
+  getRequestStoreSize(): number {
+    return this.requestStore.size;
+  }
+
+  /**
+   * Get the current size of the stream state map (for monitoring).
+   */
+  getStreamStateSize(): number {
+    return this.streamState.size;
   }
 
   /**
@@ -1790,7 +1806,7 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
       plugin.onStreamEnd(sessionId),
   };
 
-  // Attach internal methods for testing/graceful access to state
+// Attach internal methods for testing/graceful access to state
   // @ts-ignore
   (proxy as any)._internal = {
     getRequestBody: (key: string) => plugin.getRequestBodyForTesting(key),
@@ -1800,11 +1816,12 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getModifiedBodyForRetry: (key: string) => plugin.getModifiedBodyForRetry(key),
     getNvidiaWorkerRetryCount: () => plugin.getNvidiaWorkerRetryCount(),
     getUpstream429Counts: () => plugin.getUpstream429Counts(),
-    incrementUpstream429Count: (provider: string) => plugin.incrementUpstream429Count(provider),
     getStreamError: (sessionId: string) => plugin.getStreamErrorForTesting(sessionId),
     getAndConsumePendingStreamRetry: (sessionId: string | null) => plugin.getAndConsumePendingStreamRetry(sessionId),
     getStreamBuffer: (sessionId: string) => plugin.getStreamBufferForTesting(sessionId),
     getStreamBufferSize: (sessionId: string) => plugin.getStreamBufferSizeForTesting(sessionId),
+    getRequestStoreSize: () => plugin.getRequestStoreSize(),
+    getStreamStateSize: () => plugin.getStreamStateSize(),
     clear: () => plugin.clearForTesting(),
     shutdown: () => plugin.shutdown(),
   };
