@@ -729,13 +729,13 @@ function MetricsContent() {
 
             {/* Total Redactions (sum across all captures) */}
             <div
-              className="rounded-lg border p-4 bg-red-50 border-red-200"
+              className="rounded-lg border p-4 bg-accent border-border"
               title="Sum of all redactions across every capture. Every capture's redactions are counted individually (no deduplication)."
             >
               <div className="text-sm text-muted-foreground">
                 Total Redactions (all captures)
               </div>
-              <div className="text-2xl font-bold text-red-600">
+              <div className="text-2xl font-bold text-primary">
                 <span
                   title="Sum of all redactions across every capture. Every capture's redactions are counted individually with no deduplication. A single session with multiple captures will have its redactions counted multiple times."
                 >

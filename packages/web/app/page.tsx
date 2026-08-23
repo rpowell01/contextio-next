@@ -61,7 +61,7 @@ export default function HomePage() {
     try {
       const fetchPromise = fetch("/api/redactions?summary=true");
       const timeoutPromise = new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error("Fetch timeout")), 10000)
+        setTimeout(() => reject(new Error("Fetch timeout")), 120000)
       );
       const res = await Promise.race([fetchPromise, timeoutPromise]);
       console.log("[Dashboard] Fetch completed, status:", res.status);
@@ -125,17 +125,17 @@ export default function HomePage() {
 
           <Link
             href="/redactions"
-            className="rounded-lg border p-6 hover:bg-accent transition-colors border-red-200 bg-red-50"
+            className="rounded-lg border p-6 hover:bg-accent transition-colors border-border bg-accent"
           >
             <div className="flex items-center gap-4">
-              <div className="rounded-full bg-red-100 p-3">
-                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="rounded-full bg-primary/10 p-3">
+                <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-red-700">Total Redactions</h3>
+                  <h3 className="font-semibold text-foreground">Total Redactions</h3>
                   <button
                     onClick={(e) => {
                       e.preventDefault();
@@ -148,7 +148,7 @@ export default function HomePage() {
                     title="Refresh counts"
                   >
                     {refreshing ? (
-                      <Spinner size={14} className="text-red-600" />
+                      <Spinner size={14} className="text-primary" />
                     ) : (
                       <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

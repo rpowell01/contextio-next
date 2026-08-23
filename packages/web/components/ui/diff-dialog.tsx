@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useCallback, useState } from "react";
+import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { X, Code } from "lucide-react";
 import {
   Dialog,
@@ -11,6 +11,31 @@ import {
 } from "@/components/ui/dialog";
 import { computeDiff, filterDiffWithContext, type DiffChunk } from "@/lib/diff";
 import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
+
+const Spinner = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    className={`animate-spin ${className}`}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <circle
+      className="opacity-25"
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="currentColor"
+      strokeWidth="4"
+    />
+    <path
+      className="opacity-75"
+      fill="currentColor"
+      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    />
+  </svg>
+);
 
 interface DiffDialogProps {
   isOpen: boolean;
@@ -42,6 +67,8 @@ interface DiffDialogProps {
     label: string;
     path: string;
   }) => void;
+  // Optional loading state - show spinner while computing diff
+  isLoading?: boolean;
 }
 
 type ViewMode = "diff" | "segments" | "syntax";
@@ -72,7 +99,24 @@ export function DiffDialog({
   timestamp,
   matches,
   onAddFalsePositive,
+  isLoading = false,
 }: DiffDialogProps) {
+  // Internal loading state - true while heavy computations are running
+  const [isComputing, setIsComputing] = useState(false);
+
+  // Trigger computation state when dialog opens or content changes
+  useEffect(() => {
+    if (isOpen) {
+      setIsComputing(true);
+      // Allow a frame for the dialog to render, then mark computing as done
+      // This gives time for the heavy useMemo computations to complete
+      const timer = requestAnimationFrame(() => {
+        requestAnimationFrame(() => setIsComputing(false));
+      });
+      return () => cancelAnimationFrame(timer);
+    }
+  }, [isOpen, preContent, postContent, fullOriginal, fullRedacted, matches]);
+
   // Use full body content for diff if available, otherwise use match snippets
   const diffPreContent = fullOriginal ?? preContent;
   const diffPostContent = fullRedacted ?? postContent;
@@ -1101,8 +1145,20 @@ export function DiffDialog({
         aria-labelledby="diff-dialog-title"
         aria-describedby="diff-dialog-description"
       >
+        {/* Loading overlay - shows while computing diff or when isLoading prop is true */}
+        {(isLoading || isComputing) && (
+          <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-50" style={{ top: 0, left: 0, right: 0, bottom: 0 }}>
+            <div className="flex flex-col items-center gap-3 p-6">
+              <Spinner size={32} className="text-primary" />
+              <span className="text-muted-foreground text-sm">
+                {isLoading ? "Loading redaction details..." : "Computing diff..."}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Header bar - fixed at top with close button on right */}
-        <div className="flex items-start justify-between gap-4 p-4 border-b border-border flex-shrink-0">
+        <div className="flex items-start justify-between gap-4 p-4 border-b border-border flex-shrink-0 relative">
           <div className="flex-1 min-w-0">
             <DialogTitle id="diff-dialog-title" className="text-lg font-semibold">
               {title}

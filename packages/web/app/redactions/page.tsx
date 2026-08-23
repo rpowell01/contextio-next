@@ -40,6 +40,7 @@ export default function RedactionsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [diffDialogOpen, setDiffDialogOpen] = useState(false);
+  const [diffDialogLoading, setDiffDialogLoading] = useState(false);
   const [diffDialogData, setDiffDialogData] = useState<{
     preContent: string;
     postContent: string;
@@ -123,7 +124,7 @@ export default function RedactionsPage() {
       let cancelled = false;
       const fetchPromise = fetch("/api/redactions?summary=true");
       const timeoutPromise = new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error("Fetch timeout")), 30000)
+        setTimeout(() => reject(new Error("Fetch timeout")), 120000)
       );
       const res = await Promise.race([fetchPromise, timeoutPromise]);
       console.log("[Redactions] Fetch completed, status:", res.status);
@@ -149,6 +150,7 @@ export default function RedactionsPage() {
 
   const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionCaptureRow) => {
     lastFocusedTrigger.current = e.currentTarget as HTMLElement;
+    setDiffDialogLoading(true);
 
     // Fetch first match for this capture from the detail API
     // We use the first match for the diff view; the full redaction list is shown in the summary
@@ -161,7 +163,7 @@ export default function RedactionsPage() {
     try {
       const fetchPromise = fetch(`/api/redactions/detail/${row.captureId}/0`);
       const timeoutPromise = new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error("Fetch timeout")), 30000)
+        setTimeout(() => reject(new Error("Fetch timeout")), 120000)
       );
       const res = await Promise.race([fetchPromise, timeoutPromise]);
       if (res.ok) {
@@ -176,6 +178,8 @@ export default function RedactionsPage() {
       }
     } catch (err) {
       console.warn("Failed to fetch redaction detail:", err);
+    } finally {
+      setDiffDialogLoading(false);
     }
 
     // For comma-separated list, we show the summary and open with first redaction
@@ -243,7 +247,7 @@ export default function RedactionsPage() {
         console.log("[RedactionFilter] Fetching:", url);
         const fetchPromise = fetch(url);
         const timeoutPromise = new Promise<Response>((_, reject) =>
-          setTimeout(() => reject(new Error("Fetch timeout")), 30000)
+          setTimeout(() => reject(new Error("Fetch timeout")), 120000)
         );
         const res = await Promise.race([fetchPromise, timeoutPromise]);
         if (!res.ok) throw new Error("Failed to fetch details");
@@ -390,7 +394,7 @@ export default function RedactionsPage() {
       case "timestamp":
         return <span className="font-mono text-xs">{new Date(row.timestamp).toLocaleString()}</span>;
       case "totalRedactions":
-        return <span className="font-medium text-red-600 text-center">{row.totalRedactions}</span>;
+        return <span className="font-medium text-primary text-center">{row.totalRedactions}</span>;
       default:
         return null;
     }
@@ -452,7 +456,7 @@ export default function RedactionsPage() {
 
           {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border p-4 bg-red-50 border-red-200"
+            <div className="rounded-lg border p-4 bg-accent border-border"
                  title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used. This matches the 'Unique Redactions (per session)' on the Metrics page.">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">Total Redactions</div>
@@ -464,7 +468,7 @@ export default function RedactionsPage() {
                   title="Refresh count"
                 >
                   {refreshing ? (
-                    <Spinner size={14} className="text-red-600" />
+                    <Spinner size={14} className="text-primary" />
                   ) : (
                     <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -472,7 +476,7 @@ export default function RedactionsPage() {
                   )}
                 </button>
               </div>
-              <div className="text-3xl font-bold text-red-600 mt-1">
+              <div className="text-3xl font-bold text-primary mt-1">
                 <span title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used. This avoids double-counting when a session has multiple captures.">
                   {summary?.totalRedactions ?? 0}
                 </span>
@@ -682,6 +686,7 @@ export default function RedactionsPage() {
         targetUrl={diffDialogData?.targetUrl || ""}
         timestamp={diffDialogData?.timestamp || ""}
         onAddFalsePositive={handleAddFalsePositive}
+        isLoading={diffDialogLoading}
       />
 
       {/* Add False Positive Dialog - triggered from diff dialog */}
