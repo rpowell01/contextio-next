@@ -156,6 +156,7 @@ export function FalsePositiveManager({
     label: "",
     path: "",
     customPath: "",
+    matchMode: "exact",
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
