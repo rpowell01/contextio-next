@@ -21,7 +21,7 @@ hero:
 
 features:
   - title: Transparent Proxy
-    details: Zero-config routing based on URL paths and headers. Works with Claude, OpenAI, Gemini, NVIDIA, OpenRouter, and custom providers.
+    details: Zero-config routing based on URL paths and headers. Works with Anthropic, OpenAI, Google, NVIDIA, OpenRouter, Kilo Code Gateway, and custom providers.
     icon: 🔀
   - title: PII & Secrets Redaction
     details: Built-in presets (secrets, pii, strict), custom policies, and reversible mode.
@@ -44,6 +44,9 @@ features:
   - title: Docker Native
     details: Pre-built images on ghcr.io. Multi-stage build. Coolify-ready with persistent directories.
     icon: 🐳
+  - title: New Provider Support
+    details: First-class support for NVIDIA NIM, OpenRouter, and Kilo Code Gateway with automatic detection and per-provider configuration.
+    icon: ✨
 ---
 
 <script setup>
@@ -127,9 +130,9 @@ openssl rand -base64 32
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
          │                    │                    │
-         ▼                    ▼                    ▼
-   anthrophic.com      api.openai.com      generativelanguage.googleapis.com
-   integrate.api.nvidia.com  openrouter.ai/api  ...etc
+▼                    ▼                    ▼                    ▼
+    anthrophic.com      api.openai.com      generativelanguage.googleapis.com
+    integrate.api.nvidia.com  openrouter.ai/api  api.kilo.ai  ...etc
 ```
 
 ## Pre-Built Docker Images

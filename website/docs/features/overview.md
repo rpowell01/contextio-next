@@ -19,6 +19,7 @@ ContextIO-Next provides a comprehensive set of features for observing, securing,
 | Feature | Description |
 |---------|-------------|
 | **Redaction Engine** | Presets (secrets, PII, strict), custom policies, context-gated rules, path scoping |
+| **False Positive Feedback** | Click-to-add exemptions from redaction diffs, exact/pattern modes, session-scoped, admin-only |
 | **Reversible Redaction** | Numbered placeholders restored in response stream — LLM sees `[EMAIL_1]`, you see `[EMAIL_REDACTED]` |
 | **Encryption at Rest** | AES-256-GCM with PBKDF2 (100k iterations), per-file nonces, keys never leave container |
 | **OIDC Authentication** | SSO via Google, Microsoft, Okta, Auth0, Keycloak, or any OIDC provider |
@@ -89,6 +90,9 @@ ContextIO-Next provides a comprehensive set of features for observing, securing,
 | **Codex CLI** | mitmproxy + proxy chain | ✓ | ✓ |
 | **Copilot CLI** | mitmproxy + proxy chain | ✓ | ✓ |
 | **OpenCode** | mitmproxy + proxy chain | ✓ | ✓ |
+| **OpenRouter** | `OPENROUTER_BASE_URL` | ✓ | ✓ |
+| **NVIDIA NIM** | `NVIDIA_BASE_URL` | ✓ | ✓ |
+| **Kilo Code Gateway** | `KILO_BASE_URL` | ✓ | ✓ |
 
 Tools that accept base URL overrides (Claude, Aider, Pi, Gemini) route directly. Tools that don't (Codex, Copilot, OpenCode) go through mitmproxy first for TLS termination, then chain into ContextIO-Next.
 

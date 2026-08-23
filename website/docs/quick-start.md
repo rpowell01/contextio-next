@@ -98,6 +98,12 @@ export NVIDIA_BASE_URL=http://localhost:4040/v1
 export NVIDIA_API_KEY=...
 ```
 
+### Kilo Code Gateway
+```bash
+export KILO_BASE_URL=http://localhost:4040/v1
+export KILO_API_KEY=...
+```
+
 ## 6. Verify It's Working
 
 1. Make a request with your AI tool

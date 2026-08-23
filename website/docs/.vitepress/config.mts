@@ -62,6 +62,7 @@ export default defineConfig({
             { text: 'Overview', link: '/features/overview' },
             { text: 'Redaction', link: '/features/redaction' },
             { text: 'Reversible Redaction', link: '/features/reversible-redaction' },
+            { text: 'False Positive Feedback', link: '/features/false-positives' },
             { text: 'Capture Logging', link: '/features/logging' },
             { text: 'Metrics & Monitoring', link: '/features/metrics' },
             { text: 'Rate Limiting', link: '/features/rate-limiting' },

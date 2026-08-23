@@ -26,6 +26,7 @@ Lowest:  Defaults (hardcoded in source)
 |----------|-------------|
 | `CSRF_SECRET` | Session cookie signing secret for web UI (min 32 chars). Generate: `openssl rand -base64 32` |
 | `CONTEXTIO_LOGGER_ENCRYPTION_KEY` | AES-256-GCM encryption key for capture files at rest (min 32 chars). Generate: `openssl rand -base64 32` |
+| `ADMIN_EMAILS` | Comma-separated list of admin email addresses for false positive management (required for OIDC admin access) |
 
 ## Core Proxy
 
@@ -80,6 +81,18 @@ When enabled, all capture files are encrypted with **AES-256-GCM** (PBKDF2, 100k
 - **pii** — Everything in `secrets` + email, SSN, credit cards, US phone numbers
 - **strict** — Everything in `pii` + IPv4 addresses, dates of birth
 
+## False Positive Feedback System
+
+The feedback store persists false positive entries so they survive proxy restarts. Configured via Web UI → Settings → Redaction tab (environment variables take precedence).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FEEDBACK_STORE_ENABLED` | `false` | Enable persistent feedback store for false positives |
+| `FEEDBACK_STORE_TYPE` | `sqlite` | Storage backend: `sqlite` (persistent) or `memory` (in-memory, lost on restart) |
+| `FEEDBACK_STORE_PATH` | `/app/data/false-positives.db` | SQLite file path (only used when type is `sqlite`) |
+
+> **Note**: Changes to `FEEDBACK_STORE_TYPE` or `FEEDBACK_STORE_PATH` require a proxy restart to take effect.
+
 ## Rate Limiter (Built-In)
 
 Token bucket per `(sessionId, provider)` with burst buffer and request queue.
@@ -130,7 +143,7 @@ Special handling for NVIDIA `ResourceExhausted` errors — appends a `"continue"
 | `UPSTREAM_KILO_URL` | `https://api.kilo.ai/api/gateway` |
 | `UPSTREAM_OPENROUTER_URL` | `https://openrouter.ai/api` |
 
-> Trailing `/v1` is stripped at startup to avoid double-prefixing.
+> **Note**: Trailing `/v1` is automatically stripped from all upstream URLs (both environment variables and header overrides) at startup to avoid double-prefixing, since request paths already contain API version segments.
 
 ## OIDC Authentication
 
@@ -164,6 +177,7 @@ All 5 required together: `OIDC_ENABLED`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_
 # Required
 CSRF_SECRET=your-csrf-secret-here
 CONTEXTIO_LOGGER_ENCRYPTION_KEY=your-encryption-key-here
+ADMIN_EMAILS=admin@company.com,security@company.com
 
 # Core
 CONTEXT_PROXY_PORT=4040
@@ -180,6 +194,11 @@ CONTEXTIO_LOGGER_ENCRYPTION_ENABLED=true
 # Redaction
 REDACT_PRESET=pii
 REDACT_REVERSIBLE=false
+
+# False Positive Feedback Store
+FEEDBACK_STORE_ENABLED=true
+FEEDBACK_STORE_TYPE=sqlite
+FEEDBACK_STORE_PATH=/app/data/false-positives.db
 
 # Rate Limiter (retry enabled when rate limiter is enabled)
 CONTEXTIO_ENABLE_LOGGER=true

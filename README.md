@@ -12,7 +12,7 @@ This project is a fork of [contextio](https://github.com/larsderidder/contextio)
 
 ## Overview
 
-ContextIO-Next is a single-port Docker proxy that sits between your AI coding tools (Claude CLI, Aider, Gemini CLI, Codex, Copilot, OpenCode, etc.) and LLM provider APIs (Anthropic, OpenAI, Google, NVIDIA, OpenRouter, etc.). It provides:
+ContextIO-Next is a single-port Docker proxy that sits between your AI coding tools (Claude CLI, Aider, Gemini CLI, Codex, Copilot, OpenCode, etc.) and LLM provider APIs (Anthropic, OpenAI, Google, NVIDIA, OpenRouter, Kilo Code Gateway, etc.). It provides:
 
 - **Transparent proxy** — Zero-config routing based on request headers and paths
 - **Web UI** — Dashboard, session inspection, redaction viewer, metrics, and settings all on port 4040
@@ -21,6 +21,7 @@ ContextIO-Next is a single-port Docker proxy that sits between your AI coding to
 - **Rate limiting** — Per-session, per-provider token bucket with burst buffering
 - **Retry with backoff** — Exponential backoff for 429/5xx, plus NVIDIA `ResourceExhausted` special handling
 - **OIDC Authentication** — Optional SSO via Google, Microsoft, Okta, or any OIDC provider
+- **New Providers** — First-class support for NVIDIA NIM, OpenRouter, and Kilo Code Gateway
 
 All configuration is via environment variables. The web UI settings persist to a SQLite database and JSON file, but **environment variables always take precedence** over settings file values.
 
@@ -143,9 +144,9 @@ Set `CSRF_SECRET` in Coolify environment variables (it injects this at runtime).
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
          │                    │                    │
-         ▼                    ▼                    ▼
-   anthrophic.com      api.openai.com      generativelanguage.googleapis.com
-   integrate.api.nvidia.com  openrouter.ai/api  ...etc
+▼                    ▼                    ▼                    ▼
+    anthrophic.com      api.openai.com      generativelanguage.googleapis.com
+    integrate.api.nvidia.com  openrouter.ai/api  api.kilo.ai  ...etc
 ```
 
 Single Node.js process. Zero npm dependencies in the proxy core. Plugins are separate packages loaded at startup.
@@ -162,6 +163,7 @@ All configuration is via environment variables. **Environment variables always o
 |----------|-------------|
 | `CSRF_SECRET` | Session cookie signing secret for web UI (min 32 chars). Generate: `openssl rand -base64 32` |
 | `CONTEXTIO_LOGGER_ENCRYPTION_KEY` | AES-256-GCM encryption key for capture files at rest (min 32 chars). Generate: `openssl rand -base64 32` |
+| `ADMIN_EMAILS` | Comma-separated list of admin email addresses for false positive management (required for OIDC admin access) |
 
 ### Core Proxy
 
@@ -216,6 +218,18 @@ When enabled, all capture files are encrypted with **AES-256-GCM** (PBKDF2, 100k
 - `pii` — Everything in `secrets` + email, SSN, credit cards, US phone numbers
 - `strict` — Everything in `pii` + IPv4 addresses, dates of birth
 
+### False Positive Feedback System
+
+The feedback store persists false positive entries so they survive proxy restarts. Configured via Web UI → Settings → Redaction tab (environment variables take precedence).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FEEDBACK_STORE_ENABLED` | `false` | Enable persistent feedback store for false positives |
+| `FEEDBACK_STORE_TYPE` | `sqlite` | Storage backend: `sqlite` (persistent) or `memory` (in-memory, lost on restart) |
+| `FEEDBACK_STORE_PATH` | `/app/data/false-positives.db` | SQLite file path (only used when type is `sqlite`) |
+
+> **Note**: Changes to `FEEDBACK_STORE_TYPE` or `FEEDBACK_STORE_PATH` require a proxy restart to take effect.
+
 ### Rate Limiter (Built-In)
 
 Token bucket per `(sessionId, provider)` with burst buffer and request queue.
@@ -265,7 +279,7 @@ Exponential backoff with jitter for 429/5xx responses, plus streaming SSE error 
 | `UPSTREAM_KILO_URL` | `https://api.kilo.ai/api/gateway` |
 | `UPSTREAM_OPENROUTER_URL` | `https://openrouter.ai/api` |
 
-> Trailing `/v1` is stripped at startup to avoid double-prefixing.
+> **Note**: Trailing `/v1` is automatically stripped from all upstream URLs (both environment variables and header overrides) at startup to avoid double-prefixing, since request paths already contain API version segments.
 
 ### OIDC Authentication
 
@@ -369,12 +383,29 @@ export NVIDIA_API_KEY=...
 # Proxy detects NVIDIA from x-nvidia-baseurl header or Bearer nv-... auth
 ```
 
+**Kilo Code Gateway:**
+```bash
+export KILO_BASE_URL=http://localhost:4040/v1
+export KILO_API_KEY=...
+# Proxy detects Kilo from x-kilo-baseurl header or kilo.ai hostname in x-target-url
+```
+
 **Override Provider Base URL (per-request):**
 ```bash
 # Example: Route Anthropic through a different upstream
 curl -H "x-anthropic-baseurl: https://fcc.sslip.mywire.org" \
      -H "x-api-key: sk-ant-..." \
      http://localhost:4040/v1/messages
+
+# Example: Override NVIDIA base URL
+curl -H "x-nvidia-baseurl: https://custom-nvidia-endpoint.com" \
+     -H "x-api-key: nv-..." \
+     http://localhost:4040/v1/chat/completions
+
+# Example: Override Kilo Code Gateway base URL
+curl -H "x-kilo-baseurl: https://custom-kilo-gateway.com/api/gateway" \
+     -H "x-api-key: ..." \
+     http://localhost:4040/v1/chat/completions
 
 # Example: Explicit target URL (requires CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE=1)
 curl -H "x-target-url: https://api.anthropic.com/v1/messages" \
@@ -404,6 +435,7 @@ Access at `http://localhost:4040` (or your configured `NEXT_PUBLIC_SITE_URL`).
 - Overview of all redactions by type
 - Per-session breakdown with placeholder mapping (reversible mode)
 - Diff dialog showing original vs redacted content
+- **Click any redaction badge in diff dialog → "Add as false positive"** (admin only)
 - Pagination for large datasets
 
 ### Metrics
@@ -412,7 +444,7 @@ Access at `http://localhost:4040` (or your configured `NEXT_PUBLIC_SITE_URL`).
 
 ### Settings (6 Tabs)
 1. **Logging** — Capture directory, retention (max sessions, max age, cleanup interval)
-2. **Redaction** — Preset or custom policy, reversible mode
+2. **Redaction** — Preset or custom policy, reversible mode, **Feedback Store** (enable, storage backend, SQLite path)
 3. **Security** — OIDC configuration, encryption at rest toggle
 4. **Rate Limiter** — Per-provider limits (max requests, window, buffer)
 5. **Appearance** — Theme (light/dark/system)
@@ -442,6 +474,33 @@ When `REDACT_REVERSIBLE=true`:
 3. Response: Placeholders → original values restored in stream
 
 Mappings stored per-session in SQLite. Works across Anthropic, OpenAI, and Gemini streaming formats (SSE, chunked, ndjson).
+
+### False Positive Feedback System
+
+When the redaction engine incorrectly flags a value (e.g., a test email like `test@example.com` or a placeholder token), you can mark it as a **false positive** so it won't be redacted in future requests.
+
+**How it works:**
+1. **Click-to-add**: In the Web UI → Sessions → open a capture → click any redaction badge in the diff dialog → "Add as false positive"
+2. **Manual entry**: Web UI → Redactions page → "Add False Positive" button
+3. **Two modes**:
+   - **Exact match** — only the specific value is exempted (e.g., `test@example.com`)
+   - **Pattern match** — glob-style pattern exempts similar values (e.g., `test*@example.com` exempts `test1@example.com`, `test_user@example.com`)
+4. **Scope**: Global (all sessions) or session-scoped (specific `sessionId`)
+
+**Configuration (Settings → Redaction tab → Feedback Store):**
+- **Enable Feedback Store** — persist false positives across proxy restarts
+- **Storage Backend** — `sqlite` (persistent, file-based) or `memory` (in-memory, lost on restart)
+- **SQLite Path** — e.g., `/app/data/false-positives.db` (only for sqlite backend)
+
+**Requirements:**
+- **Admin only** — your account email must be in `ADMIN_EMAILS` environment variable (comma-separated)
+- Requires proxy restart to apply storage backend changes
+
+**Admin API endpoints:**
+- `GET /admin/redact/false-positives` — list with pagination
+- `POST /admin/redact/false-positives` — create new entry
+- `DELETE /admin/redact/false-positives` — remove entry
+- `POST /admin/redact/false-positives/clear` — clear all entries
 
 ### Rate Limiting
 
@@ -496,7 +555,7 @@ Highest: Programmatic overrides (in code)
 Lowest:  Defaults (hardcoded in source)
 ```
 
-**Secrets** (`CSRF_SECRET`, `CONTEXTIO_LOGGER_ENCRYPTION_KEY`, `CONTEXTIO_OIDC_CLIENT_SECRET`, `CONTEXTIO_OIDC_SESSION_SECRET`) must be set via environment variables or Docker secrets — they are never read from the settings file.
+**Secrets** (`CSRF_SECRET`, `CONTEXTIO_LOGGER_ENCRYPTION_KEY`, `CONTEXTIO_OIDC_CLIENT_SECRET`, `CONTEXTIO_OIDC_SESSION_SECRET`, `ADMIN_EMAILS`) must be set via environment variables or Docker secrets — they are never read from the settings file.
 
 ---
 

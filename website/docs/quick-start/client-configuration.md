@@ -68,6 +68,12 @@ export NVIDIA_BASE_URL=http://localhost:4040/v1
 export NVIDIA_API_KEY=...
 ```
 
+### Kilo Code Gateway
+```bash
+export KILO_BASE_URL=http://localhost:4040/v1
+export KILO_API_KEY=...
+```
+
 ## Override Provider Base URL (Per-Request)
 
 ```bash
@@ -75,6 +81,16 @@ export NVIDIA_API_KEY=...
 curl -H "x-anthropic-baseurl: https://fcc.sslip.mywire.org" \
      -H "x-api-key: sk-ant-..." \
      http://localhost:4040/v1/messages
+
+# Override NVIDIA base URL
+curl -H "x-nvidia-baseurl: https://custom-nvidia-endpoint.com" \
+     -H "x-api-key: nv-..." \
+     http://localhost:4040/v1/chat/completions
+
+# Override Kilo Code Gateway base URL
+curl -H "x-kilo-baseurl: https://custom-kilo-gateway.com/api/gateway" \
+     -H "x-api-key: ..." \
+     http://localhost:4040/v1/chat/completions
 
 # Explicit target URL (requires CONTEXT_PROXY_ALLOW_TARGET_OVERRIDE=1)
 curl -H "x-target-url: https://api.anthropic.com/v1/messages" \
