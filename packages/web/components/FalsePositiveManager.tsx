@@ -131,6 +131,7 @@ export function FalsePositiveManager({
     ruleId: string;
     label: string;
     path: string;
+    matchMode?: "exact" | "pattern";
   };
   onClose?: () => void;
 }) {
@@ -179,6 +180,7 @@ export function FalsePositiveManager({
         label: ruleOption ? ruleOption.label.split(" (")[0] : initialData.label,
         path: pathOption ? initialData.path : "custom",
         customPath: pathOption ? "" : initialData.path,
+        matchMode: initialData.matchMode || "exact",
       });
       
       // Allow a frame for the form to update before showing dialog
@@ -681,27 +683,33 @@ export function FalsePositiveManager({
               <div>
                 <Label htmlFor="fp-matchMode">Match Mode</Label>
                 <div className="flex gap-2">
-                  <label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
                       name="matchMode"
                       value="exact"
                       checked={form.matchMode !== "pattern"}
                       onChange={handleMatchModeChange}
-                      className="peer hidden"
+                      className="sr-only peer"
                     />
-                    Exact
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary">
+                      <span className="w-4 h-4 rounded-full border border-input peer-checked:border-primary peer-checked:bg-primary"></span>
+                      Exact
+                    </span>
                   </label>
-                  <label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
                       name="matchMode"
                       value="pattern"
                       checked={form.matchMode === "pattern"}
                       onChange={handleMatchModeChange}
-                      className="peer hidden"
+                      className="sr-only peer"
                     />
-                    Pattern
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary">
+                      <span className="w-4 h-4 rounded-full border border-input peer-checked:border-primary peer-checked:bg-primary"></span>
+                      Pattern
+                    </span>
                   </label>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
