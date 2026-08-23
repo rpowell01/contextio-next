@@ -40,6 +40,32 @@ import { useSearchParams, useRouter } from "next/navigation";
 // @ts-ignore
 import { apiClient } from "@/lib/api";
 
+// Spinner component for loading state
+const Spinner = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    className={`animate-spin ${className}`}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <circle
+      className="opacity-25"
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="currentColor"
+      strokeWidth="4"
+    />
+    <path
+      className="opacity-75"
+      fill="currentColor"
+      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    />
+  </svg>
+);
+
 type FalsePositiveForm = {
   value: string;
   ruleId: string;
@@ -50,7 +76,7 @@ type FalsePositiveForm = {
   matchMode?: "exact" | "pattern";
 };
 
-// All available redaction rule IDs from presets (secrets, pii, strict)
+// All available redaction rule IDs from presets (secrets, pii, strict) and Presidio LLM-based detector
 const RULE_OPTIONS: { value: string; label: string }[] = [
   // Secrets preset
   { value: "private-key", label: "Private Key (private-key)" },
@@ -92,6 +118,12 @@ const RULE_OPTIONS: { value: string; label: string }[] = [
   { value: "bsn-dutch", label: "Dutch BSN (bsn-dutch)" },
   { value: "ni-number-uk", label: "UK NI Number (ni-number-uk)" },
   { value: "passport-number", label: "Passport Number (passport-number)" },
+  // Presidio LLM-based detector (NER + pattern)
+  { value: "person", label: "Person Name (person)" },
+  { value: "location", label: "Location/Address (location)" },
+  { value: "organization", label: "Organization/Company (organization)" },
+  { value: "url", label: "URL (url)" },
+  { value: "date-time", label: "Date/Time (date-time)" },
 ];
 
 // Common JSON paths for LLM API requests
@@ -120,6 +152,7 @@ export function FalsePositiveManager({
   onCleared,
   initialData,
   onClose,
+  isLoading: externalLoading = false,
 }: {
   onEntryAdded?: (entry: FalsePositiveEntry) => void;
   onEntryRemoved?: (entry: FalsePositiveEntry) => void;
@@ -131,6 +164,7 @@ export function FalsePositiveManager({
     path: string;
   };
   onClose?: () => void;
+  isLoading?: boolean;
 }) {
   const [falsePositives, setFalsePositives] = useState<FalsePositiveEntry[]>([]);
   const [pagination, setPagination] = useState<{
@@ -162,9 +196,18 @@ export function FalsePositiveManager({
   // Dialog open state - controlled by initialData presence
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
+  // Internal loading state for dialog opening
+  const [dialogOpening, setDialogOpening] = useState(false);
+
+  // Combined loading state - true if either external loading or internal dialog opening
+  const isOpening = externalLoading || dialogOpening;
+
   // Populate form with initial data when provided
   useEffect(() => {
     if (initialData) {
+      // Show loading spinner while preparing the dialog
+      setDialogOpening(true);
+      
       // Find the matching rule option to get the correct label
       const ruleOption = RULE_OPTIONS.find(r => r.value === initialData.ruleId);
       // Find the matching path option
@@ -177,7 +220,15 @@ export function FalsePositiveManager({
         path: pathOption ? initialData.path : "custom",
         customPath: pathOption ? "" : initialData.path,
       });
-      setIsDialogOpen(true);
+      
+      // Allow a frame for the form to update before showing dialog
+      requestAnimationFrame(() => {
+        setIsDialogOpen(true);
+        setDialogOpening(false);
+      });
+    } else {
+      setIsDialogOpen(false);
+      setDialogOpening(false);
     }
   }, [initialData]);
 

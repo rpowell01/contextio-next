@@ -7,6 +7,53 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { DiffDialog } from "@/components/ui/diff-dialog";
 import { FalsePositiveManager } from "@/components/FalsePositiveManager";
 
+// Admin status cache key and TTL (5 minutes)
+const ADMIN_CACHE_KEY = "contextio_admin_status";
+const ADMIN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+interface AdminStatus {
+  isAdmin: boolean;
+  authenticated: boolean;
+  email?: string;
+  timestamp: number;
+}
+
+// Get cached admin status if valid
+function getCachedAdminStatus(): AdminStatus | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const cached = localStorage.getItem(ADMIN_CACHE_KEY);
+    if (!cached) return null;
+    const data: AdminStatus = JSON.parse(cached);
+    if (Date.now() - data.timestamp > ADMIN_CACHE_TTL) {
+      localStorage.removeItem(ADMIN_CACHE_KEY);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+// Cache admin status
+function setCachedAdminStatus(status: Omit<AdminStatus, "timestamp">): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ADMIN_CACHE_KEY, JSON.stringify({
+      ...status,
+      timestamp: Date.now(),
+    }));
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+// Clear admin cache (e.g., on logout)
+function clearAdminCache(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(ADMIN_CACHE_KEY);
+}
+
 interface RedactionSummary {
   totalRedactions: number;
   byType: Record<string, number>;
@@ -84,6 +131,7 @@ export default function RedactionsPage() {
     label: string;
     path: string;
   } | null>(null);
+  const [fpDialogLoading, setFpDialogLoading] = useState(false);
 
   const lastFocusedTrigger = useRef<HTMLElement | null>(null);
 
@@ -284,19 +332,42 @@ export default function RedactionsPage() {
     label: string;
     path: string;
   }) => {
-    // Check if user has admin role before opening the false positive dialog
+    // Check cached admin status first
+    const cached = getCachedAdminStatus();
+    if (cached) {
+      if (!cached.authenticated) {
+        alert("You must be logged in with an admin account to add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please log in with an admin account or contact your administrator.");
+        return;
+      }
+      if (!cached.isAdmin) {
+        alert("Admin role required: Only users with admin privileges can add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please contact your administrator to request admin access.");
+        return;
+      }
+      // Cached admin status is valid, open dialog immediately
+      setFpDialogData(fpData);
+      setFpDialogOpen(true);
+      return;
+    }
+
+    // No valid cache, check with server
+    setFpDialogLoading(true);
     try {
       const response = await fetch("/api/auth/check-admin");
       const adminData = await response.json();
       
+      // Cache the result for future calls
+      setCachedAdminStatus({
+        isAdmin: adminData.isAdmin ?? false,
+        authenticated: adminData.authenticated ?? false,
+        email: adminData.email,
+      });
+      
       if (!adminData.authenticated) {
-        // User not authenticated, show login required dialog
         alert("You must be logged in with an admin account to add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please log in with an admin account or contact your administrator.");
         return;
       }
       
       if (!adminData.isAdmin) {
-        // User is not admin, show admin required dialog
         alert("Admin role required: Only users with admin privileges can add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please contact your administrator to request admin access.");
         return;
       }
@@ -307,6 +378,8 @@ export default function RedactionsPage() {
     } catch (error) {
       console.error("Failed to check admin status:", error);
       alert("Failed to verify admin status. Please try again.");
+    } finally {
+      setFpDialogLoading(false);
     }
   }, []);
 

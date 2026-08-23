@@ -6,6 +6,14 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getNavigationItems, NavigationConfig } from "@/lib/nav-config";
 
+// Admin cache utilities
+const ADMIN_CACHE_KEY = "contextio_admin_status";
+
+function clearAdminCache(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(ADMIN_CACHE_KEY);
+}
+
 interface UserInfo {
   sub: string;
   email?: string;
@@ -84,6 +92,7 @@ export function Header({ navigationConfig }: HeaderProps) {
       });
       setUser(null);
       setIsAdmin(false);
+      clearAdminCache(); // Clear cached admin status on logout
       // Redirect to proxy's /auth/logout which will clear proxy session
       // and redirect to OIDC provider logout, then to /auth/logged-out
       window.location.href = "/auth/logout?redirect=" + encodeURIComponent("/auth/logged-out");
