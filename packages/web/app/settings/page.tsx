@@ -2,6 +2,7 @@
 
 import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
+import { DEFAULT_SETTINGS } from "@/lib/settings";
 import type { Settings, SettingMeta, Provider, RateLimitConfig, StreamingRetryConfig } from "@/lib/settings";
 import type { ProviderConfig, ProviderMetadata, MaintenanceOperation, MaintenanceResult } from "@/types/api";
 import type { PresetName } from "@contextio/redact";
@@ -110,7 +111,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { AlertCircle, Loader2, Trash2, Edit2, Plus, Database, Shield, Gauge, Palette, Server, EyeOff, HardDrive } from "lucide-react";
+import { AlertCircle, Loader2, Trash2, Edit2, Plus, Database, Shield, Gauge, Palette, Server, EyeOff, HardDrive, RotateCcw } from "lucide-react";
 
 // NOTE: /api/settings (GET and POST) has no authentication. Any client that can reach
 // the web server can read or overwrite settings. Treat the settings file as sensitive
@@ -1007,7 +1008,30 @@ export default function SettingsPage() {
       case "streamingRetry":
         return (
           <div className="rounded-lg border p-6" role="tabpanel" id="panel-streamingRetry" aria-labelledby="tab-streamingRetry">
-            <h3 className="font-semibold mb-4">Streaming Retry Configuration</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Streaming Retry Configuration</h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSettings((prev) => ({
+                    ...prev,
+                    streamingRetry: DEFAULT_SETTINGS.streamingRetry,
+                    retryMaxEntries: DEFAULT_SETTINGS.retryMaxEntries,
+                    retryEntryTtlMs: DEFAULT_SETTINGS.retryEntryTtlMs,
+                    retryCleanupIntervalMs: DEFAULT_SETTINGS.retryCleanupIntervalMs,
+                    retryMaxBufferSize: DEFAULT_SETTINGS.retryMaxBufferSize,
+                    retryMaxStreamRetries: DEFAULT_SETTINGS.retryMaxStreamRetries,
+                  }));
+                  setSaveMessage({ type: "success", message: "All streaming retry settings reset to defaults. Click Save to persist." });
+                }}
+                className="flex items-center gap-2"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset to Defaults
+              </Button>
+            </div>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground mb-4">
                 Configure streaming retry behavior per provider. Controls retry attempts and buffer size for rate-limited streaming responses.

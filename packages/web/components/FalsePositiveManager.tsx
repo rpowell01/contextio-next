@@ -387,10 +387,10 @@ export function FalsePositiveManager({
     [],
   );
 
-  // Update ruleId
-  const handleRuleIdChange = useCallback(
+  
+  const handleMatchModeChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setForm((prev) => ({ ...prev, ruleId: e.target.value }));
+      setForm((prev) => ({ ...prev, matchMode: e.target.value as "exact" | "pattern" }));
     },
     [],
   );
@@ -686,7 +686,7 @@ export function FalsePositiveManager({
                       name="matchMode"
                       value="exact"
                       checked={form.matchMode !== "pattern"}
-                      onChange={handleRuleIdChange}
+                      onChange={handleMatchModeChange}
                       className="peer hidden"
                     />
                     Exact
@@ -697,7 +697,7 @@ export function FalsePositiveManager({
                       name="matchMode"
                       value="pattern"
                       checked={form.matchMode === "pattern"}
-                      onChange={handleRuleIdChange}
+                      onChange={handleMatchModeChange}
                       className="peer hidden"
                     />
                     Pattern
