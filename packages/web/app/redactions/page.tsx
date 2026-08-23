@@ -48,12 +48,6 @@ function setCachedAdminStatus(status: Omit<AdminStatus, "timestamp">): void {
   }
 }
 
-// Clear admin cache (e.g., on logout)
-function clearAdminCache(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(ADMIN_CACHE_KEY);
-}
-
 interface RedactionSummary {
   totalRedactions: number;
   byType: Record<string, number>;
@@ -131,7 +125,6 @@ export default function RedactionsPage() {
     label: string;
     path: string;
   } | null>(null);
-  const [fpDialogLoading, setFpDialogLoading] = useState(false);
 
   const lastFocusedTrigger = useRef<HTMLElement | null>(null);
 
@@ -350,7 +343,6 @@ export default function RedactionsPage() {
     }
 
     // No valid cache, check with server
-    setFpDialogLoading(true);
     try {
       const response = await fetch("/api/auth/check-admin");
       const adminData = await response.json();
@@ -378,8 +370,6 @@ export default function RedactionsPage() {
     } catch (error) {
       console.error("Failed to check admin status:", error);
       alert("Failed to verify admin status. Please try again.");
-    } finally {
-      setFpDialogLoading(false);
     }
   }, []);
 
