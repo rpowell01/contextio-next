@@ -118,12 +118,8 @@ const RULE_OPTIONS: { value: string; label: string }[] = [
   { value: "bsn-dutch", label: "Dutch BSN (bsn-dutch)" },
   { value: "ni-number-uk", label: "UK NI Number (ni-number-uk)" },
   { value: "passport-number", label: "Passport Number (passport-number)" },
-  // Presidio LLM-based detector (NER + pattern)
-  { value: "person", label: "Person Name (person)" },
-  { value: "location", label: "Location/Address (location)" },
-  { value: "organization", label: "Organization/Company (organization)" },
-  { value: "url", label: "URL (url)" },
-  { value: "date-time", label: "Date/Time (date-time)" },
+  // Presidio LLM-based detector (NER entities) — uses ruleId="presidio-ts" with label as entity type
+  { value: "presidio-ts", label: "Presidio NER (PERSON, LOCATION, ORGANIZATION, URL, DATE_TIME, EMAIL_ADDRESS, PHONE_NUMBER, CREDIT_CARD, US_SSN, IP_ADDRESS)" },
 ];
 
 // Common JSON paths for LLM API requests
