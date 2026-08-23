@@ -178,12 +178,9 @@ export default function RedactionsPage() {
       }
     } catch (err) {
       console.warn("Failed to fetch redaction detail:", err);
-    } finally {
-      setDiffDialogLoading(false);
     }
 
-    // For comma-separated list, we show the summary and open with first redaction
-    // The dialog could be enhanced to show multiple redactions
+    // Set data first, then open dialog - loading stays true until DiffDialog signals ready
     setDiffDialogData({
       preContent,
       postContent,
@@ -191,7 +188,7 @@ export default function RedactionsPage() {
       fullRedacted,
       matches,
       captureId: row.captureId,
-      redactionType: row.redactionSummary, // Show summary in dialog title
+      redactionType: row.redactionSummary,
       provider: row.requestProvider,
       targetUrl: row.requestTarget,
       timestamp: row.timestamp,
@@ -204,6 +201,7 @@ export default function RedactionsPage() {
       lastFocusedTrigger.current.focus();
     }
     setDiffDialogOpen(false);
+    setDiffDialogLoading(false);
   }, []);
 
   // Debounce filter changes to avoid firing API request on every keystroke
@@ -687,6 +685,7 @@ export default function RedactionsPage() {
         timestamp={diffDialogData?.timestamp || ""}
         onAddFalsePositive={handleAddFalsePositive}
         isLoading={diffDialogLoading}
+        onReady={() => setDiffDialogLoading(false)}
       />
 
       {/* Add False Positive Dialog - triggered from diff dialog */}

@@ -69,6 +69,8 @@ interface DiffDialogProps {
   }) => void;
   // Optional loading state - show spinner while computing diff
   isLoading?: boolean;
+  // Called when dialog is fully rendered and diff computation is complete
+  onReady?: () => void;
 }
 
 type ViewMode = "diff" | "segments" | "syntax";
@@ -100,22 +102,30 @@ export function DiffDialog({
   matches,
   onAddFalsePositive,
   isLoading = false,
+  onReady,
 }: DiffDialogProps) {
   // Internal loading state - true while heavy computations are running
   const [isComputing, setIsComputing] = useState(false);
+  const hasCalledReady = useRef(false);
 
   // Trigger computation state when dialog opens or content changes
   useEffect(() => {
     if (isOpen) {
+      hasCalledReady.current = false;
       setIsComputing(true);
-      // Allow a frame for the dialog to render, then mark computing as done
-      // This gives time for the heavy useMemo computations to complete
+      // Allow time for the dialog to render and heavy useMemo computations to complete
       const timer = requestAnimationFrame(() => {
-        requestAnimationFrame(() => setIsComputing(false));
+        requestAnimationFrame(() => {
+          setIsComputing(false);
+          if (!hasCalledReady.current && onReady) {
+            hasCalledReady.current = true;
+            onReady();
+          }
+        });
       });
       return () => cancelAnimationFrame(timer);
     }
-  }, [isOpen, preContent, postContent, fullOriginal, fullRedacted, matches]);
+  }, [isOpen, preContent, postContent, fullOriginal, fullRedacted, matches, onReady]);
 
   // Use full body content for diff if available, otherwise use match snippets
   const diffPreContent = fullOriginal ?? preContent;
