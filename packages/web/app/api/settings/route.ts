@@ -45,13 +45,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     const body = await request.json();
     
+    console.log("[settings POST] Received body keys:", Object.keys(body));
+    
     // Ensure database is initialized
     ensureDbInitialized();
     
     // Validate the incoming settings (lenient - never fail the whole request)
     const validated = validateSettingsLenient(body);
+    console.log("[settings POST] Validated keys:", Object.keys(validated));
     // Merge with defaults for any missing fields
     const settings = mergeWithDefaults(validated);
+    console.log("[settings POST] Merged settings keys:", Object.keys(settings));
 
     // Apply env overrides to determine which keys are controlled by env vars
     const { appliedKeys } = applyEnvOverrides(settings);
@@ -64,9 +68,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     for (const key of appliedKeys) {
       delete settingsToPersist[key];
     }
+    console.log("[settings POST] Settings to persist keys:", Object.keys(settingsToPersist));
 
     // Persist to SQLite database
+    console.log("[settings POST] Calling upsertSettings...");
     upsertSettings(settingsToPersist);
+    console.log("[settings POST] upsertSettings completed");
 
     // Re-apply env overrides for the response to show effective values
     const { settings: effectiveSettings, appliedKeys: responseAppliedKeys } = applyEnvOverrides(settingsToPersist);
@@ -83,7 +90,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const errorErrno = (error as NodeJS.ErrnoException)?.errno;
     const errorSyscall = (error as NodeJS.ErrnoException)?.syscall;
     const errorPath = (error as NodeJS.ErrnoException)?.path;
-    console.error("Failed to save settings:", error);
+    console.error("Failed to save settings:", { errorMessage, errorStack, errorCode, errorErrno, errorSyscall, errorPath });
     return NextResponse.json(
       createErrorResponse({
         message: "Failed to save settings",
