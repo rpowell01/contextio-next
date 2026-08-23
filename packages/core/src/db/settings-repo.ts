@@ -527,7 +527,7 @@ export function upsertSettings(settings: Settings): void {
 upstream_openrouter_url, upstream_openai_url, upstream_anthropic_url, upstream_chatgpt_url,
 			upstream_gemini_url, upstream_vertex_url, upstream_nvidia_url, upstream_kilo_url,
 			upstream_gemini_code_assist_url
-	) VALUES (
+) VALUES (
 			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 		ON CONFLICT(id) DO UPDATE SET
