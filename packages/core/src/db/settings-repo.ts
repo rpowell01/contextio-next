@@ -524,11 +524,11 @@ export function upsertSettings(settings: Settings): void {
 			rate_limiter_max_entries, rate_limiter_cleanup_interval_ms, rate_limiter_entry_ttl_ms,
 			retry_max_entries, retry_entry_ttl_ms, retry_cleanup_interval_ms, retry_max_buffer_size, retry_max_stream_retries,
 			proxy_bind_host, proxy_port, proxy_allow_target_override, strict_url_forwarding,
-			upstream_openrouter_url, upstream_openai_url, upstream_anthropic_url, upstream_chatgpt_url,
+upstream_openrouter_url, upstream_openai_url, upstream_anthropic_url, upstream_chatgpt_url,
 			upstream_gemini_url, upstream_vertex_url, upstream_nvidia_url, upstream_kilo_url,
 			upstream_gemini_code_assist_url
-		) VALUES (
-			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+	) VALUES (
+			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 		ON CONFLICT(id) DO UPDATE SET
 			log_dir = excluded.log_dir,
