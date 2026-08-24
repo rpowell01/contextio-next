@@ -101,3 +101,16 @@ export function isValidMetricsData(data: unknown): data is MetricsData {
     Array.isArray(metrics.traffic)
   );
 }
+
+/**
+ * Auto-generate a regex pattern from a value for pattern-based matching.
+ * Escapes special regex characters and replaces digit sequences with \d+.
+ */
+export function generatePatternFromValue(value: string): string {
+  let pattern = value
+    .replace(/[.+*?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\d+/g, "\\d+")
+    .replace(/\s+/g, "\\s+");
+  pattern = `^${pattern}$`;
+  return pattern;
+}

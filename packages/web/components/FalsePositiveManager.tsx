@@ -41,7 +41,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 // @ts-ignore
 import { apiClient } from "@/lib/api";
 // @ts-ignore
-import { generatePatternFromValue } from "@contextio/redact";
+import { generatePatternFromValue } from "@/lib/utils";
 
 type FalsePositiveForm = {
   value: string;
