@@ -17,6 +17,7 @@
     "@contextio/logger": "workspace:*",
     "@contextio/proxy": "workspace:*",
     "@contextio/redact": "workspace:*",
+    "@radix-ui/react-select": "^2.3.7",
     "mime-types": "^2.1.35",
     "next": "15.3.1",
     "react": "^19.1.0",

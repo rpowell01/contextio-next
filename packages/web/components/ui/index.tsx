@@ -1,4 +1,5 @@
 import { Button } from "./button";
 import { Input } from "./input";
 import { Label } from "./label";
-export { Button, Input, Label };
+import { Select } from "./select";
+export { Button, Input, Label, Select };

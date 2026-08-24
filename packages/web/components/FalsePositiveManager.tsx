@@ -25,14 +25,15 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 // @ts-ignore
-import { Button, Input, Label } from "@/components/ui";
+import { Button, Input, Label, Select } from "@/components/ui";
+// @ts-ignore
+import { SelectItem, SelectTrigger, SelectValue, SelectContent } from "@/components/ui/select";
 // @ts-ignore
 import {
   Loader2,
   Trash2,
   Edit2,
   Plus,
-  ChevronDown,
   X,
 } from "lucide-react";
 // @ts-ignore
@@ -584,21 +585,21 @@ export function FalsePositiveManager({
 
                 <div>
                   <Label htmlFor="fp-ruleId">Rule ID</Label>
-                  <select
-                    id="fp-ruleId"
-                    name="ruleId"
+                  <Select
                     value={form.ruleId}
-                    onChange={(e) => setForm((prev) => ({ ...prev, ruleId: e.target.value }))}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    required
+                    onValueChange={(value) => setForm((prev) => ({ ...prev, ruleId: value }))}
                   >
-                    <option value="">Select a rule...</option>
-                    {RULE_OPTIONS.map((rule) => (
-                      <option key={rule.value} value={rule.value}>
-                        {rule.label}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a rule..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RULE_OPTIONS.map((rule) => (
+                        <SelectItem key={rule.value} value={rule.value}>
+                          {rule.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -619,30 +620,27 @@ export function FalsePositiveManager({
                 <div>
                   <Label htmlFor="fp-path">JSON Path</Label>
                   <div className="space-y-2">
-                    <div className="relative">
-                      <select
-                        id="fp-path-select"
-                        name="pathSelect"
-                        value={form.path === "custom" ? "custom" : form.path}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === "custom") {
-                            setForm((prev) => ({ ...prev, path: "custom" }));
-                          } else {
-                            setForm((prev) => ({ ...prev, path: value }));
-                          }
-                        }}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none pr-10"
-                        required
-                      >
+                    <Select
+                      value={form.path === "custom" ? "custom" : form.path}
+                      onValueChange={(value) => {
+                        if (value === "custom") {
+                          setForm((prev) => ({ ...prev, path: "custom" }));
+                        } else {
+                          setForm((prev) => ({ ...prev, path: value }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a path..." />
+                      </SelectTrigger>
+                      <SelectContent>
                         {PATH_OPTIONS.map((path) => (
-                          <option key={path.value} value={path.value}>
+                          <SelectItem key={path.value} value={path.value}>
                             {path.label}
-                          </option>
+                          </SelectItem>
                         ))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                    </div>
+                      </SelectContent>
+                    </Select>
                     {form.path === "custom" && (
                       <Input
                         id="fp-path-custom"
