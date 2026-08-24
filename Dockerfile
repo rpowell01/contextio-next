@@ -42,24 +42,14 @@ COPY packages/ packages/
 RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     pnpm install --frozen-lockfile
 
-# Build all packages with build-time env vars for version info
-ARG GIT_COMMIT=unknown
-ARG BUILD_TIME
-ARG VERSION
-ENV GIT_COMMIT=${GIT_COMMIT}
-ENV BUILD_TIME=${BUILD_TIME}
-ENV VERSION=${VERSION}
-# Next.js needs NEXT_PUBLIC_ prefix for client-side access
-ENV NEXT_PUBLIC_VERSION=${VERSION}
-ENV NEXT_PUBLIC_GIT_COMMIT=${GIT_COMMIT}
-ENV NEXT_PUBLIC_BUILD_TIME=${BUILD_TIME}
-
+# Build all packages with build-time version info
+# Compute version info and write to file for runtime access
 RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
-    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") \
-    BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-    VERSION=$(cat package.json | grep '"version"' | head -1 | sed 's/.*"version": "\([^"]*\)".*/\1/') \
-    && export GIT_COMMIT BUILD_TIME VERSION \
-    && pnpm exec turbo build
+    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") && \
+    BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) && \
+    VERSION=$(cat package.json | grep '"version"' | head -1 | sed 's/.*"version": "\([^"]*\)".*/\1/') && \
+    echo "{\"version\":\"$VERSION\",\"buildTime\":\"$BUILD_TIME\",\"gitCommit\":\"$GIT_COMMIT\"}" > /app/version-info.json && \
+    pnpm exec turbo build
 
 # Verify core dist with migrations was created in build stage
 RUN ls -la /app/packages/core/dist/db/migrations/ && \
@@ -136,6 +126,7 @@ RUN mkdir -p /app/packages/web/.next/cache /app/captures/.next/cache && \
 # Copy bundled default policy file
 COPY --from=build /app/packages/web/public/default-policy.json /app/default-policy.json
 COPY --from=build /app/default-providers.json /app/default-providers.json
+COPY --from=build /app/version-info.json /app/version-info.json
 
 # Copy pre-built plugin files and start script
 COPY docker/plugins/logger-plugin.js /app/logger-plugin.js
