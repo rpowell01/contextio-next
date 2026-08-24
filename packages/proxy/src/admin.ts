@@ -849,6 +849,7 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
               path: string;
               sessionId?: string;
               matchMode?: "exact" | "pattern";
+              pattern?: string;
             };
 
             try {
