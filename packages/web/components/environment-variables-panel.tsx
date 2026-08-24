@@ -7,6 +7,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { RefreshCw, Search, ChevronLeft, ChevronRight, Lock, EyeOff, ShieldAlert } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import type { ContainerEnvVar } from "@/types/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface EnvironmentVariablesPanelProps {
   containerId: string;
@@ -185,21 +186,21 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
           <label htmlFor="env-var-filter" className="sr-only">
             Filter by source
           </label>
-          <select
-            id="env-var-filter"
-            value={filterSource}
-            onChange={(e) => {
-              setFilterSource(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-3 py-2 text-sm border rounded-md"
-          >
-            {sources.map((source) => (
-              <option key={source} value={source}>
-                {source === "all" ? "All Sources" : source}
-              </option>
-            ))}
-          </select>
+          <Select value={filterSource} onValueChange={(value) => {
+            setFilterSource(value);
+            setCurrentPage(1);
+          }}>
+            <SelectTrigger className="px-3 py-2 text-sm border rounded-md">
+              <SelectValue placeholder="Filter by source" />
+            </SelectTrigger>
+            <SelectContent>
+              {sources.map((source) => (
+                <SelectItem key={source} value={source}>
+                  {source === "all" ? "All Sources" : source}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

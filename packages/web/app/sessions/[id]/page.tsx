@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Copy } from "lucide-react";
 
 function renderJson(data: unknown): string {
@@ -686,23 +687,23 @@ function SessionContent({
                       <label htmlFor="status" className="block text-sm font-medium mb-1">
                         Status
                       </label>
-                      <select
-                        id="status"
-                        value={filters.status}
-                        onChange={(e) => handleFilterChange("status", e.target.value)}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="">All statuses</option>
-                        <option value="200">200</option>
-                        <option value="201">201</option>
-                        <option value="400">400</option>
-                        <option value="401">401</option>
-                        <option value="403">403</option>
-                        <option value="404">404</option>
-                        <option value="500">500</option>
-                        <option value="502">502</option>
-                        <option value="503">503</option>
-                      </select>
+                      <Select value={filters.status} onValueChange={(value) => handleFilterChange("status", value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="All statuses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">All statuses</SelectItem>
+                          <SelectItem value="200">200</SelectItem>
+                          <SelectItem value="201">201</SelectItem>
+                          <SelectItem value="400">400</SelectItem>
+                          <SelectItem value="401">401</SelectItem>
+                          <SelectItem value="403">403</SelectItem>
+                          <SelectItem value="404">404</SelectItem>
+                          <SelectItem value="500">500</SelectItem>
+                          <SelectItem value="502">502</SelectItem>
+                          <SelectItem value="503">503</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div>
                       <label htmlFor="from" className="block text-sm font-medium mb-1">
@@ -732,20 +733,20 @@ function SessionContent({
                       <label htmlFor="redactionType" className="block text-sm font-medium mb-1">
                         Redaction Type
                       </label>
-                      <select
-                        id="redactionType"
-                        value={filters.redactionType}
-                        onChange={(e) => handleFilterChange("redactionType", e.target.value)}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="">All types</option>
-                        <option value="email">Email</option>
-                        <option value="api_key">API Key</option>
-                        <option value="password">Password</option>
-                        <option value="token">Token</option>
-                        <option value="phone">Phone</option>
-                        <option value="ssn">SSN</option>
-                      </select>
+                      <Select value={filters.redactionType} onValueChange={(value) => handleFilterChange("redactionType", value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="All types" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">All types</SelectItem>
+                          <SelectItem value="email">Email</SelectItem>
+                          <SelectItem value="api_key">API Key</SelectItem>
+                          <SelectItem value="password">Password</SelectItem>
+                          <SelectItem value="token">Token</SelectItem>
+                          <SelectItem value="phone">Phone</SelectItem>
+                          <SelectItem value="ssn">SSN</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>

@@ -9,6 +9,7 @@ import { apiClient } from "@/lib/api";
 import type { SessionDetail } from "@/types/api";
 import { RedactionBadges } from "@/components/session/RedactionBadges";
 import { RedactionPanel } from "@/components/session/RedactionPanel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface CaptureFilters {
   source: string;
@@ -133,39 +134,41 @@ export default function SessionView({
             <div className="grid gap-4 md:grid-cols-5">
               <div>
                 <label className="text-sm text-muted-foreground">Source</label>
-                <select
-                  value={filters.source}
-                  onChange={(e) => setFilters({ ...filters, source: e.target.value })}
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">All Sources</option>
-                  {session.captures &&
-                    [...new Set(
-                      session.captures.map((c) => c.source).filter((s): s is string => typeof s === "string"),
-                    )].map(
-                      (source) => (
-                        <option key={source} value={source}>
-                          {source}
-                        </option>
-                      ),
-                    )}
-                </select>
+                <Select value={filters.source} onValueChange={(value) => setFilters({ ...filters, source: value })}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="All Sources" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Sources</SelectItem>
+                    {session.captures &&
+                      [...new Set(
+                        session.captures.map((c) => c.source).filter((s): s is string => typeof s === "string"),
+                      )].map(
+                        (source) => (
+                          <SelectItem key={source} value={source}>
+                            {source}
+                          </SelectItem>
+                        ),
+                      )}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-sm text-muted-foreground">Status</label>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">All Status</option>
-                  <option value="200">200 OK</option>
-                  <option value="400">400 Bad Request</option>
-                  <option value="401">401 Unauthorized</option>
-                  <option value="403">403 Forbidden</option>
-                  <option value="404">404 Not Found</option>
-                  <option value="500">500 Server Error</option>
-                </select>
+                <Select value={filters.status} onValueChange={(value) => setFilters({ ...filters, status: value })}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Status</SelectItem>
+                    <SelectItem value="200">200 OK</SelectItem>
+                    <SelectItem value="400">400 Bad Request</SelectItem>
+                    <SelectItem value="401">401 Unauthorized</SelectItem>
+                    <SelectItem value="403">403 Forbidden</SelectItem>
+                    <SelectItem value="404">404 Not Found</SelectItem>
+                    <SelectItem value="500">500 Server Error</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-sm text-muted-foreground">From</label>
@@ -187,25 +190,26 @@ export default function SessionView({
               </div>
               <div>
                 <label className="text-sm text-muted-foreground">Redaction Type</label>
-                <select
-                  value={filters.redactionType}
-                  onChange={(e) => setFilters({ ...filters, redactionType: e.target.value })}
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">All Types</option>
-                  {session.captures &&
-                    [...new Set(
-                      session.captures
-                        .flatMap((c) =>
-                          Object.keys(c.redactionStats?.byRule ?? {}),
-                        )
-                        .filter((r): r is string => typeof r === "string"),
-                    )].map((rule) => (
-                      <option key={rule} value={rule}>
-                        {rule.replace(/_/g, " ")}
-                      </option>
-                    ))}
-                </select>
+                <Select value={filters.redactionType} onValueChange={(value) => setFilters({ ...filters, redactionType: value })}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Types</SelectItem>
+                    {session.captures &&
+                      [...new Set(
+                        session.captures
+                          .flatMap((c) =>
+                            Object.keys(c.redactionStats?.byRule ?? {}),
+                          )
+                          .filter((r): r is string => typeof r === "string"),
+                      )].map((rule) => (
+                        <SelectItem key={rule} value={rule}>
+                          {rule.replace(/_/g, " ")}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>

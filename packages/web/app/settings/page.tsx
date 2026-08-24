@@ -11,6 +11,7 @@ import { useTheme } from "@/components/theme-provider";
 import { FalsePositiveManager } from "@/components/FalsePositiveManager";
 import { LogsViewer } from "@/components/logs-viewer";
 import { EnvironmentVariablesPanel } from "@/components/environment-variables-panel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** Preset rule names for UI display (avoids importing @contextio/redact which brings Node.js deps) */
 const PRESET_RULES: Record<PresetName, string[]> = {
@@ -1773,21 +1774,20 @@ export default function SettingsPage() {
                 </span>
               )}
             </Label>
-            <select
-              id="redactPreset"
+            <Select
               value={settings.redactPreset}
-              onChange={(e) =>
-                updateSetting("redactPreset", e.target.value as "secrets" | "pii" | "strict")
-              }
+              onValueChange={(value) => updateSetting("redactPreset", value as "secrets" | "pii" | "strict")}
               disabled={presetDisabled}
-              className={`w-full rounded-md px-3 py-2 text-sm border border-border bg-background text-foreground ${
-                presetDisabled ? "bg-muted opacity-50 cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-ring"
-              }`}
             >
-              <option value="secrets">Secrets (API keys, tokens, passwords)</option>
-              <option value="pii">PII (emails, names, phones, SSN)</option>
-              <option value="strict">Strict (all of the above + more)</option>
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="Select preset" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="secrets">Secrets (API keys, tokens, passwords)</SelectItem>
+                <SelectItem value="pii">PII (emails, names, phones, SSN)</SelectItem>
+                <SelectItem value="strict">Strict (all of the above + more)</SelectItem>
+              </SelectContent>
+            </Select>
             <SettingHelp
               meta={getMeta("redactPreset")}
               description={SETTING_DESCRIPTIONS.redactPreset}
@@ -2114,24 +2114,21 @@ export default function SettingsPage() {
             <Label htmlFor="detectorMode" className="block text-sm font-medium mb-2">
               Detector Mode
             </Label>
-            <select
-              id="detectorMode"
+            <Select
               value={settings.detectorMode}
-              onChange={(e) =>
-                updateSetting("detectorMode", e.target.value as "rules" | "llm" | "hybrid" | "auto")
-              }
+              onValueChange={(value) => updateSetting("detectorMode", value as "rules" | "llm" | "hybrid" | "auto")}
               disabled={isSettingOverridden("detectorMode")}
-              className={`w-full rounded-md px-3 py-2 text-sm border border-border bg-background text-foreground ${
-                isSettingOverridden("detectorMode")
-                  ? "bg-muted opacity-50 cursor-not-allowed"
-                  : "focus:outline-none focus:ring-2 focus:ring-ring"
-              }`}
             >
-              <option value="rules">Rules only (fast, deterministic patterns)</option>
-              <option value="llm">LLM only (semantic detection via LLM)</option>
-              <option value="hybrid">Hybrid (rules + LLM, rules take priority)</option>
-              <option value="auto">Auto (choose based on content)</option>
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="Select detector mode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="rules">Rules only (fast, deterministic patterns)</SelectItem>
+                <SelectItem value="llm">LLM only (semantic detection via LLM)</SelectItem>
+                <SelectItem value="hybrid">Hybrid (rules + LLM, rules take priority)</SelectItem>
+                <SelectItem value="auto">Auto (choose based on content)</SelectItem>
+              </SelectContent>
+            </Select>
             <SettingHelp
               meta={getMeta("detectorMode")}
               description={SETTING_DESCRIPTIONS.detectorMode}
@@ -2974,20 +2971,19 @@ export default function SettingsPage() {
             <Label htmlFor="feedbackStoreType" className="block text-sm font-medium mb-2">
               Feedback Store Type
             </Label>
-            <select
-              id="feedbackStoreType"
+            <Select
               value={settings.feedbackStoreType}
-              onChange={(e) => updateSetting("feedbackStoreType", e.target.value as "sqlite" | "memory")}
+              onValueChange={(value) => updateSetting("feedbackStoreType", value as "sqlite" | "memory")}
               disabled={isSettingOverridden("feedbackStoreType")}
-              className={`w-full rounded-md px-3 py-2 text-sm border border-border bg-background text-foreground ${
-                isSettingOverridden("feedbackStoreType")
-                  ? "bg-muted opacity-50 cursor-not-allowed"
-                  : "focus:outline-none focus:ring-2 focus:ring-ring"
-              }`}
             >
-              <option value="sqlite">SQLite (persistent, file-based)</option>
-              <option value="memory">Memory (in-memory, lost on restart)</option>
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="Select feedback store type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sqlite">SQLite (persistent, file-based)</SelectItem>
+                <SelectItem value="memory">Memory (in-memory, lost on restart)</SelectItem>
+              </SelectContent>
+            </Select>
             <SettingHelp
               meta={getMeta("feedbackStoreType")}
               description={SETTING_DESCRIPTIONS.feedbackStoreType}
@@ -3056,23 +3052,18 @@ export default function SettingsPage() {
             </span>
           )}
         </Label>
-        <select
-          id="theme"
-          value={theme}
-          onChange={(e) =>
-            setTheme(e.target.value as "light" | "dark" | "system" | "high-contrast" | "material-light" | "material-dark" | "solarized-light" | "solarized-dark" | "dracula" | "nord" | "github-light" | "github-dark" | "one-dark" | "monokai")
-          }
-          disabled={themeDisabled}
-          className={`w-full rounded-md px-3 py-2 text-sm border border-border bg-background text-foreground ${
-            themeDisabled ? "bg-muted opacity-50 cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-ring"
-          }`}
-        >
-          {themeOptions.map(({ value, label }) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+          <Select value={theme} onValueChange={(value) => setTheme(value as typeof theme)} disabled={themeDisabled}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select theme" />
+            </SelectTrigger>
+            <SelectContent>
+              {themeOptions.map(({ value, label }) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         <SettingHelp
           meta={getMeta("theme")}
           description="Select the color theme for the web UI. System follows your OS preference. Changes apply immediately."

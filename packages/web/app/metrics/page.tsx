@@ -26,6 +26,7 @@ import {
 } from "recharts";
 import { usePageLoad } from "@/components/page-load-context";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Gauge, TrendingUp, RefreshCw, Loader2 } from "lucide-react";
 
@@ -1025,23 +1026,21 @@ function MetricsContent() {
               >
                 Time Range:
               </label>
-              <select
-                id="time-range"
-                value={timeRange.value}
-                onChange={(e) => {
-                  const selected = TIME_RANGES.find(
-                    (r) => r.value === e.target.value,
-                  );
-                  if (selected) setTimeRange(selected);
-                }}
-                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                {TIME_RANGES.map((range) => (
-                  <option key={range.value} value={range.value}>
-                    {range.label}
-                  </option>
-                ))}
-              </select>
+              <Select value={timeRange.value} onValueChange={(value) => {
+                const selected = TIME_RANGES.find((r) => r.value === value);
+                if (selected) setTimeRange(selected);
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select time range" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_RANGES.map((range) => (
+                    <SelectItem key={range.value} value={range.value}>
+                      {range.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center gap-2">
@@ -1051,21 +1050,21 @@ function MetricsContent() {
               >
                 Data Points:
               </label>
-              <select
-                id="data-points"
-                value={String(maxDataPoints)}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  setMaxDataPoints(Number.isFinite(val) ? val : 0);
-                }}
-                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                {MAX_DATA_POINTS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <Select value={String(maxDataPoints)} onValueChange={(value) => {
+                const val = parseInt(value, 10);
+                setMaxDataPoints(Number.isFinite(val) ? val : 0);
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select data points" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MAX_DATA_POINTS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={String(opt.value)}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
