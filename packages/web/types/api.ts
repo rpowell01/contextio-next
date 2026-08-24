@@ -683,8 +683,10 @@ export interface FalsePositiveEntry {
   path: string;
   /** Optional session ID for session-scoped false positives */
   sessionId?: string;
-  /** Match mode: "exact" for exact value match, "pattern" for regex-like matching */
+  /** Match mode: "exact" for exact value match, "pattern" for regex pattern match (auto-generated from value) */
   matchMode?: "exact" | "pattern";
+  /** Regex pattern string (auto-generated when matchMode='pattern', or custom if provided) */
+  pattern: string;
   /** Timestamp when the false positive was recorded */
   timestamp: number;
 }

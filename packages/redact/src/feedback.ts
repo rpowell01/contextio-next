@@ -61,10 +61,10 @@ interface FalsePositiveRow {
 export interface FeedbackStore {
 	/**
 	 * Record a new false positive entry.
-	 * @param entry - The false positive entry to record
-	 * @returns The created entry with any auto-generated fields (e.g., pattern)
+	 * @param entry - The false positive entry to record. If matchMode is "pattern" and no pattern is provided, one is auto-generated.
+	 * @returns The created entry with the final pattern
 	 */
-	recordFalsePositive(entry: Omit<FalsePositiveEntry, "pattern">): Promise<FalsePositiveEntry>;
+	recordFalsePositive(entry: Omit<FalsePositiveEntry, "pattern"> & { pattern?: string }): Promise<FalsePositiveEntry>;
 
 	/**
 	 * Check if a value matches any recorded false positive for a given rule.
@@ -171,10 +171,10 @@ export class SqliteFeedbackStore implements FeedbackStore {
 		WHERE (? IS NULL OR rule_id = ?) AND (? IS NULL OR session_id = ? OR session_id IS NULL)
 	`);
 
-	async recordFalsePositive(entry: Omit<FalsePositiveEntry, "pattern">): Promise<FalsePositiveEntry> {
-		const pattern = entry.matchMode === "pattern"
+	async recordFalsePositive(entry: Omit<FalsePositiveEntry, "pattern"> & { pattern?: string }): Promise<FalsePositiveEntry> {
+		const pattern = entry.pattern ?? (entry.matchMode === "pattern"
 			? generatePatternFromValue(entry.value)
-			: entry.value; // For exact mode, pattern is just the value
+			: entry.value); // For exact mode, pattern is just the value
 
 		const fullEntry: FalsePositiveEntry = {
 			...entry,
@@ -266,10 +266,10 @@ export class SqliteFeedbackStore implements FeedbackStore {
 export class MemoryFeedbackStore implements FeedbackStore {
 	private entries: FalsePositiveEntry[] = [];
 
-	async recordFalsePositive(entry: Omit<FalsePositiveEntry, "pattern">): Promise<FalsePositiveEntry> {
-		const pattern = entry.matchMode === "pattern"
+	async recordFalsePositive(entry: Omit<FalsePositiveEntry, "pattern"> & { pattern?: string }): Promise<FalsePositiveEntry> {
+		const pattern = entry.pattern ?? (entry.matchMode === "pattern"
 			? generatePatternFromValue(entry.value)
-			: entry.value;
+			: entry.value);
 
 		const fullEntry: FalsePositiveEntry = {
 			...entry,

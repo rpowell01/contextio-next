@@ -883,6 +883,7 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
                 timestamp: Date.now(),
                 sessionId: params.sessionId,
                 matchMode: params.matchMode ?? "exact",
+                ...(params.pattern && { pattern: params.pattern }),
               });
 
               res.writeHead(201, { "Content-Type": "application/json" });

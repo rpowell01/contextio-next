@@ -40,6 +40,8 @@ import {
 import { useSearchParams, useRouter } from "next/navigation";
 // @ts-ignore
 import { apiClient } from "@/lib/api";
+// @ts-ignore
+import { generatePatternFromValue } from "@contextio/redact";
 
 type FalsePositiveForm = {
   value: string;
@@ -49,6 +51,7 @@ type FalsePositiveForm = {
   customPath?: string;
   sessionId?: string;
   matchMode?: "exact" | "pattern";
+  pattern?: string;
 };
 
 // All available redaction rule IDs from presets (secrets, pii, strict) and Presidio LLM-based detector
@@ -133,6 +136,7 @@ export function FalsePositiveManager({
     label: string;
     path: string;
     matchMode?: "exact" | "pattern";
+    pattern?: string;
   };
   onClose?: () => void;
 }) {
@@ -159,6 +163,7 @@ export function FalsePositiveManager({
     path: "",
     customPath: "",
     matchMode: "exact",
+    pattern: "",
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -182,6 +187,7 @@ export function FalsePositiveManager({
         path: pathOption ? initialData.path : "custom",
         customPath: pathOption ? "" : initialData.path,
         matchMode: initialData.matchMode || "exact",
+        pattern: initialData.pattern || (initialData.matchMode === "pattern" ? generatePatternFromValue(initialData.value) : ""),
       });
       
       // Allow a frame for the form to update before showing dialog
@@ -192,6 +198,13 @@ export function FalsePositiveManager({
       setIsDialogOpen(false);
     }
   }, [initialData]);
+
+  // Auto-generate pattern when matchMode is "pattern" and value changes
+  useEffect(() => {
+    if (form.matchMode === "pattern" && form.value) {
+      setForm((prev) => ({ ...prev, pattern: generatePatternFromValue(prev.value) }));
+    }
+  }, [form.matchMode, form.value]);
 
   const [deleteTarget, setDeleteTarget] = useState<{
     value: string;
@@ -266,9 +279,10 @@ export function FalsePositiveManager({
 
       setCreating(true);
       try {
-        const options = form.sessionId || form.matchMode
-          ? { sessionId: form.sessionId, matchMode: form.matchMode }
-          : undefined;
+        const options: { sessionId?: string; matchMode?: "exact" | "pattern"; pattern?: string } = {};
+        if (form.sessionId) options.sessionId = form.sessionId;
+        if (form.matchMode) options.matchMode = form.matchMode;
+        if (form.matchMode === "pattern" && form.pattern) options.pattern = form.pattern;
         const result = await apiClient.createFalsePositive(
           form.value,
           form.ruleId,
@@ -286,6 +300,8 @@ export function FalsePositiveManager({
             label: "",
             path: "",
             customPath: "",
+            matchMode: "exact",
+            pattern: "",
           });
           setFormErrors({});
           setIsDialogOpen(false);
@@ -394,7 +410,12 @@ export function FalsePositiveManager({
   
   const handleMatchModeChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setForm((prev) => ({ ...prev, matchMode: e.target.value as "exact" | "pattern" }));
+      const newMode = e.target.value as "exact" | "pattern";
+      setForm((prev) => ({
+        ...prev,
+        matchMode: newMode,
+        pattern: newMode === "pattern" && prev.value ? generatePatternFromValue(prev.value) : "",
+      }));
     },
     [],
   );
@@ -482,6 +503,7 @@ export function FalsePositiveManager({
                 <th className="px-3 py-2 text-left font-medium">Path</th>
                 <th className="px-3 py-2 text-left font-medium">Session</th>
                 <th className="px-3 py-2 text-left font-medium">Match Mode</th>
+                <th className="px-3 py-2 text-left font-medium">Pattern</th>
                 <th className="px-3 py-2 text-left font-medium">Actions</th>
               </tr>
             </thead>
@@ -505,6 +527,9 @@ export function FalsePositiveManager({
                   </td>
                   <td className="px-3 py-2 text-sm text-muted-foreground">
                     {entry.matchMode === "pattern" ? "pattern" : "exact"}
+                  </td>
+                  <td className="px-3 py-2 text-sm font-mono text-muted-foreground max-w-xs truncate" title={entry.pattern || ""}>
+                    {entry.matchMode === "pattern" ? (entry.pattern || "-") : "-"}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1">
@@ -711,9 +736,27 @@ export function FalsePositiveManager({
                   </label>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Exact: matches the exact value. Pattern: uses regex-like matching.
+                  Exact: matches the exact value. Pattern: regex pattern match (auto-generated from the value).
                 </p>
               </div>
+
+              {form.matchMode === "pattern" && (
+                <div>
+                  <Label htmlFor="fp-pattern">Pattern</Label>
+                  <textarea
+                    id="fp-pattern"
+                    name="pattern"
+                    value={form.pattern || ""}
+                    onChange={(e) => setForm((prev) => ({ ...prev, pattern: e.target.value }))}
+                    placeholder="^user\d+@example\.com$"
+                    rows={2}
+                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Auto-generated from the value. You can edit it to fine-tune matching. Digits become \d+, whitespace becomes \s+.
+                  </p>
+                </div>
+              )}
 
               <DialogFooter className="flex justify-end gap-2">
                 <Button

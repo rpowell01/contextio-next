@@ -666,6 +666,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     options?: {
       sessionId?: string;
       matchMode?: "exact" | "pattern";
+      pattern?: string;
     },
     signal?: AbortSignal,
   ): Promise<{ success: boolean; falsePositive: FalsePositiveEntry }> {
@@ -677,6 +678,7 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
       path,
       ...(options?.sessionId && { sessionId: options.sessionId }),
       ...(options?.matchMode && { matchMode: options.matchMode }),
+      ...(options?.pattern && { pattern: options.pattern }),
     });
     return this.requestWithBase<{
       success: boolean;
