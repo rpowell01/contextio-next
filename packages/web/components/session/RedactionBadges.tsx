@@ -23,7 +23,7 @@ export function RedactionBadges({ stats, className }: RedactionBadgesProps) {
 
   return (
     <span className={cn("inline-flex flex-wrap items-center gap-1", className)}>
-      <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 border border-red-200">
+      <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive border border-destructive/20">
         {stats.totalRedactions} redaction{stats.totalRedactions === 1 ? "" : "s"}
       </span>
       {entries.map(([rule, count]) => (

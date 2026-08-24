@@ -91,9 +91,9 @@ export default function AuthCallbackPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <div className="text-center">
-        <div className="rounded-full bg-green-100 p-4 mx-auto w-16 h-16">
+        <div className="rounded-full bg-success/10 p-4 mx-auto w-16 h-16">
           <svg
-            className="h-8 w-8 text-green-600 mx-auto"
+            className="h-8 w-8 text-success mx-auto"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

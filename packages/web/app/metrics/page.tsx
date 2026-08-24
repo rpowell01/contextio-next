@@ -969,7 +969,7 @@ function MetricsContent() {
                                 <td className="p-2 text-muted-foreground">{bucket.provider ?? "unknown"}</td>
                                 <td className="p-2 text-muted-foreground">
                                   {bucket.sessionId === "all" ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-primary/10 text-primary">
                                       <span>🔗</span>
                                       Shared
                                     </span>
@@ -979,7 +979,7 @@ function MetricsContent() {
                                 </td>
                                 <td className="p-2 text-right">
                                   {(rateLimiterMetrics.upstream429Counts?.[bucket.provider ?? ""] ?? 0) > 0 ? (
-                                    <span className="font-mono font-bold text-red-700">
+                                    <span className="font-mono font-bold text-destructive">
                                       {formatNumber(rateLimiterMetrics.upstream429Counts?.[bucket.provider ?? ""] ?? 0)}
                                     </span>
                                   ) : (
@@ -988,7 +988,7 @@ function MetricsContent() {
                                 </td>
                                 <td className="p-2 text-right">
                                   {bucket.provider === "nvidia" && (rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0) > 0 ? (
-                                    <span className="font-mono font-bold text-amber-700">
+                                    <span className="font-mono font-bold text-primary">
                                       {rateLimiterMetrics.nvidiaWorkerRetryCount}
                                     </span>
                                   ) : (
@@ -1087,13 +1087,13 @@ function MetricsContent() {
 
             {/* Unique Redactions (deduplicated by session) */}
             <div
-              className="rounded-lg border p-4 bg-blue-50 border-blue-200"
+              className="rounded-lg border p-4 bg-primary/10 border-primary/20"
               title="Sum of max redactions per placeholder per session. For each session, take the highest count of each placeholder type across all its captures, then sum across all sessions."
             >
               <div className="text-sm text-muted-foreground">
                 Unique Redactions (per session)
               </div>
-              <div className="text-2xl font-bold text-blue-600">
+              <div className="text-2xl font-bold text-primary">
                 <span
                   title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used, then summed across all sessions. This avoids double-counting when a session has multiple captures."
                 >
@@ -1226,33 +1226,33 @@ function MetricsContent() {
               <div className="space-y-6">
                 {/* Summary Cards */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                  <div className="rounded-lg border p-4 bg-red-50 border-red-200">
+                  <div className="rounded-lg border p-4 bg-destructive/10 border-destructive/20">
                     <div className="text-sm text-muted-foreground">Total Retry Attempts</div>
-                    <div className="text-2xl font-bold text-red-600">
+                    <div className="text-2xl font-bold text-destructive">
                       {formatNumber(retryMetrics.totals.totalRetryAttempts)}
                     </div>
                   </div>
-                  <div className="rounded-lg border p-4 bg-amber-50 border-amber-200">
+                  <div className="rounded-lg border p-4 bg-primary/10 border-primary/20">
                     <div className="text-sm text-muted-foreground">Non-Streaming Retries</div>
-                    <div className="text-2xl font-bold text-amber-700">
+                    <div className="text-2xl font-bold text-primary">
                       {formatNumber(retryMetrics.totals.totalNonStreamingRetries)}
                     </div>
                   </div>
-                  <div className="rounded-lg border p-4 bg-blue-50 border-blue-200">
+                  <div className="rounded-lg border p-4 bg-primary/10 border-primary/20">
                     <div className="text-sm text-muted-foreground">Streaming Retries</div>
-                    <div className="text-2xl font-bold text-blue-600">
+                    <div className="text-2xl font-bold text-primary">
                       {formatNumber(retryMetrics.totals.totalStreamingRetries)}
                     </div>
                   </div>
-                  <div className="rounded-lg border p-4 bg-green-50 border-green-200">
+                  <div className="rounded-lg border p-4 bg-success/10 border-success/20">
                     <div className="text-sm text-muted-foreground">Active Streaming Sessions</div>
-                    <div className="text-2xl font-bold text-green-700">
+                    <div className="text-2xl font-bold text-success">
                       {formatNumber(retryMetrics.totals.totalActiveStreamingSessions)}
                     </div>
                   </div>
-                  <div className="rounded-lg border p-4 bg-purple-50 border-purple-200">
+                  <div className="rounded-lg border p-4 bg-primary/10 border-primary/20">
                     <div className="text-sm text-muted-foreground">Buffer Memory Active</div>
-                    <div className="text-2xl font-bold text-purple-700">
+                    <div className="text-2xl font-bold text-primary">
                       {retryMetrics.totals.totalCurrentBufferUsageMB.toFixed(1)} MB
                     </div>
                   </div>
@@ -1302,29 +1302,29 @@ function MetricsContent() {
                             <td className="p-2 text-right text-muted-foreground">{provider.maxRetries}</td>
                             <td className="p-2 text-right text-muted-foreground">{provider.maxResponseBufferSizeMB.toFixed(1)}</td>
                             <td className="p-2 text-right">
-                              <span className={provider.nonStreamingRetryAttempts > 0 ? "font-bold text-amber-700" : "text-muted-foreground"}>
+                              <span className={provider.nonStreamingRetryAttempts > 0 ? "font-bold text-primary" : "text-muted-foreground"}>
                                 {formatNumber(provider.nonStreamingRetryAttempts)}
                               </span>
                             </td>
                             <td className="p-2 text-right">
-                              <span className={provider.streamingRetryAttempts > 0 ? "font-bold text-blue-700" : "text-muted-foreground"}>
+                              <span className={provider.streamingRetryAttempts > 0 ? "font-bold text-primary" : "text-muted-foreground"}>
                                 {formatNumber(provider.streamingRetryAttempts)}
                               </span>
                             </td>
                             <td className="p-2 text-right">
-                              <span className={provider.totalRetryAttempts > 0 ? "font-bold text-red-700" : "text-muted-foreground"}>
+                              <span className={provider.totalRetryAttempts > 0 ? "font-bold text-destructive" : "text-muted-foreground"}>
                                 {formatNumber(provider.totalRetryAttempts)}
                               </span>
                             </td>
                             <td className="p-2 text-right">
-                              <span className={provider.activeStreamingSessions > 0 ? "font-bold text-green-700" : "text-muted-foreground"}>
+                              <span className={provider.activeStreamingSessions > 0 ? "font-bold text-success" : "text-muted-foreground"}>
                                 {formatNumber(provider.activeStreamingSessions)}
                               </span>
                             </td>
-                            <td className="p-2 text-right text-blue-600 font-mono">{provider.currentBufferUsageMB.toFixed(1)}</td>
+                            <td className="p-2 text-right text-primary font-mono">{provider.currentBufferUsageMB.toFixed(1)}</td>
                             <td className="p-2 text-right text-muted-foreground">{provider.maxBufferUsageMB.toFixed(1)}</td>
                             <td className="p-2 text-right">
-                              <span className={provider.bufferUtilizationPercent >= 90 ? "text-destructive font-medium" : provider.bufferUtilizationPercent >= 70 ? "text-amber-700 font-medium" : "text-muted-foreground"}>
+                              <span className={provider.bufferUtilizationPercent >= 90 ? "text-destructive font-medium" : provider.bufferUtilizationPercent >= 70 ? "text-primary font-medium" : "text-muted-foreground"}>
                                 {provider.bufferUtilizationPercent.toFixed(1)}%
                               </span>
                             </td>

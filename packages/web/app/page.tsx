@@ -221,10 +221,10 @@ export default function HomePage() {
               <h3 className="font-medium mb-2">2. Required Environment Variables</h3>
               <div className="space-y-2 text-xs">
                 <div className="bg-muted p-3 rounded">
-                  <code className="font-mono text-green-600">CSRF_SECRET</code> <span className="text-muted-foreground ml-2">— Session cookie signing secret (min 32 chars). Generate: <code className="bg-background px-1 rounded">openssl rand -base64 32</code></span>
+                  <code className="font-mono text-primary">CSRF_SECRET</code> <span className="text-muted-foreground ml-2">— Session cookie signing secret (min 32 chars). Generate: <code className="bg-background px-1 rounded">openssl rand -base64 32</code></span>
                 </div>
                 <div className="bg-muted p-3 rounded">
-                  <code className="font-mono text-green-600">CONTEXTIO_LOGGER_ENCRYPTION_KEY</code> <span className="text-muted-foreground ml-2">— Encryption key for capture data at rest (min 32 chars). Generate: <code className="bg-background px-1 rounded">openssl rand -base64 32</code></span>
+                  <code className="font-mono text-primary">CONTEXTIO_LOGGER_ENCRYPTION_KEY</code> <span className="text-muted-foreground ml-2">— Encryption key for capture data at rest (min 32 chars). Generate: <code className="bg-background px-1 rounded">openssl rand -base64 32</code></span>
                 </div>
               </div>
             </div>

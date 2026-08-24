@@ -612,7 +612,7 @@ export default function RedactionsPage() {
                     type="checkbox"
                     checked={hideZeroRedactions}
                     onChange={(e) => setHideZeroRedactions(e.target.checked)}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                    className="rounded border-border text-primary focus:ring-primary"
                   />
                   <span className="text-muted-foreground">Hide rows with 0 total redactions</span>
                 </label>

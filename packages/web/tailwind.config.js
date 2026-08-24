@@ -33,6 +33,10 @@ const config = {
           DEFAULT: "rgb(var(--color-destructive) / <alpha-value>)",
           foreground: "rgb(var(--color-destructive-foreground) / <alpha-value>)",
         },
+        success: {
+          DEFAULT: "rgb(var(--color-success) / <alpha-value>)",
+          foreground: "rgb(var(--color-success-foreground) / <alpha-value>)",
+        },
         ring: "rgb(var(--color-ring) / <alpha-value>)",
         card: {
           DEFAULT: "rgb(var(--color-card) / <alpha-value>)",

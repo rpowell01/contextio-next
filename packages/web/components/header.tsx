@@ -202,7 +202,7 @@ export function Header({ navigationConfig }: HeaderProps) {
                     <span className="hidden sm:block flex items-center gap-1.5">
                       {user.name || user.email || "User"}
                       {isAdmin && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success dark:bg-success/20 dark:text-success">
                           <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3 3a.75.75 0 001.06 1.061l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06l-3-3z" clipRule="evenodd" />
                           </svg>
@@ -234,7 +234,7 @@ export function Header({ navigationConfig }: HeaderProps) {
                           <p className="mt-1 text-sm font-medium">{user.name || "User"}</p>
                           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                           {isAdmin && (
-                            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
+                            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success dark:bg-success/20 dark:text-success">
                               <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3 3a.75.75 0 001.06 1.061l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06l-3-3z" clipRule="evenodd" />
                               </svg>
@@ -244,7 +244,7 @@ export function Header({ navigationConfig }: HeaderProps) {
                         </div>
                         <button
                           onClick={handleLogout}
-                          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-accent hover:text-red-600"
+                          className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-accent hover:text-destructive"
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

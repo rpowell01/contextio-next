@@ -134,7 +134,7 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
     return (
       <div className="rounded-lg border p-4">
         <h3 className="font-semibold mb-3">Container Environment Variables</h3>
-        <div className="text-center py-8 text-red-500">{error}</div>
+        <div className="text-center py-8 text-destructive">{error}</div>
       </div>
     );
   }
@@ -305,7 +305,7 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
       {blacklistedEnvVars.length > 0 && (
         <div className="mt-6 pt-4 border-t">
           <div className="flex items-center gap-2 mb-3 text-sm text-muted-foreground">
-            <ShieldAlert className="h-5 w-5 text-amber-500" />
+            <ShieldAlert className="h-5 w-5 text-primary" />
             <span className="font-medium text-foreground">Hidden Variables ({blacklistedEnvVars.length})</span>
           </div>
           <p className="text-sm text-muted-foreground mb-3">
@@ -335,7 +335,7 @@ export function EnvironmentVariablesPanel({ containerId }: EnvironmentVariablesP
                       </div>
                     </td>
                     <td className="py-2 text-muted-foreground">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary">
                         <ShieldAlert className="h-3 w-3" />
                         Hidden (Security)
                       </span>

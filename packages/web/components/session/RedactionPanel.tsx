@@ -272,7 +272,7 @@ export function RedactionPanel({ captureId, className }: RedactionPanelProps) {
                           className={cn(
                             "rounded border px-2 py-1 transition-colors",
                             copiedPath === key + "-orig"
-                              ? "border-green-500 bg-green-50 text-green-700"
+                              ? "border-success bg-success/10 text-success"
                               : "border-border hover:bg-accent"
                           )}
                           title="Copy pre-redaction value"
@@ -280,7 +280,7 @@ export function RedactionPanel({ captureId, className }: RedactionPanelProps) {
                           {match.original}
                         </button>
                       </td>
-                      <td className="py-2 font-mono text-xs text-red-700">
+                      <td className="py-2 font-mono text-xs text-destructive">
                         {match.placeholder}
                       </td>
                     </tr>

@@ -259,8 +259,8 @@ function SessionsContent() {
         <div
           className={`mb-4 p-4 rounded-lg border ${
             backfillResult.success
-              ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400"
-              : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400"
+              ? "border-success/30 bg-success/10 text-success dark:text-success"
+              : "border-destructive/30 bg-destructive/10 text-destructive dark:text-destructive"
           }`}
         >
           {backfillResult.message}

@@ -13,10 +13,10 @@ interface LogsViewerProps {
 const LOG_LEVELS: LogLevel[] = ["error", "warn", "info", "debug"];
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
-  error: "text-red-400 bg-red-500/10 border-red-500/20",
-  warn: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20",
-  info: "text-blue-400 bg-blue-500/10 border-blue-500/20",
-  debug: "text-gray-400 bg-gray-500/10 border-gray-500/20",
+  error: "text-destructive bg-destructive/10 border-destructive/20",
+  warn: "text-primary bg-primary/10 border-primary/20",
+  info: "text-primary bg-primary/10 border-primary/20",
+  debug: "text-muted-foreground bg-muted border-border",
 };
 
 const LEVEL_ICONS: Record<LogLevel, string> = {
@@ -33,7 +33,7 @@ function LogLine({ log }: { log: LogEntry }) {
   return (
     <div
       className={cn(
-        "flex items-start gap-3 px-3 py-2 text-xs border-b border-gray-800/50 last:border-0",
+        "flex items-start gap-3 px-3 py-2 text-xs border-b border-border/50 last:border-0",
         levelStyles
       )}
     >
@@ -204,7 +204,7 @@ export function LogsViewer({ containerId = "contextio-next" }: LogsViewerProps) 
             onClick={() => setAutoScroll(!autoScroll)}
             className={cn(
               "px-2 py-1 text-xs rounded border",
-              autoScroll ? "bg-blue-500/20 border-blue-500" : "bg-gray-500/20 border-gray-500"
+              autoScroll ? "bg-primary/20 border-primary" : "bg-muted border-border"
             )}
             title={autoScroll ? "Auto-scroll enabled" : "Auto-scroll disabled"}
           >
@@ -213,7 +213,7 @@ export function LogsViewer({ containerId = "contextio-next" }: LogsViewerProps) 
 
           <button
             onClick={handleClearLogs}
-            className="px-2 py-1 text-xs rounded border bg-red-500/20 border-red-500/20 hover:bg-red-500/30"
+            className="px-2 py-1 text-xs rounded border bg-destructive/20 border-destructive/20 hover:bg-destructive/30"
             title="Clear all logs"
           >
             Clear
@@ -222,7 +222,7 @@ export function LogsViewer({ containerId = "contextio-next" }: LogsViewerProps) 
           <div className="relative">
             <button
               onClick={() => setShowExportOptions(!showExportOptions)}
-              className="px-2 py-1 text-xs rounded border bg-gray-500/20"
+              className="px-2 py-1 text-xs rounded border bg-muted"
               title="Export logs"
             >
               Export
@@ -251,7 +251,7 @@ export function LogsViewer({ containerId = "contextio-next" }: LogsViewerProps) 
           </div>
         )}
         {error && (
-          <div className="text-center py-4 text-red-400">
+          <div className="text-center py-4 text-destructive">
             Error: {error}
           </div>
         )}

@@ -57,6 +57,8 @@
   --color-muted: 241 245 249;
   --color-muted-foreground: 100 116 139;
   --color-input: 226 232 240;
+  --color-success: 34 197 94;
+  --color-success-foreground: 255 255 255;
 }
 
 /* Dark theme */
@@ -85,6 +87,8 @@
   --color-muted: 30 41 59;
   --color-muted-foreground: 148 163 184;
   --color-input: 51 65 85;
+  --color-success: 74 222 128;
+  --color-success-foreground: 15 23 42;
 }
 
 /* High contrast theme */
@@ -113,6 +117,8 @@
   --color-muted: 51 51 51;
   --color-muted-foreground: 170 170 170;
   --color-input: 51 51 51;
+  --color-success: 0 255 0;
+  --color-success-foreground: 0 0 0;
 }
 
 /* Material Design Light (Google Material 3) */
@@ -141,6 +147,8 @@
   --color-muted: 245 241 235;
   --color-muted-foreground: 103 101 105;
   --color-input: 216 212 206;
+  --color-success: 34 197 94;
+  --color-success-foreground: 255 255 255;
 }
 
 /* Material Design Dark (Google Material 3) */
@@ -169,6 +177,8 @@
   --color-muted: 58 55 66;
   --color-muted-foreground: 120 117 129;
   --color-input: 58 55 66;
+  --color-success: 74 222 128;
+  --color-success-foreground: 28 27 31;
 }
 
 /* Solarized Light */
@@ -197,6 +207,8 @@
   --color-muted: 223 217 198;
   --color-muted-foreground: 147 161 161;
   --color-input: 147 161 161;
+  --color-success: 34 197 94;
+  --color-success-foreground: 253 246 227;
 }
 
 /* Solarized Dark */
@@ -225,6 +237,8 @@
   --color-muted: 14 65 78;
   --color-muted-foreground: 88 110 117;
   --color-input: 88 110 117;
+  --color-success: 133 153 0;
+  --color-success-foreground: 0 43 54;
 }
 
 /* Dracula Theme */
@@ -253,6 +267,8 @@
   --color-muted: 68 71 90;
   --color-muted-foreground: 98 114 164;
   --color-input: 68 71 90;
+  --color-success: 80 250 123;
+  --color-success-foreground: 40 42 54;
 }
 
 /* Nord Theme */
@@ -281,6 +297,8 @@
   --color-muted: 59 66 82;
   --color-muted-foreground: 168 176 191;
   --color-input: 59 66 82;
+  --color-success: 163 190 140;
+  --color-success-foreground: 46 52 64;
 }
 
 /* GitHub Light */
@@ -309,6 +327,8 @@
   --color-muted: 235 238 241;
   --color-muted-foreground: 105 106 112;
   --color-input: 209 212 216;
+  --color-success: 34 197 94;
+  --color-success-foreground: 255 255 255;
 }
 
 /* GitHub Dark */
@@ -337,6 +357,8 @@
   --color-muted: 35 41 50;
   --color-muted-foreground: 139 148 158;
   --color-input: 48 54 61;
+  --color-success: 63 185 80;
+  --color-success-foreground: 13 17 23;
 }
 
 /* One Dark (Atom/VS Code) */
@@ -365,6 +387,8 @@
   --color-muted: 60 66 78;
   --color-muted-foreground: 125 132 144;
   --color-input: 60 66 78;
+  --color-success: 152 195 121;
+  --color-success-foreground: 40 44 52;
 }
 
 /* Monokai */
@@ -393,6 +417,8 @@
   --color-muted: 62 63 53;
   --color-muted-foreground: 117 113 94;
   --color-input: 74 75 61;
+  --color-success: 166 226 46;
+  --color-success-foreground: 39 40 34;
 }
 
 /* Base styles */

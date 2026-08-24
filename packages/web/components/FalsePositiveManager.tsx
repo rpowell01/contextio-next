@@ -423,13 +423,13 @@ export function FalsePositiveManager({
 
       {/* Action Error Display */}
       {actionError && (
-        <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+        <div className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg flex items-center justify-between">
           <span>{actionError}</span>
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setActionError(null)}
-            className="text-red-600 hover:text-red-800"
+            className="text-destructive hover:text-destructive"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -443,7 +443,7 @@ export function FalsePositiveManager({
           <p className="mt-2 text-muted-foreground">Loading false positives...</p>
         </div>
       ) : loadError ? (
-        <div className="p-4 text-center text-red-600 bg-red-50 border border-red-200 rounded-lg">
+        <div className="p-4 text-center text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
           <p className="font-medium">Failed to load false positives</p>
           <p className="mt-2 text-sm">{loadError}</p>
           <p className="mt-2 text-xs text-muted-foreground">
@@ -578,7 +578,7 @@ export function FalsePositiveManager({
                     required
                   />
                   {formErrors.required && (
-                    <p className="mt-1 text-sm text-red-600">All fields are required</p>
+                    <p className="mt-1 text-sm text-destructive">All fields are required</p>
                   )}
                 </div>
 

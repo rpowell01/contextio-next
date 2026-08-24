@@ -606,7 +606,7 @@ function SessionContent({
                     </span>
                   </div>
                   {session.redactionStats.uniqueRedactions !== undefined && session.redactionStats.uniqueRedactions > 0 && (
-                    <div className="text-sm text-blue-600">
+                    <div className="text-sm text-primary">
                       <span
                         className="text-muted-foreground"
                         title="Deduplicated count: for each placeholder type, takes the maximum count found in any single capture within this session, then sums across placeholder types. Matches the 'Unique per Session' metric on the Metrics page."

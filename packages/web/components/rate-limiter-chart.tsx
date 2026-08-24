@@ -490,10 +490,10 @@ function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
   const { provider, maxRequests, bufferCapacity, totalRequestsInWindow, totalQueueLength, status } = summary;
 
   const statusColors = {
-    healthy: { bg: "bg-green-50", border: "border-green-200", text: "text-green-800", dot: "bg-green-500", hex: "#22c55e" },
-    warning: { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-800", dot: "bg-amber-500", hex: "#f59e0b" },
-    critical: { bg: "bg-red-50", border: "border-red-200", text: "text-red-800", dot: "bg-red-500", hex: "#ef4444" },
-    buffered: { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-800", dot: "bg-violet-500", hex: "#8b5cf6" },
+    healthy: { bg: "bg-success/10", border: "border-success/20", text: "text-success", dot: "bg-success", hex: "rgb(var(--color-success))" },
+    warning: { bg: "bg-primary/10", border: "border-primary/20", text: "text-primary", dot: "bg-primary", hex: "rgb(var(--color-primary))" },
+    critical: { bg: "bg-destructive/10", border: "border-destructive/20", text: "text-destructive", dot: "bg-destructive", hex: "rgb(var(--color-destructive))" },
+    buffered: { bg: "bg-primary/10", border: "border-primary/20", text: "text-primary", dot: "bg-primary", hex: "rgb(var(--color-primary))" },
   };
 
   const colors = statusColors[status];
@@ -515,10 +515,10 @@ function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
       </div>
 
       {/* Capacity meter - shows limit + buffer */}
-      <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative">
+      <div className="w-full h-3 bg-muted rounded-full overflow-hidden relative">
         {/* Limit portion - absolute positioned at left */}
         <div
-          className="h-full bg-gray-400"
+          className="h-full bg-border"
           style={{
             position: 'absolute',
             top: 0,
@@ -530,7 +530,7 @@ function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
         {/* Buffer portion - absolute positioned after limit */}
         {bufferCapacity > 0 && (
           <div
-            className="h-full bg-gray-300"
+            className="h-full bg-border-hover"
             style={{
               position: 'absolute',
               top: 0,
@@ -561,7 +561,7 @@ function ProviderUtilizationCard({ summary }: { summary: ProviderSummary }) {
       </div>
 
       {totalQueueLength > 0 && (
-        <div className="flex items-center gap-1 text-xs text-violet-700 bg-violet-100 px-2 py-0.5 rounded">
+        <div className="flex items-center gap-1 text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
           <span className="font-medium">{totalQueueLength}</span>
           <span>requests queued</span>
         </div>
