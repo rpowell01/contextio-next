@@ -1631,6 +1631,131 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Get comprehensive retry metrics for monitoring.
+   * Returns per-provider statistics including retry attempts, buffer usage, and active sessions.
+   */
+  getRetryMetrics(): {
+    providers: Array<{
+      provider: string;
+      maxRetries: number;
+      maxResponseBufferSizeMB: number;
+      nonStreamingRetryAttempts: number;
+      streamingRetryAttempts: number;
+      totalRetryAttempts: number;
+      activeStreamingSessions: number;
+      currentBufferUsageMB: number;
+      maxBufferUsageMB: number;
+      bufferUtilizationPercent: number;
+    }>;
+    totals: {
+      totalNonStreamingRetries: number;
+      totalStreamingRetries: number;
+      totalRetryAttempts: number;
+      totalActiveStreamingSessions: number;
+      totalCurrentBufferUsageMB: number;
+      totalMaxBufferUsageMB: number;
+    };
+  } {
+    // Per-provider aggregations
+    const providerMap = new Map<string, {
+      provider: string;
+      maxRetries: number;
+      maxResponseBufferSizeMB: number;
+      nonStreamingRetryAttempts: number;
+      streamingRetryAttempts: number;
+      activeStreamingSessions: number;
+      currentBufferUsageMB: number;
+      maxBufferUsageMB: number;
+    }>();
+
+    // Initialize with config defaults
+    for (const [provider, config] of Object.entries(this.globalConfig)) {
+      if (typeof config === 'object' && config !== null && 'maxRetries' in config) {
+        // This is a provider config
+        // Actually we need to iterate differently
+      }
+    }
+
+    // Aggregate from requestStore (non-streaming retries)
+    for (const entry of this.requestStore.values()) {
+      const provider = entry.provider ?? "unknown";
+      const existing = providerMap.get(provider);
+      if (!existing) {
+        providerMap.set(provider, {
+          provider,
+          maxRetries: this.globalConfig.maxRetries ?? DEFAULT_MAX_RETRIES,
+          maxResponseBufferSizeMB: (this.globalConfig.maxResponseBufferSize ?? DEFAULT_MAX_BUFFER_SIZE) / (1024 * 1024),
+          nonStreamingRetryAttempts: entry.retryCount ?? 0,
+          streamingRetryAttempts: 0,
+          activeStreamingSessions: 0,
+          currentBufferUsageMB: 0,
+          maxBufferUsageMB: 0,
+        });
+      } else {
+        existing.nonStreamingRetryAttempts += entry.retryCount ?? 0;
+      }
+    }
+
+    // Aggregate from streamState (streaming retries and buffers)
+    for (const state of this.streamState.values()) {
+      const provider = state.provider ?? "unknown";
+      const existing = providerMap.get(provider);
+      const bufferMB = state.totalBufferSize / (1024 * 1024);
+      const maxBufferMB = state.maxBufferSize / (1024 * 1024);
+      
+      if (!existing) {
+        providerMap.set(provider, {
+          provider,
+          maxRetries: this.globalConfig.maxRetries ?? DEFAULT_MAX_RETRIES,
+          maxResponseBufferSizeMB: maxBufferMB,
+          nonStreamingRetryAttempts: 0,
+          streamingRetryAttempts: state.streamRetryCount ?? 0,
+          activeStreamingSessions: 1,
+          currentBufferUsageMB: bufferMB,
+          maxBufferUsageMB: maxBufferMB,
+        });
+      } else {
+        existing.streamingRetryAttempts += state.streamRetryCount ?? 0;
+        existing.activeStreamingSessions += 1;
+        existing.currentBufferUsageMB += bufferMB;
+        existing.maxBufferUsageMB = Math.max(existing.maxBufferUsageMB, maxBufferMB);
+      }
+    }
+
+    // Convert to array and compute totals
+    const providers = Array.from(providerMap.values()).map(p => ({
+      provider: p.provider,
+      maxRetries: p.maxRetries,
+      maxResponseBufferSizeMB: p.maxResponseBufferSizeMB,
+      nonStreamingRetryAttempts: p.nonStreamingRetryAttempts,
+      streamingRetryAttempts: p.streamingRetryAttempts,
+      totalRetryAttempts: p.nonStreamingRetryAttempts + p.streamingRetryAttempts,
+      activeStreamingSessions: p.activeStreamingSessions,
+      currentBufferUsageMB: Math.round(p.currentBufferUsageMB * 100) / 100,
+      maxBufferUsageMB: Math.round(p.maxBufferUsageMB * 100) / 100,
+      bufferUtilizationPercent: p.maxBufferUsageMB > 0 ? Math.round((p.currentBufferUsageMB / p.maxBufferUsageMB) * 10000) / 100 : 0,
+    }));
+
+    const totals = providers.reduce((acc, p) => ({
+      totalNonStreamingRetries: acc.totalNonStreamingRetries + p.nonStreamingRetryAttempts,
+      totalStreamingRetries: acc.totalStreamingRetries + p.streamingRetryAttempts,
+      totalRetryAttempts: acc.totalRetryAttempts + p.totalRetryAttempts,
+      totalActiveStreamingSessions: acc.totalActiveStreamingSessions + p.activeStreamingSessions,
+      totalCurrentBufferUsageMB: acc.totalCurrentBufferUsageMB + p.currentBufferUsageMB,
+      totalMaxBufferUsageMB: acc.totalMaxBufferUsageMB + p.maxBufferUsageMB,
+    }), {
+      totalNonStreamingRetries: 0,
+      totalStreamingRetries: 0,
+      totalRetryAttempts: 0,
+      totalActiveStreamingSessions: 0,
+      totalCurrentBufferUsageMB: 0,
+      totalMaxBufferUsageMB: 0,
+    });
+
+    return { providers, totals };
+  }
+
+  /**
    * Get streaming error state for testing/inspection.
    * Returns the detected error info for a streaming session, if any.
    * Can look up by sessionId.
@@ -1816,6 +1941,7 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getModifiedBodyForRetry: (key: string) => plugin.getModifiedBodyForRetry(key),
     getNvidiaWorkerRetryCount: () => plugin.getNvidiaWorkerRetryCount(),
     getUpstream429Counts: () => plugin.getUpstream429Counts(),
+    getRetryMetrics: () => plugin.getRetryMetrics(),
     getStreamError: (sessionId: string) => plugin.getStreamErrorForTesting(sessionId),
     getAndConsumePendingStreamRetry: (sessionId: string | null) => plugin.getAndConsumePendingStreamRetry(sessionId),
     getStreamBuffer: (sessionId: string) => plugin.getStreamBufferForTesting(sessionId),

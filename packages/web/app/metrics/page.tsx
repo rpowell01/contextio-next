@@ -7,10 +7,23 @@ import type {
   MetricsData,
   TimeRange,
 } from "@/types/api";
-import type { RateLimiterMetrics, RateLimiterBucketState } from "@/types/client-api";
+import type { RateLimiterMetrics, RateLimiterBucketState, RetryMetrics, RetryProviderMetrics } from "@/types/client-api";
 import { TrafficChart } from "@/components/traffic-chart";
 import { RateLimiterChart } from "@/components/rate-limiter-chart";
 import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
+import React from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  Legend,
+  Tooltip,
+  ReferenceLine,
+  Label,
+} from "recharts";
 import { usePageLoad } from "@/components/page-load-context";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -61,7 +74,7 @@ interface ProviderRetryChartProps {
   nvidiaWorkerRetryCount: number;
   loading?: boolean;
 }
- 
+
 function ProviderRetryChart({ buckets, upstream429Counts, nvidiaWorkerRetryCount, loading = false }: ProviderRetryChartProps) {
   if (loading) {
     return (
@@ -71,7 +84,7 @@ function ProviderRetryChart({ buckets, upstream429Counts, nvidiaWorkerRetryCount
       </div>
     );
   }
- 
+
   const providerMap = useMemo(() => {
     const map = new Map<string, { upstream429s: number; nvidiaRetries: number }>();
     buckets.forEach((bucket: RateLimiterBucketState) => {
@@ -87,7 +100,7 @@ function ProviderRetryChart({ buckets, upstream429Counts, nvidiaWorkerRetryCount
     });
     return Array.from(map.entries()).map(([provider, data]: [string, { upstream429s: number; nvidiaRetries: number }]) => ({ provider, upstream429s: data.upstream429s, nvidiaRetries: data.nvidiaRetries }));
   }, [buckets, upstream429Counts, nvidiaWorkerRetryCount]);
- 
+
   if (providerMap.length === 0) {
     return (
       <div className="rounded-lg border p-8 text-center">
@@ -95,7 +108,7 @@ function ProviderRetryChart({ buckets, upstream429Counts, nvidiaWorkerRetryCount
       </div>
     );
   }
- 
+
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -116,12 +129,27 @@ function ProviderRetryChart({ buckets, upstream429Counts, nvidiaWorkerRetryCount
     </div>
   );
 }
- 
+
+// Buffer size estimation - 1MB per buffer unit
+const BUFFER_SIZE_MB_PER_UNIT = 1;
+
 interface BufferUsageChartProps {
   buckets: RateLimiterBucketState[];
   loading?: boolean;
 }
- 
+
+interface BufferProviderSummary {
+  provider: string;
+  bufferCapacity: number;
+  entriesInUse: number;
+  maxTokens: number;
+  maxRequests: number;
+  activeBuffersInUse: number;
+  bufferMemoryTotalMB: number;
+  bufferMemoryActiveMB: number;
+  utilizationPercent: number;
+}
+
 function BufferUsageChart({ buckets, loading = false }: BufferUsageChartProps) {
   if (loading) {
     return (
@@ -131,14 +159,14 @@ function BufferUsageChart({ buckets, loading = false }: BufferUsageChartProps) {
       </div>
     );
   }
- 
-  const providerMap = useMemo(() => {
-    const map = new Map<string, { bufferCapacity: number; entriesInUse: number; maxTokens: number }>();
+
+  const providerSummaries = useMemo((): BufferProviderSummary[] => {
+    const providerMap = new Map<string, { bufferCapacity: number; entriesInUse: number; maxTokens: number }>();
     buckets.forEach((bucket: RateLimiterBucketState) => {
       const provider = bucket.provider ?? "unknown";
-      const existing = map.get(provider);
+      const existing = providerMap.get(provider);
       if (!existing) {
-        map.set(provider, {
+        providerMap.set(provider, {
           bufferCapacity: bucket.bufferCapacity ?? 0,
           entriesInUse: bucket.requestsInWindow ?? 0,
           maxTokens: bucket.maxTokens ?? 0,
@@ -149,10 +177,380 @@ function BufferUsageChart({ buckets, loading = false }: BufferUsageChartProps) {
         existing.maxTokens += bucket.maxTokens ?? 0;
       }
     });
-    return Array.from(map.entries()).map(([provider, data]: [string, { bufferCapacity: number; entriesInUse: number; maxTokens: number }]) => ({ provider, bufferCapacity: data.bufferCapacity, entriesInUse: data.entriesInUse, maxTokens: data.maxTokens }));
+
+    return Array.from(providerMap.entries()).map(([provider, data]) => {
+      const maxRequests = data.maxTokens - data.bufferCapacity;
+      const activeBuffersInUse = Math.max(0, data.entriesInUse - maxRequests);
+      const bufferMemoryTotalMB = data.bufferCapacity * BUFFER_SIZE_MB_PER_UNIT;
+      const bufferMemoryActiveMB = activeBuffersInUse * BUFFER_SIZE_MB_PER_UNIT;
+      const utilizationPercent = data.maxTokens > 0 ? ((data.entriesInUse / data.maxTokens) * 100) : 0;
+
+      return {
+        provider,
+        bufferCapacity: data.bufferCapacity,
+        entriesInUse: data.entriesInUse,
+        maxTokens: data.maxTokens,
+        maxRequests,
+        activeBuffersInUse,
+        bufferMemoryTotalMB,
+        bufferMemoryActiveMB,
+        utilizationPercent,
+      };
+    }).sort((a, b) => b.bufferMemoryActiveMB - a.bufferMemoryActiveMB);
   }, [buckets]);
+
+  if (providerSummaries.length === 0) {
+    return (
+      <div className="rounded-lg border p-8 text-center">
+        <p className="text-muted-foreground">No buffer data available</p>
+      </div>
+    );
+  }
+
+  // Summary cards for total memory
+  const totalBufferMemoryMB = providerSummaries.reduce((sum, p) => sum + p.bufferMemoryTotalMB, 0);
+  const totalActiveBufferMemoryMB = providerSummaries.reduce((sum, p) => sum + p.bufferMemoryActiveMB, 0);
+  const totalActiveBuffers = providerSummaries.reduce((sum, p) => sum + p.activeBuffersInUse, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Memory Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-lg border p-4 bg-blue-50 border-blue-200">
+          <div className="text-sm text-muted-foreground">Total Buffer Memory</div>
+          <div className="text-2xl font-bold text-blue-600">{totalBufferMemoryMB.toFixed(1)} MB</div>
+          <div className="text-xs text-muted-foreground">{formatNumber(providerSummaries.reduce((s, p) => s + p.bufferCapacity, 0))} buffer units × {BUFFER_SIZE_MB_PER_UNIT} MB</div>
+        </div>
+        <div className="rounded-lg border p-4 bg-green-50 border-green-200">
+          <div className="text-sm text-muted-foreground">Active Buffer Memory</div>
+          <div className="text-2xl font-bold text-green-600">{totalActiveBufferMemoryMB.toFixed(1)} MB</div>
+          <div className="text-xs text-muted-foreground">{formatNumber(totalActiveBuffers)} active buffers × {BUFFER_SIZE_MB_PER_UNIT} MB</div>
+        </div>
+        <div className="rounded-lg border p-4 bg-amber-50 border-amber-200">
+          <div className="text-sm text-muted-foreground">Buffer Memory Utilization</div>
+          <div className="text-2xl font-bold text-amber-700">
+            {totalBufferMemoryMB > 0 ? ((totalActiveBufferMemoryMB / totalBufferMemoryMB) * 100).toFixed(1) : 0}%
+          </div>
+          <div className="text-xs text-muted-foreground">Active / Total buffer memory</div>
+        </div>
+      </div>
+
+      {/* Buffer Utilization Chart */}
+      <div className="rounded-lg border p-4">
+        <h4 className="text-md font-medium mb-3">Buffer Utilization by Provider</h4>
+        <BufferUtilizationBarChart data={providerSummaries} />
+      </div>
+
+      {/* Provider Detail Cards */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {providerSummaries.map((p) => (
+          <div key={p.provider} className="rounded-lg border p-3">
+            <div className="font-medium text-sm">{p.provider}</div>
+            <div className="space-y-1 mt-2 text-sm">
+              <div className="flex justify-between">
+                <span>Total Buffers:</span>
+                <span className="font-mono">{formatNumber(p.bufferCapacity)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Active Buffers:</span>
+                <span className={p.activeBuffersInUse > 0 ? "font-bold text-blue-600" : "text-muted-foreground"}>
+                  {formatNumber(p.activeBuffersInUse)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Buffer Memory:</span>
+                <span className="font-mono text-blue-600">{p.bufferMemoryActiveMB.toFixed(1)} / {p.bufferMemoryTotalMB.toFixed(1)} MB</span>
+              </div>
+              <div className={p.utilizationPercent >= 90 ? "text-destructive font-medium" : p.utilizationPercent >= 70 ? "text-amber-700 font-medium" : "text-muted-foreground"}>
+                Utilization: {p.utilizationPercent.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Bar chart component for buffer utilization (similar to RateLimiterChart)
+function BufferUtilizationBarChart({ data }: { data: BufferProviderSummary[] }) {
+  const globalMaxCapacity = Math.max(
+    1,
+    Math.max(...data.map((d) => d.bufferCapacity)),
+    Math.max(...data.map((d) => d.maxRequests))
+  );
+
+  return (
+    <div className="max-h-[400px] overflow-y-auto">
+      <ResponsiveContainer width="100%" height={Math.min(400, Math.max(200, data.length * 50 + 80))}>
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ top: 20, right: 20, bottom: 60, left: 140 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+          
+          <XAxis
+            type="number"
+            label={{
+              value: "Requests",
+              position: "outsideBottom",
+              offset: 80,
+              style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+            }}
+            tick={{ fill: "#666", fontSize: 11 }}
+            tickLine={{ stroke: "#999" }}
+            axisLine={{ stroke: "#999" }}
+            tickFormatter={(value) => formatNumber(value)}
+            domain={[0, globalMaxCapacity * 1.15]}
+          />
+
+          <YAxis
+            dataKey="provider"
+            type="category"
+            width={140}
+            label={{
+              value: "Provider",
+              position: "outsideLeft",
+              offset: 30,
+              style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+            }}
+            tick={{ fill: "#333", fontSize: 11 }}
+            tickLine={{ stroke: "#999" }}
+            axisLine={{ stroke: "#999" }}
+          />
+
+          <Tooltip
+            formatter={(value: number, name: string) => [formatNumber(value), name]}
+            labelFormatter={(label, payload) => {
+              if (payload && payload.length > 0 && payload[0].payload) {
+                const p = payload[0].payload;
+                return `${p.provider} | Max: ${p.maxRequests} | Buffer: ${p.bufferCapacity} | Active: ${p.activeBuffersInUse} | Memory: ${p.bufferMemoryActiveMB.toFixed(1)}/${p.bufferMemoryTotalMB.toFixed(1)} MB | Util: ${p.utilizationPercent.toFixed(1)}%`;
+              }
+              return `Provider: ${label}`;
+            }}
+            contentStyle={{
+              backgroundColor: "rgba(255, 255, 255, 0.98)",
+              border: "1px solid #ddd",
+              borderRadius: "8px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+            }}
+            cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+          />
+
+          <Legend
+            verticalAlign="top"
+            align="center"
+            iconSize={12}
+            wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
+          />
+
+          {/* Max Requests (base capacity) - gray */}
+          <Bar
+            dataKey="maxRequests"
+            name="Max Requests"
+            fill="#9ca3af"
+            animationDuration={0}
+            stackId="a"
+          />
+
+          {/* Buffer Capacity - lighter gray */}
+          <Bar
+            dataKey="bufferCapacity"
+            name="Buffer Capacity"
+            fill="#d1d5db"
+            animationDuration={0}
+            stackId="a"
+          />
+
+          {/* Active Buffers in Use - blue overlay */}
+          <Bar
+            dataKey="activeBuffersInUse"
+            name="Active Buffers"
+            fill="#3b82f6"
+            opacity={0.9}
+            animationDuration={0}
+            stackId="a"
+          />
+
+          {/* Reference line for max requests limit */}
+          {data.map((p, idx) => (
+            <React.Fragment key={p.provider}>
+              <ReferenceLine
+                x={p.maxRequests}
+                stroke="#6b7280"
+                strokeWidth={1}
+                strokeDasharray="2 2"
+                label={
+                  <Label
+                    value={`${p.provider}: Limit`}
+                    position="center"
+                    fill="#6b7280"
+                    fontSize={8}
+                    offset={10 + idx * 20}
+                  />
+                }
+              />
+            </React.Fragment>
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
  
-  if (providerMap.length === 0) {
+// Retry Attempts Chart
+interface RetryAttemptsChartProps {
+  providers: RetryProviderMetrics[];
+  loading?: boolean;
+}
+ 
+function RetryAttemptsChart({ providers, loading = false }: RetryAttemptsChartProps) {
+  if (loading) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-2 text-sm text-muted-foreground">Loading retry metrics...</p>
+      </div>
+    );
+  }
+ 
+  if (providers.length === 0) {
+    return (
+      <div className="rounded-lg border p-8 text-center">
+        <p className="text-muted-foreground">No retry data available</p>
+      </div>
+    );
+  }
+ 
+  const globalMaxRetries = Math.max(1, Math.max(...providers.map((p) => p.totalRetryAttempts)));
+ 
+  return (
+    <div className="max-h-[400px] overflow-y-auto">
+      <ResponsiveContainer width="100%" height={Math.min(400, Math.max(200, providers.length * 50 + 80))}>
+        <BarChart
+          data={providers}
+          layout="vertical"
+          margin={{ top: 20, right: 20, bottom: 60, left: 140 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+ 
+          <XAxis
+            type="number"
+            label={{
+              value: "Retry Attempts",
+              position: "outsideBottom",
+              offset: 80,
+              style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+            }}
+            tick={{ fill: "#666", fontSize: 11 }}
+            tickLine={{ stroke: "#999" }}
+            axisLine={{ stroke: "#999" }}
+            tickFormatter={(value) => formatNumber(value)}
+            domain={[0, globalMaxRetries * 1.15]}
+          />
+ 
+          <YAxis
+            dataKey="provider"
+            type="category"
+            width={140}
+            label={{
+              value: "Provider",
+              position: "outsideLeft",
+              offset: 30,
+              style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+            }}
+            tick={{ fill: "#333", fontSize: 11 }}
+            tickLine={{ stroke: "#999" }}
+            axisLine={{ stroke: "#999" }}
+          />
+ 
+          <Tooltip
+            formatter={(value: number, name: string) => [formatNumber(value), name]}
+            labelFormatter={(label, payload) => {
+              if (payload && payload.length > 0 && payload[0].payload) {
+                const p = payload[0].payload;
+                return `${p.provider} | Non-Stream: ${p.nonStreamingRetryAttempts} | Stream: ${p.streamingRetryAttempts} | Total: ${p.totalRetryAttempts} | Max Retries: ${p.maxRetries}`;
+              }
+              return `Provider: ${label}`;
+            }}
+            contentStyle={{
+              backgroundColor: "rgba(255, 255, 255, 0.98)",
+              border: "1px solid #ddd",
+              borderRadius: "8px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+            }}
+            cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+          />
+ 
+          <Legend
+            verticalAlign="top"
+            align="center"
+            iconSize={12}
+            wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
+          />
+ 
+          {/* Non-Streaming Retries - amber */}
+          <Bar
+            dataKey="nonStreamingRetryAttempts"
+            name="Non-Streaming Retries"
+            fill="#f59e0b"
+            animationDuration={0}
+            stackId="a"
+          />
+ 
+          {/* Streaming Retries - blue */}
+          <Bar
+            dataKey="streamingRetryAttempts"
+            name="Streaming Retries"
+            fill="#3b82f6"
+            animationDuration={0}
+            stackId="a"
+          />
+ 
+          {/* Reference line for max retries */}
+          {providers.map((p, idx) => (
+            <React.Fragment key={p.provider}>
+              <ReferenceLine
+                x={p.maxRetries}
+                stroke="#6b7280"
+                strokeWidth={1}
+                strokeDasharray="2 2"
+                label={
+                  <Label
+                    value={`${p.provider}: Max (${p.maxRetries})`}
+                    position="center"
+                    fill="#6b7280"
+                    fontSize={8}
+                    offset={10 + idx * 20}
+                  />
+                }
+              />
+            </React.Fragment>
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+ 
+// Retry Buffer Chart
+interface RetryBufferChartProps {
+  providers: RetryProviderMetrics[];
+  loading?: boolean;
+}
+ 
+function RetryBufferChart({ providers, loading = false }: RetryBufferChartProps) {
+  if (loading) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="mt-2 text-sm text-muted-foreground">Loading buffer metrics...</p>
+      </div>
+    );
+  }
+ 
+  if (providers.length === 0) {
     return (
       <div className="rounded-lg border p-8 text-center">
         <p className="text-muted-foreground">No buffer data available</p>
@@ -160,25 +558,114 @@ function BufferUsageChart({ buckets, loading = false }: BufferUsageChartProps) {
     );
   }
  
+  const globalMaxBuffer = Math.max(1, Math.max(...providers.map((p) => p.maxBufferUsageMB)));
+ 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {providerMap.map((p: { provider: string; bufferCapacity: number; entriesInUse: number; maxTokens: number }) => {
-          const utilizationPercent = p.maxTokens > 0 ? ((p.entriesInUse / p.maxTokens) * 100) : 0;
-          return (
-            <div key={p.provider} className="rounded-lg border p-3">
-              <div className="font-medium text-sm">{p.provider}</div>
-              <div className="space-y-1 mt-2 text-sm">
-                <div>Buffers: {formatNumber(p.bufferCapacity)}</div>
-                <div>Entries in Use: {formatNumber(p.entriesInUse)}</div>
-                <div className={utilizationPercent >= 90 ? "text-destructive font-medium" : utilizationPercent >= 70 ? "text-amber-700 font-medium" : "text-muted-foreground"}>
-                  Utilization: {utilizationPercent.toFixed(1)}%
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <div className="max-h-[400px] overflow-y-auto">
+      <ResponsiveContainer width="100%" height={Math.min(400, Math.max(200, providers.length * 50 + 80))}>
+        <BarChart
+          data={providers}
+          layout="vertical"
+          margin={{ top: 20, right: 20, bottom: 60, left: 140 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+ 
+          <XAxis
+            type="number"
+            label={{
+              value: "Buffer (MB)",
+              position: "outsideBottom",
+              offset: 80,
+              style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+            }}
+            tick={{ fill: "#666", fontSize: 11 }}
+            tickLine={{ stroke: "#999" }}
+            axisLine={{ stroke: "#999" }}
+            tickFormatter={(value) => value.toFixed(1)}
+            domain={[0, globalMaxBuffer * 1.15]}
+          />
+ 
+          <YAxis
+            dataKey="provider"
+            type="category"
+            width={140}
+            label={{
+              value: "Provider",
+              position: "outsideLeft",
+              offset: 30,
+              style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+            }}
+            tick={{ fill: "#333", fontSize: 11 }}
+            tickLine={{ stroke: "#999" }}
+            axisLine={{ stroke: "#999" }}
+          />
+ 
+          <Tooltip
+            formatter={(value: number, name: string) => [value.toFixed(1), name]}
+            labelFormatter={(label, payload) => {
+              if (payload && payload.length > 0 && payload[0].payload) {
+                const p = payload[0].payload;
+                return `${p.provider} | Active: ${p.currentBufferUsageMB.toFixed(1)} MB | Max: ${p.maxBufferUsageMB.toFixed(1)} MB | Util: ${p.bufferUtilizationPercent.toFixed(1)}% | Sessions: ${p.activeStreamingSessions}`;
+              }
+              return `Provider: ${label}`;
+            }}
+            contentStyle={{
+              backgroundColor: "rgba(255, 255, 255, 0.98)",
+              border: "1px solid #ddd",
+              borderRadius: "8px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+            }}
+            cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+          />
+ 
+          <Legend
+            verticalAlign="top"
+            align="center"
+            iconSize={12}
+            wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
+          />
+ 
+          {/* Max Buffer - lighter gray */}
+          <Bar
+            dataKey="maxBufferUsageMB"
+            name="Max Buffer (MB)"
+            fill="#d1d5db"
+            animationDuration={0}
+            stackId="a"
+          />
+ 
+          {/* Active Buffer - blue overlay */}
+          <Bar
+            dataKey="currentBufferUsageMB"
+            name="Active Buffer (MB)"
+            fill="#3b82f6"
+            opacity={0.9}
+            animationDuration={0}
+            stackId="a"
+          />
+ 
+          {/* Reference line for max buffer */}
+          {providers.map((p, idx) => (
+            <React.Fragment key={p.provider}>
+              <ReferenceLine
+                x={p.maxBufferUsageMB}
+                stroke="#6b7280"
+                strokeWidth={1}
+                strokeDasharray="2 2"
+                label={
+                  <Label
+                    value={`${p.provider}: Max (${p.maxBufferUsageMB.toFixed(1)} MB)`}
+                    position="center"
+                    fill="#6b7280"
+                    fontSize={8}
+                    offset={10 + idx * 20}
+                  />
+                }
+              />
+            </React.Fragment>
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -193,6 +680,7 @@ function MetricsContent() {
 
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [rateLimiterMetrics, setRateLimiterMetrics] = useState<RateLimiterMetrics | null>(null);
+  const [retryMetrics, setRetryMetrics] = useState<RetryMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
@@ -200,6 +688,7 @@ function MetricsContent() {
   const [maxDataPoints, setMaxDataPoints] = useState<number>(50);
   const [rateLimiterError, setRateLimiterError] = useState<string | null>(null);
   const [rateLimiterLoading, setRateLimiterLoading] = useState(true);
+  const [retryLoading, setRetryLoading] = useState(true);
 
   // Tab state - initialize to default, then sync from URL/localStorage
   const [activeTab, setActiveTab] = useState<MetricsTab>("rateLimiter");
@@ -293,7 +782,6 @@ function MetricsContent() {
 
     return Array.from(providerMap.values()).map((p) => ({
       ...p,
-      bufferSizeMB: p.bufferCapacity, // Buffer count (MB conversion factor unknown)
       utilizationPercent: p.maxTokens > 0 ? ((p.entriesInUse / p.maxTokens) * 100) : 0,
     })).sort((a, b) => b.entriesInUse - a.entriesInUse);
   }, [rateLimiterMetrics?.buckets, rateLimiterMetrics?.upstream429Counts, rateLimiterMetrics?.nvidiaWorkerRetryCount]);
@@ -309,6 +797,9 @@ function MetricsContent() {
   const isMountedRef = useRef(true);
   const requestIdRef = useRef(0);
   const metricsRequestIdRef = useRef(0);
+  const retryPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryAbortControllerRef = useRef<AbortController | null>(null);
+  const retryRequestIdRef = useRef(0);
 
   const progressPercent = progress && progress.total > 0
     ? Math.round((progress.current / progress.total) * 100)
@@ -448,6 +939,35 @@ function MetricsContent() {
     }
   }, []);
 
+  // Fetch retry metrics
+  const fetchRetryMetrics = useCallback(async (signal?: AbortSignal, requestId?: number, isInitialLoad = false): Promise<boolean> => {
+    if (!isMountedRef.current) return false;
+    if (isInitialLoad) {
+      setRetryLoading(true);
+    }
+    try {
+      const data = await apiClient.getRetryMetrics(signal);
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
+        setRetryMetrics(data);
+        setRetryLoading(false);
+      }
+      return true;
+    } catch (e) {
+      if (e instanceof RequestAbortedError) {
+        return false;
+      }
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        setRetryMetrics(null);
+        console.error("[metrics] Retry fetch error:", errorMessage);
+      }
+      if (isConnectionError(e)) {
+        throw e;
+      }
+      return false;
+    }
+  }, []);
+
   // Poll for rate limiter metrics (only when rate limiter tab is active or on initial load)
   useEffect(() => {
     // Only poll if rate limiter tab is active or we're doing initial load
@@ -573,6 +1093,62 @@ function MetricsContent() {
       }
     };
   }, [fetchTrafficMetrics, activeTab]);
+
+  // Poll for retry metrics (only when provider retry tab is active) - every 10 seconds
+  useEffect(() => {
+    const shouldPoll = activeTab === "providerRetry";
+
+    if (!shouldPoll) {
+      if (retryPollingIntervalRef.current) {
+        clearTimeout(retryPollingIntervalRef.current);
+        retryPollingIntervalRef.current = null;
+      }
+      if (retryAbortControllerRef.current) {
+        retryAbortControllerRef.current.abort();
+        retryAbortControllerRef.current = null;
+      }
+      return;
+    }
+
+    let cancelled = false;
+    let isFirstPoll = true;
+
+    const runPoll = async () => {
+      if (cancelled) return;
+      if (retryAbortControllerRef.current) {
+        retryAbortControllerRef.current.abort();
+      }
+      const requestId = ++retryRequestIdRef.current;
+      const abortController = new AbortController();
+      retryAbortControllerRef.current = abortController;
+      try {
+        await fetchRetryMetrics(abortController.signal, requestId, isFirstPoll);
+      } catch (e) {
+        if (isConnectionError(e)) {
+          console.error("[metrics] Retry polling stopped due to connection error:", e.message);
+          return;
+        }
+      }
+      isFirstPoll = false;
+      if (!cancelled) {
+        retryPollingIntervalRef.current = setTimeout(runPoll, 10000);
+      }
+    };
+
+    runPoll();
+
+    return () => {
+      cancelled = true;
+      if (retryPollingIntervalRef.current) {
+        clearTimeout(retryPollingIntervalRef.current);
+        retryPollingIntervalRef.current = null;
+      }
+      if (retryAbortControllerRef.current) {
+        retryAbortControllerRef.current.abort();
+        retryAbortControllerRef.current = null;
+      }
+    };
+  }, [fetchRetryMetrics, activeTab]);
 
   // Fetch main metrics when time range, maxDataPoints, or page changes
   // Only fetch if traffic tab is active
@@ -1006,83 +1582,71 @@ function MetricsContent() {
       )}
 
       {/* Provider Retry Metrics Tab Panel */}
-      {activeTab === "providerRetry" && rateLimiterMetrics && (
+      {activeTab === "providerRetry" && (
         <div className="space-y-6" role="tabpanel" id="panel-providerRetry" aria-labelledby="tab-providerRetry">
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Provider Retry & Buffer Metrics</h3>
-            {rateLimiterError && (
-              <div className="rounded-lg border border-destructive bg-destructive/10 p-4 mb-4">
-                <p className="text-destructive">{rateLimiterError}</p>
-              </div>
-            )}
-            {!rateLimiterMetrics.config.enabled && (
+            <h3 className="text-lg font-semibold mb-4">Provider Streaming Retry Metrics</h3>
+            {retryLoading && !retryMetrics && (
               <div className="text-center py-8">
-                <p className="text-muted-foreground">
-                  Rate limiter is not enabled. Enable it in the proxy configuration to see metrics.
-                </p>
+                <p className="text-muted-foreground">Loading retry metrics...</p>
               </div>
             )}
-            {rateLimiterMetrics && rateLimiterMetrics.config.enabled && (
+            {!retryLoading && !retryMetrics && (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">Unable to load retry metrics. Check the proxy connection and try again.</p>
+              </div>
+            )}
+            {retryMetrics && (
               <div className="space-y-6">
                 {/* Summary Cards */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                  <div className="rounded-lg border p-4">
-                    <div className="text-sm text-muted-foreground">Total Upstream 429s</div>
+                  <div className="rounded-lg border p-4 bg-red-50 border-red-200">
+                    <div className="text-sm text-muted-foreground">Total Retry Attempts</div>
                     <div className="text-2xl font-bold text-red-600">
-                      {formatNumber(
-                        Object.values(rateLimiterMetrics.upstream429Counts ?? {}).reduce((sum, v) => sum + v, 0)
-                      )}
+                      {formatNumber(retryMetrics.totals.totalRetryAttempts)}
                     </div>
                   </div>
                   <div className="rounded-lg border p-4 bg-amber-50 border-amber-200">
-                    <div className="text-sm text-muted-foreground">NVIDIA Worker Retries</div>
+                    <div className="text-sm text-muted-foreground">Non-Streaming Retries</div>
                     <div className="text-2xl font-bold text-amber-700">
-                      {formatNumber(rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0)}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <div className="text-sm text-muted-foreground">Total Buffers Configured</div>
-                    <div className="text-2xl font-bold">
-                      {formatNumber(
-                        rateLimiterMetrics.buckets.reduce((sum, b) => sum + (b.bufferCapacity ?? 0), 0)
-                      )}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <div className="text-sm text-muted-foreground">Total Entries in Use</div>
-                    <div className="text-2xl font-bold">
-                      {formatNumber(
-                        rateLimiterMetrics.buckets.reduce((sum, b) => sum + (b.requestsInWindow ?? 0), 0)
-                      )}
+                      {formatNumber(retryMetrics.totals.totalNonStreamingRetries)}
                     </div>
                   </div>
                   <div className="rounded-lg border p-4 bg-blue-50 border-blue-200">
-                    <div className="text-sm text-muted-foreground">Total Buffers</div>
+                    <div className="text-sm text-muted-foreground">Streaming Retries</div>
                     <div className="text-2xl font-bold text-blue-600">
-                      {formatNumber(
-                        rateLimiterMetrics.buckets.reduce((sum, b) => sum + (b.bufferCapacity ?? 0), 0)
-                      )}
+                      {formatNumber(retryMetrics.totals.totalStreamingRetries)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4 bg-green-50 border-green-200">
+                    <div className="text-sm text-muted-foreground">Active Streaming Sessions</div>
+                    <div className="text-2xl font-bold text-green-700">
+                      {formatNumber(retryMetrics.totals.totalActiveStreamingSessions)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4 bg-purple-50 border-purple-200">
+                    <div className="text-sm text-muted-foreground">Buffer Memory Active</div>
+                    <div className="text-2xl font-bold text-purple-700">
+                      {retryMetrics.totals.totalCurrentBufferUsageMB.toFixed(1)} MB
                     </div>
                   </div>
                 </div>
 
-                {/* Provider Retry Chart */}
+                {/* Retry Attempts by Provider */}
                 <div className="rounded-lg border p-4">
-                  <h4 className="text-md font-medium mb-3">Upstream 429 Responses by Provider</h4>
-                  <ProviderRetryChart
-                    buckets={rateLimiterMetrics.buckets}
-                    upstream429Counts={rateLimiterMetrics.upstream429Counts ?? {}}
-                    nvidiaWorkerRetryCount={rateLimiterMetrics.nvidiaWorkerRetryCount ?? 0}
-                    loading={rateLimiterLoading}
+                  <h4 className="text-md font-medium mb-3">Retry Attempts by Provider</h4>
+                  <RetryAttemptsChart
+                    providers={retryMetrics.providers}
+                    loading={retryLoading}
                   />
                 </div>
 
-                {/* Buffer Usage Chart */}
+                {/* Buffer Usage by Provider */}
                 <div className="rounded-lg border p-4">
-                  <h4 className="text-md font-medium mb-3">Buffer Utilization by Provider</h4>
-                  <BufferUsageChart
-                    buckets={rateLimiterMetrics.buckets}
-                    loading={rateLimiterLoading}
+                  <h4 className="text-md font-medium mb-3">Streaming Retry Buffer Usage by Provider</h4>
+                  <RetryBufferChart
+                    providers={retryMetrics.providers}
+                    loading={retryLoading}
                   />
                 </div>
 
@@ -1094,40 +1658,48 @@ function MetricsContent() {
                       <thead>
                         <tr className="border-b">
                           <th className="text-left p-2 font-medium">Provider</th>
-                          <th className="text-right p-2 font-medium">Upstream 429s</th>
-                          <th className="text-right p-2 font-medium">NVIDIA Retries</th>
-                          <th className="text-right p-2 font-medium">Buffers Configured</th>
-                          <th className="text-right p-2 font-medium">Entries in Use</th>
-                          <th className="text-right p-2 font-medium">Buffers</th>
-                          <th className="text-right p-2 font-medium">Queue Length</th>
-                          <th className="text-right p-2 font-medium">Utilization %</th>
+                          <th className="text-right p-2 font-medium">Max Retries</th>
+                          <th className="text-right p-2 font-medium">Max Buffer (MB)</th>
+                          <th className="text-right p-2 font-medium">Non-Stream Retries</th>
+                          <th className="text-right p-2 font-medium">Stream Retries</th>
+                          <th className="text-right p-2 font-medium">Total Retries</th>
+                          <th className="text-right p-2 font-medium">Active Sessions</th>
+                          <th className="text-right p-2 font-medium">Buffer Active (MB)</th>
+                          <th className="text-right p-2 font-medium">Buffer Max (MB)</th>
+                          <th className="text-right p-2 font-medium">Buffer Util %</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {providerRetrySummary.map((provider) => (
+                        {retryMetrics.providers.map((provider) => (
                           <tr key={provider.provider} className="border-b last:border-0">
                             <td className="p-2 font-medium">{provider.provider}</td>
+                            <td className="p-2 text-right text-muted-foreground">{provider.maxRetries}</td>
+                            <td className="p-2 text-right text-muted-foreground">{provider.maxResponseBufferSizeMB.toFixed(1)}</td>
                             <td className="p-2 text-right">
-                              <span className={provider.upstream429s > 0 ? "font-bold text-red-700" : "text-muted-foreground"}>
-                                {formatNumber(provider.upstream429s)}
+                              <span className={provider.nonStreamingRetryAttempts > 0 ? "font-bold text-amber-700" : "text-muted-foreground"}>
+                                {formatNumber(provider.nonStreamingRetryAttempts)}
                               </span>
                             </td>
                             <td className="p-2 text-right">
-                              <span className={provider.provider === "nvidia" && provider.nvidiaRetries > 0 ? "font-bold text-amber-700" : "text-muted-foreground"}>
-                                {formatNumber(provider.nvidiaRetries)}
-                              </span>
-                            </td>
-                            <td className="p-2 text-right text-muted-foreground">{formatNumber(provider.bufferCapacity)}</td>
-                            <td className="p-2 text-right text-muted-foreground">{formatNumber(provider.entriesInUse)}</td>
-                            <td className="p-2 text-right text-blue-600 font-mono">{formatNumber(provider.bufferCapacity)}</td>
-                            <td className="p-2 text-right">
-                              <span className={provider.queueLength > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>
-                                {formatNumber(provider.queueLength)}
+                              <span className={provider.streamingRetryAttempts > 0 ? "font-bold text-blue-700" : "text-muted-foreground"}>
+                                {formatNumber(provider.streamingRetryAttempts)}
                               </span>
                             </td>
                             <td className="p-2 text-right">
-                              <span className={provider.utilizationPercent >= 90 ? "text-destructive font-medium" : provider.utilizationPercent >= 70 ? "text-amber-700 font-medium" : "text-muted-foreground"}>
-                                {provider.utilizationPercent.toFixed(1)}%
+                              <span className={provider.totalRetryAttempts > 0 ? "font-bold text-red-700" : "text-muted-foreground"}>
+                                {formatNumber(provider.totalRetryAttempts)}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right">
+                              <span className={provider.activeStreamingSessions > 0 ? "font-bold text-green-700" : "text-muted-foreground"}>
+                                {formatNumber(provider.activeStreamingSessions)}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right text-blue-600 font-mono">{provider.currentBufferUsageMB.toFixed(1)}</td>
+                            <td className="p-2 text-right text-muted-foreground">{provider.maxBufferUsageMB.toFixed(1)}</td>
+                            <td className="p-2 text-right">
+                              <span className={provider.bufferUtilizationPercent >= 90 ? "text-destructive font-medium" : provider.bufferUtilizationPercent >= 70 ? "text-amber-700 font-medium" : "text-muted-foreground"}>
+                                {provider.bufferUtilizationPercent.toFixed(1)}%
                               </span>
                             </td>
                           </tr>
@@ -1141,6 +1713,7 @@ function MetricsContent() {
           </div>
         </div>
       )}
+
 
       {/* Traffic tab loading state */}
       {activeTab === "traffic" && loading && (

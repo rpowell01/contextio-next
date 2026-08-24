@@ -1,5 +1,5 @@
 import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, ProviderConfig, ProviderMetadata, FalsePositiveEntry, MaintenanceOperation, MaintenanceResponse } from "@/types/api";
-import type { RateLimiterMetrics } from "@/types/client-api";
+import type { RateLimiterMetrics, RetryMetrics } from "@/types/client-api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
 /**
@@ -749,6 +749,10 @@ async getProxyStatus(signal?: AbortSignal): Promise<ProxyStatus> {
 
   async getRateLimiterMetrics(signal?: AbortSignal): Promise<RateLimiterMetrics> {
     return this.request("/api/admin/rate-limiter", { signal });
+  }
+
+  async getRetryMetrics(signal?: AbortSignal): Promise<RetryMetrics> {
+    return this.request("/api/admin/retry-metrics", { signal });
   }
 
   async getDatabaseMaintenanceInfo(signal?: AbortSignal): Promise<{

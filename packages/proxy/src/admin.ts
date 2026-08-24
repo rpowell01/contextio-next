@@ -110,6 +110,43 @@ function isRateLimiterPlugin(plugin: ProxyPlugin): plugin is ProxyPlugin & { _in
   );
 }
 
+function isRetryPlugin(plugin: ProxyPlugin): plugin is ProxyPlugin & { _internal: RetryInternal } {
+  return (
+    plugin.name === "retry" &&
+    "_internal" in plugin &&
+    typeof (plugin as { _internal?: RetryInternal })._internal?.getRetryMetrics === "function"
+  );
+}
+
+interface RetryInternal {
+  getRetryMetrics: () => {
+    providers: Array<{
+      provider: string;
+      maxRetries: number;
+      maxResponseBufferSizeMB: number;
+      nonStreamingRetryAttempts: number;
+      streamingRetryAttempts: number;
+      totalRetryAttempts: number;
+      activeStreamingSessions: number;
+      currentBufferUsageMB: number;
+      maxBufferUsageMB: number;
+      bufferUtilizationPercent: number;
+    }>;
+    totals: {
+      totalNonStreamingRetries: number;
+      totalStreamingRetries: number;
+      totalRetryAttempts: number;
+      totalActiveStreamingSessions: number;
+      totalCurrentBufferUsageMB: number;
+      totalMaxBufferUsageMB: number;
+    };
+  };
+  getNvidiaWorkerRetryCount: () => number;
+  getUpstream429Counts: () => Record<string, number>;
+  getRequestStoreSize: () => number;
+  getStreamStateSize: () => number;
+}
+
 // --- Rate Limiter Metrics ---
 
 // Types are imported from @contextio/core
@@ -629,6 +666,48 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
               details: innerError instanceof Error ? innerError.message : String(innerError),
               code: "RATE_LIMITER_INTERNAL_ERROR",
               service: SERVICE_IDENTIFIER 
+            }));
+          }
+          return;
+        }
+ 
+        // Retry Metrics Endpoint
+        case "retry-metrics": {
+          if (req.method !== "GET") {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+ 
+          const retryPlugin = plugins.find((p) => p.name === "retry");
+          if (!retryPlugin) {
+            console.error("[admin] Retry plugin not found in plugins array:", plugins.map(p => p.name));
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Retry plugin not found", code: "RETRY_PLUGIN_NOT_FOUND", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+ 
+          if (!isRetryPlugin(retryPlugin)) {
+            console.error("[admin] Retry plugin missing internal methods:", Object.keys(retryPlugin));
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Retry plugin does not expose metrics methods", code: "RETRY_PLUGIN_INTERNAL_ERROR", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+ 
+          try {
+            const getRetryMetrics = retryPlugin._internal.getRetryMetrics.bind(retryPlugin);
+            const metrics = getRetryMetrics();
+ 
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ...metrics, service: SERVICE_IDENTIFIER }));
+          } catch (innerError) {
+            console.error("[admin] Retry metrics error:", innerError);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              error: "Internal server error",
+              details: innerError instanceof Error ? innerError.message : String(innerError),
+              code: "RETRY_PLUGIN_INTERNAL_ERROR",
+              service: SERVICE_IDENTIFIER
             }));
           }
           return;

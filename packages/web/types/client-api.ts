@@ -99,3 +99,57 @@ export interface Provider {
     jitterFactor: number;
   };
 }
+
+/**
+ * Retry metrics for a single provider
+ */
+export interface RetryProviderMetrics {
+  /** Provider identifier */
+  provider: string;
+  /** Maximum retry attempts configured */
+  maxRetries: number;
+  /** Maximum response buffer size in MB */
+  maxResponseBufferSizeMB: number;
+  /** Non-streaming retry attempts */
+  nonStreamingRetryAttempts: number;
+  /** Streaming retry attempts */
+  streamingRetryAttempts: number;
+  /** Total retry attempts */
+  totalRetryAttempts: number;
+  /** Active streaming sessions */
+  activeStreamingSessions: number;
+  /** Current buffer usage in MB */
+  currentBufferUsageMB: number;
+  /** Maximum buffer usage in MB */
+  maxBufferUsageMB: number;
+  /** Buffer utilization percentage */
+  bufferUtilizationPercent: number;
+}
+
+/**
+ * Aggregated retry metrics totals
+ */
+export interface RetryMetricsTotals {
+  /** Total non-streaming retry attempts */
+  totalNonStreamingRetries: number;
+  /** Total streaming retry attempts */
+  totalStreamingRetries: number;
+  /** Total retry attempts */
+  totalRetryAttempts: number;
+  /** Total active streaming sessions */
+  totalActiveStreamingSessions: number;
+  /** Total current buffer usage in MB */
+  totalCurrentBufferUsageMB: number;
+  /** Total maximum buffer usage in MB */
+  totalMaxBufferUsageMB: number;
+}
+
+/**
+ * Complete retry metrics response
+ */
+export interface RetryMetrics {
+  /** Per-provider retry metrics */
+  providers: RetryProviderMetrics[];
+  /** Aggregated totals */
+  totals: RetryMetricsTotals;
+}
