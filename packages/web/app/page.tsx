@@ -102,8 +102,10 @@ export default function HomePage() {
           <div className="flex items-center gap-4">
             {buildInfo && (
               <div className="text-right text-xs text-muted-foreground font-mono hidden sm:block">
-                <div>v{buildInfo.version}</div>
-                <div>{buildInfo.gitCommit}</div>
+                <div className="font-medium text-foreground">v{buildInfo.version}</div>
+                <div className="truncate max-w-[120px]" title={buildInfo.gitCommit}>
+                  {buildInfo.gitCommit}
+                </div>
                 <div>{new Date(buildInfo.buildTime).toLocaleString()}</div>
               </div>
             )}
