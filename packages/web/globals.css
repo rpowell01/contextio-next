@@ -547,3 +547,26 @@ button:focus {
   }
 }
 
+/* Ensure form elements respect theme colors in all modes */
+select,
+textarea,
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="email"],
+input[type="url"],
+input[type="search"] {
+  background-color: rgb(var(--color-background));
+  color: rgb(var(--color-foreground));
+  border-color: rgb(var(--color-border));
+}
+
+/* In high-contrast, ensure form elements have strong visibility */
+[data-theme="high-contrast"] select,
+[data-theme="high-contrast"] textarea,
+[data-theme="high-contrast"] input {
+  background-color: rgb(var(--color-background));
+  color: rgb(var(--color-foreground));
+  border-color: rgb(var(--color-border));
+}
+

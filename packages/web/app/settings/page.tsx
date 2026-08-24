@@ -236,18 +236,18 @@ function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
     <div className="mt-1 flex flex-wrap items-center gap-2">
       {meta.source === "environment-variable" && meta.envVar && (
         <span
-          className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+          className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
           title={`This value is controlled by the ${meta.envVar} environment variable and cannot be changed here`}
         >
           Overridden by {meta.envVar}
         </span>
       )}
-      <span
-        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-          meta.dynamic
-            ? "bg-green-100 text-green-800"
-            : "bg-orange-100 text-orange-800"
-        }`}
+        <span
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+            meta.dynamic
+              ? "bg-primary/10 text-primary"
+              : "bg-muted text-foreground"
+          }`}
         title={
           meta.dynamic
             ? "Changes take effect immediately"
@@ -360,10 +360,10 @@ function DetectorModeWarnings({
           key={i}
           className={`rounded-lg border p-3 text-sm ${
             w.type === "info"
-              ? "border-blue-200 bg-blue-50 text-blue-800"
+              ? "border-primary/30 bg-primary/10 text-primary"
               : w.type === "warning"
-              ? "border-amber-200 bg-amber-50 text-amber-800"
-              : "border-green-200 bg-green-50 text-green-800"
+              ? "border-primary/30 bg-primary/10 text-primary"
+              : "border-primary/30 bg-primary/10 text-primary"
           }`}
         >
           <div className="font-medium mb-1">{w.title}</div>
@@ -462,7 +462,7 @@ function DisabledRulesList({
   return (
     <div className="space-y-4">
       {isCustomPolicyMode && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <strong>Custom policy file active:</strong> Disabled rules are managed in your custom policy file.
           Edit the policy file directly to enable/disable specific rules. The checkboxes below are disabled
           because they only apply to built-in presets.
@@ -485,8 +485,8 @@ function DisabledRulesList({
                     key={ruleName}
                     className={`flex items-center gap-2 p-3 rounded-lg border transition-colors ${
                       isDisabled
-                        ? "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50"
-                        : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 hover:border-primary/50"
+                        ? "border-border bg-muted dark:bg-muted/50"
+                        : "border-border bg-background hover:border-primary/50 dark:hover:border-primary"
                     } ${isCheckboxDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                     title={description}
                   >
@@ -495,9 +495,9 @@ function DisabledRulesList({
                       checked={!isDisabled}
                       onChange={() => handleToggle(ruleName)}
                       disabled={isCheckboxDisabled}
-                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
                     />
-                    <span className="text-sm font-mono text-primary/80">{ruleName}</span>
+                    <span className="text-sm font-mono text-foreground/80">{ruleName}</span>
                     <span className="text-xs text-muted-foreground flex-1 min-w-0 truncate">{description}</span>
                   </label>
                 );
@@ -506,7 +506,7 @@ function DisabledRulesList({
           </div>
         ))}
       {disabled && !isCustomPolicyMode && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           This setting is controlled by the <code>CONTEXTIO_REDACT_DISABLED_RULES</code> environment variable
           and cannot be changed here.
         </div>
@@ -1209,7 +1209,7 @@ export default function SettingsPage() {
             </p>
 
             {providersError && (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 mb-4">
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive mb-4">
                 {providersError}
               </div>
             )}
@@ -1254,10 +1254,10 @@ export default function SettingsPage() {
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                               provider.source === "file"
-                                ? "bg-blue-100 text-blue-800"
+                                ? "bg-primary/10 text-primary"
                                 : provider.source === "env"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-gray-100 text-gray-800"
+                                ? "bg-primary/10 text-primary"
+                                : "bg-muted text-foreground"
                             }`}
                             title={
                               provider.source === "file"
@@ -1270,12 +1270,12 @@ export default function SettingsPage() {
                             {provider.source === "file" ? "File" : provider.source === "env" ? "Env" : "Default"}
                           </span>
                           {provider.dynamic && (
-                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-800" title="User-created">
+                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-primary/10 text-primary" title="User-created">
                               Custom
                             </span>
                           )}
                           {provider.source === "env" && (
-                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800" title="Overridden by environment variable">
+                            <span className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-primary/10 text-primary" title="Overridden by environment variable">
                               Env Override
                             </span>
                           )}
@@ -1301,7 +1301,7 @@ export default function SettingsPage() {
                                   size="sm"
                                   onClick={() => openDeleteProviderDialog(provider)}
                                   disabled={deleteProviderSubmitting}
-                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                                   title="Delete provider"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -1768,7 +1768,7 @@ export default function SettingsPage() {
             >
               Redaction Preset
               {presetOverrideReason && (
-                <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-normal">
+                <span className="ml-2 text-xs text-foreground/70 font-normal">
                   ({presetOverrideReason})
                 </span>
               )}
@@ -1780,8 +1780,8 @@ export default function SettingsPage() {
                 updateSetting("redactPreset", e.target.value as "secrets" | "pii" | "strict")
               }
               disabled={presetDisabled}
-              className={`w-full rounded-md px-3 py-2 text-sm border rounded-md ${
-                presetDisabled ? "bg-muted cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-primary"
+              className={`w-full rounded-md px-3 py-2 text-sm border border-border bg-background text-foreground ${
+                presetDisabled ? "bg-muted opacity-50 cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-ring"
               }`}
             >
               <option value="secrets">Secrets (API keys, tokens, passwords)</option>
@@ -1837,16 +1837,16 @@ export default function SettingsPage() {
                   )}
                 </div>
                 {policyFileLoadError ? (
-                  <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                     {policyFileLoadError}
                   </div>
                 ) : (
                   <>
-                    <textarea
-                      value={editedPolicyContent}
-                      onChange={(e) => setEditedPolicyContent(e.target.value)}
-                      className="font-mono text-xs min-h-[600px] min-w-[600px] p-2 border rounded"
-                    />
+                     <textarea
+                       value={editedPolicyContent}
+                       onChange={(e) => setEditedPolicyContent(e.target.value)}
+                       className="font-mono text-xs min-h-[600px] min-w-[600px] p-2 border border-border bg-background text-foreground rounded"
+                     />
                     {editedPolicyContent && editedPolicyContent !== policyFileContents && (
                       <Button
                         type="button"
@@ -1955,8 +1955,8 @@ export default function SettingsPage() {
               }}
               placeholder='["messages[*].content"]'
               disabled={isSettingOverridden("redactPathsOnly")}
-              className={`font-mono text-xs min-h-[80px] w-full p-2 border rounded ${
-                isSettingOverridden("redactPathsOnly") ? "bg-muted cursor-not-allowed" : ""
+              className={`font-mono text-xs min-h-[80px] w-full p-2 border border-border bg-background text-foreground rounded ${
+                isSettingOverridden("redactPathsOnly") ? "bg-muted opacity-50 cursor-not-allowed" : ""
               }`}
               rows={4}
             />
@@ -1988,8 +1988,8 @@ export default function SettingsPage() {
               }}
               placeholder='["tools","tool_calls","messages[*].tool_calls[*].id",...]'
               disabled={isSettingOverridden("redactPathsSkip")}
-              className={`font-mono text-xs min-h-[120px] w-full p-2 border rounded ${
-                isSettingOverridden("redactPathsSkip") ? "bg-muted cursor-not-allowed" : ""
+              className={`font-mono text-xs min-h-[120px] w-full p-2 border border-border bg-background text-foreground rounded ${
+                isSettingOverridden("redactPathsSkip") ? "bg-muted opacity-50 cursor-not-allowed" : ""
               }`}
               rows={6}
             />
@@ -2121,10 +2121,10 @@ export default function SettingsPage() {
                 updateSetting("detectorMode", e.target.value as "rules" | "llm" | "hybrid" | "auto")
               }
               disabled={isSettingOverridden("detectorMode")}
-              className={`w-full rounded-md px-3 py-2 text-sm border ${
+              className={`w-full rounded-md px-3 py-2 text-sm border border-border bg-background text-foreground ${
                 isSettingOverridden("detectorMode")
-                  ? "bg-muted cursor-not-allowed"
-                  : "focus:outline-none focus:ring-2 focus:ring-primary"
+                  ? "bg-muted opacity-50 cursor-not-allowed"
+                  : "focus:outline-none focus:ring-2 focus:ring-ring"
               }`}
             >
               <option value="rules">Rules only (fast, deterministic patterns)</option>
@@ -2282,7 +2282,7 @@ export default function SettingsPage() {
                   updateSetting("captureCleanupEnabled", e.target.checked)
                 }
                 disabled={isSettingOverridden("captureCleanupEnabled")}
-                className="h-4 w-4 rounded border-gray-300"
+                className="h-4 w-4 rounded border-border"
               />
               <Label htmlFor="captureCleanupEnabled" className="text-sm font-medium">
                 Enable Automatic Cleanup
@@ -2508,7 +2508,7 @@ export default function SettingsPage() {
                                 updateStreamingRetry(provider, "enabled", e.target.checked)
                               }
                               disabled={isSettingOverridden("streamingRetry")}
-                              className="h-4 w-4 rounded border-gray-300"
+                              className="h-4 w-4 rounded border-border"
                             />
                             <Label htmlFor={`${rowId}-enabled`} className="text-sm">
                               Enable
@@ -2979,10 +2979,10 @@ export default function SettingsPage() {
               value={settings.feedbackStoreType}
               onChange={(e) => updateSetting("feedbackStoreType", e.target.value as "sqlite" | "memory")}
               disabled={isSettingOverridden("feedbackStoreType")}
-              className={`w-full rounded-md px-3 py-2 text-sm border ${
+              className={`w-full rounded-md px-3 py-2 text-sm border border-border bg-background text-foreground ${
                 isSettingOverridden("feedbackStoreType")
-                  ? "bg-muted cursor-not-allowed"
-                  : "focus:outline-none focus:ring-2 focus:ring-primary"
+                  ? "bg-muted opacity-50 cursor-not-allowed"
+                  : "focus:outline-none focus:ring-2 focus:ring-ring"
               }`}
             >
               <option value="sqlite">SQLite (persistent, file-based)</option>
@@ -3051,7 +3051,7 @@ export default function SettingsPage() {
         <Label htmlFor="theme" className="block text-sm font-medium mb-2">
           Theme
           {themeIsOverridden && (
-            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-normal">
+            <span className="ml-2 text-xs text-foreground/70 font-normal">
               (Set by environment variable)
             </span>
           )}
@@ -3063,8 +3063,8 @@ export default function SettingsPage() {
             setTheme(e.target.value as "light" | "dark" | "system" | "high-contrast" | "material-light" | "material-dark" | "solarized-light" | "solarized-dark" | "dracula" | "nord" | "github-light" | "github-dark" | "one-dark" | "monokai")
           }
           disabled={themeDisabled}
-          className={`w-full rounded-md px-3 py-2 text-sm border ${
-            themeDisabled ? "bg-muted cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-primary"
+          className={`w-full rounded-md px-3 py-2 text-sm border border-border bg-background text-foreground ${
+            themeDisabled ? "bg-muted opacity-50 cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-ring"
           }`}
         >
           {themeOptions.map(({ value, label }) => (
@@ -3111,11 +3111,11 @@ export default function SettingsPage() {
 
         {cleanupMessage && (
           <div
-            className={`rounded-lg border p-4 flex items-center justify-between gap-4 ${
-              cleanupMessage.type === "success"
-                ? "border-green-200 bg-green-50 text-green-800"
-                : "border-red-200 bg-red-50 text-red-800"
-            }`}
+          className={`rounded-lg border p-4 flex items-center justify-between gap-4 ${
+            cleanupMessage.type === "success"
+              ? "border-primary/30 bg-primary/10 text-primary"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
+          }`}
           >
             <span>{cleanupMessage.message}</span>
           </div>
@@ -3127,11 +3127,11 @@ export default function SettingsPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {saveMessage?.type === "success" ? (
-                  <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 ) : (
-                  <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-5 w-5 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 )}
@@ -3249,7 +3249,7 @@ export default function SettingsPage() {
                     checked={providerFormData.allowBaseUrlOverride}
                     onChange={(e) => handleProviderFormChange("allowBaseUrlOverride", e.target.checked)}
                     disabled={providerFormSubmitting}
-                    className="h-4 w-4 rounded border-gray-300"
+                    className="h-4 w-4 rounded border-border"
                   />
                   <Label htmlFor="provider-allow-baseurl-override" className="text-sm">
                     Allow base URL override via header
@@ -3270,7 +3270,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">Header name clients use to override the base URL (e.g., x-openai-baseurl)</p>
               </div>
               {providerFormError && (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                   {providerFormError}
                 </div>
               )}
@@ -3358,7 +3358,7 @@ export default function SettingsPage() {
                     checked={providerFormData.allowBaseUrlOverride}
                     onChange={(e) => handleProviderFormChange("allowBaseUrlOverride", e.target.checked)}
                     disabled={providerFormSubmitting}
-                    className="h-4 w-4 rounded border-gray-300"
+                    className="h-4 w-4 rounded border-border"
                   />
                   <Label htmlFor="edit-provider-allow-baseurl-override" className="text-sm">
                     Allow base URL override via header
@@ -3379,7 +3379,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">Header name clients use to override the base URL (e.g., x-openai-baseurl)</p>
               </div>
               {providerFormError && (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                   {providerFormError}
                 </div>
               )}
@@ -3421,7 +3421,7 @@ export default function SettingsPage() {
               </div>
             )}
             {providerFormError && (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 mt-4">
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive mt-4">
                 {providerFormError}
               </div>
             )}
@@ -3573,19 +3573,19 @@ function DatabaseMaintenance() {
               className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
                 operations.includes(op.id as MaintenanceOperation)
                   ? "border-primary bg-primary/5"
-                  : "border-gray-200 bg-white hover:border-primary/50 dark:border-gray-700 dark:bg-gray-900"
+                  : "border-border bg-background hover:border-primary/50 dark:hover:border-primary"
               }`}
             >
               <input
                 type="checkbox"
                 checked={operations.includes(op.id as MaintenanceOperation)}
                 onChange={() => handleToggleOperation(op.id as MaintenanceOperation)}
-                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary focus:ring-primary"
+                className="w-4 h-4 mt-0.5 rounded border-border text-primary focus:ring-primary"
               />
               <div>
                 <p className="font-medium text-sm">{op.label}</p>
                 <p className="text-xs text-muted-foreground">{op.description}</p>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{op.warning}</p>
+                <p className="text-xs text-foreground/70 mt-0.5">{op.warning}</p>
               </div>
             </label>
           ))}
@@ -3610,7 +3610,7 @@ function DatabaseMaintenance() {
       </Button>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -3623,10 +3623,10 @@ function DatabaseMaintenance() {
             {results.map((result, i) => (
               <div
                 key={i}
-                className={`rounded-lg p-3 ${
+                className={`rounded-lg p-3 border ${
                   result.success
-                    ? "border-green-200 bg-green-50"
-                    : "border-red-200 bg-red-50"
+                    ? "border-primary/30 bg-primary/10"
+                    : "border-destructive/30 bg-destructive/10"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -3634,8 +3634,8 @@ function DatabaseMaintenance() {
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                       result.success
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-destructive/10 text-destructive"
                     }`}
                   >
                     {result.success ? "Success" : "Failed"}
@@ -3646,7 +3646,7 @@ function DatabaseMaintenance() {
                   Duration: {result.durationMs}ms
                 </p>
                 {result.details && (
-                  <pre className="mt-2 text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-auto">
+                  <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-auto">
                     {JSON.stringify(result.details, null, 2)}
                   </pre>
                 )}
@@ -3655,7 +3655,7 @@ function DatabaseMaintenance() {
             <div className="pt-2 border-t">
               <p className="font-medium">
                 Overall:{" "}
-                <span className={results.every((r) => r.success) ? "text-green-600" : "text-red-600"}>
+                <span className={results.every((r) => r.success) ? "text-primary" : "text-destructive"}>
                   {results.every((r) => r.success) ? "All operations succeeded" : "Some operations failed"}
                 </span>
               </p>
