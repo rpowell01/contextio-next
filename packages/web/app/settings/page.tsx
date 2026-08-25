@@ -966,6 +966,11 @@ export default function SettingsPage() {
                 />
               </div>
 
+              {/* Per-Provider Redaction */}
+              <div className="pt-2 border-t">
+                {renderSetting("redactProviders")}
+              </div>
+
               {/* Detector mode capabilities & warnings */}
               <DetectorModeWarnings
                 detectorMode={settings.detectorMode}
