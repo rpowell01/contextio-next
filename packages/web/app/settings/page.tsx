@@ -1083,24 +1083,17 @@ export default function SettingsPage() {
             </div>
 
             <FalsePositiveManager
-              onEntryAdded={(entry) => {
-                setSettings((prev: Omit<Settings, "theme">) => ({ ...prev, redactDisabledRules: [...prev.redactDisabledRules, entry.ruleId] }));
-                setMetadata((prev: Record<keyof Settings, SettingMeta> | null) => {
-                  const meta = { ...prev };
-                  meta[(entry.ruleId as keyof Settings)] = { source: "settings-file", envVar: null, dynamic: true };
-                  return meta as Record<keyof Settings, SettingMeta>;
-                });
+              onEntryAdded={() => {
+                // False positives are managed by the FeedbackStore, not settings state.
+                // The table refreshes automatically via loadFalsePositives.
               }}
-              onEntryRemoved={(entry) => {
-                setSettings((prev: Omit<Settings, "theme">) => {
-                  const rules = prev.redactDisabledRules.filter((r: string) => r !== entry.ruleId);
-                  return { ...prev, redactDisabledRules: rules };
-                });
-                setMetadata((prev: Record<keyof Settings, SettingMeta> | null) => {
-                  const meta = { ...prev };
-                  delete meta[(entry.ruleId as keyof Settings)];
-                  return meta as Record<keyof Settings, SettingMeta>;
-                });
+              onEntryRemoved={() => {
+                // False positives are managed by the FeedbackStore, not settings state.
+                // The table refreshes automatically via loadFalsePositives.
+              }}
+              onEntryUpdated={() => {
+                // False positives are managed by the FeedbackStore, not settings state.
+                // The table refreshes automatically via loadFalsePositives.
               }}
               onCleared={(_cleared) => {
                 // Optionally show a message

@@ -123,12 +123,14 @@ const PATH_OPTIONS: { value: string; label: string }[] = [
 export function FalsePositiveManager({
   onEntryAdded,
   onEntryRemoved,
+  onEntryUpdated,
   onCleared,
   initialData,
   onClose,
 }: {
   onEntryAdded?: (entry: FalsePositiveEntry) => void;
   onEntryRemoved?: (entry: FalsePositiveEntry) => void;
+  onEntryUpdated?: (oldEntry: FalsePositiveEntry, newEntry: FalsePositiveEntry) => void;
   onCleared?: (cleared: number) => void;
   initialData?: {
     value: string;
@@ -154,8 +156,10 @@ export function FalsePositiveManager({
   });
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<FalsePositiveEntry | null>(null);
   const [form, setForm] = useState<FalsePositiveForm>({
     value: "",
     ruleId: "",
@@ -266,7 +270,7 @@ export function FalsePositiveManager({
     [pagination.page, initialData],
   );
 
-  // Handle form submit
+  // Handle form submit (create or update)
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -277,23 +281,40 @@ export function FalsePositiveManager({
         return;
       }
 
-      setCreating(true);
+      const isEdit = !!editingEntry;
+      const setBusy = isEdit ? setUpdating : setCreating;
+
+      setBusy(true);
       try {
         const options: { sessionId?: string; matchMode?: "exact" | "pattern"; pattern?: string } = {};
         if (form.sessionId) options.sessionId = form.sessionId;
         if (form.matchMode) options.matchMode = form.matchMode;
         if (form.matchMode === "pattern" && form.pattern) options.pattern = form.pattern;
-        const result = await apiClient.createFalsePositive(
-          form.value,
-          form.ruleId,
-          form.label,
-          form.path,
-          options,
-          undefined,
-        );
 
-        if (result.success && onEntryAdded) {
-          onEntryAdded(result.falsePositive);
+        let result: { success: boolean; falsePositive: FalsePositiveEntry };
+        if (isEdit && editingEntry) {
+          result = await apiClient.updateFalsePositive(
+            { value: editingEntry.value, ruleId: editingEntry.ruleId, sessionId: editingEntry.sessionId },
+            { value: form.value, ruleId: form.ruleId, label: form.label, path: form.path, ...options },
+            undefined,
+          );
+        } else {
+          result = await apiClient.createFalsePositive(
+            form.value,
+            form.ruleId,
+            form.label,
+            form.path,
+            options,
+            undefined,
+          );
+        }
+
+        if (result.success) {
+          if (isEdit && editingEntry && onEntryUpdated) {
+            onEntryUpdated(editingEntry, result.falsePositive);
+          } else if (!isEdit && onEntryAdded) {
+            onEntryAdded(result.falsePositive);
+          }
           setForm({
             value: "",
             ruleId: "",
@@ -304,25 +325,43 @@ export function FalsePositiveManager({
             pattern: "",
           });
           setFormErrors({});
+          setEditingEntry(null);
           setIsDialogOpen(false);
           loadFalsePositives();
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error("Failed to create false positive:", error);
+        console.error(isEdit ? "Failed to update false positive:" : "Failed to create false positive:", error);
         if (errorMessage.includes("403") || errorMessage.includes("admin role required")) {
-          setActionError("Access denied: Admin role required to create false positives.");
+          setActionError("Access denied: Admin role required.");
         } else if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
           setActionError("Authentication required. Please log in.");
         } else {
-          setActionError(`Failed to create false positive: ${errorMessage}`);
+          setActionError(`Failed to ${isEdit ? "update" : "create"} false positive: ${errorMessage}`);
         }
       } finally {
-        setCreating(false);
+        setBusy(false);
       }
     },
-    [form, formErrors, creating, onEntryAdded, loadFalsePositives],
+    [form, editingEntry, creating, updating, onEntryAdded, onEntryUpdated, loadFalsePositives],
   );
+
+  // Handle edit button click
+  const handleEditClick = useCallback((entry: FalsePositiveEntry) => {
+    setEditingEntry(entry);
+    const ruleOption = RULE_OPTIONS.find((r) => r.value === entry.ruleId);
+    const pathOption = PATH_OPTIONS.find((p) => p.value === entry.path);
+    setForm({
+      value: entry.value,
+      ruleId: entry.ruleId,
+      label: ruleOption ? ruleOption.label.split(" (")[0] : entry.label,
+      path: pathOption ? pathOption.value : "custom",
+      customPath: pathOption ? "" : entry.path,
+      matchMode: entry.matchMode || "exact",
+      pattern: entry.pattern || "",
+    });
+    setIsDialogOpen(true);
+  }, []);
 
   // Handle delete
   const handleDelete = useCallback(
@@ -533,21 +572,26 @@ export function FalsePositiveManager({
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10"
                         title="Edit"
-                        onClick={() => {
-                          // Could add edit functionality later
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleEditClick(entry);
                         }}
                       >
                         <Edit2 className="h-3 w-3" />
-                      </Button>
+                      </button>
                       <Button
                         size="icon"
                         variant="ghost"
+                        type="button"
                         title="Delete"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           setDeleteTarget({
                             value: entry.value,
                             ruleId: entry.ruleId,
@@ -576,17 +620,22 @@ export function FalsePositiveManager({
         </div>
       )}
 
-      {/* Create False Positive Dialog */}
-      {initialData && isDialogOpen && (
+      {/* Create/Edit False Positive Dialog */}
+      {isDialogOpen && (initialData || editingEntry) && (
         <Dialog open={isDialogOpen} onOpenChange={(open) => {
           setIsDialogOpen(open);
-          if (!open && onClose) onClose();
+          if (!open) {
+            setEditingEntry(null);
+            if (onClose) onClose();
+          }
         }}>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Add False Positive</DialogTitle>
+              <DialogTitle>{editingEntry ? "Edit False Positive" : "Add False Positive"}</DialogTitle>
               <DialogDescription>
-                Record a value that should be exempt from redaction.
+                {editingEntry
+                  ? "Update the false positive entry details."
+                  : "Record a value that should be exempt from redaction."}
               </DialogDescription>
             </DialogHeader>
 
@@ -762,17 +811,20 @@ export function FalsePositiveManager({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  disabled={creating}
+                  onClick={() => {
+                    setIsDialogOpen(false);
+                    setEditingEntry(null);
+                  }}
+                  disabled={creating || updating}
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  disabled={creating}
+                  disabled={creating || updating}
                 >
-                  {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {creating ? "Saving..." : "Add False Positive"}
+                  {(creating || updating) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {(creating || updating) ? "Saving..." : editingEntry ? "Update False Positive" : "Add False Positive"}
                 </Button>
               </DialogFooter>
             </form>

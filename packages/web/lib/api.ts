@@ -708,6 +708,42 @@ async clearCaptures(): Promise<{ success: boolean; deleted: number; errors: numb
     );
   }
 
+  async updateFalsePositive(
+    oldEntry: { value: string; ruleId: string; sessionId?: string },
+    newEntry: {
+      value: string;
+      ruleId: string;
+      label: string;
+      path: string;
+      sessionId?: string;
+      matchMode?: "exact" | "pattern";
+      pattern?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<{ success: boolean; falsePositive: FalsePositiveEntry }> {
+    const baseUrl = getProxyAdminBaseUrl();
+    // Since the FeedbackStore doesn't support updates, we delete the old entry
+    // and create a new one. We use a sequential approach to avoid race conditions.
+    await this.deleteFalsePositive(oldEntry.value, oldEntry.ruleId, oldEntry.sessionId, signal);
+    const body = JSON.stringify({
+      value: newEntry.value,
+      ruleId: newEntry.ruleId,
+      label: newEntry.label,
+      path: newEntry.path,
+      ...(newEntry.sessionId && { sessionId: newEntry.sessionId }),
+      ...(newEntry.matchMode && { matchMode: newEntry.matchMode }),
+      ...(newEntry.pattern && { pattern: newEntry.pattern }),
+    });
+    return this.requestWithBase<{
+      success: boolean;
+      falsePositive: FalsePositiveEntry;
+    }>(baseUrl, "/admin/redact/false-positives", {
+      method: "POST",
+      body,
+      signal,
+    });
+  }
+
   async clearFalsePositives(
     options?: {
       ruleId?: string;
