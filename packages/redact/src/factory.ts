@@ -18,7 +18,7 @@
  */
 
 import { createRedactPlugin, type RedactPluginConfig, type RedactionMetadata, type RedactPlugin } from "./index.js";
-import type { ProxyPlugin } from "@contextio/core";
+import type { ProxyPlugin, Provider } from "@contextio/core";
 import { upsertRedactionMetadata, getSettings } from "@contextio/core/db";
 
 interface WebUISettings {
@@ -29,6 +29,7 @@ interface WebUISettings {
 	redactPathsOnly?: string[];
 	redactPathsSkip?: string[];
 	redactDisabledRules?: string[];
+	redactProviders?: Record<string, boolean>;
 	detectorMode?: "rules" | "llm" | "hybrid" | "auto";
 	detectorModelName?: string;
 	detectorThreshold?: number;
@@ -51,6 +52,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 				redactPathsOnly: dbSettings.redactPathsOnly,
 				redactPathsSkip: dbSettings.redactPathsSkip,
 				redactDisabledRules: dbSettings.redactDisabledRules,
+				redactProviders: dbSettings.redactProviders,
 				detectorMode: dbSettings.detectorMode,
 				detectorModelName: dbSettings.detectorModelName,
 				detectorThreshold: dbSettings.detectorThreshold,
@@ -77,6 +79,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			redactPathsOnly: parsed.redactPathsOnly,
 			redactPathsSkip: parsed.redactPathsSkip,
 			redactDisabledRules: parsed.redactDisabledRules,
+			redactProviders: parsed.redactProviders,
 			detectorMode: parsed.detectorMode,
 			detectorModelName: parsed.detectorModelName ?? parsed.detectorModelDir,
 			detectorThreshold: parsed.detectorThreshold,
@@ -126,6 +129,14 @@ const config: RedactPluginConfig = {
 		// Feedback store for false positive filtering
 		feedbackStore: settings.feedbackStoreEnabled !== false ? (settings.feedbackStoreType || "sqlite") : undefined,
 		disabledRules: settings.redactDisabledRules,
+		// Compute disabled providers from per-provider redact toggle
+		disabledProviders: (() => {
+			const providers = settings.redactProviders;
+			if (!providers) return undefined;
+			return Object.entries(providers)
+				.filter(([, enabled]) => !enabled)
+				.map(([provider]) => provider as Provider);
+		})(),
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
 			// Only persist redaction metadata when the capture session metadata is fully populated.
 			// If source, provider, or targetUrl are null/undefined, the capture session is still

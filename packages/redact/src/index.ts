@@ -26,6 +26,7 @@ import type {
   ProxyPlugin,
   RequestContext,
   ResponseContext,
+  Provider,
 } from "@contextio/core";
 
 import fs from "node:fs";
@@ -173,6 +174,12 @@ export interface RedactPluginConfig {
    * Default: undefined (no false positive filtering).
    */
   feedbackStore?: FeedbackStore | "sqlite" | "memory";
+  /**
+   * List of provider IDs for which redaction should be skipped.
+   * When set, requests from these providers pass through unredacted.
+   * Default: undefined (redact all providers).
+   */
+  disabledProviders?: Provider[];
 }
 
 /** Extended plugin interface for the redact plugin with feedback store methods. */
@@ -603,6 +610,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
   const verbose = config?.verbose ?? false;
   const reversible = config?.reversible ?? false;
   const sessionTtlMs = config?.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
+  const disabledProviders = config?.disabledProviders;
 
   // Per-session state (only used in reversible mode)
   const sessions = new Map<string, SessionState>();
@@ -897,6 +905,15 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
 
   async onRequest(ctx: RequestContext): Promise<RequestContext> {
     if (!ctx.body) return ctx;
+
+    // Skip redaction if the provider is in the disabled list
+    if (disabledProviders && ctx.provider && disabledProviders.includes(ctx.provider as Provider)) {
+      if (verbose) {
+        const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
+        console.error(`[redact]${sid} Skipping redaction for disabled provider: ${ctx.provider}`);
+      }
+      return ctx;
+    }
 
     const map = reversible ? getSession(ctx.sessionId).map : null;
     const stats = createStats();

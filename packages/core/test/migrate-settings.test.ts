@@ -122,6 +122,17 @@ function createTestSettingsFile(overrides: Record<string, unknown> = {}): string
 			openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 			kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 		},
+		redactProviders: {
+			anthropic: true,
+			openai: true,
+			chatgpt: true,
+			gemini: true,
+			geminiCodeAssist: true,
+			vertex: true,
+			nvidia: true,
+			openrouter: true,
+			kilo: true,
+		},
 	};
 	const content = { ...base, ...overrides };
 	const filePath = join(testDbDir, "settings.json");

@@ -73,6 +73,8 @@ export interface Settings {
   rateLimiter: Record<Provider, RateLimitConfig>;
   // Streaming retry settings per provider
   streamingRetry: Record<Provider, StreamingRetryConfig>;
+  // Redaction enabled per provider (true = redact this provider)
+  redactProviders: Record<Provider, boolean>;
   // Feature flags
   enableLogger: boolean;
   enableRedact: boolean;
@@ -199,6 +201,10 @@ export const SETTING_ENV_MAP: Record<
     dynamic: false,
   },
   streamingRetry: {
+    envVar: "", // No direct env var - configured via settings file/UI with per-provider keys
+    dynamic: false,
+  },
+  redactProviders: {
     envVar: "", // No direct env var - configured via settings file/UI with per-provider keys
     dynamic: false,
   },
@@ -689,6 +695,18 @@ export const DEFAULT_SETTINGS: Settings = {
     openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
     kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
   },
+  // Redaction enabled per provider (true = redact this provider)
+  redactProviders: {
+    anthropic: true,
+    openai: true,
+    chatgpt: true,
+    gemini: true,
+    geminiCodeAssist: true,
+    vertex: true,
+    nvidia: true,
+    openrouter: true,
+    kilo: true,
+  },
   // Feature flags
   enableLogger: true,
   enableRedact: true,
@@ -888,6 +906,19 @@ export function validateSettings(input: unknown): Settings {
       }
       return result;
     })(),
+    redactProviders: (() => {
+      const rp = obj.redactProviders;
+      if (typeof rp !== "object" || rp === null) {
+        return DEFAULT_SETTINGS.redactProviders;
+      }
+      const rpObj = rp as Record<string, unknown>;
+      const result = {} as Record<Provider, boolean>;
+      for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "openrouter", "kilo", "unknown"] as Provider[]) {
+        const v = rpObj[provider];
+        result[provider] = typeof v === "boolean" ? v : true;
+      }
+      return result;
+    })(),
     // Feature flags
     enableLogger: validateBoolean("enableLogger"),
     enableRedact: validateBoolean("enableRedact"),
@@ -971,6 +1002,19 @@ export function validateSettingsLenient(input: unknown): Settings {
     Array.isArray(obj.redactDisabledRules) && obj.redactDisabledRules.every((item: unknown) => typeof item === "string")
       ? (obj.redactDisabledRules as string[])
       : DEFAULT_SETTINGS.redactDisabledRules,
+  redactProviders: (() => {
+    const rp = obj.redactProviders;
+    if (typeof rp !== "object" || rp === null) {
+      return DEFAULT_SETTINGS.redactProviders;
+    }
+    const rpObj = rp as Record<string, unknown>;
+    const result = {} as Record<Provider, boolean>;
+    for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "openrouter", "kilo", "unknown"] as Provider[]) {
+      const v = rpObj[provider];
+      result[provider] = typeof v === "boolean" ? v : true;
+    }
+    return result;
+  })(),
   encryptionAtRest:
       typeof obj.encryptionAtRest === "boolean"
         ? obj.encryptionAtRest

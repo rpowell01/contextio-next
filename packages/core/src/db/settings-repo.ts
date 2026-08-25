@@ -7,6 +7,19 @@ import { getDb } from "./connection.js";
 import type { Provider, RateLimitConfig, StreamingRetryConfig } from "../types.js";
 import fs from "node:fs";
 
+/** Default redaction configuration per provider. */
+const DEFAULT_REDACT_PROVIDERS: Record<Provider, boolean> = {
+	anthropic: true,
+	openai: true,
+	chatgpt: true,
+	gemini: true,
+	geminiCodeAssist: true,
+	vertex: true,
+	nvidia: true,
+	openrouter: true,
+	kilo: true,
+};
+
 /**
  * Get the default settings.json file path.
  * Uses SETTINGS_FILE env var or falls back to /app/custom-policy/settings.json.
@@ -50,6 +63,7 @@ export interface SettingsRow {
 	redact_disabled_rules: string | null; // JSON array of disabled rule names
 	rate_limiter: string; // JSON blob
 	streaming_retry: string; // JSON blob
+	redact_providers: string; // JSON blob
 	// Feature flags (migration 014)
 	enable_logger: number;
 	enable_redact: number;
@@ -126,6 +140,8 @@ export interface Settings {
 	detectorThreshold: number;
 	rateLimiter: Record<Provider, RateLimitConfig>;
 	streamingRetry: Record<Provider, StreamingRetryConfig>;
+	// Redaction enabled per provider (true = redact this provider)
+	redactProviders: Record<Provider, boolean>;
 	// Feature flags
 	enableLogger: boolean;
 	enableRedact: boolean;
@@ -298,6 +314,18 @@ const DEFAULT_SETTINGS: Settings = {
 	retryCleanupIntervalMs: 30000,
 	retryMaxBufferSize: 5242880,
 	retryMaxStreamRetries: 3,
+	// Redaction enabled per provider
+	redactProviders: {
+		anthropic: true,
+		openai: true,
+		chatgpt: true,
+		gemini: true,
+		geminiCodeAssist: true,
+		vertex: true,
+		nvidia: true,
+		openrouter: true,
+		kilo: true,
+	},
 	// Proxy configuration
 	proxyBindHost: "0.0.0.0",
 	proxyPort: 4040,
@@ -355,6 +383,7 @@ function rowToSettings(row: SettingsRow): Settings {
 		detectorThreshold: row.detector_threshold,
 		rateLimiter: safeJsonParse(row.rate_limiter, DEFAULT_RATE_LIMITER),
 		streamingRetry: safeJsonParse(row.streaming_retry, DEFAULT_STREAMING_RETRY),
+		redactProviders: safeJsonParse(row.redact_providers, DEFAULT_REDACT_PROVIDERS),
 		// Feature flags (migration 014)
 		enableLogger: row.enable_logger === 1,
 		enableRedact: row.enable_redact === 1,
@@ -421,6 +450,7 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		detector_threshold: merged.detectorThreshold,
 		rate_limiter: JSON.stringify(merged.rateLimiter),
 		streaming_retry: JSON.stringify(merged.streamingRetry),
+		redact_providers: JSON.stringify(merged.redactProviders),
 		// Feature flags (migration 014)
 		enable_logger: merged.enableLogger ? 1 : 0,
 		enable_redact: merged.enableRedact ? 1 : 0,
@@ -515,6 +545,7 @@ export function upsertSettings(settings: Settings): void {
 		INSERT INTO settings (
 			id, log_dir, max_sessions, redact_preset, redact_reversible, redact_policy_file,
 			redact_policy_enabled, redact_paths_only, redact_paths_skip, redact_disabled_rules,
+			redact_providers,
 			encryption_at_rest, capture_cleanup_enabled, capture_cleanup_interval_hours,
 			capture_cleanup_max_age_days, theme, oidc_enabled, oidc_public_url, oidc_issuer,
 			show_page_load_time, feedback_store_enabled, feedback_store_type, feedback_store_path,
@@ -524,10 +555,10 @@ export function upsertSettings(settings: Settings): void {
 			rate_limiter_max_entries, rate_limiter_cleanup_interval_ms, rate_limiter_entry_ttl_ms,
 			retry_max_entries, retry_entry_ttl_ms, retry_cleanup_interval_ms, retry_max_buffer_size, retry_max_stream_retries,
 			proxy_bind_host, proxy_port, proxy_allow_target_override, strict_url_forwarding,
-upstream_openrouter_url, upstream_openai_url, upstream_anthropic_url, upstream_chatgpt_url,
+			upstream_openrouter_url, upstream_openai_url, upstream_anthropic_url, upstream_chatgpt_url,
 			upstream_gemini_url, upstream_vertex_url, upstream_nvidia_url, upstream_kilo_url,
 			upstream_gemini_code_assist_url
-) VALUES (
+		) VALUES (
 			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 		ON CONFLICT(id) DO UPDATE SET
@@ -540,6 +571,7 @@ upstream_openrouter_url, upstream_openai_url, upstream_anthropic_url, upstream_c
 			redact_paths_only = excluded.redact_paths_only,
 			redact_paths_skip = excluded.redact_paths_skip,
 			redact_disabled_rules = excluded.redact_disabled_rules,
+			redact_providers = excluded.redact_providers,
 			encryption_at_rest = excluded.encryption_at_rest,
 			capture_cleanup_enabled = excluded.capture_cleanup_enabled,
 			capture_cleanup_interval_hours = excluded.capture_cleanup_interval_hours,
@@ -595,6 +627,7 @@ upstream_openrouter_url, upstream_openai_url, upstream_anthropic_url, upstream_c
 			row.redact_paths_only,
 			row.redact_paths_skip,
 			row.redact_disabled_rules,
+			row.redact_providers,
 			row.encryption_at_rest,
 			row.capture_cleanup_enabled,
 			row.capture_cleanup_interval_hours,
@@ -684,9 +717,10 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		detectorMode: { envVar: "REDACT_DETECTOR_MODE", dynamic: true },
 		detectorModelName: { envVar: "REDACT_DETECTOR_MODEL_NAME", dynamic: true },
 		detectorThreshold: { envVar: "REDACT_DETECTOR_THRESHOLD", dynamic: true },
-		rateLimiter: { envVar: "", dynamic: false },
-		streamingRetry: { envVar: "", dynamic: false },
-		// Feature flags
+	rateLimiter: { envVar: "", dynamic: false },
+	streamingRetry: { envVar: "", dynamic: false },
+	redactProviders: { envVar: "", dynamic: false },
+	// Feature flags
 		enableLogger: { envVar: "CONTEXTIO_ENABLE_LOGGER", dynamic: false },
 		enableRedact: { envVar: "CONTEXTIO_ENABLE_REDACT", dynamic: false },
 		enableRateLimiter: { envVar: "CONTEXTIO_ENABLE_RATE_LIMITER", dynamic: false },
@@ -867,6 +901,21 @@ function validateAndMergeSettings(input: unknown): Settings {
 		return result;
 	};
 
+	// Parse redactProviders
+	const parseRedactProviders = (key: string): Record<Provider, boolean> => {
+		const rp = obj[key];
+		if (typeof rp !== "object" || rp === null) {
+			return DEFAULT_REDACT_PROVIDERS;
+		}
+		const rpObj = rp as Record<string, unknown>;
+		const result = {} as Record<Provider, boolean>;
+		for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "openrouter", "kilo"] as Provider[]) {
+			const v = rpObj[provider];
+			result[provider] = typeof v === "boolean" ? v : true;
+		}
+		return result;
+	};
+
 	// Helper to parse JSON array of strings
 	const parseStringArray = (key: string, defaultVal: string[]): string[] => {
 		const v = obj[key];
@@ -921,6 +970,7 @@ function validateAndMergeSettings(input: unknown): Settings {
 		detectorThreshold: getFloat("detectorThreshold", DEFAULT_SETTINGS.detectorThreshold, 0, 1),
 		rateLimiter: parseRateLimiter("rateLimiter"),
 		streamingRetry: parseStreamingRetry("streamingRetry"),
+		redactProviders: parseRedactProviders("redactProviders"),
 		// Feature flags
 		enableLogger: getBoolean("enableLogger", DEFAULT_SETTINGS.enableLogger),
 		enableRedact: getBoolean("enableRedact", DEFAULT_SETTINGS.enableRedact),

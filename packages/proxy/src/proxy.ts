@@ -9,7 +9,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import { join } from "node:path";
 
-import type { ProxyConfig, ProxyPlugin } from "@contextio/core";
+import type { ProxyConfig, ProxyPlugin, Provider } from "@contextio/core";
 import { upsertRedactionMetadata, getSettings } from "@contextio/core/db";
 
 import { resolveConfig } from "./config.js";
@@ -116,18 +116,26 @@ export function createProxy(
        })
      );
    }
-   if (resolved.plugins.redactEnabled) {
-     effectivePlugins.push(
-       createRedactPlugin({
-         // Use preset from config or environment
-         policyFile: process.env.REDACT_POLICY_FILE || "/app/custom-policy/custom-policy.json",
-         // Enable feedback store for false positive management
-         feedbackStore: "sqlite",
-         // Disable specific redaction rules from settings
-         disabledRules: storedSettings?.redactDisabledRules ?? [],
-       })
-     );
-   }
+    if (resolved.plugins.redactEnabled) {
+      effectivePlugins.push(
+        createRedactPlugin({
+          // Use preset from config or environment
+          policyFile: process.env.REDACT_POLICY_FILE || "/app/custom-policy/custom-policy.json",
+          // Enable feedback store for false positive management
+          feedbackStore: "sqlite",
+          // Disable specific redaction rules from settings
+          disabledRules: storedSettings?.redactDisabledRules ?? [],
+          // Disable redaction for specific providers from settings
+          disabledProviders: (() => {
+            const providers = storedSettings?.redactProviders;
+            if (!providers) return undefined;
+            return Object.entries(providers)
+              .filter(([, enabled]) => !enabled)
+              .map(([provider]) => provider as Provider);
+          })(),
+        })
+      );
+    }
    if (resolved.plugins.rateLimiterEnabled) {
      effectivePlugins.push(
        createRateLimiterPlugin({

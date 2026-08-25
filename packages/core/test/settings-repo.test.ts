@@ -130,6 +130,18 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 		retryCleanupIntervalMs: 30000,
 		retryMaxBufferSize: 5242880,
 		retryMaxStreamRetries: 3,
+		// Redaction enabled per provider
+		redactProviders: {
+			anthropic: true,
+			openai: true,
+			chatgpt: true,
+			gemini: true,
+			geminiCodeAssist: true,
+			vertex: true,
+			nvidia: true,
+			openrouter: true,
+			kilo: true,
+		},
 		// Proxy configuration
 		proxyBindHost: "[IP_ADDRESS_1786835330040]",
 		proxyPort: 4040,

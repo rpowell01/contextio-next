@@ -143,6 +143,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "JSON paths where redaction should be skipped (e.g., tool call IDs, function arguments). These are checked before 'only' paths. Default includes all tool call and structured data paths to prevent NER false positives. Changes apply dynamically per request.",
   redactDisabledRules:
     "List of redaction rule IDs to disable. Use this to selectively disable specific redaction types (e.g., URL, ORGANIZATION) while keeping others active. Changes apply dynamically per request.",
+  redactProviders:
+    "Enable or disable PII/secrets redaction per provider. When a provider is disabled, traffic for that provider passes through unredacted. Requires a proxy restart to apply.",
   encryptionAtRest:
     "Encrypt captured API traffic files at rest using AES-256. Requires a proxy restart to apply.",
   captureCleanupEnabled:
@@ -639,6 +641,18 @@ export default function SettingsPage() {
       nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
       openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
       kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    },
+    // Redaction enabled per provider
+    redactProviders: {
+      anthropic: true,
+      openai: true,
+      chatgpt: true,
+      gemini: true,
+      geminiCodeAssist: true,
+      vertex: true,
+      nvidia: true,
+      openrouter: true,
+      kilo: true,
     },
     // Feature flags
     enableLogger: true,
@@ -1548,6 +1562,16 @@ export default function SettingsPage() {
     }));
   };
 
+  const updateRedactProviders = (provider: Provider, enabled: boolean) => {
+    setSettings((prev) => ({
+      ...prev,
+      redactProviders: {
+        ...prev.redactProviders,
+        [provider]: enabled,
+      },
+    }));
+  };
+
   const handleCleanupAll = async () => {
     setIsCleaning(true);
     try {
@@ -2232,6 +2256,68 @@ export default function SettingsPage() {
             <SettingHelp meta={getMeta("enableRedact")} description={SETTING_DESCRIPTIONS.enableRedact} />
           </div>
         );
+      case "redactProviders": {
+        const providers: Provider[] = [
+          "anthropic",
+          "openai",
+          "chatgpt",
+          "gemini",
+          "vertex",
+          "nvidia",
+          "openrouter",
+          "kilo",
+        ];
+        return (
+          <div className="space-y-4">
+            <h3 className="font-semibold mb-2">Per-Provider Redaction</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Enable or disable PII/secrets redaction for each provider individually.
+              When disabled, traffic for that provider passes through unredacted.
+            </p>
+            <SettingHelp
+              meta={getMeta("redactProviders")}
+              description={SETTING_DESCRIPTIONS.redactProviders}
+            />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border rounded">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Provider</th>
+                    <th className="px-3 py-2 text-left font-medium">Redact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {providers.map((provider) => {
+                    const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1);
+                    const rowId = `redact-${provider}`;
+                    const enabled = settings.redactProviders?.[provider] ?? true;
+                    return (
+                      <tr key={provider} className="border-t">
+                        <td className="px-3 py-2 font-medium">{providerLabel}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              id={rowId}
+                              type="checkbox"
+                              checked={enabled}
+                              onChange={(e) => updateRedactProviders(provider, e.target.checked)}
+                              disabled={isSettingOverridden("redactProviders")}
+                              className="w-4 h-4"
+                            />
+                            <Label htmlFor={rowId} className="text-sm">
+                              {enabled ? "Enabled" : "Disabled"}
+                            </Label>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
       case "enableRateLimiter":
         return (
           <div className="flex items-center gap-2">
