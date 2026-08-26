@@ -931,6 +931,12 @@ export default function SettingsPage() {
             <h3 className="font-semibold mb-4">Redaction</h3>
             <div className="space-y-4">
               {renderSetting("enableRedact")}
+
+              {/* Per-Provider Redaction */}
+              <div className="pt-2 border-t">
+                {renderSetting("redactProviders")}
+              </div>
+
               {renderSetting("redactPreset")}
               {renderSetting("redactReversible")}
               {renderSetting("redactPolicyFile")}
@@ -964,11 +970,6 @@ export default function SettingsPage() {
                   preset={settings.redactPreset}
                   hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
                 />
-              </div>
-
-              {/* Per-Provider Redaction */}
-              <div className="pt-2 border-t">
-                {renderSetting("redactProviders")}
               </div>
 
               {/* Detector mode capabilities & warnings */}
@@ -2272,6 +2273,7 @@ export default function SettingsPage() {
           "openrouter",
           "kilo",
         ];
+        const redactDisabled = !settings.enableRedact;
         return (
           <div className="space-y-4">
             <h3 className="font-semibold mb-2">Per-Provider Redaction</h3>
@@ -2279,6 +2281,12 @@ export default function SettingsPage() {
               Enable or disable PII/secrets redaction for each provider individually.
               When disabled, traffic for that provider passes through unredacted.
             </p>
+            {redactDisabled && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                Per-provider redaction is unavailable because global redaction is disabled.
+                Enable <strong>PII/Secrets Redaction</strong> above to configure provider-level redaction.
+              </div>
+            )}
             <SettingHelp
               meta={getMeta("redactProviders")}
               description={SETTING_DESCRIPTIONS.redactProviders}
@@ -2296,6 +2304,7 @@ export default function SettingsPage() {
                     const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1);
                     const rowId = `redact-${provider}`;
                     const enabled = settings.redactProviders?.[provider] ?? true;
+                    const checkboxDisabled = isSettingOverridden("redactProviders") || redactDisabled;
                     return (
                       <tr key={provider} className="border-t">
                         <td className="px-3 py-2 font-medium">{providerLabel}</td>
@@ -2306,7 +2315,7 @@ export default function SettingsPage() {
                               type="checkbox"
                               checked={enabled}
                               onChange={(e) => updateRedactProviders(provider, e.target.checked)}
-                              disabled={isSettingOverridden("redactProviders")}
+                              disabled={checkboxDisabled}
                               className="w-4 h-4"
                             />
                             <Label htmlFor={rowId} className="text-sm">
