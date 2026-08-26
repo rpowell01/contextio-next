@@ -908,11 +908,16 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
 
     // Skip redaction if the provider is in the disabled list
     if (disabledProviders && ctx.provider && disabledProviders.includes(ctx.provider as Provider)) {
-      if (verbose) {
+      if (verbose || process.env.REDACT_DEBUG === "true") {
         const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
         console.error(`[redact]${sid} Skipping redaction for disabled provider: ${ctx.provider}`);
       }
       return ctx;
+    }
+
+    if (process.env.REDACT_DEBUG === "true") {
+      const sid = ctx.sessionId ? ` [${ctx.sessionId}]` : "";
+      console.error(`[redact]${sid} Provider check: ctx.provider="${ctx.provider}", disabledProviders=${JSON.stringify(disabledProviders)}, match=${disabledProviders?.includes(ctx.provider as Provider)}`);
     }
 
     const map = reversible ? getSession(ctx.sessionId).map : null;

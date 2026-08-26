@@ -132,10 +132,20 @@ const config: RedactPluginConfig = {
 		// Compute disabled providers from per-provider redact toggle
 		disabledProviders: (() => {
 			const providers = settings.redactProviders;
-			if (!providers) return undefined;
-			return Object.entries(providers)
+			if (!providers) {
+				if (process.env.REDACT_DEBUG === "true") {
+					console.error("[redact-factory] No redactProviders in settings, using defaults");
+				}
+				return undefined;
+			}
+			const disabled = Object.entries(providers)
 				.filter(([, enabled]) => !enabled)
 				.map(([provider]) => provider as Provider);
+			if (process.env.REDACT_DEBUG === "true") {
+				console.error(`[redact-factory] redactProviders from settings: ${JSON.stringify(providers)}`);
+				console.error(`[redact-factory] Computed disabledProviders: ${JSON.stringify(disabled)}`);
+			}
+			return disabled.length > 0 ? disabled : undefined;
 		})(),
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
 			// Only persist redaction metadata when the capture session metadata is fully populated.
