@@ -110,7 +110,6 @@ export interface RedactionMetaWatcher {
 // ---------------------------------------------------------------------------
 
 const PLACEHOLDER_REGEX = /\[([A-Z][A-Z0-9_]*)_REDACTED\]/g;
-const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/g;
 
 /**
  * Validate that the matches array in a meta file has the expected format.
@@ -161,28 +160,19 @@ function extractRedactionMatches(rawData: unknown): Array<RedactionMatch> {
   const rawCapture = (rawData ?? null) as Record<string, unknown> | null;
   const matches: Array<RedactionMatch> = [];
 
-  // Helper to extract matches from a string value
+// Helper to extract matches from a string value
   function extractFromString(text: string, path: string): void {
     PLACEHOLDER_REGEX.lastIndex = 0;
     let m: RegExpExecArray | null;
   while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
-    const ruleId = (m[1] ?? "unknown").toLowerCase();
-    matches.push({
-      ruleId,
-      original: text,
-      placeholder: m[0],
-      path,
-    });
-  }
-  SSN_REGEX.lastIndex = 0;
-  while ((m = SSN_REGEX.exec(text)) !== null) {
-    matches.push({
-      ruleId: "ssn",
-      original: text,
-      placeholder: m[0],
-      path,
-    });
-  }
+      const ruleId = (m[1] ?? "unknown").toLowerCase();
+      matches.push({
+        ruleId,
+        original: text,
+        placeholder: m[0],
+        path,
+      });
+    }
   }
 
   // Collect all string values and their paths
@@ -255,11 +245,6 @@ function computeCaptureRedactionCounts(rawData: unknown): {
     while ((m = PLACEHOLDER_REGEX.exec(text)) !== null) {
       const rule = (m[1] ?? "unknown").toLowerCase();
       byRule[rule] = (byRule[rule] ?? 0) + 1;
-      total++;
-    }
-    SSN_REGEX.lastIndex = 0;
-    while ((m = SSN_REGEX.exec(text)) !== null) {
-      byRule["ssn"] = (byRule["ssn"] ?? 0) + 1;
       total++;
     }
   }
