@@ -612,6 +612,10 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
   const sessionTtlMs = config?.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
   const disabledProviders = config?.disabledProviders;
 
+  if (process.env.REDACT_DEBUG === "true") {
+    console.error(`[redact] Plugin created with disabledProviders=${JSON.stringify(disabledProviders)}, preset=${config?.preset}, reversible=${reversible}`);
+  }
+
   // Per-session state (only used in reversible mode)
   const sessions = new Map<string, SessionState>();
   let lastEviction = Date.now();

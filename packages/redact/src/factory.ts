@@ -44,6 +44,9 @@ async function readWebUISettings(): Promise<WebUISettings> {
 	try {
 		const dbSettings = getSettings();
 		if (dbSettings) {
+			if (process.env.REDACT_DEBUG === "true") {
+				console.error(`[redact-factory] Loaded settings from database: redactProviders=${JSON.stringify(dbSettings.redactProviders)}`);
+			}
 			return {
 				redactPreset: dbSettings.redactPreset,
 				redactReversible: dbSettings.redactReversible,
@@ -61,6 +64,9 @@ async function readWebUISettings(): Promise<WebUISettings> {
 				feedbackStorePath: dbSettings.feedbackStorePath,
 			};
 		}
+		if (process.env.REDACT_DEBUG === "true") {
+			console.error(`[redact-factory] getSettings() returned null, falling back to JSON file`);
+		}
 	} catch (err) {
 		console.log(`[redact-factory] failed to read settings from database, falling back to JSON file: ${err instanceof Error ? err.message : String(err)}`);
 	}
@@ -71,6 +77,9 @@ async function readWebUISettings(): Promise<WebUISettings> {
 	try {
 		const data = fs.readFileSync(WEB_UI_SETTINGS_PATH, "utf8");
 		const parsed = JSON.parse(data);
+		if (process.env.REDACT_DEBUG === "true") {
+			console.error(`[redact-factory] Loaded settings from JSON file: redactProviders=${JSON.stringify(parsed.redactProviders)}`);
+		}
 		return {
 			redactPreset: parsed.redactPreset,
 			redactReversible: parsed.redactReversible,
@@ -88,6 +97,9 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			feedbackStorePath: parsed.feedbackStorePath,
 		};
 	} catch {
+		if (process.env.REDACT_DEBUG === "true") {
+			console.error(`[redact-factory] Failed to load settings from JSON file, using empty settings`);
+		}
 		return {};
 	}
 }
