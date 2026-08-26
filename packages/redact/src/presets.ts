@@ -75,12 +75,12 @@ const SECRETS_RULES: RedactionRule[] = [
  {
   name: "authorization-header",
   pattern:
-  /authorization\s*:\s*bearer\s+["']?(?<!\[)[a-zA-Z0-9._\-+/=]{20,}["']?/gi,
+  /\bauthorization\s*:\s*bearer\s+["']?(?<!\[)[a-zA-Z0-9._\-+/=]{20,}["']?/gi,
   replacement: "[AUTH_HEADER_REDACTED]",
 },
  {
   name: "bearer-token",
-  pattern: /(?:^|\s)bearer\s+([a-zA-Z0-9._\-+/=]{20,})/gi,
+  pattern: /\bbearer\s+([a-zA-Z0-9._\-+/=]{20,})/gi,
   replacement: "[BEARER_TOKEN_REDACTED]",
 },
   // Broader prefix-based catch-all (sk-, pk-, api-, key-, token- prefixed values)
@@ -99,7 +99,7 @@ const SECRETS_RULES: RedactionRule[] = [
 const PII_RULES: RedactionRule[] = [
   {
     name: "email",
-    pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+    pattern: /(?<!\w)[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?!\w)/g,
     replacement: "[EMAIL_REDACTED]",
   },
   {
@@ -136,7 +136,7 @@ const PII_RULES: RedactionRule[] = [
   {
     name: "phone-us",
     pattern:
-      /(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?[2-9]\d{2}[-.\s]?\d{4}\b/g,
+      /\b(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?[2-9]\d{2}[-.\s]?\d{4}\b/g,
     replacement: "[PHONE_REDACTED]",
     context: [
       "phone",
@@ -153,7 +153,7 @@ const PII_RULES: RedactionRule[] = [
   {
     name: "phone-eu",
     pattern:
-      /\+(?:31|32|33|34|39|41|43|44|45|46|47|48|49)[\s\-\.]?(?:\d[\s\-\.]?){8,11}\b/g,
+      /(?:^|\s)\+(?:31|32|33|34|39|41|43|44|45|46|47|48|49)[\s\-\.]?(?:\d[\s\-\.]?){8,11}\b/g,
     replacement: "[PHONE_REDACTED]",
     context: [
       "phone",
@@ -170,7 +170,7 @@ const PII_RULES: RedactionRule[] = [
   {
     name: "iban",
     pattern:
-      /\b[A-Z]{2}\d{2}(?:[\s]?[A-Z0-9]){11,26}\b/g,
+      /(?<!\w)[A-Z]{2}\d{2}(?:[\s]?[A-Z0-9]){11,26}(?!\w)/g,
     replacement: "[IBAN_REDACTED]",
     context: [
       "iban",
@@ -237,7 +237,7 @@ const STRICT_RULES: RedactionRule[] = [
   },
   {
     name: "ni-number-uk",
-    pattern: /\b[A-CEGHJ-PR-TW-Z]{2}[\s]?\d{2}[\s]?\d{2}[\s]?\d{2}[\s]?[A-D\s]\b/g,
+    pattern: /(?<!\w)[A-CEGHJ-PR-TW-Z]{2}[\s]?\d{2}[\s]?\d{2}[\s]?\d{2}[\s]?[A-D\s](?!\w)/g,
     replacement: "[NI_NUMBER_REDACTED]",
     context: [
       "ni number",
@@ -252,7 +252,7 @@ const STRICT_RULES: RedactionRule[] = [
   },
   {
     name: "passport-number",
-    pattern: /\b[A-Z]{1,2}\d{6,9}\b/g,
+    pattern: /(?<!\w)[A-Z]{1,2}\d{6,9}(?!\w)/g,
     replacement: "[PASSPORT_REDACTED]",
     context: [
       "passport",

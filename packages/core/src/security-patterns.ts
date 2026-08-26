@@ -398,14 +398,14 @@ export const CREDENTIAL_PATTERNS: CredentialPattern[] = [
     id: "credential_bearer_token",
     label: "Bearer token in Authorization header",
     // Matches "Bearer <token>" patterns in headers
-    pattern: /(?:^|\s)bearer\s+([a-zA-Z0-9._\-+/=]{20,})/i,
+    pattern: /\bbearer\s+([a-zA-Z0-9._\-+/=]{20,})/i,
   },
 
   {
     id: "credential_authorization_header",
     label: "Authorization header value",
     // Matches various Authorization header formats (Basic, Bearer, APIKey, etc.)
-    pattern: /(?:authorization|api-?key|x-api-?key)\s*[:=]\s*["']?([a-zA-Z0-9._\-+/=]{20,})["']?/i,
+    pattern: /\b(?:authorization|api-?key|x-api-?key)\s*[:=]\s*["']?([a-zA-Z0-9._\-+/=]{20,})["']?/i,
   },
 
   {
