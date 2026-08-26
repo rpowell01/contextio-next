@@ -76,8 +76,6 @@ ENV NODE_ENV=production
 ENV CONTEXT_PROXY_BIND_HOST=0.0.0.0
 ENV CONTEXT_PROXY_PORT=4040
 ENV CONTEXT_PROXY_PLUGINS=/app/redact-plugin.js,/app/logger-plugin.js
-ENV LOG_TRAFFIC=false
-ENV DEBUG_ROUTING=false
 ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
 ENV NEXT_CACHE_DIR=/app/captures/.next/cache
@@ -88,9 +86,9 @@ ENV NODE_OPTIONS="--expose-gc --max-old-space-size=1536"
 
 LABEL org.opencontainers.image.title="contextio-next"
 LABEL org.opencontainers.image.description="LLM API proxy with redaction, logging, and web UI. Zero external dependencies."
-LABEL org.opencontainers.image.url="https://github.com/larsderidder/contextio-next"
-LABEL org.opencontainers.image.source="https://github.com/larsderidder/contextio-next"
-LABEL org.opencontainers.image.vendor="Lars de Ridder"
+LABEL org.opencontainers.image.url="https://github.com/rpowell01/contextio-next"
+LABEL org.opencontainers.image.source="https://github.com/rpowell01/contextio-next"
+LABEL org.opencontainers.image.vendor="Russell Powell"
 LABEL org.opencontainers.image.licenses="MIT"
 
 # Enable corepack for pnpm in runtime
