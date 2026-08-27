@@ -251,13 +251,27 @@ const config: RedactPluginConfig = {
 
 /** Factory function for redact plugin (enabled via CONTEXTIO_ENABLE_REDACT env var). */
 export default async function createRedactPluginFactory(): Promise<RedactPlugin | null> {
+	if (process.env.REDACT_DEBUG === "true") {
+		console.error(`[redact-factory-debug] Factory called, CONTEXTIO_ENABLE_REDACT=${process.env.CONTEXTIO_ENABLE_REDACT}`);
+	}
 	// Check if redact is explicitly disabled via env var
 	const redactEnabled = process.env.CONTEXTIO_ENABLE_REDACT !== "false";
 	if (!redactEnabled) {
+		if (process.env.REDACT_DEBUG === "true") {
+			console.error(`[redact-factory-debug] Redact disabled via env var`);
+		}
 		return null;
 	}
 	const config = await buildRedactConfig();
-	if (!config) return null;
+	if (!config) {
+		if (process.env.REDACT_DEBUG === "true") {
+			console.error(`[redact-factory-debug] No config returned from buildRedactConfig`);
+		}
+		return null;
+	}
+	if (process.env.REDACT_DEBUG === "true") {
+		console.error(`[redact-factory-debug] Creating redact plugin with config.detectorConfig.llmLabels=${JSON.stringify(config.detectorConfig?.llmLabels)}`);
+	}
 	return createRedactPlugin(config);
 }
 
