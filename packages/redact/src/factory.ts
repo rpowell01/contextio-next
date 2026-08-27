@@ -111,6 +111,11 @@ async function readWebUISettings(): Promise<WebUISettings> {
 async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 	const settings = await readWebUISettings();
 
+	// DEBUG: Log detectorLabels from settings
+	if (process.env.REDACT_DEBUG === "true") {
+		console.error(`[redact-factory-debug] settings.detectorLabels =`, JSON.stringify(settings.detectorLabels));
+	}
+
 	// Check if redaction is enabled via env or settings
 	const redactEnabled =
 		process.env.CONTEXTIO_ENABLE_REDACT !== "false" || settings.redactPreset !== undefined;
