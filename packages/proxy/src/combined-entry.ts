@@ -16,12 +16,12 @@
  * - Retry plugin is enabled when rate limiter is enabled
  */
 
-import type { EncryptionAtRestConfig, ProxyPlugin } from "@contextio/core";
+import type { EncryptionAtRestConfig, ProxyPlugin, Provider } from "@contextio/core";
 import { createRateLimiterPlugin } from "./rate-limiter.js";
 import { createRetryPlugin } from "./retry-plugin.js";
 import { resolveConfig } from "./config.js";
 import { createCombinedProxy } from "./combined-server.js";
-import { initDb } from "@contextio/core/db";
+import { initDb, getSettings } from "@contextio/core/db";
 import { decrypt } from "@contextio/logger";
 import { createLoggerPlugin } from "@contextio/logger";
 
@@ -121,14 +121,43 @@ async function main(): Promise<void> {
 	// Load redact plugin if enabled
 	if (redactEnabled) {
 		try {
+			// Load settings from database for redact plugin config
+			const storedSettings = getSettings();
+			
 			// Import redact factory directly (standard path)
 			const redactModule = await import("@contextio/redact/factory");
 			const redactFactory = redactModule.default ?? redactModule.createRedactPluginFactory ?? redactModule;
 			if (typeof redactFactory === "function") {
-				const redactPlugin = await redactFactory();
+				const redactPlugin = await redactFactory({
+					policyFile: process.env.REDACT_POLICY_FILE || "/app/custom-policy/custom-policy.json",
+					feedbackStore: "sqlite",
+					disabledRules: storedSettings?.redactDisabledRules ?? [],
+					disabledProviders: (() => {
+						const providers = storedSettings?.redactProviders;
+						if (!providers) return undefined;
+						return Object.entries(providers)
+							.filter(([, enabled]) => !enabled)
+							.map(([provider]) => provider as Provider);
+					})(),
+					detectorConfig: {
+						llmLabels: storedSettings?.detectorLabels ?? [
+							"PERSON",
+							"ORGANIZATION",
+							"LOCATION",
+							"EMAIL_ADDRESS",
+							"PHONE_NUMBER",
+							"CREDIT_CARD",
+							"US_SSN",
+							"IP_ADDRESS",
+							"URL",
+							"DATE_TIME",
+						],
+						llmThreshold: storedSettings?.detectorThreshold ?? 0.5,
+					},
+				});
 				if (redactPlugin) {
 					plugins.push(redactPlugin);
-					console.log("Loaded plugin: redact (from @contextio/redact/factory)");
+					console.log("Loaded plugin: redact (from @contextio/redact/factory with settings)");
 				} else {
 					console.log("Redact plugin disabled (no configuration found)");
 				}
