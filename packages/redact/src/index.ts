@@ -405,7 +405,19 @@ async function redactWithDetector(
   // Temporary debug logging (enabled via REDACT_DEBUG=true)
   const DEBUG_REDACT = process.env.REDACT_DEBUG === "true";
   const pathStr = currentPath.join(".");
+
+  // DEBUG: Log top-level keys on first call
+  if (currentPath.length === 0 && DEBUG_REDACT) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      console.error(`[redact-debug] Top-level keys:`, Object.keys(value as Record<string, unknown>));
+    }
+  }
   
+  // DEBUG: Log path being visited
+  if (DEBUG_REDACT && currentPath.length > 0) {
+    console.error(`[redact-debug] Visiting path: ${currentPath.join(".")}`);
+  }
+
   if (typeof value === "string") {
     // Check path filtering
     if (policy.paths.only !== null || policy.paths.skip.length > 0) {

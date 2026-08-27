@@ -352,6 +352,18 @@ export async function redactWithPolicy(
   map: ReplacementMap | null = null,
   feedbackStore: FeedbackStore | null = null,
 ): Promise<unknown> {
+  // DEBUG: Log top-level keys on first call
+  if (currentPath.length === 0 && process.env.REDACT_DEBUG === "true") {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      console.error(`[redact-debug] Top-level keys:`, Object.keys(value as Record<string, unknown>));
+    }
+  }
+
+  // DEBUG: Log path being visited
+  if (process.env.REDACT_DEBUG === "true" && currentPath.length > 0) {
+    console.error(`[redact-debug] Visiting path: ${currentPath.join(".")}`);
+  }
+
   if (typeof value === "string") {
     if (policy.paths.only !== null || policy.paths.skip.length > 0) {
       if (!shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip)) {
