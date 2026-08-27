@@ -784,74 +784,80 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
         const disabledRules = config?.disabledRules ?? [];
         const disabledEntityTypes = getPresidioEntityTypesFromDisabledRules(disabledRules);
 
-        // Compute effective labels for Presidio: explicit config labels minus covered types
-        // If user explicitly specifies llmLabels, respect that but still filter covered types.
-        // If no explicit labels, Presidio will use all supported types minus covered types.
-        function computePresidioLabels(explicitLabels?: string[]): string[] | undefined {
-          // Get all supported Presidio entity type labels
-          const allSupportedLabels = [
-            EntityType.PERSON,
-            EntityType.LOCATION,
-            EntityType.ORGANIZATION,
-            EntityType.EMAIL_ADDRESS,
-            EntityType.PHONE_NUMBER,
-            EntityType.CREDIT_CARD,
-            EntityType.US_SSN,
-            EntityType.IP_ADDRESS,
-            EntityType.URL,
-            EntityType.DATE_TIME,
-          ];
+// Compute effective labels for Presidio: explicit config labels minus covered types
+		// If user explicitly specifies llmLabels, respect that but still filter covered types.
+		// If no explicit labels, Presidio will use all supported types minus covered types.
+		// In "llm" mode, don't filter out labels since there's no rule-based detector running.
+		function computePresidioLabels(explicitLabels?: string[], mode?: string): string[] | undefined {
+		  // Get all supported Presidio entity type labels
+		  const allSupportedLabels = [
+		    EntityType.PERSON,
+		    EntityType.LOCATION,
+		    EntityType.ORGANIZATION,
+		    EntityType.EMAIL_ADDRESS,
+		    EntityType.PHONE_NUMBER,
+		    EntityType.CREDIT_CARD,
+		    EntityType.US_SSN,
+		    EntityType.IP_ADDRESS,
+		    EntityType.URL,
+		    EntityType.DATE_TIME,
+		  ];
 
-          // Start with explicit labels or all supported
-          const labelsToUse = explicitLabels && explicitLabels.length > 0
-            ? explicitLabels
-            : allSupportedLabels;
+		  // Start with explicit labels or all supported
+		  const labelsToUse = explicitLabels && explicitLabels.length > 0
+		    ? explicitLabels
+		    : allSupportedLabels;
 
-          // Filter out covered entity types (but only if user didn't explicitly request them)
-          // Map entity types to their string labels for comparison
-          const entityTypeToLabel: Record<EntityType, string> = {
-            [EntityType.PERSON]: "PERSON",
-            [EntityType.LOCATION]: "LOCATION",
-            [EntityType.ORGANIZATION]: "ORGANIZATION",
-            [EntityType.EMAIL_ADDRESS]: "EMAIL_ADDRESS",
-            [EntityType.PHONE_NUMBER]: "PHONE_NUMBER",
-            [EntityType.CREDIT_CARD]: "CREDIT_CARD",
-            [EntityType.US_SSN]: "US_SSN",
-            [EntityType.IP_ADDRESS]: "IP_ADDRESS",
-            [EntityType.URL]: "URL",
-            [EntityType.DATE_TIME]: "DATE_TIME",
-          };
+		  // In LLM-only mode, don't filter out labels since there's no rule-based detector
+		  if (mode === "llm") {
+		    return labelsToUse;
+		  }
 
-          const coveredLabels = new Set<string>();
-          for (const et of coveredEntityTypes) {
-            coveredLabels.add(entityTypeToLabel[et]);
-          }
-          // Also add entity types from disabled rules
-          for (const et of disabledEntityTypes) {
-            coveredLabels.add(entityTypeToLabel[et]);
-          }
-          // Also add common aliases that Presidio might use
-          const aliasMap: Record<string, string> = {
-            "EMAIL": "EMAIL_ADDRESS",
-            "PHONE": "PHONE_NUMBER",
-            "SSN": "US_SSN",
-            "IP": "IP_ADDRESS",
-            "DATE": "DATE_TIME",
-            "DATETIME": "DATE_TIME",
-          };
-          for (const [alias, canonical] of Object.entries(aliasMap)) {
-            if (coveredLabels.has(canonical)) {
-              coveredLabels.add(alias);
-            }
-          }
+		  // Filter out covered entity types (but only if user didn't explicitly request them)
+		  // Map entity types to their string labels for comparison
+		  const entityTypeToLabel: Record<EntityType, string> = {
+		    [EntityType.PERSON]: "PERSON",
+		    [EntityType.LOCATION]: "LOCATION",
+		    [EntityType.ORGANIZATION]: "ORGANIZATION",
+		    [EntityType.EMAIL_ADDRESS]: "EMAIL_ADDRESS",
+		    [EntityType.PHONE_NUMBER]: "PHONE_NUMBER",
+		    [EntityType.CREDIT_CARD]: "CREDIT_CARD",
+		    [EntityType.US_SSN]: "US_SSN",
+		    [EntityType.IP_ADDRESS]: "IP_ADDRESS",
+		    [EntityType.URL]: "URL",
+		    [EntityType.DATE_TIME]: "DATE_TIME",
+		  };
 
-          const filtered = labelsToUse.filter((label) => !coveredLabels.has(label.toUpperCase()));
-          if (verbose && filtered.length < labelsToUse.length) {
-            const removed = labelsToUse.filter((label) => coveredLabels.has(label.toUpperCase()));
-            console.error(`[redact] Disabled Presidio recognizers (covered by policy rules or disabled in settings): ${removed.join(", ")}`);
-          }
-          return filtered.length > 0 ? filtered : undefined;
-        }
+		  const coveredLabels = new Set<string>();
+		  for (const et of coveredEntityTypes) {
+		    coveredLabels.add(entityTypeToLabel[et]);
+		  }
+		  // Also add entity types from disabled rules
+		  for (const et of disabledEntityTypes) {
+		    coveredLabels.add(entityTypeToLabel[et]);
+		  }
+		  // Also add common aliases that Presidio might use
+		  const aliasMap: Record<string, string> = {
+		    "EMAIL": "EMAIL_ADDRESS",
+		    "PHONE": "PHONE_NUMBER",
+		    "SSN": "US_SSN",
+		    "IP": "IP_ADDRESS",
+		    "DATE": "DATE_TIME",
+		    "DATETIME": "DATE_TIME",
+		  };
+		  for (const [alias, canonical] of Object.entries(aliasMap)) {
+		    if (coveredLabels.has(canonical)) {
+		      coveredLabels.add(alias);
+		    }
+		  }
+
+		  const filtered = labelsToUse.filter((label) => !coveredLabels.has(label.toUpperCase()));
+		  if (verbose && filtered.length < labelsToUse.length) {
+		    const removed = labelsToUse.filter((label) => coveredLabels.has(label.toUpperCase()));
+		    console.error(`[redact] Disabled Presidio recognizers (covered by policy rules or disabled in settings): ${removed.join(", ")}`);
+		  }
+		  return filtered.length > 0 ? filtered : undefined;
+		}
 
         let pipeline: Detector;
 
@@ -859,7 +865,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
           // LLM-only mode: use Presidio TS detector
           const presidioConfig = detectorConfig as RedactDetectorConfig;
           const modelName = presidioConfig.modelName ?? "Xenova/bert-base-NER";
-          const presidioLabels = computePresidioLabels(presidioConfig.llmLabels);
+          const presidioLabels = computePresidioLabels(presidioConfig.llmLabels, detectorMode);
           const llmDetector = await createPresidioTsDetector({
             name: "presidio-ts",
             modelName,
@@ -878,7 +884,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
           const presidioConfig = detectorConfig as RedactDetectorConfig;
           let llmDetector: Detector | null = null;
           const modelName = presidioConfig.modelName ?? "Xenova/bert-base-NER";
-          const presidioLabels = computePresidioLabels(presidioConfig.llmLabels);
+          const presidioLabels = computePresidioLabels(presidioConfig.llmLabels, detectorMode);
           llmDetector = await createPresidioTsDetector({
             name: "presidio-ts",
             modelName,
