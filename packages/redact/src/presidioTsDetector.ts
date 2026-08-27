@@ -314,6 +314,12 @@ export class PresidioTsDetector implements Detector {
       entityTypes = mappedTypes
         .filter((m): m is { label: string; entityType: EntityType } => m.entityType !== null)
         .map((m) => m.entityType);
+      
+      // DEBUG: Log mapped entity types
+      if (process.env.REDACT_DEBUG === "true") {
+        console.error(`[presidio-ts-debug] Config labels:`, finalConfig.labels);
+        console.error(`[presidio-ts-debug] Mapped entityTypes:`, entityTypes?.map(e => PresidioTsDetector.ENTITY_LABEL_MAP[e]).join(",") || "none");
+      }
     }
 
     // Run analysis
