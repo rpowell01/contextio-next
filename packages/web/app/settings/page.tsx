@@ -286,11 +286,13 @@ function DetectorModeWarnings({
   detectorMode,
   detectorModelName,
   detectorThreshold,
+  detectorLabels,
   hasCustomPolicy,
 }: {
   detectorMode: "rules" | "llm" | "hybrid" | "auto";
   detectorModelName: string;
   detectorThreshold: number;
+  detectorLabels: string[];
   hasCustomPolicy: boolean;
 }) {
   const warnings: Array<{ title: string; description: string; type: "info" | "warning" | "success" }> = [];
@@ -307,6 +309,13 @@ function DetectorModeWarnings({
       description: "Only semantic PII detection via transformers.js (NER) is active. Custom regex rules from presets/policy file are ignored. Path filtering (only/skip) is still applied. Context-gated rules will not run.",
       type: "warning",
     });
+    if (detectorLabels.length > 0) {
+      warnings.push({
+        title: "Active LLM Entity Labels",
+        description: `The LLM detector will identify: ${detectorLabels.join(", ")}`,
+        type: "info",
+      });
+    }
     if (hasCustomPolicy) {
       warnings.push({
         title: "Custom Policy File Detected",
@@ -991,6 +1000,7 @@ export default function SettingsPage() {
                 detectorMode={settings.detectorMode}
                 detectorModelName={settings.detectorModelName}
                 detectorThreshold={settings.detectorThreshold}
+                detectorLabels={settings.detectorLabels}
                 hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
               />
 
@@ -1000,6 +1010,7 @@ export default function SettingsPage() {
                   {renderSetting("detectorMode")}
                   {renderSetting("detectorModelName")}
                   {renderSetting("detectorThreshold")}
+                  {renderSetting("detectorLabels")}
                 </div>
               </div>
             </div>
@@ -2222,6 +2233,50 @@ export default function SettingsPage() {
             <SettingHelp
               meta={getMeta("detectorThreshold")}
               description={SETTING_DESCRIPTIONS.detectorThreshold}
+            />
+          </div>
+        );
+      case "detectorLabels":
+        return (
+          <div>
+            <Label htmlFor="detectorLabels" className="block text-sm font-medium mb-2">
+              Detector Entity Labels
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  "PERSON",
+                  "ORGANIZATION",
+                  "LOCATION",
+                  "EMAIL_ADDRESS",
+                  "PHONE_NUMBER",
+                  "CREDIT_CARD",
+                  "US_SSN",
+                  "IP_ADDRESS",
+                  "URL",
+                  "DATE_TIME",
+                ] as const
+              ).map((label) => (
+                <label key={label} className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={settings.detectorLabels.includes(label)}
+                    onChange={(e) => {
+                      const newLabels = e.target.checked
+                        ? [...settings.detectorLabels, label]
+                        : settings.detectorLabels.filter((l) => l !== label);
+                      updateSetting("detectorLabels", newLabels);
+                    }}
+                    disabled={isSettingOverridden("detectorLabels")}
+                    className="w-4 h-4 rounded border-input"
+                  />
+                  <span className="text-sm">{label}</span>
+                </label>
+              ))}
+            </div>
+            <SettingHelp
+              meta={getMeta("detectorLabels")}
+              description={SETTING_DESCRIPTIONS.detectorLabels}
             />
           </div>
         );
