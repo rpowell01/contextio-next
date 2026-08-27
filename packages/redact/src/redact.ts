@@ -409,11 +409,6 @@ export async function redactWithPolicy(
     }
   }
 
-  // DEBUG: Log path being visited
-  if (process.env.REDACT_DEBUG === "true" && currentPath.length > 0) {
-    console.error(`[redact-debug] Visiting path: ${currentPath.join(".")}`);
-  }
-
   if (typeof value === "string") {
     if (policy.paths.only !== null || policy.paths.skip.length > 0) {
       if (!shouldRedactPath(currentPath, policy.paths.only, policy.paths.skip)) {

@@ -412,11 +412,6 @@ async function redactWithDetector(
       console.error(`[redact-debug] Top-level keys:`, Object.keys(value as Record<string, unknown>));
     }
   }
-  
-  // DEBUG: Log path being visited
-  if (DEBUG_REDACT && currentPath.length > 0) {
-    console.error(`[redact-debug] Visiting path: ${currentPath.join(".")}`);
-  }
 
   // Check if this path should be skipped entirely (before any traversal)
   if (currentPath.length > 0 && (policy.paths.only !== null || policy.paths.skip.length > 0)) {
