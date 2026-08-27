@@ -219,6 +219,19 @@ export function pathMatches(segments: string[], matcher: string[]): boolean {
   return true;
 }
 
+/**
+ * Check if a path is a prefix of any matcher (for traversal decisions).
+ * e.g., path=["messages"] is a prefix of matcher=["messages", "*", "content"]
+ */
+function pathIsPrefixOfMatcher(path: string[], matcher: string[]): boolean {
+  if (path.length >= matcher.length) return false;
+  for (let i = 0; i < path.length; i++) {
+    if (matcher[i] === "*") continue;
+    if (path[i] !== matcher[i]) return false;
+  }
+  return true;
+}
+
 export function shouldSkipPath(
   path: string[],
   onlyMatchers: { segments: string[] }[] | null,
@@ -228,16 +241,20 @@ export function shouldSkipPath(
   for (const m of skipMatchers) {
     if (pathMatches(path, m.segments)) return true;
   }
-  // If only matchers exist and path doesn't match any, skip it
+  // If only matchers exist, skip if path doesn't match AND isn't a prefix of any matcher
   if (onlyMatchers !== null) {
     let matches = false;
+    let isPrefix = false;
     for (const m of onlyMatchers) {
       if (pathMatches(path, m.segments)) {
         matches = true;
         break;
       }
+      if (pathIsPrefixOfMatcher(path, m.segments)) {
+        isPrefix = true;
+      }
     }
-    if (!matches) return true;
+    if (!matches && !isPrefix) return true;
   }
   return false;
 }
