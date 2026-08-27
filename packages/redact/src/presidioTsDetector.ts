@@ -321,7 +321,18 @@ export class PresidioTsDetector implements Detector {
     if (!this.analyzer) {
       throw new Error("PresidioTsDetector analyzer is not initialized");
     }
+    
+    // DEBUG: Log what we're detecting
+    if (process.env.REDACT_DEBUG === "true") {
+      console.error(`[presidio-ts-debug] Analyzing text (len=${text.length}), entityTypes=${entityTypes?.map(e => PresidioTsDetector.ENTITY_LABEL_MAP[e]).join(",") || "all"}, threshold=${threshold}`);
+    }
+    
     const analyzerResults = await this.analyzer.analyze(text, entityTypes);
+    
+    // DEBUG: Log raw analyzer results
+    if (process.env.REDACT_DEBUG === "true") {
+      console.error(`[presidio-ts-debug] Raw results:`, analyzerResults.map(r => `${r.entityType}:${r.text}@${r.start}-${r.end} (${r.score.toFixed(3)})`));
+    }
 
     // Convert to DetectionResult format
     let filteredResults = analyzerResults
