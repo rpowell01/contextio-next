@@ -33,6 +33,7 @@ interface WebUISettings {
 	detectorMode?: "rules" | "llm" | "hybrid" | "auto";
 	detectorModelName?: string;
 	detectorThreshold?: number;
+	detectorLabels?: string[];
 	feedbackStoreEnabled?: boolean;
 	feedbackStoreType?: "sqlite" | "memory";
 	feedbackStorePath?: string;
@@ -59,6 +60,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 				detectorMode: dbSettings.detectorMode,
 				detectorModelName: dbSettings.detectorModelName,
 				detectorThreshold: dbSettings.detectorThreshold,
+				detectorLabels: dbSettings.detectorLabels,
 				feedbackStoreEnabled: dbSettings.feedbackStoreEnabled,
 				feedbackStoreType: dbSettings.feedbackStoreType,
 				feedbackStorePath: dbSettings.feedbackStorePath,
@@ -92,6 +94,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			detectorMode: parsed.detectorMode,
 			detectorModelName: parsed.detectorModelName ?? parsed.detectorModelDir,
 			detectorThreshold: parsed.detectorThreshold,
+			detectorLabels: parsed.detectorLabels,
 			feedbackStoreEnabled: parsed.feedbackStoreEnabled,
 			feedbackStoreType: parsed.feedbackStoreType,
 			feedbackStorePath: parsed.feedbackStorePath,
@@ -127,6 +130,11 @@ async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 		if (Number.isFinite(val) && val >= 0 && val <= 1) {
 			detectorConfig.llmThreshold = val;
 		}
+	}
+	if (settings.detectorLabels !== undefined && settings.detectorLabels.length > 0) {
+		detectorConfig.llmLabels = settings.detectorLabels;
+	} else if (process.env.REDACT_DETECTOR_LABELS) {
+		detectorConfig.llmLabels = process.env.REDACT_DETECTOR_LABELS.split(",");
 	}
 
 const config: RedactPluginConfig = {
