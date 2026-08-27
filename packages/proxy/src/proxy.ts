@@ -133,6 +133,22 @@ export function createProxy(
               .filter(([, enabled]) => !enabled)
               .map(([provider]) => provider as Provider);
           })(),
+          // LLM detector configuration
+          detectorConfig: {
+            llmLabels: storedSettings?.detectorLabels ?? [
+              "PERSON",
+              "ORGANIZATION",
+              "LOCATION",
+              "EMAIL_ADDRESS",
+              "PHONE_NUMBER",
+              "CREDIT_CARD",
+              "US_SSN",
+              "IP_ADDRESS",
+              "URL",
+              "DATE_TIME",
+            ],
+            llmThreshold: storedSettings?.detectorThreshold ?? 0.5,
+          },
         })
       );
     }

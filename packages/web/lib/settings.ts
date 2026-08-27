@@ -69,6 +69,7 @@ export interface Settings {
   detectorMode: "rules" | "llm" | "hybrid" | "auto";
   detectorModelName: string;
   detectorThreshold: number;
+  detectorLabels: string[];
   // Rate limiter settings per provider
   rateLimiter: Record<Provider, RateLimitConfig>;
   // Streaming retry settings per provider
@@ -194,6 +195,10 @@ export const SETTING_ENV_MAP: Record<
   },
   detectorThreshold: {
     envVar: "REDACT_DETECTOR_THRESHOLD",
+    dynamic: true,
+  },
+  detectorLabels: {
+    envVar: "REDACT_DETECTOR_LABELS",
     dynamic: true,
   },
   rateLimiter: {
@@ -673,6 +678,18 @@ export const DEFAULT_SETTINGS: Settings = {
   detectorMode: "rules",
   detectorModelName: "Xenova/bert-base-NER",
   detectorThreshold: 0.5,
+  detectorLabels: [
+    "PERSON",
+    "ORGANIZATION",
+    "LOCATION",
+    "EMAIL_ADDRESS",
+    "PHONE_NUMBER",
+    "CREDIT_CARD",
+    "US_SSN",
+    "IP_ADDRESS",
+    "URL",
+    "DATE_TIME",
+  ],
   rateLimiter: {
     anthropic: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     openai: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
@@ -855,15 +872,22 @@ export function validateSettings(input: unknown): Settings {
     feedbackStoreEnabled: validateBoolean("feedbackStoreEnabled"),
     feedbackStoreType: validateEnum("feedbackStoreType", ["sqlite", "memory"]) as "sqlite" | "memory",
     feedbackStorePath: validateString("feedbackStorePath", 0),
-    detectorMode: validateEnum("detectorMode", ["rules", "llm", "hybrid", "auto"]) as "rules" | "llm" | "hybrid" | "auto",
-    detectorModelName: validateString("detectorModelName", 0),
-    detectorThreshold: (() => {
-      const v = obj.detectorThreshold;
-      if (typeof v !== "number" || v < 0 || v > 1) {
-        throw new Error(`Invalid detectorThreshold: must be a number between 0 and 1`);
-      }
-      return v;
-    })(),
+detectorMode: validateEnum("detectorMode", ["rules", "llm", "hybrid", "auto"]) as "rules" | "llm" | "hybrid" | "auto",
+  detectorModelName: validateString("detectorModelName", 0),
+  detectorThreshold: (() => {
+    const v = obj.detectorThreshold;
+    if (typeof v !== "number" || v < 0 || v > 1) {
+      throw new Error(`Invalid detectorThreshold: must be a number between 0 and 1`);
+    }
+    return v;
+  })(),
+  detectorLabels: (() => {
+    const v = obj.detectorLabels;
+    if (!Array.isArray(v) || !v.every((item) => typeof item === "string")) {
+      return DEFAULT_SETTINGS.detectorLabels;
+    }
+    return v as string[];
+  })(),
     rateLimiter: (() => {
       const rl = obj.rateLimiter;
       if (typeof rl !== "object" || rl === null) {
@@ -1114,6 +1138,10 @@ export function validateSettingsLenient(input: unknown): Settings {
       obj.detectorThreshold <= 1
         ? obj.detectorThreshold
         : DEFAULT_SETTINGS.detectorThreshold,
+    detectorLabels:
+      Array.isArray(obj.detectorLabels) && obj.detectorLabels.every((v) => typeof v === "string")
+        ? (obj.detectorLabels as string[])
+        : DEFAULT_SETTINGS.detectorLabels,
     rateLimiter: (() => {
       const rl = obj.rateLimiter;
       if (typeof rl !== "object" || rl === null) {

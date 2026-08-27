@@ -173,6 +173,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Name of the Hugging Face model used for LLM-based PII detection (e.g., 'Xenova/bert-base-NER'). Used in llm/hybrid/auto modes. Changes apply dynamically.",
   detectorThreshold:
     "Minimum confidence threshold for LLM-based detections (0-1). Higher values reduce false positives but may miss some entities. Applied dynamically per request.",
+  detectorLabels:
+    "Entity types for LLM-based PII detection (e.g., PERSON, ORGANIZATION, LOCATION, EMAIL_ADDRESS, PHONE_NUMBER, CREDIT_CARD, US_SSN, IP_ADDRESS, URL, DATE_TIME). Used in llm/hybrid/auto modes. Changes apply dynamically per request.",
   rateLimiter:
     "Rate limiting configuration per provider. Controls max requests, time window, and burst capacity. Requires a proxy restart to apply.",
   streamingRetry:
@@ -620,6 +622,18 @@ export default function SettingsPage() {
     detectorMode: "rules",
     detectorModelName: "Xenova/bert-base-NER",
     detectorThreshold: 0.5,
+    detectorLabels: [
+      "PERSON",
+      "ORGANIZATION",
+      "LOCATION",
+      "EMAIL_ADDRESS",
+      "PHONE_NUMBER",
+      "CREDIT_CARD",
+      "US_SSN",
+      "IP_ADDRESS",
+      "URL",
+      "DATE_TIME",
+    ],
     rateLimiter: {
       anthropic: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       openai: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },

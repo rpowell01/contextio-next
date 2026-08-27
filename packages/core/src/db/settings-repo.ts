@@ -58,6 +58,7 @@ export interface SettingsRow {
 	detector_mode: string;
 	detector_model_name: string;
 	detector_threshold: number;
+	detector_labels: string | null; // JSON array of detector labels
 	redact_paths_only: string | null; // JSON array of path strings
 	redact_paths_skip: string | null; // JSON array of path strings
 	redact_disabled_rules: string | null; // JSON array of disabled rule names
@@ -138,6 +139,7 @@ export interface Settings {
 	detectorMode: "rules" | "llm" | "hybrid" | "auto";
 	detectorModelName: string;
 	detectorThreshold: number;
+	detectorLabels: string[];
 	rateLimiter: Record<Provider, RateLimitConfig>;
 	streamingRetry: Record<Provider, StreamingRetryConfig>;
 	// Redaction enabled per provider (true = redact this provider)
@@ -297,6 +299,18 @@ const DEFAULT_SETTINGS: Settings = {
 	detectorMode: "rules",
 	detectorModelName: "Xenova/bert-base-NER",
 	detectorThreshold: 0.5,
+	detectorLabels: [
+		"PERSON",
+		"ORGANIZATION",
+		"LOCATION",
+		"EMAIL_ADDRESS",
+		"PHONE_NUMBER",
+		"CREDIT_CARD",
+		"US_SSN",
+		"IP_ADDRESS",
+		"URL",
+		"DATE_TIME",
+	],
 	rateLimiter: DEFAULT_RATE_LIMITER,
 	streamingRetry: DEFAULT_STREAMING_RETRY,
 	// Feature flags
@@ -381,6 +395,7 @@ function rowToSettings(row: SettingsRow): Settings {
 		detectorMode: row.detector_mode as Settings["detectorMode"],
 		detectorModelName: row.detector_model_name,
 		detectorThreshold: row.detector_threshold,
+		detectorLabels: safeJsonParse<string[]>(row.detector_labels, DEFAULT_SETTINGS.detectorLabels),
 		rateLimiter: safeJsonParse(row.rate_limiter, DEFAULT_RATE_LIMITER),
 		streamingRetry: safeJsonParse(row.streaming_retry, DEFAULT_STREAMING_RETRY),
 		redactProviders: safeJsonParse(row.redact_providers, DEFAULT_REDACT_PROVIDERS),
@@ -448,6 +463,7 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		detector_mode: merged.detectorMode,
 		detector_model_name: merged.detectorModelName,
 		detector_threshold: merged.detectorThreshold,
+		detector_labels: JSON.stringify(merged.detectorLabels),
 		rate_limiter: JSON.stringify(merged.rateLimiter),
 		streaming_retry: JSON.stringify(merged.streamingRetry),
 		redact_providers: JSON.stringify(merged.redactProviders),
@@ -717,6 +733,7 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		detectorMode: { envVar: "REDACT_DETECTOR_MODE", dynamic: true },
 		detectorModelName: { envVar: "REDACT_DETECTOR_MODEL_NAME", dynamic: true },
 		detectorThreshold: { envVar: "REDACT_DETECTOR_THRESHOLD", dynamic: true },
+		detectorLabels: { envVar: "REDACT_DETECTOR_LABELS", dynamic: true },
 	rateLimiter: { envVar: "", dynamic: false },
 	streamingRetry: { envVar: "", dynamic: false },
 	redactProviders: { envVar: "", dynamic: false },
@@ -968,6 +985,7 @@ function validateAndMergeSettings(input: unknown): Settings {
 		detectorMode: getEnum("detectorMode", ["rules", "llm", "hybrid", "auto"], DEFAULT_SETTINGS.detectorMode),
 		detectorModelName: getString("detectorModelName", DEFAULT_SETTINGS.detectorModelName),
 		detectorThreshold: getFloat("detectorThreshold", DEFAULT_SETTINGS.detectorThreshold, 0, 1),
+		detectorLabels: parseStringArray("detectorLabels", DEFAULT_SETTINGS.detectorLabels),
 		rateLimiter: parseRateLimiter("rateLimiter"),
 		streamingRetry: parseStreamingRetry("streamingRetry"),
 		redactProviders: parseRedactProviders("redactProviders"),
