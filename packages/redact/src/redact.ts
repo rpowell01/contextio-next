@@ -219,6 +219,29 @@ export function pathMatches(segments: string[], matcher: string[]): boolean {
   return true;
 }
 
+export function shouldSkipPath(
+  path: string[],
+  onlyMatchers: { segments: string[] }[] | null,
+  skipMatchers: { segments: string[] }[],
+): boolean {
+  // If path matches any skip matcher, skip it entirely
+  for (const m of skipMatchers) {
+    if (pathMatches(path, m.segments)) return true;
+  }
+  // If only matchers exist and path doesn't match any, skip it
+  if (onlyMatchers !== null) {
+    let matches = false;
+    for (const m of onlyMatchers) {
+      if (pathMatches(path, m.segments)) {
+        matches = true;
+        break;
+      }
+    }
+    if (!matches) return true;
+  }
+  return false;
+}
+
 export function shouldRedactPath(
   path: string[],
   onlyMatchers: { segments: string[] }[] | null,
@@ -359,6 +382,16 @@ export async function redactWithPolicy(
     }
   }
 
+  // Check if this path should be skipped entirely (before any traversal)
+  if (currentPath.length > 0 && (policy.paths.only !== null || policy.paths.skip.length > 0)) {
+    if (shouldSkipPath(currentPath, policy.paths.only, policy.paths.skip)) {
+      if (process.env.REDACT_DEBUG === "true") {
+        console.error(`[redact-debug] SKIPPED TRAVERSAL: ${currentPath.join(".")}`);
+      }
+      return value;
+    }
+  }
+
   // DEBUG: Log path being visited
   if (process.env.REDACT_DEBUG === "true" && currentPath.length > 0) {
     console.error(`[redact-debug] Visiting path: ${currentPath.join(".")}`);
@@ -381,6 +414,16 @@ export async function redactWithPolicy(
       currentPath,
       feedbackStore,
     );
+  }
+
+  // Check if this path should be skipped entirely (before traversing arrays/objects)
+  if (currentPath.length > 0 && (policy.paths.only !== null || policy.paths.skip.length > 0)) {
+    if (shouldSkipPath(currentPath, policy.paths.only, policy.paths.skip)) {
+      if (process.env.REDACT_DEBUG === "true") {
+        console.error(`[redact-debug] SKIPPED TRAVERSAL: ${currentPath.join(".")}`);
+      }
+      return value;
+    }
   }
 
   if (Array.isArray(value)) {

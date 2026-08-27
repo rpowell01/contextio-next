@@ -418,6 +418,17 @@ async function redactWithDetector(
     console.error(`[redact-debug] Visiting path: ${currentPath.join(".")}`);
   }
 
+  // Check if this path should be skipped entirely (before any traversal)
+  if (currentPath.length > 0 && (policy.paths.only !== null || policy.paths.skip.length > 0)) {
+    const { shouldSkipPath } = await import("./redact.js");
+    if (shouldSkipPath(currentPath, policy.paths.only, policy.paths.skip)) {
+      if (DEBUG_REDACT) {
+        console.error(`[redact-debug] SKIPPED TRAVERSAL: ${pathStr}`);
+      }
+      return value;
+    }
+  }
+
   if (typeof value === "string") {
     // Check path filtering
     if (policy.paths.only !== null || policy.paths.skip.length > 0) {
