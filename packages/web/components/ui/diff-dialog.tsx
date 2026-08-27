@@ -362,6 +362,22 @@ export function DiffDialog({
   // Context to show around redactions (chars)
   const CONTEXT_CHARS = 200;
 
+  // Pre-split content into lines for efficient line extraction
+  const preContentLines = useMemo(() => diffPreContent.split("\n"), [diffPreContent]);
+  const postContentLines = useMemo(() => diffPostContent.split("\n"), [diffPostContent]);
+
+  // Get the actual line content for a pane from the original (non-normalized) content
+  // Uses line numbers from diff chunks (oldLineNum for left/pre, newLineNum for right/post)
+  function getActualLineContent(chunk: DiffChunk, isLeft: boolean): string {
+    const lines = isLeft ? preContentLines : postContentLines;
+    const lineNum = isLeft ? chunk.oldLineNum : chunk.newLineNum;
+    if (lineNum !== undefined && lineNum > 0 && lineNum <= lines.length) {
+      return lines[lineNum - 1]; // Convert 1-indexed to 0-indexed
+    }
+    // Fallback to chunk value if line number not available
+    return chunk.value ?? "";
+  }
+
   // Truncate a long line to show context around redactions
   // Returns { value: truncated string, isTruncated: boolean }
   function truncateLongLine(
@@ -586,7 +602,8 @@ export function DiffDialog({
     // For right pane (post-redaction), use RedactionHighlight to highlight placeholders
     // For left pane (pre-redaction), use RedactionHighlight with isPre=true and pass matches for exact highlighting
     // Truncate very long lines to show context around redactions
-    const rawValue = item.value ?? "";
+    // Use actual content from original/redacted bodies (not normalized) for correct display
+    const rawValue = getActualLineContent(item, isLeft);
     const { value: displayValue } = truncateLongLine(rawValue, isLeft, matches ?? []);
     
     // Convert matches to include ruleId and path for the click handler
