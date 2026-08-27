@@ -106,6 +106,9 @@ export function createProxy(
    // Load settings from database for redact plugin config (disabled rules, etc.)
    const storedSettings = getSettings();
 
+   // DEBUG: Log detectorLabels from settings
+   console.error(`[proxy-debug] storedSettings.detectorLabels =`, JSON.stringify(storedSettings?.detectorLabels));
+
    // Build plugins array from enabled flags and user-provided plugins
    const effectivePlugins: ProxyPlugin[] = [];
    if (resolved.plugins.loggerEnabled) {
