@@ -94,6 +94,8 @@ export interface SettingsRow {
 	upstream_openrouter_url: string;
 	upstream_kilo_url: string;
 	upstream_gemini_code_assist_url: string;
+	// Presidio strict boundaries (migration 022)
+	strict_boundaries: number;
 	created_at: number;
 	updated_at: number;
 }
@@ -177,6 +179,8 @@ export interface Settings {
 	upstreamOpenRouterUrl: string;
 	upstreamKiloUrl: string;
 	upstreamGeminiCodeAssistUrl: string;
+	// Presidio strict boundaries (migration 022)
+	strictBoundaries: boolean;
 }
 
 /**
@@ -354,6 +358,8 @@ const DEFAULT_SETTINGS: Settings = {
 	upstreamOpenRouterUrl: "",
 	upstreamKiloUrl: "",
 	upstreamGeminiCodeAssistUrl: "",
+	// Presidio strict boundaries (migration 022)
+	strictBoundaries: false,
 };
 
 /**
@@ -428,6 +434,8 @@ function rowToSettings(row: SettingsRow): Settings {
 		upstreamOpenRouterUrl: row.upstream_openrouter_url || "",
 		upstreamKiloUrl: row.upstream_kilo_url || "",
 		upstreamGeminiCodeAssistUrl: row.upstream_gemini_code_assist_url || "",
+		// Presidio strict boundaries (migration 022)
+		strictBoundaries: row.strict_boundaries === 1,
 	};
 }
 
@@ -497,6 +505,8 @@ function settingsToRow(settings: Partial<Settings>): Omit<SettingsRow, "id" | "c
 		upstream_kilo_url: merged.upstreamKiloUrl,
 		upstream_gemini_code_assist_url: merged.upstreamGeminiCodeAssistUrl,
 		redact_disabled_rules: JSON.stringify(merged.redactDisabledRules),
+		// Presidio strict boundaries (migration 022)
+		strict_boundaries: merged.strictBoundaries ? 1 : 0,
 	};
 }
 
@@ -766,6 +776,8 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		upstreamOpenRouterUrl: { envVar: "UPSTREAM_OPENROUTER_URL", dynamic: false },
 		upstreamKiloUrl: { envVar: "UPSTREAM_KILO_URL", dynamic: false },
 		upstreamGeminiCodeAssistUrl: { envVar: "UPSTREAM_GEMINI_CODE_ASSIST_URL", dynamic: false },
+		// Presidio strict boundaries (migration 022)
+		strictBoundaries: { envVar: "REDACT_STRICT_BOUNDARIES", dynamic: true },
 	};
 
 	const meta = {} as Record<keyof Settings, SettingMeta>;
@@ -1018,5 +1030,7 @@ function validateAndMergeSettings(input: unknown): Settings {
 		upstreamOpenRouterUrl: getString("upstreamOpenRouterUrl", DEFAULT_SETTINGS.upstreamOpenRouterUrl),
 		upstreamKiloUrl: getString("upstreamKiloUrl", DEFAULT_SETTINGS.upstreamKiloUrl),
 		upstreamGeminiCodeAssistUrl: getString("upstreamGeminiCodeAssistUrl", DEFAULT_SETTINGS.upstreamGeminiCodeAssistUrl),
+		// Presidio strict boundaries (migration 022)
+		strictBoundaries: getBoolean("strictBoundaries", DEFAULT_SETTINGS.strictBoundaries),
 	};
 }

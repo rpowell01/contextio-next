@@ -133,6 +133,10 @@ export interface RedactDetectorConfig {
   llmThreshold?: number;
   /** Entity labels for LLM detector. If empty, uses model's defaults. */
   llmLabels?: string[];
+  /** Enable strict word boundary checking for LLM-based detections.
+   *  When true, prevents substring matches (e.g., 10-digit phone number within
+   *  a 25-digit string, organization names within longer text). Default: false. */
+  strictBoundaries?: boolean;
 }
 
 /**

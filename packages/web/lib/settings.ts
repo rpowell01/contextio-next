@@ -109,6 +109,8 @@ export interface Settings {
   upstreamOpenRouterUrl: string;
   upstreamKiloUrl: string;
   upstreamGeminiCodeAssistUrl: string;
+  // Presidio strict boundaries for LLM detector
+  strictBoundaries: boolean;
 }
 
 export type SettingSource =
@@ -242,6 +244,8 @@ export const SETTING_ENV_MAP: Record<
   upstreamOpenRouterUrl: { envVar: "UPSTREAM_OPENROUTER_URL", dynamic: false },
   upstreamKiloUrl: { envVar: "UPSTREAM_KILO_URL", dynamic: false },
   upstreamGeminiCodeAssistUrl: { envVar: "UPSTREAM_GEMINI_CODE_ASSIST_URL", dynamic: false },
+  // Presidio strict boundaries for LLM detector
+  strictBoundaries: { envVar: "REDACT_STRICT_BOUNDARIES", dynamic: true },
 };
 
 /**
@@ -753,6 +757,8 @@ export const DEFAULT_SETTINGS: Settings = {
   upstreamOpenRouterUrl: "",
   upstreamKiloUrl: "",
   upstreamGeminiCodeAssistUrl: "",
+  // Presidio strict boundaries for LLM detector
+  strictBoundaries: false,
 };
 
 export function validateSettings(input: unknown): Settings {
@@ -972,6 +978,8 @@ detectorMode: validateEnum("detectorMode", ["rules", "llm", "hybrid", "auto"]) a
     upstreamOpenRouterUrl: validateString("upstreamOpenRouterUrl", 0),
     upstreamKiloUrl: validateString("upstreamKiloUrl", 0),
     upstreamGeminiCodeAssistUrl: validateString("upstreamGeminiCodeAssistUrl", 0),
+    // Presidio strict boundaries for LLM detector
+    strictBoundaries: validateBoolean("strictBoundaries"),
   };
 }
 
@@ -1315,5 +1323,10 @@ export function validateSettingsLenient(input: unknown): Settings {
       typeof obj.upstreamGeminiCodeAssistUrl === "string"
         ? obj.upstreamGeminiCodeAssistUrl
         : DEFAULT_SETTINGS.upstreamGeminiCodeAssistUrl,
+    // Presidio strict boundaries for LLM detector
+    strictBoundaries:
+      typeof obj.strictBoundaries === "boolean"
+        ? obj.strictBoundaries
+        : DEFAULT_SETTINGS.strictBoundaries,
   };
 }

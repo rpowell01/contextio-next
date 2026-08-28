@@ -37,6 +37,7 @@ interface WebUISettings {
 	feedbackStoreEnabled?: boolean;
 	feedbackStoreType?: "sqlite" | "memory";
 	feedbackStorePath?: string;
+	strictBoundaries?: boolean;
 }
 
 /** Read web UI settings from SQLite database (with JSON file fallback for backward compatibility). */
@@ -48,23 +49,24 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			if (process.env.REDACT_DEBUG === "true") {
 				console.error(`[redact-factory] Loaded settings from database: redactProviders=${JSON.stringify(dbSettings.redactProviders)}`);
 			}
-			return {
-				redactPreset: dbSettings.redactPreset,
-				redactReversible: dbSettings.redactReversible,
-				redactPolicyFile: dbSettings.redactPolicyFile,
-				redactPolicyEnabled: dbSettings.redactPolicyEnabled,
-				redactPathsOnly: dbSettings.redactPathsOnly,
-				redactPathsSkip: dbSettings.redactPathsSkip,
-				redactDisabledRules: dbSettings.redactDisabledRules,
-				redactProviders: dbSettings.redactProviders,
-				detectorMode: dbSettings.detectorMode,
-				detectorModelName: dbSettings.detectorModelName,
-				detectorThreshold: dbSettings.detectorThreshold,
-				detectorLabels: dbSettings.detectorLabels,
-				feedbackStoreEnabled: dbSettings.feedbackStoreEnabled,
-				feedbackStoreType: dbSettings.feedbackStoreType,
-				feedbackStorePath: dbSettings.feedbackStorePath,
-			};
+return {
+			redactPreset: dbSettings.redactPreset,
+			redactReversible: dbSettings.redactReversible,
+			redactPolicyFile: dbSettings.redactPolicyFile,
+			redactPolicyEnabled: dbSettings.redactPolicyEnabled,
+			redactPathsOnly: dbSettings.redactPathsOnly,
+			redactPathsSkip: dbSettings.redactPathsSkip,
+			redactDisabledRules: dbSettings.redactDisabledRules,
+			redactProviders: dbSettings.redactProviders,
+			detectorMode: dbSettings.detectorMode,
+			detectorModelName: dbSettings.detectorModelName,
+			detectorThreshold: dbSettings.detectorThreshold,
+			detectorLabels: dbSettings.detectorLabels,
+			feedbackStoreEnabled: dbSettings.feedbackStoreEnabled,
+			feedbackStoreType: dbSettings.feedbackStoreType,
+			feedbackStorePath: dbSettings.feedbackStorePath,
+			strictBoundaries: dbSettings.strictBoundaries,
+		};
 		}
 		if (process.env.REDACT_DEBUG === "true") {
 			console.error(`[redact-factory] getSettings() returned null, falling back to JSON file`);
@@ -98,6 +100,7 @@ async function readWebUISettings(): Promise<WebUISettings> {
 			feedbackStoreEnabled: parsed.feedbackStoreEnabled,
 			feedbackStoreType: parsed.feedbackStoreType,
 			feedbackStorePath: parsed.feedbackStorePath,
+			strictBoundaries: parsed.strictBoundaries,
 		};
 	} catch {
 		if (process.env.REDACT_DEBUG === "true") {
@@ -140,6 +143,11 @@ async function buildRedactConfig(): Promise<RedactPluginConfig | null> {
 		detectorConfig.llmLabels = settings.detectorLabels;
 	} else if (process.env.REDACT_DETECTOR_LABELS) {
 		detectorConfig.llmLabels = process.env.REDACT_DETECTOR_LABELS.split(",");
+	}
+	if (settings.strictBoundaries !== undefined) {
+		detectorConfig.strictBoundaries = settings.strictBoundaries;
+	} else if (process.env.REDACT_STRICT_BOUNDARIES) {
+		detectorConfig.strictBoundaries = process.env.REDACT_STRICT_BOUNDARIES === "true";
 	}
 
 const config: RedactPluginConfig = {

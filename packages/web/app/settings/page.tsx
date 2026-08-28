@@ -175,6 +175,8 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
     "Minimum confidence threshold for LLM-based detections (0-1). Higher values reduce false positives but may miss some entities. Applied dynamically per request.",
   detectorLabels:
     "Entity types for LLM-based PII detection (e.g., PERSON, ORGANIZATION, LOCATION, EMAIL_ADDRESS, PHONE_NUMBER, CREDIT_CARD, US_SSN, IP_ADDRESS, URL, DATE_TIME). Used in llm/hybrid/auto modes. Changes apply dynamically per request.",
+  strictBoundaries:
+    "Enable strict word boundary checking for LLM-based detections. When enabled, prevents substring matches (e.g., 10-digit phone number within a 25-digit string, organization names within longer text). Applied dynamically per request. Requires LLM detector mode (llm, hybrid, or auto).",
   rateLimiter:
     "Rate limiting configuration per provider. Controls max requests, time window, and burst capacity. Requires a proxy restart to apply.",
   streamingRetry:
@@ -706,6 +708,8 @@ export default function SettingsPage() {
     upstreamOpenRouterUrl: "",
     upstreamKiloUrl: "",
     upstreamGeminiCodeAssistUrl: "",
+    // Presidio strict boundaries for LLM detector
+    strictBoundaries: false,
   });
   const [metadata, setMetadata] = useState<Record<
     keyof Settings,
@@ -2277,6 +2281,28 @@ export default function SettingsPage() {
             <SettingHelp
               meta={getMeta("detectorLabels")}
               description={SETTING_DESCRIPTIONS.detectorLabels}
+            />
+          </div>
+        );
+      case "strictBoundaries":
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="strictBoundaries"
+              checked={settings.strictBoundaries}
+              onChange={(e) =>
+                updateSetting("strictBoundaries", e.target.checked)
+              }
+              className="w-4 h-4"
+              disabled={isSettingOverridden("strictBoundaries")}
+            />
+            <Label htmlFor="strictBoundaries" className="text-sm">
+              Strict boundaries (prevent substring matches)
+            </Label>
+            <SettingHelp
+              meta={getMeta("strictBoundaries")}
+              description={SETTING_DESCRIPTIONS.strictBoundaries}
             />
           </div>
         );

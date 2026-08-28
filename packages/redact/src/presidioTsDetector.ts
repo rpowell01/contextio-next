@@ -46,6 +46,12 @@ export interface PresidioTsConfig extends DetectorConfig {
   allowlistPatterns?: RegExp[];
   /** Optional feedback store to filter out known false positives. */
   feedbackStore?: FeedbackStore;
+  /** Enable strict word boundary checking to prevent substring matches.
+   *  When true, filters out detections that appear to be substrings within
+   *  longer alphanumeric sequences (e.g., 10-digit phone in 25-digit string,
+   *  organization name within longer text). Default: false for backward compatibility.
+   */
+  strictBoundaries?: boolean;
 }
 
 /**
@@ -364,6 +370,12 @@ export class PresidioTsDetector implements Detector {
       );
     }
 
+    // Apply strict boundary filtering if enabled
+    const strictBoundaries = finalConfig.strictBoundaries ?? false;
+    if (strictBoundaries) {
+      filteredResults = this.filterSubstringMatches(filteredResults, text);
+    }
+
     const spans = filteredResults.map((result: RecognizerResult) => this.convertToDetectedSpan(result));
 
     // Sort by start position
@@ -422,6 +434,91 @@ export class PresidioTsDetector implements Detector {
     };
 
     return aliasMap[upperLabel] ?? null;
+  }
+
+  /**
+   * Filter out detections that appear to be substrings within longer alphanumeric sequences.
+   * This addresses the issue where pattern-based recognizers (especially phone numbers)
+   * match substrings within longer strings, and NER models detect entities within larger text.
+   *
+   * @param results - Recognizer results to filter
+   * @param fullText - The original text that was analyzed
+   * @returns Filtered results with substring matches removed
+   */
+  private filterSubstringMatches(
+    results: RecognizerResult[],
+    fullText: string
+  ): RecognizerResult[] {
+    return results.filter((result) => {
+      const start = result.start;
+      const end = result.end;
+      const matchedText = result.text;
+
+      // Check character before the match
+      const charBefore = start > 0 ? fullText[start - 1] : '';
+      // Check character after the match
+      const charAfter = end < fullText.length ? fullText[end] : '';
+
+      // Define what constitutes a "word boundary" character
+      const isBoundaryChar = (ch: string): boolean => {
+        if (!ch) return true; // Start/end of string is a boundary
+        // Word boundary: whitespace, punctuation, or non-alphanumeric
+        return !/[A-Za-z0-9]/.test(ch);
+      };
+
+      const hasBoundaryBefore = isBoundaryChar(charBefore);
+      const hasBoundaryAfter = isBoundaryChar(charAfter);
+
+      // For pattern-based entities (PHONE_NUMBER, CREDIT_CARD, US_SSN, IP_ADDRESS, EMAIL_ADDRESS, URL, DATE_TIME)
+      // require boundaries on BOTH sides
+      const patternEntityTypes = new Set([
+        EntityType.PHONE_NUMBER,
+        EntityType.CREDIT_CARD,
+        EntityType.US_SSN,
+        EntityType.IP_ADDRESS,
+        EntityType.EMAIL_ADDRESS,
+        EntityType.URL,
+        EntityType.DATE_TIME,
+      ]);
+
+      // For NER-based entities (PERSON, LOCATION, ORGANIZATION)
+      // require the match to be a complete "word" - not embedded within
+      // a longer alphanumeric sequence. This means:
+      // - At string start: charAfter must be a boundary
+      // - At string end: charBefore must be a boundary
+      // - In middle: both charBefore and charAfter must be boundaries
+      const nerEntityTypes = new Set([
+        EntityType.PERSON,
+        EntityType.LOCATION,
+        EntityType.ORGANIZATION,
+      ]);
+
+      if (patternEntityTypes.has(result.entityType)) {
+        // Pattern entities need boundaries on BOTH sides
+        return hasBoundaryBefore && hasBoundaryAfter;
+      } else if (nerEntityTypes.has(result.entityType)) {
+        // NER entities: check if embedded in longer alphanumeric token
+        const atStart = start === 0;
+        const atEnd = end === fullText.length;
+
+        if (atStart && atEnd) {
+          // Entire text is the entity - keep it
+          return true;
+        } else if (atStart) {
+          // At start of string: require boundary after (not embedded in longer token)
+          return hasBoundaryAfter;
+        } else if (atEnd) {
+          // At end of string: require boundary before (not embedded in longer token)
+          return hasBoundaryBefore;
+        } else {
+          // In middle: require boundaries on BOTH sides
+          return hasBoundaryBefore && hasBoundaryAfter;
+        }
+      }
+
+      // Default: keep if unsure
+      return true;
+    });
   }
 }
 
