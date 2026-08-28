@@ -1015,6 +1015,7 @@ export default function SettingsPage() {
                   {renderSetting("detectorModelName")}
                   {renderSetting("detectorThreshold")}
                   {renderSetting("detectorLabels")}
+                  {renderSetting("strictBoundaries")}
                 </div>
               </div>
             </div>
