@@ -398,12 +398,14 @@ function DisabledRulesList({
   disabled,
   preset,
   hasCustomPolicy,
+  detectorMode,
 }: {
   disabledRules: string[];
   onChange: (rules: string[]) => void;
   disabled: boolean;
   preset: PresetName;
   hasCustomPolicy: boolean;
+  detectorMode: "rules" | "llm" | "hybrid" | "auto";
 }) {
   const disabledSet = new Set(disabledRules);
 
@@ -484,6 +486,12 @@ function DisabledRulesList({
           because they only apply to built-in presets.
         </div>
       )}
+      {detectorMode === "llm" && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          <strong>Disabled in LLM mode:</strong> Rules-based settings only apply in Rules, Hybrid, or Auto detector modes.
+        </div>
+      )}
+      <div className="text-xs text-muted-foreground mb-2 font-medium">Rules-Based Settings</div>
       {categories
         .filter((cat) => activePresets.includes(cat.preset))
         .map((category) => (
@@ -956,68 +964,137 @@ export default function SettingsPage() {
         return (
           <div className="rounded-lg border p-6" role="tabpanel" id="panel-redaction" aria-labelledby="tab-redaction">
             <h3 className="font-semibold mb-4">Redaction</h3>
-            <div className="space-y-4">
-              {renderSetting("enableRedact")}
-
-              {/* Per-Provider Redaction */}
-              <div className="pt-2 border-t">
-                {renderSetting("redactProviders")}
-              </div>
-
-              {renderSetting("redactPreset")}
-              {renderSetting("redactReversible")}
-              {renderSetting("redactPolicyFile")}
-              {renderSetting("redactPolicyEnabled")}
-
-              {/* Path filtering settings */}
-              <div className="pt-2 border-t">
-                <h4 className="text-sm font-medium text-muted-foreground mb-3">Path Filtering</h4>
-                <p className="text-xs text-muted-foreground mb-4">
-                  Configure which JSON paths are redacted ("only") and which are skipped ("skip").
-                  Skip paths are checked before only paths. Defaults cover all LLM tool call formats
-                  (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
+            <div className="space-y-6">
+              
+              {/* ============================================================
+                   SECTION 1: GLOBAL CONFIGURATION
+                   ============================================================ */}
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-foreground">Global Configuration</h4>
+                  <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-medium">Always Active</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Master switches that control whether redaction runs at all and for which providers.
                 </p>
                 <div className="space-y-4">
-                  {renderSetting("redactPathsOnly")}
-                  {renderSetting("redactPathsSkip")}
+                  {renderSetting("enableRedact")}
+                  {renderSetting("redactProviders")}
                 </div>
-              </div>
+              </section>
 
-              {/* Disabled Rules Settings */}
-              <div className="pt-2 border-t">
-                <h4 className="text-sm font-medium text-muted-foreground mb-3">Disabled Redaction Rules</h4>
-                <p className="text-xs text-muted-foreground mb-4">
-                  Selectively disable specific redaction rule types. Uncheck a rule to stop it from
-                  redacting values. Changes apply dynamically per request.
+              {/* ============================================================
+                   SECTION 2: REDACTION MODE SELECTION
+                   ============================================================ */}
+              <section className="space-y-4 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-foreground">Redaction Mode</h4>
+                  <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">Core Setting</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Choose the detection engine. This determines which settings below are active.
                 </p>
-                <DisabledRulesList
-                  disabledRules={settings.redactDisabledRules}
-                  onChange={(rules) => updateSetting("redactDisabledRules", rules)}
-                  disabled={isSettingOverridden("redactDisabledRules")}
-                  preset={settings.redactPreset}
-                  hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
-                />
-              </div>
-
-              {/* Detector mode capabilities & warnings */}
-              <DetectorModeWarnings
-                detectorMode={settings.detectorMode}
-                detectorModelName={settings.detectorModelName}
-                detectorThreshold={settings.detectorThreshold}
-                detectorLabels={settings.detectorLabels}
-                hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
-              />
-
-              <div className="pt-2 border-t">
-                <h4 className="text-sm font-medium text-muted-foreground mb-3">Detector Settings</h4>
                 <div className="space-y-4">
                   {renderSetting("detectorMode")}
+                </div>
+                
+                {/* Detector mode capabilities & warnings */}
+                <DetectorModeWarnings
+                  detectorMode={settings.detectorMode}
+                  detectorModelName={settings.detectorModelName}
+                  detectorThreshold={settings.detectorThreshold}
+                  detectorLabels={settings.detectorLabels}
+                  hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
+                />
+              </section>
+
+              {/* ============================================================
+                   SECTION 3: RULES-BASED SETTINGS
+                   (Active in: rules, hybrid, auto modes)
+                   ============================================================ */}
+              <section className="space-y-4 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-foreground">Rules-Based Settings</h4>
+                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                    settings.detectorMode === "llm" 
+                      ? "bg-muted text-muted-foreground" 
+                      : "bg-green/10 text-green"
+                  }`}>
+                    {settings.detectorMode === "llm" ? "Disabled in LLM Mode" : "Active"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Regex/pattern-based redaction using built-in presets or custom policy files. 
+                  {settings.detectorMode === "llm" && "Disabled because detector mode is set to \"LLM Only\"."}
+                </p>
+                
+                <div className="space-y-4" style={{ opacity: settings.detectorMode === "llm" ? 0.5 : 1 }}>
+                  {renderSetting("redactPreset")}
+                  {renderSetting("redactReversible")}
+                  {renderSetting("redactPolicyFile")}
+                  {renderSetting("redactPolicyEnabled")}
+
+                  {/* Path filtering settings */}
+                  <div className="pt-2 border-t">
+                    <h5 className="text-sm font-medium text-muted-foreground mb-3">Path Filtering</h5>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Configure which JSON paths are redacted ("only") and which are skipped ("skip").
+                      Skip paths are checked before only paths. Defaults cover all LLM tool call formats
+                      (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
+                    </p>
+                    <div className="space-y-4">
+                      {renderSetting("redactPathsOnly")}
+                      {renderSetting("redactPathsSkip")}
+                    </div>
+                  </div>
+
+                  {/* Disabled Rules Settings */}
+                  <div className="pt-2 border-t">
+                    <h5 className="text-sm font-medium text-muted-foreground mb-3">Disabled Redaction Rules</h5>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Selectively disable specific redaction rule types. Uncheck a rule to stop it from
+                      redacting values. Changes apply dynamically per request.
+                    </p>
+                    <DisabledRulesList
+                      disabledRules={settings.redactDisabledRules}
+                      onChange={(rules) => updateSetting("redactDisabledRules", rules)}
+                      disabled={isSettingOverridden("redactDisabledRules") || settings.detectorMode === "llm"}
+                      preset={settings.redactPreset}
+                      hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
+                      detectorMode={settings.detectorMode}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* ============================================================
+                   SECTION 4: LLM-BASED SETTINGS
+                   (Active in: llm, hybrid, auto modes)
+                   ============================================================ */}
+              <section className="space-y-4 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-foreground">LLM-Based Settings</h4>
+                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                    settings.detectorMode === "rules" 
+                      ? "bg-muted text-muted-foreground" 
+                      : "bg-blue/10 text-blue"
+                  }`}>
+                    {settings.detectorMode === "rules" ? "Disabled in Rules Mode" : "Active"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Semantic PII detection via transformer models (Presidio/NER). 
+                  {settings.detectorMode === "rules" && "Disabled because detector mode is set to \"Rules Only\"."}
+                </p>
+
+                <div className="space-y-4" style={{ opacity: settings.detectorMode === "rules" ? 0.5 : 1 }}>
                   {renderSetting("detectorModelName")}
                   {renderSetting("detectorThreshold")}
                   {renderSetting("detectorLabels")}
                   {renderSetting("strictBoundaries")}
                 </div>
-              </div>
+              </section>
+
             </div>
           </div>
         );
@@ -1808,11 +1885,13 @@ export default function SettingsPage() {
           </div>
         );
       case "redactPreset": {
-        const presetDisabled = isSettingOverridden("redactPreset") || Boolean(settings.redactPolicyFile?.trim());
+        const presetDisabled = isSettingOverridden("redactPreset") || Boolean(settings.redactPolicyFile?.trim()) || settings.detectorMode === "llm";
         const presetOverrideReason = isSettingOverridden("redactPreset")
           ? "Set by environment variable"
           : settings.redactPolicyFile?.trim()
             ? "Overridden by custom policy file"
+            : settings.detectorMode === "llm"
+            ? "Disabled in LLM mode"
             : null;
         return (
           <div>
@@ -1820,7 +1899,7 @@ export default function SettingsPage() {
               htmlFor="redactPreset"
               className="block text-sm font-medium mb-2"
             >
-              Redaction Preset
+              Redaction Preset <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
               {presetOverrideReason && (
                 <span className="ml-2 text-xs text-foreground/70 font-normal">
                   ({presetOverrideReason})
@@ -1845,6 +1924,11 @@ export default function SettingsPage() {
               meta={getMeta("redactPreset")}
               description={SETTING_DESCRIPTIONS.redactPreset}
             />
+            {settings.detectorMode === "llm" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Disabled: This setting only applies in Rules, Hybrid, or Auto detector modes.
+              </p>
+            )}
           </div>
         );
       }
@@ -1852,16 +1936,16 @@ export default function SettingsPage() {
         return (
           <div>
             <Label htmlFor="redactPolicyFile" className="block text-sm font-medium mb-2">
-              Redaction Policy File
+              Redaction Policy File <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
             </Label>
             <Input
               id="redactPolicyFile"
               value={settings.redactPolicyFile}
               onChange={(e) => updateSetting("redactPolicyFile", e.target.value)}
               placeholder="/path/to/policy.yaml"
-              disabled={isSettingOverridden("redactPolicyFile")}
+              disabled={isSettingOverridden("redactPolicyFile") || settings.detectorMode === "llm"}
               className={
-                isSettingOverridden("redactPolicyFile")
+                (isSettingOverridden("redactPolicyFile") || settings.detectorMode === "llm")
                   ? "bg-muted cursor-not-allowed"
                   : ""
               }
@@ -1870,6 +1954,11 @@ export default function SettingsPage() {
               meta={getMeta("redactPolicyFile")}
               description={SETTING_DESCRIPTIONS.redactPolicyFile}
             />
+            {settings.detectorMode === "llm" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Disabled: This setting only applies in Rules, Hybrid, or Auto detector modes.
+              </p>
+            )}
             {(policyFileContents || policyFileLoadError) && (
               <div className="mt-3 space-y-2">
                 <div className="flex items-center justify-between">
@@ -1956,15 +2045,20 @@ export default function SettingsPage() {
                 updateSetting("redactPolicyEnabled", e.target.checked)
               }
               className="w-4 h-4"
-              disabled={isSettingOverridden("redactPolicyEnabled")}
+              disabled={isSettingOverridden("redactPolicyEnabled") || settings.detectorMode === "llm"}
             />
             <Label htmlFor="redactPolicyEnabled" className="text-sm">
-              Use custom policy file
+              Use custom policy file <span className="text-xs text-muted-foreground font-normal">(Rules-Based)</span>
             </Label>
             <SettingHelp
               meta={getMeta("redactPolicyEnabled")}
               description={SETTING_DESCRIPTIONS.redactPolicyEnabled}
             />
+            {settings.detectorMode === "llm" && (
+              <p className="text-xs text-muted-foreground mt-1 ml-6">
+                Disabled: This setting only applies in Rules, Hybrid, or Auto detector modes.
+              </p>
+            )}
           </div>
         );
       case "redactReversible":
@@ -1978,22 +2072,27 @@ export default function SettingsPage() {
                 updateSetting("redactReversible", e.target.checked)
               }
               className="w-4 h-4"
-              disabled={isSettingOverridden("redactReversible")}
+              disabled={isSettingOverridden("redactReversible") || settings.detectorMode === "llm"}
             />
             <Label htmlFor="redactReversible" className="text-sm">
-              Reversible redaction (restore originals in responses)
+              Reversible redaction (restore originals in responses) <span className="text-xs text-muted-foreground font-normal">(Rules-Based)</span>
             </Label>
             <SettingHelp
               meta={getMeta("redactReversible")}
               description={SETTING_DESCRIPTIONS.redactReversible}
             />
+            {settings.detectorMode === "llm" && (
+              <p className="text-xs text-muted-foreground mt-1 ml-6">
+                Disabled: This setting only applies in Rules, Hybrid, or Auto detector modes.
+              </p>
+            )}
           </div>
         );
       case "redactPathsOnly":
         return (
           <div>
             <Label htmlFor="redactPathsOnly" className="block text-sm font-medium mb-2">
-              Redaction Paths (Only)
+              Redaction Paths (Only) <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
             </Label>
             <textarea
               id="redactPathsOnly"
@@ -2007,9 +2106,9 @@ export default function SettingsPage() {
                 }
               }}
               placeholder='["messages[*].content"]'
-              disabled={isSettingOverridden("redactPathsOnly")}
+              disabled={isSettingOverridden("redactPathsOnly") || settings.detectorMode === "llm"}
               className={`font-mono text-xs min-h-[80px] w-full p-2 border border-border bg-background text-foreground rounded ${
-                isSettingOverridden("redactPathsOnly") ? "bg-muted opacity-50 cursor-not-allowed" : ""
+                (isSettingOverridden("redactPathsOnly") || settings.detectorMode === "llm") ? "bg-muted opacity-50 cursor-not-allowed" : ""
               }`}
               rows={4}
             />
@@ -2020,13 +2119,18 @@ export default function SettingsPage() {
             <p className="text-xs text-muted-foreground mt-1">
               Enter a JSON array of path strings (e.g., ["messages[*].content","system"]). Use [*] for array wildcards.
             </p>
+            {settings.detectorMode === "llm" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Disabled: This setting only applies in Rules, Hybrid, or Auto detector modes.
+              </p>
+            )}
           </div>
         );
       case "redactPathsSkip":
         return (
           <div>
             <Label htmlFor="redactPathsSkip" className="block text-sm font-medium mb-2">
-              Redaction Paths (Skip)
+              Redaction Paths (Skip) <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
             </Label>
             <textarea
               id="redactPathsSkip"
@@ -2040,9 +2144,9 @@ export default function SettingsPage() {
                 }
               }}
               placeholder='["tools","tool_calls","messages[*].tool_calls[*].id",...]'
-              disabled={isSettingOverridden("redactPathsSkip")}
+              disabled={isSettingOverridden("redactPathsSkip") || settings.detectorMode === "llm"}
               className={`font-mono text-xs min-h-[120px] w-full p-2 border border-border bg-background text-foreground rounded ${
-                isSettingOverridden("redactPathsSkip") ? "bg-muted opacity-50 cursor-not-allowed" : ""
+                (isSettingOverridden("redactPathsSkip") || settings.detectorMode === "llm") ? "bg-muted opacity-50 cursor-not-allowed" : ""
               }`}
               rows={6}
             />
@@ -2053,6 +2157,11 @@ export default function SettingsPage() {
             <p className="text-xs text-muted-foreground mt-1">
               Enter a JSON array of path strings to skip. Checked before "only" paths. Use [*] for array wildcards.
             </p>
+            {settings.detectorMode === "llm" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Disabled: This setting only applies in Rules, Hybrid, or Auto detector modes.
+              </p>
+            )}
           </div>
         );
       case "encryptionAtRest":
@@ -2192,29 +2301,36 @@ export default function SettingsPage() {
         return (
           <div>
             <Label htmlFor="detectorModelName" className="block text-sm font-medium mb-2">
-              Detector Model Name
+              Detector Model Name <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
             </Label>
             <Input
               id="detectorModelName"
               value={settings.detectorModelName}
               onChange={(e) => updateSetting("detectorModelName", e.target.value)}
               placeholder="Xenova/bert-base-NER"
-              disabled={isSettingOverridden("detectorModelName")}
+              disabled={isSettingOverridden("detectorModelName") || settings.detectorMode === "rules"}
               className={
-                isSettingOverridden("detectorModelName") ? "bg-muted cursor-not-allowed" : ""
+                (isSettingOverridden("detectorModelName") || settings.detectorMode === "rules")
+                  ? "bg-muted cursor-not-allowed"
+                  : ""
               }
             />
             <SettingHelp
               meta={getMeta("detectorModelName")}
               description={SETTING_DESCRIPTIONS.detectorModelName}
             />
+            {settings.detectorMode === "rules" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Disabled: This setting only applies in LLM, Hybrid, or Auto detector modes.
+              </p>
+            )}
           </div>
         );
       case "detectorThreshold":
         return (
           <div>
             <Label htmlFor="detectorThreshold" className="block text-sm font-medium mb-2">
-              LLM Detection Threshold (0-1)
+              LLM Detection Threshold (0-1) <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
             </Label>
             <Input
               id="detectorThreshold"
@@ -2230,22 +2346,29 @@ export default function SettingsPage() {
                 }
               }}
               placeholder="0.5"
-              disabled={isSettingOverridden("detectorThreshold")}
+              disabled={isSettingOverridden("detectorThreshold") || settings.detectorMode === "rules"}
               className={
-                isSettingOverridden("detectorThreshold") ? "bg-muted cursor-not-allowed" : ""
+                (isSettingOverridden("detectorThreshold") || settings.detectorMode === "rules")
+                  ? "bg-muted cursor-not-allowed"
+                  : ""
               }
             />
             <SettingHelp
               meta={getMeta("detectorThreshold")}
               description={SETTING_DESCRIPTIONS.detectorThreshold}
             />
+            {settings.detectorMode === "rules" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Disabled: This setting only applies in LLM, Hybrid, or Auto detector modes.
+              </p>
+            )}
           </div>
         );
       case "detectorLabels":
         return (
           <div>
             <Label htmlFor="detectorLabels" className="block text-sm font-medium mb-2">
-              Detector Entity Labels
+              Detector Entity Labels <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
             </Label>
             <div className="flex flex-wrap gap-2">
               {(
@@ -2272,7 +2395,7 @@ export default function SettingsPage() {
                         : settings.detectorLabels.filter((l) => l !== label);
                       updateSetting("detectorLabels", newLabels);
                     }}
-                    disabled={isSettingOverridden("detectorLabels")}
+                    disabled={isSettingOverridden("detectorLabels") || settings.detectorMode === "rules"}
                     className="w-4 h-4 rounded border-input"
                   />
                   <span className="text-sm">{label}</span>
@@ -2283,6 +2406,11 @@ export default function SettingsPage() {
               meta={getMeta("detectorLabels")}
               description={SETTING_DESCRIPTIONS.detectorLabels}
             />
+            {settings.detectorMode === "rules" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Disabled: This setting only applies in LLM, Hybrid, or Auto detector modes.
+              </p>
+            )}
           </div>
         );
       case "strictBoundaries":
@@ -2296,15 +2424,20 @@ export default function SettingsPage() {
                 updateSetting("strictBoundaries", e.target.checked)
               }
               className="w-4 h-4"
-              disabled={isSettingOverridden("strictBoundaries")}
+              disabled={isSettingOverridden("strictBoundaries") || settings.detectorMode === "rules"}
             />
             <Label htmlFor="strictBoundaries" className="text-sm">
-              Strict boundaries (prevent substring matches)
+              Strict boundaries (prevent substring matches) <span className="text-xs text-muted-foreground font-normal">(LLM-Based)</span>
             </Label>
             <SettingHelp
               meta={getMeta("strictBoundaries")}
               description={SETTING_DESCRIPTIONS.strictBoundaries}
             />
+            {settings.detectorMode === "rules" && (
+              <p className="text-xs text-muted-foreground mt-1 ml-6">
+                Disabled: This setting only applies in LLM, Hybrid, or Auto detector modes.
+              </p>
+            )}
           </div>
         );
       case "enableLogger":
