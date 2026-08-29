@@ -12,6 +12,8 @@ import { FalsePositiveManager } from "@/components/FalsePositiveManager";
 import { LogsViewer } from "@/components/logs-viewer";
 import { EnvironmentVariablesPanel } from "@/components/environment-variables-panel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 /** Preset rule names for UI display (avoids importing @contextio/redact which brings Node.js deps) */
 const PRESET_RULES: Record<PresetName, string[]> = {
@@ -964,138 +966,263 @@ export default function SettingsPage() {
         return (
           <div className="rounded-lg border p-6" role="tabpanel" id="panel-redaction" aria-labelledby="tab-redaction">
             <h3 className="font-semibold mb-4">Redaction</h3>
-            <div className="space-y-6">
-              
-              {/* ============================================================
-                   SECTION 1: GLOBAL CONFIGURATION
-                   ============================================================ */}
-              <section className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-foreground">Global Configuration</h4>
-                  <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-medium">Always Active</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Master switches that control whether redaction runs at all and for which providers.
-                </p>
-                <div className="space-y-4">
-                  {renderSetting("enableRedact")}
-                  {renderSetting("redactProviders")}
-                </div>
-              </section>
+            {/* ============================================================
+                 REDACTION TAB - REORGANIZED
+                 ============================================================ */}
+              <div className="space-y-4">
+                {/* Collapsible Section Component */}
+                {(() => {
+                  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+                    global: true,
+                    mode: true,
+                    rules: true,
+                    llm: true,
+                  });
 
-              {/* ============================================================
-                   SECTION 2: REDACTION MODE SELECTION
-                   ============================================================ */}
-              <section className="space-y-4 border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-foreground">Redaction Mode</h4>
-                  <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">Core Setting</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Choose the detection engine. This determines which settings below are active.
-                </p>
-                <div className="space-y-4">
-                  {renderSetting("detectorMode")}
-                </div>
-                
-                {/* Detector mode capabilities & warnings */}
-                <DetectorModeWarnings
-                  detectorMode={settings.detectorMode}
-                  detectorModelName={settings.detectorModelName}
-                  detectorThreshold={settings.detectorThreshold}
-                  detectorLabels={settings.detectorLabels}
-                  hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
-                />
-              </section>
+                  const toggleSection = (section: string) => {
+                    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+                  };
 
-              {/* ============================================================
-                   SECTION 3: RULES-BASED SETTINGS
-                   (Active in: rules, hybrid, auto modes)
-                   ============================================================ */}
-              <section className="space-y-4 border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-foreground">Rules-Based Settings</h4>
-                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                    settings.detectorMode === "llm" 
-                      ? "bg-muted text-muted-foreground" 
-                      : "bg-green/10 text-green"
-                  }`}>
-                    {settings.detectorMode === "llm" ? "Disabled in LLM Mode" : "Active"}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Regex/pattern-based redaction using built-in presets or custom policy files. 
-                  {settings.detectorMode === "llm" && "Disabled because detector mode is set to \"LLM Only\"."}
-                </p>
-                
-                <div className="space-y-4" style={{ opacity: settings.detectorMode === "llm" ? 0.5 : 1 }}>
-                  {renderSetting("redactPreset")}
-                  {renderSetting("redactReversible")}
-                  {renderSetting("redactPolicyFile")}
-                  {renderSetting("redactPolicyEnabled")}
+                  // Theme-aware background colors for each section
+                  const sectionStyles = {
+                    global: "bg-green-50/50 dark:bg-green-900/10 border-green-200/50 dark:border-green-800/30",
+                    mode: "bg-blue-50/50 dark:bg-blue-900/10 border-blue-200/50 dark:border-blue-800/30",
+                    rules: "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200/50 dark:border-emerald-800/30",
+                    llm: "bg-purple-50/50 dark:bg-purple-900/10 border-purple-200/50 dark:border-purple-800/30",
+                  };
 
-                  {/* Path filtering settings */}
-                  <div className="pt-2 border-t">
-                    <h5 className="text-sm font-medium text-muted-foreground mb-3">Path Filtering</h5>
-                    <p className="text-xs text-muted-foreground mb-4">
-                      Configure which JSON paths are redacted ("only") and which are skipped ("skip").
-                      Skip paths are checked before only paths. Defaults cover all LLM tool call formats
-                      (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
-                    </p>
-                    <div className="space-y-4">
-                      {renderSetting("redactPathsOnly")}
-                      {renderSetting("redactPathsSkip")}
-                    </div>
-                  </div>
+                  const sectionIcons = {
+                    global: "🌐",
+                    mode: "⚙️",
+                    rules: "📋",
+                    llm: "🤖",
+                  };
 
-                  {/* Disabled Rules Settings */}
-                  <div className="pt-2 border-t">
-                    <h5 className="text-sm font-medium text-muted-foreground mb-3">Disabled Redaction Rules</h5>
-                    <p className="text-xs text-muted-foreground mb-4">
-                      Selectively disable specific redaction rule types. Uncheck a rule to stop it from
-                      redacting values. Changes apply dynamically per request.
-                    </p>
-                    <DisabledRulesList
-                      disabledRules={settings.redactDisabledRules}
-                      onChange={(rules) => updateSetting("redactDisabledRules", rules)}
-                      disabled={isSettingOverridden("redactDisabledRules") || settings.detectorMode === "llm"}
-                      preset={settings.redactPreset}
-                      hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
-                      detectorMode={settings.detectorMode}
-                    />
-                  </div>
-                </div>
-              </section>
+                  const Section = ({
+                    id,
+                    title,
+                    icon,
+                    status,
+                    description,
+                    children,
+                    disabled,
+                  }: {
+                    id: string;
+                    title: string;
+                    icon: string;
+                    status: React.ReactNode;
+                    description: string;
+                    children: React.ReactNode;
+                    disabled?: boolean;
+                  }) => {
+                    const isOpen = openSections[id];
+                    return (
+                      <details
+                        className={`group rounded-lg border p-4 transition-all ${
+                          sectionStyles[id as keyof typeof sectionStyles]
+                        } ${disabled ? "opacity-50" : ""}`}
+                        open={isOpen}
+                        onToggle={() => toggleSection(id)}
+                      >
+                        <summary
+                          className="flex items-center gap-3 cursor-pointer list-none select-none"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            toggleSection(id);
+                          }}
+                        >
+                          <span className="text-xl" aria-hidden="true">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-foreground truncate">{title}</h4>
+                            <Tooltip delayDuration={300}>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs text-muted-foreground underline dotted cursor-help">
+                                  {description}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" align="start">
+                                <p className="max-w-[300px]">{description}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {status}
+                            <span
+                              className={cn(
+                                "transition-transform duration-200",
+                                isOpen ? "rotate-180" : "rotate-0"
+                              )}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M6 9l6 6 6-6" />
+                              </svg>
+                            </span>
+                          </div>
+                        </summary>
+                        <div className="mt-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                          {disabled && (
+                            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                              {settings.detectorMode === "llm" && id === "rules" && (
+                                <>Disabled in LLM Only mode — Rules-based settings only apply in Rules, Hybrid, or Auto modes.</>
+                              )}
+                              {settings.detectorMode === "rules" && id === "llm" && (
+                                <>Disabled in Rules Only mode — LLM-based settings only apply in LLM, Hybrid, or Auto modes.</>
+                              )}
+                            </div>
+                          )}
+                          {children}
+                        </div>
+                      </details>
+                    );
+                  };
 
-              {/* ============================================================
-                   SECTION 4: LLM-BASED SETTINGS
-                   (Active in: llm, hybrid, auto modes)
-                   ============================================================ */}
-              <section className="space-y-4 border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-foreground">LLM-Based Settings</h4>
-                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                    settings.detectorMode === "rules" 
-                      ? "bg-muted text-muted-foreground" 
-                      : "bg-blue/10 text-blue"
-                  }`}>
-                    {settings.detectorMode === "rules" ? "Disabled in Rules Mode" : "Active"}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Semantic PII detection via transformer models (Presidio/NER). 
-                  {settings.detectorMode === "rules" && "Disabled because detector mode is set to \"Rules Only\"."}
-                </p>
+                  return (
+                    <>
+                      {/* SECTION 1: GLOBAL CONFIGURATION */}
+                      <Section
+                        id="global"
+                        title="Global Configuration"
+                        icon={sectionIcons.global}
+                        status={
+                          <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-medium">
+                            Always Active
+                          </span>
+                        }
+                        description="Master switches that control whether redaction runs at all and for which providers."
+                      >
+                        <div className="space-y-4">
+                          {renderSetting("enableRedact")}
+                          {renderSetting("redactProviders")}
+                        </div>
+                      </Section>
 
-                <div className="space-y-4" style={{ opacity: settings.detectorMode === "rules" ? 0.5 : 1 }}>
-                  {renderSetting("detectorModelName")}
-                  {renderSetting("detectorThreshold")}
-                  {renderSetting("detectorLabels")}
-                  {renderSetting("strictBoundaries")}
-                </div>
-              </section>
+                      {/* SECTION 2: REDACTION MODE SELECTION */}
+                      <Section
+                        id="mode"
+                        title="Redaction Mode"
+                        icon={sectionIcons.mode}
+                        status={
+                          <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                            Core Setting
+                          </span>
+                        }
+                        description="Choose the detection engine. This determines which settings below are active."
+                      >
+                        <div className="space-y-4">
+                          {renderSetting("detectorMode")}
+                        </div>
+                        {/* Detector mode capabilities & warnings */}
+                        <DetectorModeWarnings
+                          detectorMode={settings.detectorMode}
+                          detectorModelName={settings.detectorModelName}
+                          detectorThreshold={settings.detectorThreshold}
+                          detectorLabels={settings.detectorLabels}
+                          hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
+                        />
+                      </Section>
 
-            </div>
+                      {/* SECTION 3: RULES-BASED SETTINGS */}
+                      <Section
+                        id="rules"
+                        title="Rules-Based Settings"
+                        icon={sectionIcons.rules}
+                        status={
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                            settings.detectorMode === "llm"
+                              ? "bg-muted text-muted-foreground"
+                              : "bg-green/10 text-green"
+                          }`}>
+                            {settings.detectorMode === "llm" ? "Disabled in LLM Mode" : "Active"}
+                          </span>
+                        }
+                        description="Regex/pattern-based redaction using built-in presets or custom policy files."
+                        disabled={settings.detectorMode === "llm"}
+                      >
+                        <div className="space-y-4" style={{ opacity: settings.detectorMode === "llm" ? 0.5 : 1 }}>
+                          {renderSetting("redactPreset")}
+                          {renderSetting("redactReversible")}
+                          {renderSetting("redactPolicyFile")}
+                          {renderSetting("redactPolicyEnabled")}
+
+                          {/* Path filtering settings */}
+                          <div className="pt-2 border-t">
+                            <h5 className="text-sm font-medium text-muted-foreground mb-3">Path Filtering</h5>
+                            <Tooltip delayDuration={300}>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs text-muted-foreground underline dotted cursor-help mb-4 block">
+                                  Configure which JSON paths are redacted ("only") and which are skipped ("skip"). Skip paths are checked before only paths. Defaults cover all LLM tool call formats (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" align="start">
+                                <p className="max-w-[300px]">
+                                  Configure which JSON paths are redacted ("only") and which are skipped ("skip").
+                                  Skip paths are checked before only paths. Defaults cover all LLM tool call formats
+                                  (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <div className="space-y-4">
+                              {renderSetting("redactPathsOnly")}
+                              {renderSetting("redactPathsSkip")}
+                            </div>
+                          </div>
+
+                          {/* Disabled Rules Settings */}
+                          <div className="pt-2 border-t">
+                            <h5 className="text-sm font-medium text-muted-foreground mb-3">Disabled Redaction Rules</h5>
+                            <Tooltip delayDuration={300}>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs text-muted-foreground underline dotted cursor-help mb-4 block">
+                                  Selectively disable specific redaction rule types. Uncheck a rule to stop it from redacting values. Changes apply dynamically per request.
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" align="start">
+                                <p className="max-w-[300px]">
+                                  Selectively disable specific redaction rule types. Uncheck a rule to stop it from
+                                  redacting values. Changes apply dynamically per request.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <DisabledRulesList
+                              disabledRules={settings.redactDisabledRules}
+                              onChange={(rules) => updateSetting("redactDisabledRules", rules)}
+                              disabled={isSettingOverridden("redactDisabledRules") || settings.detectorMode === "llm"}
+                              preset={settings.redactPreset}
+                              hasCustomPolicy={Boolean(settings.redactPolicyFile?.trim() && settings.redactPolicyEnabled)}
+                              detectorMode={settings.detectorMode}
+                            />
+                          </div>
+                        </div>
+                      </Section>
+
+                      {/* SECTION 4: LLM-BASED SETTINGS */}
+                      <Section
+                        id="llm"
+                        title="LLM-Based Settings"
+                        icon={sectionIcons.llm}
+                        status={
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                            settings.detectorMode === "rules"
+                              ? "bg-muted text-muted-foreground"
+                              : "bg-blue/10 text-blue"
+                          }`}>
+                            {settings.detectorMode === "rules" ? "Disabled in Rules Mode" : "Active"}
+                          </span>
+                        }
+                        description="Semantic PII detection via transformer models (Presidio/NER)."
+                        disabled={settings.detectorMode === "rules"}
+                      >
+                        <div className="space-y-4" style={{ opacity: settings.detectorMode === "rules" ? 0.5 : 1 }}>
+                          {renderSetting("detectorModelName")}
+                          {renderSetting("detectorThreshold")}
+                          {renderSetting("detectorLabels")}
+                          {renderSetting("strictBoundaries")}
+                        </div>
+                      </Section>
+                    </>
+                  );
+                })()}
+              </div>
           </div>
         );
       case "security":
