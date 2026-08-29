@@ -1026,10 +1026,6 @@ export default function SettingsPage() {
                       >
                         <summary
                           className="flex items-center gap-3 cursor-pointer list-none select-none"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            toggleSection(id);
-                          }}
                         >
                           <span className="text-xl" aria-hidden="true">{icon}</span>
                           <div className="flex-1 min-w-0">
