@@ -119,15 +119,16 @@ export function TooltipTrigger({ children }: TooltipTriggerProps) {
   const { showTooltip, hideTooltip, triggerRef, handleKeyDown } = useTooltipContext();
   
   const child = React.Children.only(children);
-  const childProps = child.props as React.HTMLAttributes<HTMLElement>;
+  const childProps = child.props as React.HTMLAttributes<HTMLElement> & { ref?: React.Ref<HTMLElement> };
 
   const mergedRef = React.useCallback(
     (node: HTMLElement) => {
       triggerRef.current = node;
-      if (typeof childProps.ref === "function") {
-        childProps.ref(node);
-      } else if (childProps.ref && typeof childProps.ref === "object") {
-        (childProps.ref as React.MutableRefObject<HTMLElement>).current = node;
+      const childRef = childProps.ref;
+      if (typeof childRef === "function") {
+        childRef(node);
+      } else if (childRef && typeof childRef === "object") {
+        (childRef as React.MutableRefObject<HTMLElement>).current = node;
       }
     },
     [childProps.ref, triggerRef]
