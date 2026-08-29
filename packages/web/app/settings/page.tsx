@@ -743,6 +743,14 @@ export default function SettingsPage() {
   const [isCleaning, setIsCleaning] = useState(false);
   const [envContainerId, setEnvContainerId] = useState("contextio-next");
 
+  // State for collapsible sections in the Redaction tab
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    global: true,
+    mode: true,
+    rules: true,
+    llm: true,
+  });
+
   // Initialize active tab from localStorage or default to "logging"
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     if (typeof window !== "undefined") {
@@ -972,17 +980,6 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 {/* Collapsible Section Component */}
                 {(() => {
-                  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-                    global: true,
-                    mode: true,
-                    rules: true,
-                    llm: true,
-                  });
-
-                  const toggleSection = (section: string) => {
-                    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
-                  };
-
                   // Theme-aware background colors for each section
                   const sectionStyles = {
                     global: "bg-green-50/50 dark:bg-green-900/10 border-green-200/50 dark:border-green-800/30",
@@ -996,6 +993,10 @@ export default function SettingsPage() {
                     mode: "⚙️",
                     rules: "📋",
                     llm: "🤖",
+                  };
+
+                  const toggleSection = (section: string) => {
+                    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
                   };
 
                   const Section = ({
