@@ -101,8 +101,8 @@ const TooltipContext = React.createContext<{
   setIsOpen: (open: boolean) => void;
   showTooltip: () => void;
   hideTooltip: () => void;
-  triggerRef: React.RefObject<HTMLElement>;
-  contentRef: React.RefObject<HTMLElement>;
+  triggerRef: React.RefObject<HTMLElement | null>;
+  contentRef: React.RefObject<HTMLElement | null>;
   delayDuration: number;
   disabled: boolean;
   handleKeyDown: (e: React.KeyboardEvent) => void;
