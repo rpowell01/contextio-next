@@ -121,44 +121,36 @@ export function TooltipTrigger({ children }: TooltipTriggerProps) {
   const child = React.Children.only(children);
   const childProps = child.props as React.HTMLAttributes<HTMLElement>;
   
-  // Create a wrapper element that combines our ref with the child's ref
-  const wrapperRef = React.useCallback(
-    (node: HTMLElement) => {
-      triggerRef.current = node;
-    },
-    [triggerRef]
-  );
-
+  // Use a wrapper span that we control - this avoids cloneElement type issues
+  // The child is rendered inside our wrapper which handles all events
   return (
-    <React.Fragment>
-      {React.cloneElement(child, {
-        // Don't pass ref to cloneElement - it's not allowed
-        // Instead, we'll handle ref merging differently
-        onMouseEnter: (e: React.MouseEvent) => {
-          childProps.onMouseEnter?.(e);
-          showTooltip();
-        },
-        onMouseLeave: (e: React.MouseEvent) => {
-          childProps.onMouseLeave?.(e);
-          hideTooltip();
-        },
-        onFocus: (e: React.FocusEvent) => {
-          childProps.onFocus?.(e);
-          showTooltip();
-        },
-        onBlur: (e: React.FocusEvent) => {
-          childProps.onBlur?.(e);
-          hideTooltip();
-        },
-        onKeyDown: (e: React.KeyboardEvent) => {
-          childProps.onKeyDown?.(e);
-          handleKeyDown(e);
-        },
-        tabIndex: 0,
-        // Add ref to the cloned element's props directly
-        ref: wrapperRef,
-      })}
-    </React.Fragment>
+    <span
+      ref={triggerRef}
+      tabIndex={0}
+      onMouseEnter={(e) => {
+        childProps.onMouseEnter?.(e);
+        showTooltip();
+      }}
+      onMouseLeave={(e) => {
+        childProps.onMouseLeave?.(e);
+        hideTooltip();
+      }}
+      onFocus={(e) => {
+        childProps.onFocus?.(e);
+        showTooltip();
+      }}
+      onBlur={(e) => {
+        childProps.onBlur?.(e);
+        hideTooltip();
+      }}
+      onKeyDown={(e) => {
+        childProps.onKeyDown?.(e);
+        handleKeyDown(e);
+      }}
+      style={{ display: 'inline-flex' }}
+    >
+      {child}
+    </span>
   );
 }
 
