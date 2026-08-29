@@ -120,9 +120,22 @@ export function TooltipTrigger({ children, asChild = false }: TooltipTriggerProp
   const child = React.Children.only(children);
   const childProps = child.props as React.HTMLAttributes<HTMLElement>;
 
+  // Create a ref callback that merges triggerRef with child's ref
+  const mergedRef = React.useCallback(
+    (node: HTMLElement | null) => {
+      triggerRef.current = node;
+      if (typeof child.ref === "function") {
+        child.ref(node);
+      } else if (child.ref && typeof child.ref === "object") {
+        (child.ref as React.MutableRefObject<HTMLElement | null>).current = node;
+      }
+    },
+    [triggerRef, child.ref]
+  );
+
   if (asChild) {
-    const clonedElement = React.cloneElement(child, {
-      ref: mergeRefs(triggerRef, child.ref),
+    return React.cloneElement(child, {
+      ref: mergedRef,
       tabIndex: 0,
       onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
         childProps.onMouseEnter?.(e);
@@ -146,7 +159,6 @@ export function TooltipTrigger({ children, asChild = false }: TooltipTriggerProp
       },
       "aria-describedby": contentId,
     });
-    return clonedElement;
   }
 
   return (
