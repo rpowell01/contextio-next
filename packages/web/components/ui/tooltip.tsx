@@ -116,7 +116,7 @@ function useTooltipContext() {
 }
 
 export function TooltipTrigger({ children }: TooltipTriggerProps) {
-  const { showTooltip, hideTooltip, triggerRef, disabled, handleKeyDown } = useTooltipContext();
+  const { showTooltip, hideTooltip, triggerRef, handleKeyDown } = useTooltipContext();
   
   const child = React.Children.only(children);
   const childProps = child.props as React.HTMLAttributes<HTMLElement>;
