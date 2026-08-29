@@ -108,17 +108,20 @@ export function TooltipTrigger({ children, asChild = false }: TooltipTriggerProp
   const child = React.Children.only(children);
   const childProps = child.props as React.HTMLAttributes<HTMLElement>;
 
+  // Access child's ref at runtime (not typed in ReactElement)
+  const childRef = (child as unknown as { ref?: React.Ref<HTMLElement> }).ref;
+
   // Create a ref callback that merges triggerRef with child's ref
   const mergedRef = React.useCallback(
     (node: HTMLElement | null) => {
       triggerRef.current = node;
-      if (typeof child.ref === "function") {
-        child.ref(node);
-      } else if (child.ref && typeof child.ref === "object") {
-        (child.ref as React.MutableRefObject<HTMLElement | null>).current = node;
+      if (typeof childRef === "function") {
+        childRef(node);
+      } else if (childRef && typeof childRef === "object") {
+        (childRef as React.MutableRefObject<HTMLElement | null>).current = node;
       }
     },
-    [triggerRef, child.ref]
+    [triggerRef, childRef]
   );
 
   if (asChild) {
