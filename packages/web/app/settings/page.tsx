@@ -995,8 +995,8 @@ export default function SettingsPage() {
                     llm: "🤖",
                   };
 
-                  const toggleSection = (section: string) => {
-                    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+                  const toggleSection = (section: string, isOpen: boolean) => {
+                    setOpenSections((prev) => ({ ...prev, [section]: isOpen }));
                   };
 
                   const Section = ({
@@ -1023,7 +1023,7 @@ export default function SettingsPage() {
                           sectionStyles[id as keyof typeof sectionStyles]
                         } ${disabled ? "opacity-50" : ""}`}
                         open={isOpen}
-                        onToggle={() => toggleSection(id)}
+                        onToggle={(e: React.ToggleEvent<HTMLDetailsElement>) => toggleSection(id, (e.target as HTMLDetailsElement).open)}
                       >
                         <summary
                           className="flex items-center gap-3 cursor-pointer list-none select-none"
