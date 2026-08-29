@@ -89,6 +89,13 @@ function TooltipContentWrapper({
   const [isVisible, setIsVisible] = React.useState(false);
   const [timeoutId, setTimeoutId] = React.useState<ReturnType<typeof setTimeout> | null>(null);
 
+  const showTooltip = () => {
+    const id = setTimeout(() => {
+      setIsVisible(true);
+    }, delayDuration);
+    setTimeoutId(id);
+  };
+
   const hideTooltip = () => {
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -133,8 +140,8 @@ function TooltipContentWrapper({
       className="fixed z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[300px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95"
       style={tooltipStyle}
       role="tooltip"
-      onMouseEnter={() => setIsVisible(true)}
-      onMouseLeave={() => setIsVisible(false)}
+      onMouseEnter={showTooltip}
+      onMouseLeave={hideTooltip}
     >
       {content}
     </div>
