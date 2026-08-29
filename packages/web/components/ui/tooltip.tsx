@@ -89,19 +89,12 @@ function TooltipContentWrapper({
   const [isVisible, setIsVisible] = React.useState(false);
   const [timeoutId, setTimeoutId] = React.useState<ReturnType<typeof setTimeout> | null>(null);
 
-  const showTooltip = () => {
-    const id = setTimeout(() => {
-      setIsVisible(true);
-    }, delayDuration);
-    setTimeoutId(id);
-  };
-
   const hideTooltip = () => {
     if (timeoutId) {
       clearTimeout(timeoutId);
       setTimeoutId(null);
     }
-    setIsOpen(false);
+    setIsVisible(false);
   };
 
   React.useEffect(() => {
