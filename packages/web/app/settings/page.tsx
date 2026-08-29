@@ -1030,15 +1030,10 @@ export default function SettingsPage() {
                           <span className="text-xl" aria-hidden="true">{icon}</span>
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-foreground truncate">{title}</h4>
-                            <Tooltip delayDuration={300}>
-                              <TooltipTrigger>
-                                <span className="text-xs text-muted-foreground underline dotted cursor-help">
-                                  {description}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" align="start">
-                                <p className="max-w-[300px]">{description}</p>
-                              </TooltipContent>
+                            <Tooltip delayDuration={300} content={<p className="max-w-[300px]">{description}</p>}>
+                              <span className="text-xs text-muted-foreground underline dotted cursor-help">
+                                {description}
+                              </span>
                             </Tooltip>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1143,19 +1138,14 @@ export default function SettingsPage() {
                           {/* Path filtering settings */}
                           <div className="pt-2 border-t">
                             <h5 className="text-sm font-medium text-muted-foreground mb-3">Path Filtering</h5>
-                            <Tooltip delayDuration={300}>
-                              <TooltipTrigger>
-                                <span className="text-xs text-muted-foreground underline dotted cursor-help mb-4 block">
-                                  Configure which JSON paths are redacted ("only") and which are skipped ("skip"). Skip paths are checked before only paths. Defaults cover all LLM tool call formats (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" align="start">
-                                <p className="max-w-[300px]">
+                            <Tooltip delayDuration={300} content={<p className="max-w-[300px]">
                                   Configure which JSON paths are redacted ("only") and which are skipped ("skip").
                                   Skip paths are checked before only paths. Defaults cover all LLM tool call formats
                                   (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
-                                </p>
-                              </TooltipContent>
+                                </p>}>
+                              <span className="text-xs text-muted-foreground underline dotted cursor-help mb-4 block">
+                                Configure which JSON paths are redacted ("only") and which are skipped ("skip"). Skip paths are checked before only paths. Defaults cover all LLM tool call formats (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
+                              </span>
                             </Tooltip>
                             <div className="space-y-4">
                               {renderSetting("redactPathsOnly")}
@@ -1166,18 +1156,13 @@ export default function SettingsPage() {
                           {/* Disabled Rules Settings */}
                           <div className="pt-2 border-t">
                             <h5 className="text-sm font-medium text-muted-foreground mb-3">Disabled Redaction Rules</h5>
-                            <Tooltip delayDuration={300}>
-                              <TooltipTrigger>
-                                <span className="text-xs text-muted-foreground underline dotted cursor-help mb-4 block">
-                                  Selectively disable specific redaction rule types. Uncheck a rule to stop it from redacting values. Changes apply dynamically per request.
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" align="start">
-                                <p className="max-w-[300px]">
+                            <Tooltip delayDuration={300} content={<p className="max-w-[300px]">
                                   Selectively disable specific redaction rule types. Uncheck a rule to stop it from
                                   redacting values. Changes apply dynamically per request.
-                                </p>
-                              </TooltipContent>
+                                </p>}>
+                              <span className="text-xs text-muted-foreground underline dotted cursor-help mb-4 block">
+                                Selectively disable specific redaction rule types. Uncheck a rule to stop it from redacting values. Changes apply dynamically per request.
+                              </span>
                             </Tooltip>
                             <DisabledRulesList
                               disabledRules={settings.redactDisabledRules}

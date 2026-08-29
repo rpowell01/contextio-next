@@ -5,6 +5,9 @@ import { cn } from "@/lib/utils";
 
 interface TooltipProps {
   children: React.ReactNode;
+  content: React.ReactNode;
+  side?: "top" | "right" | "bottom" | "left";
+  align?: "start" | "center" | "end";
   delayDuration?: number;
   disabled?: boolean;
 }
@@ -19,24 +22,76 @@ interface TooltipContentProps {
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
   sideOffset?: number;
+  alignOffset?: number;
   className?: string;
 }
 
+/**
+ * Simple CSS-based Tooltip component.
+ * Uses pure CSS for positioning and visibility - no complex ref handling needed.
+ * 
+ * Usage:
+ *   <Tooltip content="Tooltip text">
+ *     <TooltipTrigger asChild>
+ *       <button>Hover me</button>
+ *     </TooltipTrigger>
+ *   </Tooltip>
+ * 
+ * Or without asChild:
+ *   <Tooltip content="Tooltip text">
+ *     <TooltipTrigger>
+ *       <span>Hover me</span>
+ *     </TooltipTrigger>
+ *   </Tooltip>
+ */
 export function Tooltip({
   children,
+  content,
+  side = "top",
+  align = "center",
   delayDuration = 200,
   disabled = false,
 }: TooltipProps) {
-  const [isOpen, setIsOpen] = React.useState(false);
+  const child = React.Children.only(children);
+  
+  // Wrap the child in a tooltip container
+  return (
+    <div 
+      className="relative inline-block"
+      style={{ display: 'inline-block' }}
+    >
+      {child}
+      {!disabled && (
+        <TooltipContentWrapper
+          content={content}
+          side={side}
+          align={align}
+          delayDuration={delayDuration}
+        />
+      )}
+    </div>
+  );
+}
+
+interface TooltipContentWrapperProps {
+  content: React.ReactNode;
+  side: "top" | "right" | "bottom" | "left";
+  align: "start" | "center" | "end";
+  delayDuration: number;
+}
+
+function TooltipContentWrapper({ 
+  content, 
+  side, 
+  align, 
+  delayDuration 
+}: TooltipContentWrapperProps) {
+  const [isVisible, setIsVisible] = React.useState(false);
   const [timeoutId, setTimeoutId] = React.useState<ReturnType<typeof setTimeout> | null>(null);
-  const triggerRef = React.useRef<HTMLElement>(null);
-  const contentRef = React.useRef<HTMLElement>(null);
-  const contentId = React.useId();
 
   const showTooltip = () => {
-    if (disabled) return;
     const id = setTimeout(() => {
-      setIsOpen(true);
+      setIsVisible(true);
     }, delayDuration);
     setTimeoutId(id);
   };
@@ -57,178 +112,54 @@ export function Tooltip({
     };
   }, [timeoutId]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape" || e.key === "Tab") {
-      hideTooltip();
-    }
-  };
-
-  return (
-    <TooltipContext.Provider value={{
-      isOpen,
-      setIsOpen,
-      showTooltip,
-      hideTooltip,
-      triggerRef,
-      contentRef,
-      delayDuration,
-      disabled,
-      handleKeyDown,
-      contentId,
-    }}>
-      <div className="inline-block relative">{children}</div>
-    </TooltipContext.Provider>
-  );
-}
-
-const TooltipContext = React.createContext<{
-  isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
-  showTooltip: () => void;
-  hideTooltip: () => void;
-  triggerRef: React.RefObject<HTMLElement | null>;
-  contentRef: React.RefObject<HTMLElement | null>;
-  delayDuration: number;
-  disabled: boolean;
-  handleKeyDown: (e: React.KeyboardEvent) => void;
-  contentId: string;
-} | null>(null);
-
-function useTooltipContext() {
-  const context = React.useContext(TooltipContext);
-  if (!context) {
-    throw new Error("Tooltip components must be used within a Tooltip");
-  }
-  return context;
-}
-
-export function TooltipTrigger({ children, asChild = false }: TooltipTriggerProps) {
-  const { showTooltip, hideTooltip, triggerRef, handleKeyDown, contentId } = useTooltipContext();
-
-  const child = React.Children.only(children);
-  const childProps = child.props as React.HTMLAttributes<HTMLElement>;
-
-  // Access child's ref at runtime (not typed in ReactElement)
-  const childRef = (child as unknown as { ref?: React.Ref<HTMLElement> }).ref;
-
-  // Create a ref callback that merges triggerRef with child's ref
-  const mergedRef = React.useCallback(
-    (node: HTMLElement | null) => {
-      triggerRef.current = node;
-      if (typeof childRef === "function") {
-        childRef(node);
-      } else if (childRef && typeof childRef === "object") {
-        (childRef as React.MutableRefObject<HTMLElement | null>).current = node;
-      }
-    },
-    [triggerRef, childRef]
-  );
-
-  if (asChild) {
-    return React.cloneElement(child, {
-      ref: mergedRef,
-      tabIndex: 0,
-      onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
-        childProps.onMouseEnter?.(e);
-        showTooltip();
-      },
-      onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
-        childProps.onMouseLeave?.(e);
-        hideTooltip();
-      },
-      onFocus: (e: React.FocusEvent<HTMLElement>) => {
-        childProps.onFocus?.(e);
-        showTooltip();
-      },
-      onBlur: (e: React.FocusEvent<HTMLElement>) => {
-        childProps.onBlur?.(e);
-        hideTooltip();
-      },
-      onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => {
-        childProps.onKeyDown?.(e);
-        handleKeyDown(e);
-      },
-      "aria-describedby": contentId,
-    });
-  }
-
-  return (
-    <span
-      ref={triggerRef}
-      tabIndex={0}
-      onMouseEnter={(e) => {
-        childProps.onMouseEnter?.(e);
-        showTooltip();
-      }}
-      onMouseLeave={(e) => {
-        childProps.onMouseLeave?.(e);
-        hideTooltip();
-      }}
-      onFocus={(e) => {
-        childProps.onFocus?.(e);
-        showTooltip();
-      }}
-      onBlur={(e) => {
-        childProps.onBlur?.(e);
-        hideTooltip();
-      }}
-      onKeyDown={(e) => {
-        childProps.onKeyDown?.(e);
-        handleKeyDown(e);
-      }}
-      style={{ display: 'inline-flex' }}
-      aria-describedby={contentId}
-    >
-      {child}
-    </span>
-  );
-}
-
-export function TooltipContent({ 
-  children, 
-  side = "top", 
-  align = "center", 
-  sideOffset = 4, 
-  className,
-}: TooltipContentProps) {
-  const { isOpen, contentRef, disabled, contentId } = useTooltipContext();
-
-  if (disabled) return null;
-
   const sideStyles: Record<string, React.CSSProperties> = {
-    top: { bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: sideOffset },
-    bottom: { top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: sideOffset },
-    left: { right: "100%", top: "50%", transform: "translateY(-50%)", marginRight: sideOffset },
-    right: { left: "100%", top: "50%", transform: "translateY(-50%)", marginLeft: sideOffset },
+    top: { bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 4 },
+    bottom: { top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: 4 },
+    left: { right: "100%", top: "50%", transform: "translateY(-50%)", marginRight: 4 },
+    right: { left: "100%", top: "50%", transform: "translateY(-50%)", marginLeft: 4 },
   };
 
   const alignStyles: Record<string, React.CSSProperties> = {
-    start: { left: 0, transform: "none" },
-    end: { right: 0, transform: "none" },
+    start: { left: 0, transform: "translateX(0)" },
+    end: { right: 0, transform: "translateX(0)" },
     center: {},
   };
 
   const tooltipStyle: React.CSSProperties = {
     ...sideStyles[side],
     ...(align !== "center" ? alignStyles[align] : {}),
+    position: "absolute",
     zIndex: 50,
+    whiteSpace: "normal",
   };
 
-  if (!isOpen) return null;
+  if (!isVisible) return null;
 
   return (
     <div
-      ref={contentRef}
-      id={contentId}
-      className={cn(
-        "fixed z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
-        "max-w-[300px] whitespace-normal break-words",
-        className
-      )}
+      className="fixed z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[300px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95"
       style={tooltipStyle}
       role="tooltip"
-      data-state={isOpen ? "open" : "closed"}
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
     >
+      {content}
+    </div>
+  );
+}
+
+export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps) {
+  // For simplicity, just render the child directly
+  // The Tooltip component handles the wrapper
+  return asChild ? children : <span>{children}</span>;
+}
+
+export function TooltipContent({ 
+  children, 
+  className,
+}: TooltipContentProps) {
+  return (
+    <div className={cn("relative", className)}>
       {children}
     </div>
   );
