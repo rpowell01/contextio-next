@@ -1035,7 +1035,7 @@ export default function SettingsPage() {
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-foreground truncate">{title}</h4>
                             <Tooltip delayDuration={300}>
-                              <TooltipTrigger asChild>
+                              <TooltipTrigger>
                                 <span className="text-xs text-muted-foreground underline dotted cursor-help">
                                   {description}
                                 </span>
@@ -1148,7 +1148,7 @@ export default function SettingsPage() {
                           <div className="pt-2 border-t">
                             <h5 className="text-sm font-medium text-muted-foreground mb-3">Path Filtering</h5>
                             <Tooltip delayDuration={300}>
-                              <TooltipTrigger asChild>
+                              <TooltipTrigger>
                                 <span className="text-xs text-muted-foreground underline dotted cursor-help mb-4 block">
                                   Configure which JSON paths are redacted ("only") and which are skipped ("skip"). Skip paths are checked before only paths. Defaults cover all LLM tool call formats (OpenAI tool_calls, Anthropic content blocks) to prevent NER false positives.
                                 </span>
@@ -1171,7 +1171,7 @@ export default function SettingsPage() {
                           <div className="pt-2 border-t">
                             <h5 className="text-sm font-medium text-muted-foreground mb-3">Disabled Redaction Rules</h5>
                             <Tooltip delayDuration={300}>
-                              <TooltipTrigger asChild>
+                              <TooltipTrigger>
                                 <span className="text-xs text-muted-foreground underline dotted cursor-help mb-4 block">
                                   Selectively disable specific redaction rule types. Uncheck a rule to stop it from redacting values. Changes apply dynamically per request.
                                 </span>
