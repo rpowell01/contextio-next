@@ -12,7 +12,7 @@ import { FalsePositiveManager } from "@/components/FalsePositiveManager";
 import { LogsViewer } from "@/components/logs-viewer";
 import { EnvironmentVariablesPanel } from "@/components/environment-variables-panel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /** Preset rule names for UI display (avoids importing @contextio/redact which brings Node.js deps) */
