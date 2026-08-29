@@ -18,7 +18,7 @@ interface TooltipTriggerProps {
 }
 
 interface TooltipContentProps {
-  children: React.ReactNode;
+  content: React.ReactNode;
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
   sideOffset?: number;
@@ -54,38 +54,7 @@ export function Tooltip({
 }: TooltipProps) {
   const child = React.Children.only(children);
   
-  // Wrap the child in a tooltip container
-  return (
-    <div 
-      className="relative inline-block"
-      style={{ display: 'inline-block' }}
-    >
-      {child}
-      {!disabled && (
-        <TooltipContentWrapper
-          content={content}
-          side={side}
-          align={align}
-          delayDuration={delayDuration}
-        />
-      )}
-    </div>
-  );
-}
-
-interface TooltipContentWrapperProps {
-  content: React.ReactNode;
-  side: "top" | "right" | "bottom" | "left";
-  align: "start" | "center" | "end";
-  delayDuration: number;
-}
-
-function TooltipContentWrapper({ 
-  content, 
-  side, 
-  align, 
-  delayDuration 
-}: TooltipContentWrapperProps) {
+  // State for tooltip visibility
   const [isVisible, setIsVisible] = React.useState(false);
   const [timeoutId, setTimeoutId] = React.useState<ReturnType<typeof setTimeout> | null>(null);
 
@@ -111,7 +80,42 @@ function TooltipContentWrapper({
       }
     };
   }, [timeoutId]);
+  
+  // Wrap the child in a tooltip container
+  return (
+    <div 
+      className="relative inline-block"
+      style={{ display: 'inline-block' }}
+      onMouseEnter={disabled ? undefined : showTooltip}
+      onMouseLeave={disabled ? undefined : hideTooltip}
+    >
+      {child}
+      {!disabled && isVisible && (
+        <TooltipContent
+          content={content}
+          side={side}
+          align={align}
+        />
+      )}
+    </div>
+  );
+}
 
+
+
+export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps) {
+  // For simplicity, just render the child directly
+  // The Tooltip component handles the wrapper
+  return asChild ? children : <span>{children}</span>;
+}
+
+export function TooltipContent({ 
+  content,
+  side = "top",
+  align = "center",
+  className,
+}: TooltipContentProps & { content: React.ReactNode; side?: "top" | "right" | "bottom" | "left"; align?: "start" | "center" | "end" }) {
+  
   const sideStyles: Record<string, React.CSSProperties> = {
     top: { bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 4 },
     bottom: { top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: 4 },
@@ -133,34 +137,13 @@ function TooltipContentWrapper({
     whiteSpace: "normal",
   };
 
-  if (!isVisible) return null;
-
   return (
     <div
-      className="fixed z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[300px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95"
+      className={cn("z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[300px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95", className)}
       style={tooltipStyle}
       role="tooltip"
-      onMouseEnter={showTooltip}
-      onMouseLeave={hideTooltip}
     >
       {content}
-    </div>
-  );
-}
-
-export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps) {
-  // For simplicity, just render the child directly
-  // The Tooltip component handles the wrapper
-  return asChild ? children : <span>{children}</span>;
-}
-
-export function TooltipContent({ 
-  children, 
-  className,
-}: TooltipContentProps) {
-  return (
-    <div className={cn("relative", className)}>
-      {children}
     </div>
   );
 }
