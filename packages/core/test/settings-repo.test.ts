@@ -147,6 +147,7 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 		proxyPort: 4040,
 		proxyAllowTargetOverride: false,
 		strictUrlForwarding: false,
+		strictBoundaries: false,
 		upstreamOpenAiUrl: "",
 		upstreamAnthropicUrl: "",
 		upstreamChatGptUrl: "",
