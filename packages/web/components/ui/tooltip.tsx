@@ -119,25 +119,21 @@ export function TooltipTrigger({ children }: TooltipTriggerProps) {
   const { showTooltip, hideTooltip, triggerRef, handleKeyDown } = useTooltipContext();
   
   const child = React.Children.only(children);
-  const childProps = child.props as React.HTMLAttributes<HTMLElement> & { ref?: React.Ref<HTMLElement> };
-
-  const mergedRef = React.useCallback(
+  const childProps = child.props as React.HTMLAttributes<HTMLElement>;
+  
+  // Create a wrapper element that combines our ref with the child's ref
+  const wrapperRef = React.useCallback(
     (node: HTMLElement) => {
       triggerRef.current = node;
-      const childRef = childProps.ref;
-      if (typeof childRef === "function") {
-        childRef(node);
-      } else if (childRef && typeof childRef === "object") {
-        (childRef as React.MutableRefObject<HTMLElement>).current = node;
-      }
     },
-    [childProps.ref, triggerRef]
+    [triggerRef]
   );
 
   return (
     <React.Fragment>
       {React.cloneElement(child, {
-        ref: mergedRef,
+        // Don't pass ref to cloneElement - it's not allowed
+        // Instead, we'll handle ref merging differently
         onMouseEnter: (e: React.MouseEvent) => {
           childProps.onMouseEnter?.(e);
           showTooltip();
@@ -159,6 +155,8 @@ export function TooltipTrigger({ children }: TooltipTriggerProps) {
           handleKeyDown(e);
         },
         tabIndex: 0,
+        // Add ref to the cloned element's props directly
+        ref: wrapperRef,
       })}
     </React.Fragment>
   );
