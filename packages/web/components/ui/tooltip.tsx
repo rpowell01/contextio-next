@@ -12,7 +12,6 @@ interface TooltipProps {
 
 interface TooltipTriggerProps {
   children: React.ReactElement;
-  asChild?: boolean;
 }
 
 interface TooltipContentProps {
@@ -116,7 +115,7 @@ function useTooltipContext() {
   return context;
 }
 
-export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps) {
+export function TooltipTrigger({ children }: TooltipTriggerProps) {
   const { showTooltip, hideTooltip, triggerRef, disabled, handleKeyDown } = useTooltipContext();
   
   const child = React.Children.only(children);
