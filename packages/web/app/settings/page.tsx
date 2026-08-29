@@ -1030,11 +1030,8 @@ export default function SettingsPage() {
                         >
                           <span className="text-xl" aria-hidden="true">{icon}</span>
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-foreground truncate">{title}</h4>
                             <Tooltip delayDuration={300} content={<p className="max-w-[300px]">{description}</p>}>
-                              <span className="text-xs text-muted-foreground underline dotted cursor-help">
-                                {description}
-                              </span>
+                              <h4 className="font-semibold text-foreground truncate cursor-help">{title}</h4>
                             </Tooltip>
                           </div>
                           <div className="flex items-center gap-2">
