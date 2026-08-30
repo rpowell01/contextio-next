@@ -49,7 +49,7 @@ RUN export PATH="$PATH:/root/.local/share/pnpm/bin" && \
     BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) && \
     VERSION=$(cat package.json | grep '"version"' | head -1 | sed 's/.*"version": "\([^"]*\)".*/\1/') && \
     echo "{\"version\":\"$VERSION\",\"buildTime\":\"$BUILD_TIME\",\"gitCommit\":\"$GIT_COMMIT\"}" > /app/version-info.json && \
-    pnpm exec turbo build
+    SKIP_STANDALONE=true pnpm exec turbo build
 
 # Verify core dist with migrations was created in build stage
 RUN ls -la /app/packages/core/dist/db/migrations/ && \
@@ -112,9 +112,8 @@ RUN ls -la /app/packages/core/dist/db/migrations/ && \
     test -f /app/packages/core/dist/db/migrations/014_add_feature_flags_and_advanced_config.sql && \
     test -f /app/packages/core/dist/db/migrations/015_add_upstream_urls.sql
 
-# Copy Next.js standalone build output
-COPY --from=build /app/packages/web/.next/standalone/packages/web ./packages/web
-COPY --from=build /app/packages/web/.next/static ./packages/web/.next/static
+# Copy Next.js build output (non-standalone, full .next directory)
+COPY --from=build /app/packages/web/.next ./packages/web/.next
 COPY --from=build /app/packages/web/public ./packages/web/public
 
 # Create Next.js cache directories

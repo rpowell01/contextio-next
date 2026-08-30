@@ -853,7 +853,7 @@ export default function SettingsPage() {
   const [envContainerId, setEnvContainerId] = useState("contextio-next");
 
   // Admin authentication protection
-  const { showContent, showAccessDenied, setShowAccessDenied, authState } = useAdminProtection();
+  const { showContent } = useAdminProtection();
 
   // State for collapsible sections in the Redaction tab
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -2108,7 +2108,9 @@ export default function SettingsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        navigator.clipboard.writeText(policyFileContents);
+                        if (policyFileContents) {
+                          navigator.clipboard.writeText(policyFileContents);
+                        }
                       }}
                     >
                       Copy
