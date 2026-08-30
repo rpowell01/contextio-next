@@ -2917,14 +2917,12 @@ case "oidcIssuer":
         ];
         return (
           <div className="space-y-4">
-            <h3 className="font-semibold mb-2">Streaming Retry Configuration</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Configure streaming retry behavior per provider. Controls whether retry is enabled, max retry attempts, and max buffer size for rate-limited streaming responses.
-            </p>
             <SettingHelp
               meta={getMeta("streamingRetry")}
               description={SETTING_DESCRIPTIONS.streamingRetry}
-            />
+            >
+              <h3 className="font-semibold mb-2 cursor-help">Streaming Retry Configuration</h3>
+            </SettingHelp>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border rounded">
                 <thead className="bg-muted">
@@ -3539,7 +3537,16 @@ case "upstreamGeminiCodeAssistUrl":
         <SettingHelp
           meta={getMeta("theme")}
           description="Select the color theme for the web UI. System follows your OS preference. Changes apply immediately."
-        />
+        >
+          <Label htmlFor="theme" className="block text-sm font-medium mb-2 cursor-help">
+            Theme
+            {themeIsOverridden && (
+              <span className="ml-2 text-xs text-foreground/70 font-normal">
+                (Set by environment variable)
+              </span>
+            )}
+          </Label>
+        </SettingHelp>
       </div>
     );
   };

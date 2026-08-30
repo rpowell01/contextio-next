@@ -231,16 +231,13 @@ export function DiffDialog({
 
       // If exact postValue not found, fall back to nth placeholder position
       if (!postPos) {
-        const placeholderPattern = /\[[A-Z][A-Z0-9_-]*(?:_REDACTED|_\d+)\]/g;
         const placeholderPositions: Array<{ start: number; end: number }> = [];
         let placeholderMatch;
         const pattern = new RegExp(`\\[[A-Z][A-Z0-9_-]*(?:_REDACTED|_\\d+)\\]`, 'g');
-        let lastIndex = 0;
         while ((placeholderMatch = pattern.exec(diffPostContent)) !== null) {
           const idx = placeholderMatch.index;
           const end = idx + placeholderMatch[0].length;
           placeholderPositions.push({ start: idx, end });
-          lastIndex = end;
         }
         // Use the placeholder at the same match index (0-based)
         if (placeholderPositions.length > matchIdx) {
