@@ -828,6 +828,18 @@ export default function SettingsPage() {
   const [isCleaning, setIsCleaning] = useState(false);
   const [envContainerId, setEnvContainerId] = useState("contextio-next");
 
+  // State for collapsible sections in the Redaction tab
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    global: true,
+    mode: true,
+    rules: true,
+    llm: true,
+  });
+
+  const toggleSection = (id: string) => {
+    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   // Initialize active tab from localStorage or default to "logging"
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     if (typeof window !== "undefined") {
@@ -1047,16 +1059,7 @@ export default function SettingsPage() {
             )}
           </div>
         );
-      case "redaction": {
-        const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-          global: true,
-          mode: true,
-          rules: true,
-          llm: true,
-        });
-        const toggleSection = (id: string) => {
-          setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
-        };
+      case "redaction":
         return (
           <div className="rounded-lg border p-6" role="tabpanel" id="panel-redaction" aria-labelledby="tab-redaction">
             <h3 className="font-semibold mb-4">Redaction</h3>
@@ -1202,7 +1205,6 @@ export default function SettingsPage() {
               </div>
             </div>
           );
-        }
       case "security":
         return (
           <div className="rounded-lg border p-6" role="tabpanel" id="panel-security" aria-labelledby="tab-security">
