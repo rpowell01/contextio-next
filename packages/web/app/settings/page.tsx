@@ -272,15 +272,19 @@ function SettingBadges({ meta }: { meta: SettingMeta | undefined }) {
 function SettingHelp({
   meta,
   description,
+  children,
 }: {
   meta: SettingMeta | undefined;
   description: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="mt-1">
-      <p className="text-xs text-muted-foreground">{description}</p>
+    <>
+      <Tooltip delayDuration={300} content={<p className="max-w-[300px]">{description}</p>}>
+        {children}
+      </Tooltip>
       <SettingBadges meta={meta} />
-    </div>
+    </>
   );
 }
 
@@ -1943,9 +1947,14 @@ export default function SettingsPage() {
       case "logDir":
         return (
           <div>
-            <Label htmlFor="logDir" className="block text-sm font-medium mb-2">
-              Capture Directory
-            </Label>
+            <SettingHelp
+              meta={getMeta("logDir")}
+              description={SETTING_DESCRIPTIONS.logDir}
+            >
+              <Label htmlFor="logDir" className="block text-sm font-medium mb-2 cursor-help">
+                Capture Directory
+              </Label>
+            </SettingHelp>
             <Input
               id="logDir"
               value={settings.logDir}
@@ -1956,21 +1965,22 @@ export default function SettingsPage() {
                 isSettingOverridden("logDir") ? "bg-muted cursor-not-allowed" : ""
               }
             />
-            <SettingHelp
-              meta={getMeta("logDir")}
-              description={SETTING_DESCRIPTIONS.logDir}
-            />
           </div>
         );
       case "maxSessions":
         return (
           <div>
-            <Label
-              htmlFor="maxSessions"
-              className="block text-sm font-medium mb-2"
+            <SettingHelp
+              meta={getMeta("maxSessions")}
+              description={SETTING_DESCRIPTIONS.maxSessions}
             >
-              Max Sessions (0 = unlimited)
-            </Label>
+              <Label
+                htmlFor="maxSessions"
+                className="block text-sm font-medium mb-2 cursor-help"
+              >
+                Max Sessions (0 = unlimited)
+              </Label>
+            </SettingHelp>
             <Input
               id="maxSessions"
               type="number"
@@ -1983,10 +1993,6 @@ export default function SettingsPage() {
               className={
                 isSettingOverridden("maxSessions") ? "bg-muted cursor-not-allowed" : ""
               }
-            />
-            <SettingHelp
-              meta={getMeta("maxSessions")}
-              description={SETTING_DESCRIPTIONS.maxSessions}
             />
           </div>
         );
@@ -2001,17 +2007,22 @@ export default function SettingsPage() {
             : null;
         return (
           <div>
-            <Label
-              htmlFor="redactPreset"
-              className="block text-sm font-medium mb-2"
+            <SettingHelp
+              meta={getMeta("redactPreset")}
+              description={SETTING_DESCRIPTIONS.redactPreset}
             >
-              Redaction Preset <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
-              {presetOverrideReason && (
-                <span className="ml-2 text-xs text-foreground/70 font-normal">
-                  ({presetOverrideReason})
-                </span>
-              )}
-            </Label>
+              <Label
+                htmlFor="redactPreset"
+                className="block text-sm font-medium mb-2 cursor-help"
+              >
+                Redaction Preset <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
+                {presetOverrideReason && (
+                  <span className="ml-2 text-xs text-foreground/70 font-normal">
+                    ({presetOverrideReason})
+                  </span>
+                )}
+              </Label>
+            </SettingHelp>
             <Select
               value={settings.redactPreset}
               onValueChange={(value) => updateSetting("redactPreset", value as "secrets" | "pii" | "strict")}
@@ -2026,10 +2037,6 @@ export default function SettingsPage() {
                 <SelectItem value="strict">Strict (all of the above + more)</SelectItem>
               </SelectContent>
             </Select>
-            <SettingHelp
-              meta={getMeta("redactPreset")}
-              description={SETTING_DESCRIPTIONS.redactPreset}
-            />
             {settings.detectorMode === "llm" && (
               <p className="text-xs text-muted-foreground mt-1">
                 Disabled: This setting only applies in Rules, Hybrid, or Auto detector modes.
@@ -2041,9 +2048,14 @@ export default function SettingsPage() {
       case "redactPolicyFile":
         return (
           <div>
-            <Label htmlFor="redactPolicyFile" className="block text-sm font-medium mb-2">
-              Redaction Policy File <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
-            </Label>
+            <SettingHelp
+              meta={getMeta("redactPolicyFile")}
+              description={SETTING_DESCRIPTIONS.redactPolicyFile}
+            >
+              <Label htmlFor="redactPolicyFile" className="block text-sm font-medium mb-2 cursor-help">
+                Redaction Policy File <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
+              </Label>
+            </SettingHelp>
             <Input
               id="redactPolicyFile"
               value={settings.redactPolicyFile}
@@ -2055,10 +2067,6 @@ export default function SettingsPage() {
                   ? "bg-muted cursor-not-allowed"
                   : ""
               }
-            />
-            <SettingHelp
-              meta={getMeta("redactPolicyFile")}
-              description={SETTING_DESCRIPTIONS.redactPolicyFile}
             />
             {settings.detectorMode === "llm" && (
               <p className="text-xs text-muted-foreground mt-1">
@@ -2153,13 +2161,14 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("redactPolicyEnabled") || settings.detectorMode === "llm"}
             />
-            <Label htmlFor="redactPolicyEnabled" className="text-sm">
-              Use custom policy file <span className="text-xs text-muted-foreground font-normal">(Rules-Based)</span>
-            </Label>
             <SettingHelp
               meta={getMeta("redactPolicyEnabled")}
               description={SETTING_DESCRIPTIONS.redactPolicyEnabled}
-            />
+            >
+              <Label htmlFor="redactPolicyEnabled" className="text-sm cursor-help">
+                Use custom policy file <span className="text-xs text-muted-foreground font-normal">(Rules-Based)</span>
+              </Label>
+            </SettingHelp>
             {settings.detectorMode === "llm" && (
               <p className="text-xs text-muted-foreground mt-1 ml-6">
                 Disabled: This setting only applies in Rules, Hybrid, or Auto detector modes.
@@ -2180,13 +2189,14 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("redactReversible") || settings.detectorMode === "llm"}
             />
-            <Label htmlFor="redactReversible" className="text-sm">
-              Reversible redaction (restore originals in responses) <span className="text-xs text-muted-foreground font-normal">(Rules-Based)</span>
-            </Label>
             <SettingHelp
               meta={getMeta("redactReversible")}
               description={SETTING_DESCRIPTIONS.redactReversible}
-            />
+            >
+              <Label htmlFor="redactReversible" className="text-sm cursor-help">
+                Reversible redaction (restore originals in responses) <span className="text-xs text-muted-foreground font-normal">(Rules-Based)</span>
+              </Label>
+            </SettingHelp>
             {settings.detectorMode === "llm" && (
               <p className="text-xs text-muted-foreground mt-1 ml-6">
                 Disabled: This setting only applies in Rules, Hybrid, or Auto detector modes.
@@ -2197,9 +2207,14 @@ export default function SettingsPage() {
       case "redactPathsOnly":
         return (
           <div>
-            <Label htmlFor="redactPathsOnly" className="block text-sm font-medium mb-2">
-              Redaction Paths (Only) <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
-            </Label>
+            <SettingHelp
+              meta={getMeta("redactPathsOnly")}
+              description={SETTING_DESCRIPTIONS.redactPathsOnly}
+            >
+              <Label htmlFor="redactPathsOnly" className="block text-sm font-medium mb-2 cursor-help">
+                Redaction Paths (Only) <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
+              </Label>
+            </SettingHelp>
             <textarea
               id="redactPathsOnly"
               defaultValue={JSON.stringify(settings.redactPathsOnly, null, 2)}
@@ -2218,10 +2233,6 @@ export default function SettingsPage() {
               }`}
               rows={4}
             />
-            <SettingHelp
-              meta={getMeta("redactPathsOnly")}
-              description={SETTING_DESCRIPTIONS.redactPathsOnly}
-            />
             <p className="text-xs text-muted-foreground mt-1">
               Enter a JSON array of path strings (e.g., ["messages[*].content","system"]). Use [*] for array wildcards.
             </p>
@@ -2235,9 +2246,14 @@ export default function SettingsPage() {
       case "redactPathsSkip":
         return (
           <div>
-            <Label htmlFor="redactPathsSkip" className="block text-sm font-medium mb-2">
-              Redaction Paths (Skip) <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
-            </Label>
+            <SettingHelp
+              meta={getMeta("redactPathsSkip")}
+              description={SETTING_DESCRIPTIONS.redactPathsSkip}
+            >
+              <Label htmlFor="redactPathsSkip" className="block text-sm font-medium mb-2 cursor-help">
+                Redaction Paths (Skip) <span className="text-xs text-muted-foreground font-normal ml-1">(Rules-Based)</span>
+              </Label>
+            </SettingHelp>
             <textarea
               id="redactPathsSkip"
               defaultValue={JSON.stringify(settings.redactPathsSkip, null, 2)}
@@ -2255,10 +2271,6 @@ export default function SettingsPage() {
                 (isSettingOverridden("redactPathsSkip") || settings.detectorMode === "llm") ? "bg-muted opacity-50 cursor-not-allowed" : ""
               }`}
               rows={6}
-            />
-            <SettingHelp
-              meta={getMeta("redactPathsSkip")}
-              description={SETTING_DESCRIPTIONS.redactPathsSkip}
             />
             <p className="text-xs text-muted-foreground mt-1">
               Enter a JSON array of path strings to skip. Checked before "only" paths. Use [*] for array wildcards.
@@ -2283,13 +2295,14 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("encryptionAtRest")}
             />
-            <Label htmlFor="encryptionAtRest" className="text-sm">
-              Enable encryption at rest for capture files
-            </Label>
             <SettingHelp
               meta={getMeta("encryptionAtRest")}
               description={SETTING_DESCRIPTIONS.encryptionAtRest}
-            />
+            >
+              <Label htmlFor="encryptionAtRest" className="text-sm cursor-help">
+                Enable encryption at rest for capture files
+              </Label>
+            </SettingHelp>
           </div>
         );
       case "oidcEnabled":
@@ -2303,56 +2316,59 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("oidcEnabled")}
             />
-            <Label htmlFor="oidcEnabled" className="text-sm">
-              Enable OpenID Connect authentication
-            </Label>
             <SettingHelp
               meta={getMeta("oidcEnabled")}
               description={SETTING_DESCRIPTIONS.oidcEnabled}
-            />
+            >
+              <Label htmlFor="oidcEnabled" className="text-sm cursor-help">
+                Enable OpenID Connect authentication
+              </Label>
+            </SettingHelp>
           </div>
         );
       case "oidcPublicUrl":
         return (
           <div>
-            <Label htmlFor="oidcPublicUrl" className="block text-sm font-medium mb-2">
-              OIDC Public URL
-            </Label>
+            <SettingHelp
+              meta={getMeta("oidcPublicUrl")}
+              description={SETTING_DESCRIPTIONS.oidcPublicUrl}
+            >
+              <Label htmlFor="oidcPublicUrl" className="block text-sm font-medium mb-2 cursor-help">
+                OIDC Public URL
+              </Label>
+            </SettingHelp>
             <Input
               id="oidcPublicUrl"
               value={settings.oidcPublicUrl}
               onChange={(e) => updateSetting("oidcPublicUrl", e.target.value)}
-              placeholder="https://contextio.example.com"
+              placeholder="[URL_3]"
               disabled={isSettingOverridden("oidcPublicUrl")}
               className={
                 isSettingOverridden("oidcPublicUrl") ? "bg-muted cursor-not-allowed" : ""
               }
             />
-            <SettingHelp
-              meta={getMeta("oidcPublicUrl")}
-              description={SETTING_DESCRIPTIONS.oidcPublicUrl}
-            />
           </div>
         );
-      case "oidcIssuer":
+case "oidcIssuer":
         return (
           <div>
-            <Label htmlFor="oidcIssuer" className="block text-sm font-medium mb-2">
-              OIDC Issuer URL
-            </Label>
+            <SettingHelp
+              meta={getMeta("oidcIssuer")}
+              description={SETTING_DESCRIPTIONS.oidcIssuer}
+            >
+              <Label htmlFor="oidcIssuer" className="block text-sm font-medium mb-2 cursor-help">
+                OIDC Issuer URL
+              </Label>
+            </SettingHelp>
             <Input
               id="oidcIssuer"
               value={settings.oidcIssuer}
               onChange={(e) => updateSetting("oidcIssuer", e.target.value)}
-              placeholder="https://accounts.google.com"
+              placeholder="[URL_4]"
               disabled={isSettingOverridden("oidcIssuer")}
               className={
                 isSettingOverridden("oidcIssuer") ? "bg-muted cursor-not-allowed" : ""
               }
-            />
-            <SettingHelp
-              meta={getMeta("oidcIssuer")}
-              description={SETTING_DESCRIPTIONS.oidcIssuer}
             />
           </div>
         );
@@ -2367,21 +2383,27 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("showPageLoadTime")}
             />
-            <Label htmlFor="showPageLoadTime" className="text-sm">
-              Show page load time in footer
-            </Label>
             <SettingHelp
               meta={getMeta("showPageLoadTime")}
               description={SETTING_DESCRIPTIONS.showPageLoadTime}
-            />
+            >
+              <Label htmlFor="showPageLoadTime" className="text-sm cursor-help">
+                Show page load time in footer
+              </Label>
+            </SettingHelp>
           </div>
         );
       case "detectorMode":
         return (
           <div>
-            <Label htmlFor="detectorMode" className="block text-sm font-medium mb-2">
-              Detector Mode
-            </Label>
+            <SettingHelp
+              meta={getMeta("detectorMode")}
+              description={SETTING_DESCRIPTIONS.detectorMode}
+            >
+              <Label htmlFor="detectorMode" className="block text-sm font-medium mb-2 cursor-help">
+                Detector Mode
+              </Label>
+            </SettingHelp>
             <Select
               value={settings.detectorMode}
               onValueChange={(value) => updateSetting("detectorMode", value as "rules" | "llm" | "hybrid" | "auto")}
@@ -2397,18 +2419,19 @@ export default function SettingsPage() {
                 <SelectItem value="auto">Auto (choose based on content)</SelectItem>
               </SelectContent>
             </Select>
-            <SettingHelp
-              meta={getMeta("detectorMode")}
-              description={SETTING_DESCRIPTIONS.detectorMode}
-            />
           </div>
         );
       case "detectorModelName":
         return (
           <div>
-            <Label htmlFor="detectorModelName" className="block text-sm font-medium mb-2">
-              Detector Model Name <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
-            </Label>
+            <SettingHelp
+              meta={getMeta("detectorModelName")}
+              description={SETTING_DESCRIPTIONS.detectorModelName}
+            >
+              <Label htmlFor="detectorModelName" className="block text-sm font-medium mb-2 cursor-help">
+                Detector Model Name <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
+              </Label>
+            </SettingHelp>
             <Input
               id="detectorModelName"
               value={settings.detectorModelName}
@@ -2421,10 +2444,6 @@ export default function SettingsPage() {
                   : ""
               }
             />
-            <SettingHelp
-              meta={getMeta("detectorModelName")}
-              description={SETTING_DESCRIPTIONS.detectorModelName}
-            />
             {settings.detectorMode === "rules" && (
               <p className="text-xs text-muted-foreground mt-1">
                 Disabled: This setting only applies in LLM, Hybrid, or Auto detector modes.
@@ -2435,9 +2454,14 @@ export default function SettingsPage() {
       case "detectorThreshold":
         return (
           <div>
-            <Label htmlFor="detectorThreshold" className="block text-sm font-medium mb-2">
-              LLM Detection Threshold (0-1) <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
-            </Label>
+            <SettingHelp
+              meta={getMeta("detectorThreshold")}
+              description={SETTING_DESCRIPTIONS.detectorThreshold}
+            >
+              <Label htmlFor="detectorThreshold" className="block text-sm font-medium mb-2 cursor-help">
+                LLM Detection Threshold (0-1) <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
+              </Label>
+            </SettingHelp>
             <Input
               id="detectorThreshold"
               type="number"
@@ -2459,10 +2483,6 @@ export default function SettingsPage() {
                   : ""
               }
             />
-            <SettingHelp
-              meta={getMeta("detectorThreshold")}
-              description={SETTING_DESCRIPTIONS.detectorThreshold}
-            />
             {settings.detectorMode === "rules" && (
               <p className="text-xs text-muted-foreground mt-1">
                 Disabled: This setting only applies in LLM, Hybrid, or Auto detector modes.
@@ -2473,9 +2493,14 @@ export default function SettingsPage() {
       case "detectorLabels":
         return (
           <div>
-            <Label htmlFor="detectorLabels" className="block text-sm font-medium mb-2">
-              Detector Entity Labels <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
-            </Label>
+            <SettingHelp
+              meta={getMeta("detectorLabels")}
+              description={SETTING_DESCRIPTIONS.detectorLabels}
+            >
+              <Label htmlFor="detectorLabels" className="block text-sm font-medium mb-2 cursor-help">
+                Detector Entity Labels <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
+              </Label>
+            </SettingHelp>
             <div className="flex flex-wrap gap-2">
               {(
                 [
@@ -2508,10 +2533,6 @@ export default function SettingsPage() {
                 </label>
               ))}
             </div>
-            <SettingHelp
-              meta={getMeta("detectorLabels")}
-              description={SETTING_DESCRIPTIONS.detectorLabels}
-            />
             {settings.detectorMode === "rules" && (
               <p className="text-xs text-muted-foreground mt-1">
                 Disabled: This setting only applies in LLM, Hybrid, or Auto detector modes.
@@ -2532,13 +2553,14 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("strictBoundaries") || settings.detectorMode === "rules"}
             />
-            <Label htmlFor="strictBoundaries" className="text-sm">
-              Strict boundaries (prevent substring matches) <span className="text-xs text-muted-foreground font-normal">(LLM-Based)</span>
-            </Label>
             <SettingHelp
               meta={getMeta("strictBoundaries")}
               description={SETTING_DESCRIPTIONS.strictBoundaries}
-            />
+            >
+              <Label htmlFor="strictBoundaries" className="text-sm cursor-help">
+                Strict boundaries (prevent substring matches) <span className="text-xs text-muted-foreground font-normal">(LLM-Based)</span>
+              </Label>
+            </SettingHelp>
             {settings.detectorMode === "rules" && (
               <p className="text-xs text-muted-foreground mt-1 ml-6">
                 Disabled: This setting only applies in LLM, Hybrid, or Auto detector modes.
@@ -2557,10 +2579,11 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("enableLogger")}
             />
-            <Label htmlFor="enableLogger" className="text-sm">
-              Enable Request/Response Logging
-            </Label>
-            <SettingHelp meta={getMeta("enableLogger")} description={SETTING_DESCRIPTIONS.enableLogger} />
+            <SettingHelp meta={getMeta("enableLogger")} description={SETTING_DESCRIPTIONS.enableLogger}>
+              <Label htmlFor="enableLogger" className="text-sm cursor-help">
+                Enable Request/Response Logging
+              </Label>
+            </SettingHelp>
           </div>
         );
       case "logTraffic":
@@ -2574,10 +2597,11 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("logTraffic")}
             />
-            <Label htmlFor="logTraffic" className="text-sm">
-              Enable Detailed Traffic Logging
-            </Label>
-            <SettingHelp meta={getMeta("logTraffic")} description={SETTING_DESCRIPTIONS.logTraffic} />
+            <SettingHelp meta={getMeta("logTraffic")} description={SETTING_DESCRIPTIONS.logTraffic}>
+              <Label htmlFor="logTraffic" className="text-sm cursor-help">
+                Enable Detailed Traffic Logging
+              </Label>
+            </SettingHelp>
           </div>
         );
       case "enableRedact":
@@ -2591,10 +2615,11 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("enableRedact")}
             />
-            <Label htmlFor="enableRedact" className="text-sm">
-              Enable PII/Secrets Redaction
-            </Label>
-            <SettingHelp meta={getMeta("enableRedact")} description={SETTING_DESCRIPTIONS.enableRedact} />
+            <SettingHelp meta={getMeta("enableRedact")} description={SETTING_DESCRIPTIONS.enableRedact}>
+              <Label htmlFor="enableRedact" className="text-sm cursor-help">
+                Enable PII/Secrets Redaction
+              </Label>
+            </SettingHelp>
           </div>
         );
       case "redactProviders": {
@@ -2611,21 +2636,18 @@ export default function SettingsPage() {
         const redactDisabled = !settings.enableRedact;
         return (
           <div className="space-y-4">
-            <h3 className="font-semibold mb-2">Per-Provider Redaction</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Enable or disable PII/secrets redaction for each provider individually.
-              When disabled, traffic for that provider passes through unredacted.
-            </p>
+            <SettingHelp
+              meta={getMeta("redactProviders")}
+              description={SETTING_DESCRIPTIONS.redactProviders}
+            >
+              <h3 className="font-semibold mb-2 cursor-help">Per-Provider Redaction</h3>
+            </SettingHelp>
             {redactDisabled && (
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                 Per-provider redaction is unavailable because global redaction is disabled.
                 Enable <strong>PII/Secrets Redaction</strong> above to configure provider-level redaction.
               </div>
             )}
-            <SettingHelp
-              meta={getMeta("redactProviders")}
-              description={SETTING_DESCRIPTIONS.redactProviders}
-            />
             <div className="overflow-x-auto">
               <table className="w-full text-sm border rounded">
                 <thead className="bg-muted">
@@ -2678,25 +2700,23 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("enableRateLimiter")}
             />
-            <Label htmlFor="enableRateLimiter" className="text-sm">
-              Enable Rate Limiting
-            </Label>
-            <SettingHelp meta={getMeta("enableRateLimiter")} description={SETTING_DESCRIPTIONS.enableRateLimiter} />
+            <SettingHelp meta={getMeta("enableRateLimiter")} description={SETTING_DESCRIPTIONS.enableRateLimiter}>
+              <Label htmlFor="enableRateLimiter" className="text-sm cursor-help">
+                Enable Rate Limiting
+              </Label>
+            </SettingHelp>
           </div>
         );
       case "captureCleanupEnabled":
         return (
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-semibold mb-1">Capture File Cleanup</h3>
-              <p className="text-sm text-muted-foreground">
-                Manage automatic and manual cleanup of captured API traffic
-                files
-              </p>
               <SettingHelp
                 meta={getMeta("captureCleanupEnabled")}
                 description={SETTING_DESCRIPTIONS.captureCleanupEnabled}
-              />
+              >
+                <h3 className="font-semibold mb-1 cursor-help">Capture File Cleanup</h3>
+              </SettingHelp>
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -2718,12 +2738,17 @@ export default function SettingsPage() {
       case "captureCleanupIntervalHours":
         return (
           <div>
-            <Label
-              htmlFor="cleanupIntervalHours"
-              className="block text-sm font-medium mb-2"
+            <SettingHelp
+              meta={getMeta("captureCleanupIntervalHours")}
+              description={SETTING_DESCRIPTIONS.captureCleanupIntervalHours}
             >
-              Cleanup Interval (hours)
-            </Label>
+              <Label
+                htmlFor="cleanupIntervalHours"
+                className="block text-sm font-medium mb-2 cursor-help"
+              >
+                Cleanup Interval (hours)
+              </Label>
+            </SettingHelp>
             <Input
               id="cleanupIntervalHours"
               type="number"
@@ -2744,21 +2769,22 @@ export default function SettingsPage() {
                   : ""
               }
             />
-            <SettingHelp
-              meta={getMeta("captureCleanupIntervalHours")}
-              description={SETTING_DESCRIPTIONS.captureCleanupIntervalHours}
-            />
           </div>
         );
       case "captureCleanupMaxAgeDays":
         return (
           <div>
-            <Label
-              htmlFor="cleanupMaxAgeDays"
-              className="block text-sm font-medium mb-2"
+            <SettingHelp
+              meta={getMeta("captureCleanupMaxAgeDays")}
+              description={SETTING_DESCRIPTIONS.captureCleanupMaxAgeDays}
             >
-              Max Age (days)
-            </Label>
+              <Label
+                htmlFor="cleanupMaxAgeDays"
+                className="block text-sm font-medium mb-2 cursor-help"
+              >
+                Max Age (days)
+              </Label>
+            </SettingHelp>
             <Input
               id="cleanupMaxAgeDays"
               type="number"
@@ -2779,10 +2805,6 @@ export default function SettingsPage() {
                   : ""
               }
             />
-            <SettingHelp
-              meta={getMeta("captureCleanupMaxAgeDays")}
-              description={SETTING_DESCRIPTIONS.captureCleanupMaxAgeDays}
-            />
           </div>
         );
       case "rateLimiter": {
@@ -2798,14 +2820,12 @@ export default function SettingsPage() {
         ];
         return (
           <div className="space-y-4">
-            <h3 className="font-semibold mb-2">Rate Limiter Configuration</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Configure rate limits per provider. Controls max requests, time window, and burst capacity.
-            </p>
             <SettingHelp
               meta={getMeta("rateLimiter")}
               description={SETTING_DESCRIPTIONS.rateLimiter}
-            />
+            >
+              <h3 className="font-semibold mb-2 cursor-help">Rate Limiter Configuration</h3>
+            </SettingHelp>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border rounded">
                 <thead className="bg-muted">
@@ -2986,9 +3006,11 @@ export default function SettingsPage() {
       case "rateLimiterMaxEntries":
         return (
           <div>
-            <Label htmlFor="rateLimiterMaxEntries" className="block text-sm font-medium mb-2">
-              Max Entries
-            </Label>
+            <SettingHelp meta={getMeta("rateLimiterMaxEntries")} description="Maximum number of entries in the rate limiter cache">
+              <Label htmlFor="rateLimiterMaxEntries" className="block text-sm font-medium mb-2 cursor-help">
+                Max Entries
+              </Label>
+            </SettingHelp>
             <Input
               id="rateLimiterMaxEntries"
               type="number"
@@ -3002,15 +3024,16 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("rateLimiterMaxEntries")}
               className={isSettingOverridden("rateLimiterMaxEntries") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("rateLimiterMaxEntries")} description="Maximum number of entries in the rate limiter cache" />
           </div>
         );
       case "rateLimiterCleanupIntervalMs":
         return (
           <div>
-            <Label htmlFor="rateLimiterCleanupIntervalMs" className="block text-sm font-medium mb-2">
-              Cleanup Interval (ms)
-            </Label>
+            <SettingHelp meta={getMeta("rateLimiterCleanupIntervalMs")} description="Interval between cache cleanup runs in milliseconds">
+              <Label htmlFor="rateLimiterCleanupIntervalMs" className="block text-sm font-medium mb-2 cursor-help">
+                Cleanup Interval (ms)
+              </Label>
+            </SettingHelp>
             <Input
               id="rateLimiterCleanupIntervalMs"
               type="number"
@@ -3024,15 +3047,16 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("rateLimiterCleanupIntervalMs")}
               className={isSettingOverridden("rateLimiterCleanupIntervalMs") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("rateLimiterCleanupIntervalMs")} description="Interval between cache cleanup runs in milliseconds" />
           </div>
         );
       case "rateLimiterEntryTtlMs":
         return (
           <div>
-            <Label htmlFor="rateLimiterEntryTtlMs" className="block text-sm font-medium mb-2">
-              Entry TTL (ms)
-            </Label>
+            <SettingHelp meta={getMeta("rateLimiterEntryTtlMs")} description="Time-to-live for rate limiter cache entries in milliseconds">
+              <Label htmlFor="rateLimiterEntryTtlMs" className="block text-sm font-medium mb-2 cursor-help">
+                Entry TTL (ms)
+              </Label>
+            </SettingHelp>
             <Input
               id="rateLimiterEntryTtlMs"
               type="number"
@@ -3046,15 +3070,16 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("rateLimiterEntryTtlMs")}
               className={isSettingOverridden("rateLimiterEntryTtlMs") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("rateLimiterEntryTtlMs")} description="Time-to-live for rate limiter cache entries in milliseconds" />
           </div>
         );
       case "retryMaxEntries":
         return (
           <div>
-            <Label htmlFor="retryMaxEntries" className="block text-sm font-medium mb-2">
-              Max Entries
-            </Label>
+            <SettingHelp meta={getMeta("retryMaxEntries")} description="Maximum number of entries in the streaming retry cache">
+              <Label htmlFor="retryMaxEntries" className="block text-sm font-medium mb-2 cursor-help">
+                Max Entries
+              </Label>
+            </SettingHelp>
             <Input
               id="retryMaxEntries"
               type="number"
@@ -3066,15 +3091,16 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("retryMaxEntries")}
               className={isSettingOverridden("retryMaxEntries") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("retryMaxEntries")} description="Maximum number of entries in the streaming retry cache" />
           </div>
         );
       case "retryEntryTtlMs":
         return (
           <div>
-            <Label htmlFor="retryEntryTtlMs" className="block text-sm font-medium mb-2">
-              Entry TTL (ms)
-            </Label>
+            <SettingHelp meta={getMeta("retryEntryTtlMs")} description="Time-to-live for streaming retry cache entries in milliseconds">
+              <Label htmlFor="retryEntryTtlMs" className="block text-sm font-medium mb-2 cursor-help">
+                Entry TTL (ms)
+              </Label>
+            </SettingHelp>
             <Input
               id="retryEntryTtlMs"
               type="number"
@@ -3086,15 +3112,16 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("retryEntryTtlMs")}
               className={isSettingOverridden("retryEntryTtlMs") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("retryEntryTtlMs")} description="Time-to-live for streaming retry cache entries in milliseconds" />
           </div>
         );
       case "retryCleanupIntervalMs":
         return (
           <div>
-            <Label htmlFor="retryCleanupIntervalMs" className="block text-sm font-medium mb-2">
-              Cleanup Interval (ms)
-            </Label>
+            <SettingHelp meta={getMeta("retryCleanupIntervalMs")} description="Interval between streaming retry cache cleanup runs in milliseconds">
+              <Label htmlFor="retryCleanupIntervalMs" className="block text-sm font-medium mb-2 cursor-help">
+                Cleanup Interval (ms)
+              </Label>
+            </SettingHelp>
             <Input
               id="retryCleanupIntervalMs"
               type="number"
@@ -3106,15 +3133,16 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("retryCleanupIntervalMs")}
               className={isSettingOverridden("retryCleanupIntervalMs") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("retryCleanupIntervalMs")} description="Interval between streaming retry cache cleanup runs in milliseconds" />
           </div>
         );
       case "retryMaxBufferSize":
         return (
           <div>
-            <Label htmlFor="retryMaxBufferSize" className="block text-sm font-medium mb-2">
-              Max Buffer Size (bytes)
-            </Label>
+            <SettingHelp meta={getMeta("retryMaxBufferSize")} description="Maximum buffer size for streaming responses in the retry cache in bytes">
+              <Label htmlFor="retryMaxBufferSize" className="block text-sm font-medium mb-2 cursor-help">
+                Max Buffer Size (bytes)
+              </Label>
+            </SettingHelp>
             <Input
               id="retryMaxBufferSize"
               type="number"
@@ -3126,15 +3154,16 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("retryMaxBufferSize")}
               className={isSettingOverridden("retryMaxBufferSize") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("retryMaxBufferSize")} description="Maximum buffer size for streaming responses in the retry cache in bytes" />
           </div>
         );
       case "retryMaxStreamRetries":
         return (
           <div>
-            <Label htmlFor="retryMaxStreamRetries" className="block text-sm font-medium mb-2">
-              Max Stream Retries
-            </Label>
+            <SettingHelp meta={getMeta("retryMaxStreamRetries")} description="Maximum number of retries for failed streaming responses">
+              <Label htmlFor="retryMaxStreamRetries" className="block text-sm font-medium mb-2 cursor-help">
+                Max Stream Retries
+              </Label>
+            </SettingHelp>
             <Input
               id="retryMaxStreamRetries"
               type="number"
@@ -3146,15 +3175,16 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("retryMaxStreamRetries")}
               className={isSettingOverridden("retryMaxStreamRetries") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("retryMaxStreamRetries")} description="Maximum number of retries for failed streaming responses" />
           </div>
         );
       case "proxyBindHost":
         return (
           <div>
-            <Label htmlFor="proxyBindHost" className="block text-sm font-medium mb-2">
-              Bind Host
-            </Label>
+            <SettingHelp meta={getMeta("proxyBindHost")} description={SETTING_DESCRIPTIONS.proxyBindHost}>
+              <Label htmlFor="proxyBindHost" className="block text-sm font-medium mb-2 cursor-help">
+                Bind Host
+              </Label>
+            </SettingHelp>
             <Input
               id="proxyBindHost"
               value={settings.proxyBindHost}
@@ -3163,15 +3193,16 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("proxyBindHost")}
               className={isSettingOverridden("proxyBindHost") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("proxyBindHost")} description={SETTING_DESCRIPTIONS.proxyBindHost} />
           </div>
         );
       case "proxyPort":
         return (
           <div>
-            <Label htmlFor="proxyPort" className="block text-sm font-medium mb-2">
-              Proxy Port
-            </Label>
+            <SettingHelp meta={getMeta("proxyPort")} description={SETTING_DESCRIPTIONS.proxyPort}>
+              <Label htmlFor="proxyPort" className="block text-sm font-medium mb-2 cursor-help">
+                Proxy Port
+              </Label>
+            </SettingHelp>
             <Input
               id="proxyPort"
               type="number"
@@ -3183,7 +3214,6 @@ export default function SettingsPage() {
               disabled={isSettingOverridden("proxyPort")}
               className={isSettingOverridden("proxyPort") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("proxyPort")} description={SETTING_DESCRIPTIONS.proxyPort} />
           </div>
         );
       case "proxyAllowTargetOverride":
@@ -3197,10 +3227,11 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("proxyAllowTargetOverride")}
             />
-            <Label htmlFor="proxyAllowTargetOverride" className="text-sm">
-              Allow Target Override
-            </Label>
-            <SettingHelp meta={getMeta("proxyAllowTargetOverride")} description={SETTING_DESCRIPTIONS.proxyAllowTargetOverride} />
+            <SettingHelp meta={getMeta("proxyAllowTargetOverride")} description={SETTING_DESCRIPTIONS.proxyAllowTargetOverride}>
+              <Label htmlFor="proxyAllowTargetOverride" className="text-sm cursor-help">
+                Allow Target Override
+              </Label>
+            </SettingHelp>
           </div>
         );
       case "strictUrlForwarding":
@@ -3214,163 +3245,173 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("strictUrlForwarding")}
             />
-            <Label htmlFor="strictUrlForwarding" className="text-sm">
-              Strict URL Forwarding
-            </Label>
-            <SettingHelp meta={getMeta("strictUrlForwarding")} description={SETTING_DESCRIPTIONS.strictUrlForwarding} />
+            <SettingHelp meta={getMeta("strictUrlForwarding")} description={SETTING_DESCRIPTIONS.strictUrlForwarding}>
+              <Label htmlFor="strictUrlForwarding" className="text-sm cursor-help">
+                Strict URL Forwarding
+              </Label>
+            </SettingHelp>
           </div>
         );
-      case "upstreamOpenAiUrl":
+case "upstreamOpenAiUrl":
         return (
           <div>
-            <Label htmlFor="upstreamOpenAiUrl" className="block text-sm font-medium mb-2">
-              OpenAI Upstream URL
-            </Label>
+            <SettingHelp meta={getMeta("upstreamOpenAiUrl")} description="Override the default OpenAI API base URL">
+              <Label htmlFor="upstreamOpenAiUrl" className="block text-sm font-medium mb-2 cursor-help">
+                OpenAI Upstream URL
+              </Label>
+            </SettingHelp>
             <Input
               id="upstreamOpenAiUrl"
               value={settings.upstreamOpenAiUrl}
               onChange={(e) => updateSetting("upstreamOpenAiUrl", e.target.value)}
-              placeholder="https://api.openai.com/v1"
+              placeholder="[URL_5]"
               disabled={isSettingOverridden("upstreamOpenAiUrl")}
               className={isSettingOverridden("upstreamOpenAiUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("upstreamOpenAiUrl")} description="Override the default OpenAI API base URL" />
           </div>
         );
-      case "upstreamAnthropicUrl":
+case "upstreamAnthropicUrl":
         return (
           <div>
-            <Label htmlFor="upstreamAnthropicUrl" className="block text-sm font-medium mb-2">
-              Anthropic Upstream URL
-            </Label>
+            <SettingHelp meta={getMeta("upstreamAnthropicUrl")} description="Override the default Anthropic API base URL">
+              <Label htmlFor="upstreamAnthropicUrl" className="block text-sm font-medium mb-2 cursor-help">
+                Anthropic Upstream URL
+              </Label>
+            </SettingHelp>
             <Input
               id="upstreamAnthropicUrl"
               value={settings.upstreamAnthropicUrl}
               onChange={(e) => updateSetting("upstreamAnthropicUrl", e.target.value)}
-              placeholder="https://api.anthropic.com"
+              placeholder="[URL_6]"
               disabled={isSettingOverridden("upstreamAnthropicUrl")}
               className={isSettingOverridden("upstreamAnthropicUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("upstreamAnthropicUrl")} description="Override the default Anthropic API base URL" />
           </div>
         );
-      case "upstreamChatGptUrl":
+case "upstreamChatGptUrl":
         return (
           <div>
-            <Label htmlFor="upstreamChatGptUrl" className="block text-sm font-medium mb-2">
-              ChatGPT Upstream URL
-            </Label>
+            <SettingHelp meta={getMeta("upstreamChatGptUrl")} description="Override the default ChatGPT API base URL">
+              <Label htmlFor="upstreamChatGptUrl" className="block text-sm font-medium mb-2 cursor-help">
+                ChatGPT Upstream URL
+              </Label>
+            </SettingHelp>
             <Input
               id="upstreamChatGptUrl"
               value={settings.upstreamChatGptUrl}
               onChange={(e) => updateSetting("upstreamChatGptUrl", e.target.value)}
-              placeholder="https://chatgpt.com/backend-api"
+              placeholder="[URL_7]"
               disabled={isSettingOverridden("upstreamChatGptUrl")}
               className={isSettingOverridden("upstreamChatGptUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("upstreamChatGptUrl")} description="Override the default ChatGPT API base URL" />
           </div>
         );
-      case "upstreamGeminiUrl":
+case "upstreamGeminiUrl":
         return (
           <div>
-            <Label htmlFor="upstreamGeminiUrl" className="block text-sm font-medium mb-2">
-              Gemini Upstream URL
-            </Label>
+            <SettingHelp meta={getMeta("upstreamGeminiUrl")} description="Override the default Gemini API base URL">
+              <Label htmlFor="upstreamGeminiUrl" className="block text-sm font-medium mb-2 cursor-help">
+                Gemini Upstream URL
+              </Label>
+            </SettingHelp>
             <Input
               id="upstreamGeminiUrl"
               value={settings.upstreamGeminiUrl}
               onChange={(e) => updateSetting("upstreamGeminiUrl", e.target.value)}
-              placeholder="https://generativelanguage.googleapis.com"
+              placeholder="[URL_8]"
               disabled={isSettingOverridden("upstreamGeminiUrl")}
               className={isSettingOverridden("upstreamGeminiUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("upstreamGeminiUrl")} description="Override the default Gemini API base URL" />
           </div>
         );
-      case "upstreamVertexUrl":
+case "upstreamVertexUrl":
         return (
           <div>
-            <Label htmlFor="upstreamVertexUrl" className="block text-sm font-medium mb-2">
-              Vertex AI Upstream URL
-            </Label>
+            <SettingHelp meta={getMeta("upstreamVertexUrl")} description="Override the default Vertex AI API base URL">
+              <Label htmlFor="upstreamVertexUrl" className="block text-sm font-medium mb-2 cursor-help">
+                Vertex AI Upstream URL
+              </Label>
+            </SettingHelp>
             <Input
               id="upstreamVertexUrl"
               value={settings.upstreamVertexUrl}
               onChange={(e) => updateSetting("upstreamVertexUrl", e.target.value)}
-              placeholder="https://aiplatform.googleapis.com/v1"
+              placeholder="[URL_9]"
               disabled={isSettingOverridden("upstreamVertexUrl")}
               className={isSettingOverridden("upstreamVertexUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("upstreamVertexUrl")} description="Override the default Vertex AI API base URL" />
           </div>
         );
-      case "upstreamNvidiaUrl":
+case "upstreamNvidiaUrl":
         return (
           <div>
-            <Label htmlFor="upstreamNvidiaUrl" className="block text-sm font-medium mb-2">
-              NVIDIA Upstream URL
-            </Label>
+            <SettingHelp meta={getMeta("upstreamNvidiaUrl")} description="Override the default NVIDIA API base URL">
+              <Label htmlFor="upstreamNvidiaUrl" className="block text-sm font-medium mb-2 cursor-help">
+                NVIDIA Upstream URL
+              </Label>
+            </SettingHelp>
             <Input
               id="upstreamNvidiaUrl"
               value={settings.upstreamNvidiaUrl}
               onChange={(e) => updateSetting("upstreamNvidiaUrl", e.target.value)}
-              placeholder="https://integrate.api.nvidia.com/v1"
+              placeholder="[URL_10]"
               disabled={isSettingOverridden("upstreamNvidiaUrl")}
               className={isSettingOverridden("upstreamNvidiaUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("upstreamNvidiaUrl")} description="Override the default NVIDIA API base URL" />
           </div>
         );
-      case "upstreamOpenRouterUrl":
+case "upstreamOpenRouterUrl":
         return (
           <div>
-            <Label htmlFor="upstreamOpenRouterUrl" className="block text-sm font-medium mb-2">
-              OpenRouter Upstream URL
-            </Label>
+            <SettingHelp meta={getMeta("upstreamOpenRouterUrl")} description="Override the default OpenRouter API base URL">
+              <Label htmlFor="upstreamOpenRouterUrl" className="block text-sm font-medium mb-2 cursor-help">
+                OpenRouter Upstream URL
+              </Label>
+            </SettingHelp>
             <Input
               id="upstreamOpenRouterUrl"
               value={settings.upstreamOpenRouterUrl}
               onChange={(e) => updateSetting("upstreamOpenRouterUrl", e.target.value)}
-              placeholder="https://openrouter.ai/api/v1"
+              placeholder="[URL_11]"
               disabled={isSettingOverridden("upstreamOpenRouterUrl")}
               className={isSettingOverridden("upstreamOpenRouterUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("upstreamOpenRouterUrl")} description="Override the default OpenRouter API base URL" />
           </div>
         );
-      case "upstreamKiloUrl":
+case "upstreamKiloUrl":
         return (
           <div>
-            <Label htmlFor="upstreamKiloUrl" className="block text-sm font-medium mb-2">
-              Kilo Upstream URL
-            </Label>
+            <SettingHelp meta={getMeta("upstreamKiloUrl")} description="Override the default Kilo API base URL">
+              <Label htmlFor="upstreamKiloUrl" className="block text-sm font-medium mb-2 cursor-help">
+                Kilo Upstream URL
+              </Label>
+            </SettingHelp>
             <Input
               id="upstreamKiloUrl"
               value={settings.upstreamKiloUrl}
               onChange={(e) => updateSetting("upstreamKiloUrl", e.target.value)}
-              placeholder="https://api.kilo.ai/v1"
+              placeholder="[URL_12]"
               disabled={isSettingOverridden("upstreamKiloUrl")}
               className={isSettingOverridden("upstreamKiloUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("upstreamKiloUrl")} description="Override the default Kilo API base URL" />
           </div>
         );
-      case "upstreamGeminiCodeAssistUrl":
+case "upstreamGeminiCodeAssistUrl":
         return (
           <div>
-            <Label htmlFor="upstreamGeminiCodeAssistUrl" className="block text-sm font-medium mb-2">
-              Gemini Code Assist Upstream URL
-            </Label>
+            <SettingHelp meta={getMeta("upstreamGeminiCodeAssistUrl")} description="Override the default Gemini Code Assist API base URL">
+              <Label htmlFor="upstreamGeminiCodeAssistUrl" className="block text-sm font-medium mb-2 cursor-help">
+                Gemini Code Assist Upstream URL
+              </Label>
+            </SettingHelp>
             <Input
               id="upstreamGeminiCodeAssistUrl"
               value={settings.upstreamGeminiCodeAssistUrl}
               onChange={(e) => updateSetting("upstreamGeminiCodeAssistUrl", e.target.value)}
-              placeholder="https://generativelanguage.googleapis.com"
+              placeholder="[URL_8]"
               disabled={isSettingOverridden("upstreamGeminiCodeAssistUrl")}
               className={isSettingOverridden("upstreamGeminiCodeAssistUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
-            <SettingHelp meta={getMeta("upstreamGeminiCodeAssistUrl")} description="Override the default Gemini Code Assist API base URL" />
           </div>
         );
       case "feedbackStoreEnabled":
@@ -3384,21 +3425,27 @@ export default function SettingsPage() {
               className="w-4 h-4"
               disabled={isSettingOverridden("feedbackStoreEnabled")}
             />
-            <Label htmlFor="feedbackStoreEnabled" className="text-sm">
-              Enable Feedback Store
-            </Label>
             <SettingHelp
               meta={getMeta("feedbackStoreEnabled")}
               description={SETTING_DESCRIPTIONS.feedbackStoreEnabled}
-            />
+            >
+              <Label htmlFor="feedbackStoreEnabled" className="text-sm cursor-help">
+                Enable Feedback Store
+              </Label>
+            </SettingHelp>
           </div>
         );
       case "feedbackStoreType":
         return (
           <div>
-            <Label htmlFor="feedbackStoreType" className="block text-sm font-medium mb-2">
-              Feedback Store Type
-            </Label>
+            <SettingHelp
+              meta={getMeta("feedbackStoreType")}
+              description={SETTING_DESCRIPTIONS.feedbackStoreType}
+            >
+              <Label htmlFor="feedbackStoreType" className="block text-sm font-medium mb-2 cursor-help">
+                Feedback Store Type
+              </Label>
+            </SettingHelp>
             <Select
               value={settings.feedbackStoreType}
               onValueChange={(value) => updateSetting("feedbackStoreType", value as "sqlite" | "memory")}
@@ -3412,18 +3459,19 @@ export default function SettingsPage() {
                 <SelectItem value="memory">Memory (in-memory, lost on restart)</SelectItem>
               </SelectContent>
             </Select>
-            <SettingHelp
-              meta={getMeta("feedbackStoreType")}
-              description={SETTING_DESCRIPTIONS.feedbackStoreType}
-            />
           </div>
         );
       case "feedbackStorePath":
         return (
           <div>
-            <Label htmlFor="feedbackStorePath" className="block text-sm font-medium mb-2">
-              Feedback Store Path
-            </Label>
+            <SettingHelp
+              meta={getMeta("feedbackStorePath")}
+              description={SETTING_DESCRIPTIONS.feedbackStorePath}
+            >
+              <Label htmlFor="feedbackStorePath" className="block text-sm font-medium mb-2 cursor-help">
+                Feedback Store Path
+              </Label>
+            </SettingHelp>
             <Input
               id="feedbackStorePath"
               value={settings.feedbackStorePath}
@@ -3431,10 +3479,6 @@ export default function SettingsPage() {
               placeholder="/app/data/false-positives.db"
               disabled={isSettingOverridden("feedbackStorePath")}
               className={isSettingOverridden("feedbackStorePath") ? "bg-muted cursor-not-allowed" : ""}
-            />
-            <SettingHelp
-              meta={getMeta("feedbackStorePath")}
-              description={SETTING_DESCRIPTIONS.feedbackStorePath}
             />
           </div>
         );

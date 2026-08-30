@@ -157,7 +157,10 @@ export function DiffDialog({
   };
 
   // Build focused view segments around each redaction
-  // Each segment shows ~100 chars before/after the redaction
+  // Each segment shows ~100 chars context around the redaction position.
+  // Uses nth-occurrence matching to correctly associate each match with its
+  // corresponding occurrence in the content. Falls back to placeholder-based
+  // positioning if exact values aren't found.
   const redactionSegments = useMemo((): Array<{
     preContext: string;
     postContext: string;
@@ -168,7 +171,7 @@ export function DiffDialog({
     path: string;
   }> => {
     if (!matches || matches.length === 0) return [];
-    
+
     const CONTEXT_LENGTH = 100;
     const segments: Array<{
       preContext: string;
@@ -179,76 +182,92 @@ export function DiffDialog({
       label: string;
       path: string;
     }> = [];
-    
+
+    // Helper: find the nth occurrence of a substring in a string
+    const findNthOccurrence = (
+      str: string,
+      substr: string,
+      n: number
+    ): number => {
+      let start = 0;
+      let found = -1;
+      for (let i = 0; i < n; i++) {
+        found = str.indexOf(substr, start);
+        if (found === -1) return -1;
+        start = found + substr.length;
+      }
+      return found;
+    };
+
+    // Helper: find nth occurrence, returning start and end indices
+    const findNthPosition = (
+      str: string,
+      substr: string,
+      n: number
+    ): { start: number; end: number } | null => {
+      const start = findNthOccurrence(str, substr, n);
+      if (start === -1) return null;
+      return { start, end: start + substr.length };
+    };
+
     for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
       const match = matches[matchIdx];
       if (!match.preValue || !match.postValue) continue;
-      
-      // Find position in pre-content - use nth occurrence for correct matching
-      let preIndex = -1;
-      let searchStart = 0;
-      for (let i = 0; i <= matchIdx; i++) {
-        const found = diffPreContent.indexOf(match.preValue, searchStart);
-        if (found === -1) {
-          preIndex = -1;
-          break;
-        }
-        preIndex = found;
-        searchStart = found + match.preValue.length;
-      }
-      
-      // Find position in post-content - try exact match first with nth occurrence
-      let postIndex = -1;
-      searchStart = 0;
-      for (let i = 0; i <= matchIdx; i++) {
-        const found = diffPostContent.indexOf(match.postValue, searchStart);
-        if (found === -1) {
-          postIndex = -1;
-          break;
-        }
-        postIndex = found;
-        searchStart = found + match.postValue.length;
-      }
-      
-      // If exact postValue not found, try to find the nth placeholder that corresponds to this match
-      if (postIndex === -1 && match.postValue) {
-        const placeholderPattern = /\[[A-Z][A-Z0-9_-]*(?:_REDACTED|_\d+)\]/g;
-        const placeholderMatches = [];
-        let placeholderMatch;
-        while ((placeholderMatch = placeholderPattern.exec(diffPostContent)) !== null) {
-          placeholderMatches.push({ value: placeholderMatch[0], index: placeholderMatch.index });
-        }
-        // Use the placeholder at the same index as this match
-        if (placeholderMatches.length > matchIdx) {
-          postIndex = placeholderMatches[matchIdx].index;
-        } else if (placeholderMatches.length > 0) {
-          // Fallback: use the last placeholder if we have fewer placeholders than matches
-          postIndex = placeholderMatches[placeholderMatches.length - 1].index;
-        }
-      }
-      
-      // If we can't find exact positions, skip this match
-      if (preIndex === -1 || postIndex === -1) {
-        console.debug("Skipping match - couldn't find positions", {
+
+      // Find position in pre-content using nth occurrence (matchIdx + 1 occurrence)
+      const prePos = findNthPosition(diffPreContent, match.preValue, matchIdx + 1);
+      if (!prePos) {
+        console.debug("Skipping match - couldn't find preValue position", {
           matchIdx,
           preValue: match.preValue?.slice(0, 50),
-          postValue: match.postValue?.slice(0, 50),
-          preIndex,
-          postIndex,
-          preContentLen: diffPreContent.length,
-          postContentLen: diffPostContent.length
+          occurrence: matchIdx + 1,
+          preContentLen: diffPreContent.length
         });
         continue;
       }
-      
+
+      // Find position in post-content using nth occurrence first
+      let postPos = findNthPosition(diffPostContent, match.postValue, matchIdx + 1);
+
+      // If exact postValue not found, fall back to nth placeholder position
+      if (!postPos) {
+        const placeholderPattern = /\[[A-Z][A-Z0-9_-]*(?:_REDACTED|_\d+)\]/g;
+        const placeholderPositions: Array<{ start: number; end: number }> = [];
+        let placeholderMatch;
+        const pattern = new RegExp(`\\[[A-Z][A-Z0-9_-]*(?:_REDACTED|_\\d+)\\]`, 'g');
+        let lastIndex = 0;
+        while ((placeholderMatch = pattern.exec(diffPostContent)) !== null) {
+          const idx = placeholderMatch.index;
+          const end = idx + placeholderMatch[0].length;
+          placeholderPositions.push({ start: idx, end });
+          lastIndex = end;
+        }
+        // Use the placeholder at the same match index (0-based)
+        if (placeholderPositions.length > matchIdx) {
+          postPos = placeholderPositions[matchIdx];
+        } else if (placeholderPositions.length > 0) {
+          postPos = placeholderPositions[placeholderPositions.length - 1];
+        }
+      }
+
+      // If we still can't find post position, skip this match
+      if (!postPos) {
+        console.debug("Skipping match - couldn't find postValue/placeholder position", {
+          matchIdx,
+          preValue: match.preValue?.slice(0, 50),
+          postValue: match.postValue?.slice(0, 50)
+        });
+        continue;
+      }
+
       // Extract context around the redaction
-      const preStart = Math.max(0, preIndex - CONTEXT_LENGTH);
-      const preEnd = Math.min(diffPreContent.length, preIndex + match.preValue.length + CONTEXT_LENGTH);
-      const postStart = Math.max(0, postIndex - CONTEXT_LENGTH);
-      const postEnd = Math.min(diffPostContent.length, postIndex + match.postValue.length + CONTEXT_LENGTH);
-      
+      const preStart = Math.max(0, prePos.start - CONTEXT_LENGTH);
+      const preEnd = Math.min(diffPreContent.length, prePos.end + CONTEXT_LENGTH);
+      const postStart = Math.max(0, postPos.start - CONTEXT_LENGTH);
+      const postEnd = Math.min(diffPostContent.length, postPos.end + CONTEXT_LENGTH);
+
       const ruleInfo = extractRuleInfo(match.postValue);
-      
+
       segments.push({
         preContext: diffPreContent.slice(preStart, preEnd),
         postContext: diffPostContent.slice(postStart, postEnd),
@@ -259,7 +278,7 @@ export function DiffDialog({
         path: match.path ?? "",
       });
     }
-    
+
     return segments;
   }, [diffPreContent, diffPostContent, matches]);
 
@@ -599,13 +618,14 @@ export function DiffDialog({
         : "bg-transparent"
     }`;
 
-    // For right pane (post-redaction), use RedactionHighlight to highlight placeholders
-    // For left pane (pre-redaction), use RedactionHighlight with isPre=true and pass matches for exact highlighting
+    // For right pane (post-redaction), use RedactionHighlight without isPre to highlight placeholders
+    // For left pane (pre-redaction), use RedactionHighlight with isPre=true to highlight exact pre-values
+    // Both modes now pass unified data to onAddFalsePositive: {value, ruleId, label, path}
     // Truncate very long lines to show context around redactions
     // Use actual content from original/redacted bodies (not normalized) for correct display
     const rawValue = getActualLineContent(item, isLeft);
     const { value: displayValue } = truncateLongLine(rawValue, isLeft, matches ?? []);
-    
+
     // Convert matches to include ruleId and path for the click handler
     const enhancedMatches = (matches ?? []).map(m => ({
       preValue: m.preValue,
@@ -613,14 +633,14 @@ export function DiffDialog({
       ruleId: m.ruleId,
       path: m.path,
     }));
-    
+
     // Use enriched chunk's redaction matches if available, otherwise fall back to all matches
     const chunkRedactionMatches = (item as any)._redactionMatches || [];
     const effectiveMatches = chunkRedactionMatches.length > 0 ? chunkRedactionMatches : enhancedMatches;
-    
+
     const renderValue = isLeft
       ? <RedactionHighlight value={displayValue} isPre matches={effectiveMatches} onAddFalsePositive={onAddFalsePositive} />
-      : <RedactionHighlight value={displayValue} matches={effectiveMatches} onAddFalsePositive={onAddFalsePositive} />;
+      : <RedactionHighlight value={displayValue} isPre={false} matches={effectiveMatches} onAddFalsePositive={onAddFalsePositive} />;
 
     return (
       <div
@@ -881,7 +901,7 @@ export function DiffDialog({
   }: {
     value: string | undefined | null;
     isPre?: boolean;
-    matches?: Array<{ preValue: string; postValue: string; ruleId?: string; path?: string; lineNumber?: number; startCharIndex?: number; endCharIndex?: number }>;
+    matches?: Array<{ preValue: string; postValue: string; ruleId?: string; path?: string }>;
     onAddFalsePositive?: (data: { value: string; ruleId: string; label: string; path: string }) => void;
   }) => {
     // Match both [RULE_REDACTED] and [RULE_N] formats (pipeline detector)
@@ -889,10 +909,10 @@ export function DiffDialog({
     const safeValue = String(value || "");
 
   if (isPre && matches.length > 0) {
-      // Left pane: highlight pre-values using match indices from the right pane's placeholder positions.
-      // We use the matches array directly since it contains both preValue and postValue for each redaction.
-      // Iterate through matches in order and find each preValue in the left content sequentially.
-      
+      // Left pane: highlight pre-values using exact string matching.
+      // Each match's preValue is highlighted, and clicking passes the original
+      // pre-redaction value to onAddFalsePositive for unified false positive handling.
+
       const result: (string | React.ReactElement)[] = [];
       let lastIndex = 0;
 
@@ -900,13 +920,13 @@ export function DiffDialog({
         const correspondingMatch = matches[matchIdx];
         const preValue = correspondingMatch?.preValue ?? "";
         const postValue = correspondingMatch?.postValue ?? "";
-        
+
         if (!preValue || preValue.length === 0) continue;
 
         // Find this preValue in the left pane content starting from lastIndex
         const matchIndex = safeValue.indexOf(preValue, lastIndex);
         if (matchIndex === -1) {
-          // PreValue not found in this fragment (may be truncated or in different diff chunk)
+          // PreValue not found in this fragment
           // Skip to next match
           continue;
         }
@@ -918,7 +938,6 @@ export function DiffDialog({
         const ruleInfo = extractRuleInfo(postValue);
         const ruleId = correspondingMatch?.ruleId ?? ruleInfo.ruleId;
         const path = correspondingMatch?.path ?? "";
-        const normalizedPostValue = postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted");
 
         const handleClick = () => {
           if (onAddFalsePositive) {
@@ -928,9 +947,9 @@ export function DiffDialog({
 
         result.push(
           <mark
-            key={`exact-${matchIdx}-${matchIndex}`}
+            key={`exact-${matchIdx}`}
             className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
-            data-redaction={normalizedPostValue}
+            data-redaction={postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted")}
             data-match-index={matchIdx}
             onClick={handleClick}
             title="Click to add as false positive"
@@ -950,7 +969,6 @@ export function DiffDialog({
       if (result.some(r => typeof r === 'object')) {
         return <code className="font-mono text-xs">{result}</code>;
       }
-      // Fall through to PII patterns if no exact matches found
     }
 
     // Right pane (post-redaction, isPre=false): render [RULE_REDACTED] placeholder tokens
@@ -983,26 +1001,23 @@ export function DiffDialog({
                   placeholderOccurrenceCount.set(placeholder, occurrenceCount + 1);
                   const matchIdx = occurrenceCount;
 
+                  // Find the corresponding match from the matches array using matchIdx
+                  const correspondingMatch = matches?.[matchIdx];
+                  const ruleInfo = extractRuleInfo(placeholder);
+                  const ruleId = correspondingMatch?.ruleId ?? ruleInfo.ruleId;
+                  const path = correspondingMatch?.path ?? "";
+                  // Use the original pre-value (actual content from the redaction metadata)
+                  const value = correspondingMatch?.preValue ?? placeholder.replace(/[\[\]]/g, "");
+
                   return (
                     <mark
-                      key={`ph-${i}-${placeholder}`}
+                      key={`ph-${i}`}
                       className="redaction-placeholder cursor-pointer hover:bg-primary/10"
                       data-redaction={normalizedPlaceholder}
                       data-match-index={matchIdx}
                       onClick={() => {
                         if (onAddFalsePositive) {
-                          const ruleInfo = extractRuleInfo(placeholder);
-                          // Use the captured matchIdx for correct path lookup
-                          const correspondingMatch = matches[matchIdx];
-                          const path = correspondingMatch?.path ?? "";
-                          // Use the original pre-value (actual content) instead of the placeholder
-                          const value = correspondingMatch?.preValue ?? placeholder.replace(/[\[\]]/g, "");
-                          onAddFalsePositive({
-                            value,
-                            ruleId: ruleInfo.ruleId,
-                            label: ruleInfo.label,
-                            path,
-                          });
+                          onAddFalsePositive({ value, ruleId, label: ruleInfo.label, path });
                         }
                       }}
                       title="Click to add as false positive"
