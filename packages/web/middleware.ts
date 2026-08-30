@@ -50,14 +50,7 @@ export default async function middleware(request: NextRequest) {
   // Check for valid session
   const session = await getSession();
 
-  if (!session) {
-    // Redirect to login with return URL
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // Issue CSRF token on safe methods
+  // Issue CSRF token on safe methods (even for unauthenticated users)
   if (request.method === "GET" || request.method === "HEAD") {
     try {
       const { issueToken } = await import("@/lib/csrf");
@@ -67,10 +60,11 @@ export default async function middleware(request: NextRequest) {
       return response;
     } catch (err) {
       console.error("[middleware] CSRF token issuance failed:", err);
-      return NextResponse.next();
     }
   }
 
+  // Allow request through regardless of auth status
+  // Page-level admin protection will handle access control for protected pages
   return NextResponse.next();
 }
 

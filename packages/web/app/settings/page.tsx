@@ -8,7 +8,6 @@ import type { ProviderConfig, ProviderMetadata, MaintenanceOperation, Maintenanc
 import type { PresetName } from "@contextio/redact";
 import { useState, useEffect, useRef } from "react";
 import { useAdminProtection } from "@/hooks/use-admin-auth";
-import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
 import { useTheme } from "@/components/theme-provider";
 import { FalsePositiveManager } from "@/components/FalsePositiveManager";
 import { LogsViewer } from "@/components/logs-viewer";
@@ -3579,7 +3578,7 @@ case "upstreamGeminiCodeAssistUrl":
     );
   };
 
-  if (loading) {
+if (loading) {
     return (
       <MainLayout>
         <div className="space-y-6">
@@ -3598,10 +3597,12 @@ case "upstreamGeminiCodeAssistUrl":
   }
 
   return (
-    <MainLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+    <>
+      {showContent && (
+        <MainLayout>
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">
             Configure ContextIO-Next proxy settings
           </p>
