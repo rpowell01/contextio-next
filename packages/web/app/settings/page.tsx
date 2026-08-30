@@ -93,6 +93,29 @@ const PRESET_RULES: Record<PresetName, string[]> = {
   ],
 };
 
+/** Available NER models with descriptions for the detector model dropdown */
+const DETECTOR_MODEL_OPTIONS: Array<{
+  value: string;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "Xenova/bert-base-NER",
+    label: "Xenova/bert-base-NER",
+    description: "Default English-only BERT model. Fast but limited to English and has known subword tokenization issues at text boundaries.",
+  },
+  {
+    value: "Xenova/bert-base-multilingual-cased-ner-hrl",
+    label: "Xenova/bert-base-multilingual-cased-ner-hrl",
+    description: "Multilingual BERT (100+ languages). Better tokenizer reduces partial-word detection issues. Recommended for most users.",
+  },
+  {
+    value: "Xenova/distilbert-base-multilingual-cased-ner-hrl",
+    label: "Xenova/distilbert-base-multilingual-cased-ner-hrl",
+    description: "Distilled multilingual BERT. ~6x faster and smaller than base BERT with minimal accuracy loss. Good for resource-constrained environments.",
+  },
+];
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -2429,18 +2452,22 @@ case "oidcIssuer":
                 Detector Model Name <span className="text-xs text-muted-foreground font-normal ml-1">(LLM-Based)</span>
               </Label>
             </SettingHelp>
-            <Input
-              id="detectorModelName"
+            <Select
               value={settings.detectorModelName}
-              onChange={(e) => updateSetting("detectorModelName", e.target.value)}
-              placeholder="Xenova/bert-base-NER"
+              onValueChange={(value) => updateSetting("detectorModelName", value)}
               disabled={isSettingOverridden("detectorModelName") || settings.detectorMode === "rules"}
-              className={
-                (isSettingOverridden("detectorModelName") || settings.detectorMode === "rules")
-                  ? "bg-muted cursor-not-allowed"
-                  : ""
-              }
-            />
+            >
+              <SelectTrigger id="detectorModelName" className={isSettingOverridden("detectorModelName") || settings.detectorMode === "rules" ? "bg-muted cursor-not-allowed" : ""}>
+                <SelectValue placeholder="Select a model..." />
+              </SelectTrigger>
+              <SelectContent>
+                {DETECTOR_MODEL_OPTIONS.map((option) => (
+                  <Tooltip key={option.value} delayDuration={300} content={<p className="max-w-[350px]">{option.description}</p>}>
+                    <SelectItem value={option.value}>{option.label}</SelectItem>
+                  </Tooltip>
+                ))}
+              </SelectContent>
+            </Select>
             {settings.detectorMode === "rules" && (
               <p className="text-xs text-muted-foreground mt-1">
                 Disabled: This setting only applies in LLM, Hybrid, or Auto detector modes.
