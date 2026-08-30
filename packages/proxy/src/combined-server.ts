@@ -357,22 +357,9 @@ export function createCombinedProxy(
       );
     }
 
-    // OIDC authentication check for web UI routes only
-    // If OIDC is enabled, require valid session for all other routes (Next.js web UI)
-    // Do NOT protect /api/* (web API routes) - AI tools need unauthenticated access
-    // Also skip public assets (manifest, logos, favicon)
-    if (resolved.oidc && !path.startsWith("/api/") && !isPublicAsset(path)) {
-      const session = validateSession(req, resolved.oidc.sessionSecret);
-      if (!session) {
-        // Redirect to login with return URL
-        const loginUrl = `/auth/login?redirect=${encodeURIComponent(path + parsedUrl.search)}`;
-        res.writeHead(302, { Location: loginUrl });
-        res.end();
-        return;
-      }
-    }
-
     // Everything else → Next.js (web UI, /api/*, etc.)
+    // Unauthenticated access allowed; page-level admin protection handles access control
+    // for protected pages (logs, redactions, settings)
     if (nextHandler) {
       nextHandler(req, res);
     } else {
