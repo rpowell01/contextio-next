@@ -2462,9 +2462,9 @@ case "oidcIssuer":
               </SelectTrigger>
               <SelectContent>
                 {DETECTOR_MODEL_OPTIONS.map((option) => (
-                  <Tooltip key={option.value} delayDuration={300} content={<p className="max-w-[350px]">{option.description}</p>}>
-                    <SelectItem value={option.value}>{option.label}</SelectItem>
-                  </Tooltip>
+                  <SelectItem key={option.value} value={option.value} title={option.description}>
+                    {option.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
