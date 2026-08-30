@@ -830,10 +830,10 @@ export default function SettingsPage() {
 
   // State for collapsible sections in the Redaction tab
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    global: true,
-    mode: true,
-    rules: true,
-    llm: true,
+    global: false,
+    mode: false,
+    rules: false,
+    llm: false,
   });
 
   const toggleSection = (id: string) => {

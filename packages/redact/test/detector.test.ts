@@ -436,10 +436,10 @@ describe("PresidioTsDetector", () => {
       assert.ok(emailSpans.length > 0);
     });
 
-    it("handles special characters in text", async function(this: { skip: (msg: string) => void }) {
+it("handles special characters in text", async function(this: { skip: (msg: string) => void }) {
       skipIfHeavy.call(this);
       const detector = await getSharedPresidioDetector();
-      const text = "Email: john.doe+tag@example.com, phone: +1-555-123-4567, SSN: 123-45-6789";
+      const text = "Email: [EMAIL_4], phone: +1-555-123-4567, SSN: [SSN_1]";
       const result = await detector.detect(text);
       const labels = result.spans.map(s => s.label);
       assert.ok(labels.includes("EMAIL_ADDRESS"));
@@ -447,6 +447,101 @@ describe("PresidioTsDetector", () => {
       assert.ok(labels.includes("US_SSN"));
     });
   });
+
+  describe("strict boundaries (substring match filtering)", () => {
+    it("filters PHONE_NUMBER embedded in longer digit string", async function(this: { skip: (msg: string) => void }) {
+      skipIfHeavy.call(this);
+      const detector = await createPresidioTsDetector({
+        name: "test-strict-phone",
+        threshold: 0.3,
+        useNER: false,
+        strictBoundaries: true,
+      });
+      try {
+        const result = await detector.detect("Call me at 12345678901234567890");
+        // 10-digit phone embedded in 20-digit string should be filtered
+        assert.equal(result.spans.length, 0, "Should not detect embedded phone number");
+      } finally {
+        await detector.shutdown();
+      }
+    });
+
+    it("filters ORGANIZATION embedded in longer alphanumeric string", async function(this: { skip: (msg: string) => void }) {
+      skipIfHeavy.call(this);
+      // Use very low threshold to catch NER detections, but strictBoundaries should filter embedded ones
+      const detector = await createPresidioTsDetector({
+        name: "test-strict-org",
+        threshold: 0.01,
+        useNER: true,
+        strictBoundaries: true,
+      });
+      try {
+        const result = await detector.detect("MicrosoftCorporation announced a new product");
+        // "Microsoft" embedded in "MicrosoftCorporation" should be filtered
+        const orgSpans = result.spans.filter(s => s.label === "ORGANIZATION");
+        // The NER model detects partial words at start, but strictBoundaries should filter
+        // because the char after is alphanumeric (not a boundary)
+        assert.equal(orgSpans.length, 0, "Should not detect embedded organization");
+      } finally {
+        await detector.shutdown();
+      }
+    });
+
+    it("filters LOCATION embedded in longer alphanumeric string", async function(this: { skip: (msg: string) => void }) {
+      skipIfHeavy.call(this);
+      const detector = await createPresidioTsDetector({
+        name: "test-strict-location",
+        threshold: 0.01,
+        useNER: true,
+        strictBoundaries: true,
+      });
+      try {
+        const result = await detector.detect("Meeting in NewYorkCity tomorrow");
+        // "New York" embedded in "NewYorkCity" should be filtered
+        const locSpans = result.spans.filter(s => s.label === "LOCATION");
+        assert.equal(locSpans.length, 0, "Should not detect embedded location");
+      } finally {
+        await detector.shutdown();
+      }
+    });
+
+    it("allows valid PHONE_NUMBER at word boundary", async function(this: { skip: (msg: string) => void }) {
+      skipIfHeavy.call(this);
+      const detector = await createPresidioTsDetector({
+        name: "test-strict-phone-valid",
+        threshold: 0.3,
+        useNER: false,
+        strictBoundaries: true,
+      });
+      try {
+        const result = await detector.detect("Call me at +1-555-123-4567 please");
+        const phoneSpans = result.spans.filter(s => s.label === "PHONE_NUMBER");
+        assert.ok(phoneSpans.length > 0, "Should detect valid phone at boundary");
+        assert.equal(phoneSpans[0].text, "+1-555-123-4567");
+      } finally {
+        await detector.shutdown();
+      }
+    });
+
+    it("allows valid ORGANIZATION at word boundary", async function(this: { skip: (msg: string) => void }) {
+      skipIfHeavy.call(this);
+      const detector = await createPresidioTsDetector({
+        name: "test-strict-org-valid",
+        threshold: 0.01,
+        useNER: true,
+        strictBoundaries: true,
+      });
+      try {
+        const result = await detector.detect("Microsoft announced a new product");
+        const orgSpans = result.spans.filter(s => s.label === "ORGANIZATION");
+        // "Microsoft" at start of string followed by space should be detected
+        assert.ok(orgSpans.length > 0, "Should detect valid organization at boundary");
+        assert.equal(orgSpans[0].text, "Microsoft");
+      } finally {
+        await detector.shutdown();
+      }
+    });
+});
 });
 
 describe("RuleDetector", () => {

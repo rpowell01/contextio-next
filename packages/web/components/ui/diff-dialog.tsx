@@ -215,7 +215,25 @@ export function DiffDialog({
       if (!match.preValue || !match.postValue) continue;
 
       // Find position in pre-content using nth occurrence (matchIdx + 1 occurrence)
-      const prePos = findNthPosition(diffPreContent, match.preValue, matchIdx + 1);
+      let prePos = findNthPosition(diffPreContent, match.preValue, matchIdx + 1);
+
+      // If exact preValue not found, fall back to case-insensitive search
+      // This handles cases where the preValue was normalized or trimmed during storage
+      if (!prePos) {
+        const safePreContent = diffPreContent.toLowerCase();
+        const safePreValue = match.preValue.toLowerCase();
+        const fallbackIndex = safePreContent.indexOf(safePreValue);
+        if (fallbackIndex !== -1) {
+          prePos = { start: fallbackIndex, end: fallbackIndex + match.preValue.length };
+          console.debug("Using case-insensitive fallback for preValue position", {
+            matchIdx,
+            preValue: match.preValue?.slice(0, 50),
+            fallbackIndex,
+            preContentLen: diffPreContent.length
+          });
+        }
+      }
+
       if (!prePos) {
         console.debug("Skipping match - couldn't find preValue position", {
           matchIdx,
@@ -921,7 +939,23 @@ export function DiffDialog({
         if (!preValue || preValue.length === 0) continue;
 
         // Find this preValue in the left pane content starting from lastIndex
-        const matchIndex = safeValue.indexOf(preValue, lastIndex);
+        // Try exact match first, then fall back to case-insensitive search
+        let matchIndex = safeValue.indexOf(preValue, lastIndex);
+        if (matchIndex === -1) {
+          // Fall back to case-insensitive search
+          const safeLowerValue = safeValue.toLowerCase();
+          const safeLowerPreValue = preValue.toLowerCase();
+          const fallbackIndex = safeLowerValue.indexOf(safeLowerPreValue, lastIndex);
+          if (fallbackIndex !== -1) {
+            matchIndex = fallbackIndex;
+            console.debug("Using case-insensitive fallback for preValue highlighting", {
+              matchIdx: matchIdx,
+              preValue: preValue?.slice(0, 50),
+              fallbackIndex
+            });
+          }
+        }
+
         if (matchIndex === -1) {
           // PreValue not found in this fragment
           // Skip to next match

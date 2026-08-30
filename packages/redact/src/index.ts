@@ -874,6 +874,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
             options: presidioConfig.options,
             allowlistPatterns: policy.allowlist.patterns,
             feedbackStore,
+            strictBoundaries: presidioConfig.strictBoundaries,
           });
           pipeline = await createDetectorPipeline({
             detectors: [llmDetector],
@@ -893,6 +894,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
             options: presidioConfig.options,
             allowlistPatterns: policy.allowlist.patterns,
             feedbackStore,
+            strictBoundaries: presidioConfig.strictBoundaries,
           });
 
           // In auto mode, we still use hybrid but could add logic to skip LLM for simple cases
