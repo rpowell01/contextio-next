@@ -117,7 +117,13 @@ export function AdminAccessDeniedDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => {
+            onClose();
+            // Navigate back to the previous page instead of staying on blank screen
+            if (typeof window !== "undefined") {
+              window.history.back();
+            }
+          }}>
             Close
           </Button>
           <Button onClick={() => window.location.href = "/auth/login"}>

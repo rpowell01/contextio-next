@@ -24,6 +24,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Copy } from "lucide-react";
+import { useAdminProtection } from "@/hooks/use-admin-auth";
+import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
 
 function renderJson(data: unknown): string {
   if (typeof data === "string") {
@@ -94,6 +96,9 @@ function SessionContent({
   const [copyMetadataSuccess, setCopyMetadataSuccess] = useState(false);
   const [filters, setFilters] = useState<CaptureFilters>(DEFAULT_FILTERS);
   const searchParams = useSearchParams();
+
+  // Admin authentication protection for capture detail view
+  const { showContent: showCaptureDetail, showAccessDenied, setShowAccessDenied, authState } = useAdminProtection();
 
   // Page load tracking for footer - NOW INSIDE MainLayout
   const { registerPageLoad, registerPageReady } = usePageLoad();
@@ -342,7 +347,15 @@ function SessionContent({
           </div>
         )}
 
-        {(captureDetailLoading || captureDetail || captureDetailError) ? (
+        {/* Admin Access Denied Dialog for capture detail */}
+        <AdminAccessDeniedDialog
+          open={showAccessDenied}
+          onClose={() => setShowAccessDenied(false)}
+          userEmail={authState.userEmail}
+          isAuthenticated={authState.isAuthenticated}
+        />
+
+        {showCaptureDetail && (captureDetailLoading || captureDetail || captureDetailError) ? (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>

@@ -80,8 +80,8 @@ export default function RedactionsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [_error, _setError] = useState<string | null>(null);
 
-  // Admin authentication protection
-  const { showContent, showAccessDenied, setShowAccessDenied, authState } = useAdminProtection();
+  // Admin authentication protection - only for dialog actions, not the main page
+  const { showAccessDenied, setShowAccessDenied, authState } = useAdminProtection();
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -501,8 +501,7 @@ export default function RedactionsPage() {
         userEmail={authState.userEmail}
         isAuthenticated={authState.isAuthenticated}
       />
-      {showContent && (
-        <MainLayout>
+      <MainLayout>
           <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
@@ -749,7 +748,6 @@ export default function RedactionsPage() {
           </div>
         </div>
       </MainLayout>
-      )}
 
       {/* Diff Dialog - Two-pane view showing pre/post redaction side by side */}
       <DiffDialog
