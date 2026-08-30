@@ -6,6 +6,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 import { DiffDialog } from "@/components/ui/diff-dialog";
 import { FalsePositiveManager } from "@/components/FalsePositiveManager";
+import { useAdminProtection } from "@/hooks/use-admin-auth";
+import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
 
 // Admin status cache key and TTL (5 minutes)
 const ADMIN_CACHE_KEY = "contextio_admin_status";
@@ -77,6 +79,9 @@ export default function RedactionsPage() {
   const [_loadingDetails, _setLoadingDetails] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [_error, _setError] = useState<string | null>(null);
+
+  // Admin authentication protection
+  const { showContent, showAccessDenied, setShowAccessDenied, authState } = useAdminProtection();
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -191,6 +196,13 @@ export default function RedactionsPage() {
 
   const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionCaptureRow) => {
     lastFocusedTrigger.current = e.currentTarget as HTMLElement;
+
+    // Check admin auth before opening diff dialog
+    if (authState.oidcEnabled && (!authState.isAuthenticated || !authState.isAdmin)) {
+      setShowAccessDenied(true);
+      return;
+    }
+
     setDiffDialogLoading(true);
 
     // Fetch first match for this capture from the detail API
@@ -483,8 +495,15 @@ export default function RedactionsPage() {
 
   return (
     <>
-      <MainLayout>
-        <div className="space-y-6">
+      <AdminAccessDeniedDialog
+        open={showAccessDenied}
+        onClose={() => setShowAccessDenied(false)}
+        userEmail={authState.userEmail}
+        isAuthenticated={authState.isAuthenticated}
+      />
+      {showContent && (
+        <MainLayout>
+          <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Redactions</h1>
@@ -730,6 +749,7 @@ export default function RedactionsPage() {
           </div>
         </div>
       </MainLayout>
+      )}
 
       {/* Diff Dialog - Two-pane view showing pre/post redaction side by side */}
       <DiffDialog

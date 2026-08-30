@@ -3,13 +3,26 @@
 import { MainLayout } from "@/components/main-layout";
 import { LogsViewer } from "@/components/logs-viewer";
 import { useState } from "react";
+import { useAdminProtection } from "@/hooks/use-admin-auth";
+import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
 
 export default function LogsPage() {
   const [containerId, setContainerId] = useState("contextio-next");
 
+  // Admin authentication protection
+  const { showContent, showAccessDenied, setShowAccessDenied, authState } = useAdminProtection();
+
   return (
-    <MainLayout>
-      <div className="space-y-6">
+    <>
+      <AdminAccessDeniedDialog
+        open={showAccessDenied}
+        onClose={() => setShowAccessDenied(false)}
+        userEmail={authState.userEmail}
+        isAuthenticated={authState.isAuthenticated}
+      />
+      {showContent && (
+        <MainLayout>
+          <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Container Logs</h1>
           <p className="text-muted-foreground">
@@ -38,5 +51,7 @@ export default function LogsPage() {
         </div>
       </div>
     </MainLayout>
+      )}
+    </>
   );
 }

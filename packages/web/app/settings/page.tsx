@@ -7,6 +7,8 @@ import type { Settings, SettingMeta, Provider, RateLimitConfig, StreamingRetryCo
 import type { ProviderConfig, ProviderMetadata, MaintenanceOperation, MaintenanceResult } from "@/types/api";
 import type { PresetName } from "@contextio/redact";
 import { useState, useEffect, useRef } from "react";
+import { useAdminProtection } from "@/hooks/use-admin-auth";
+import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
 import { useTheme } from "@/components/theme-provider";
 import { FalsePositiveManager } from "@/components/FalsePositiveManager";
 import { LogsViewer } from "@/components/logs-viewer";
@@ -850,6 +852,9 @@ export default function SettingsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [envContainerId, setEnvContainerId] = useState("contextio-next");
+
+  // Admin authentication protection
+  const { showContent, showAccessDenied, setShowAccessDenied, authState } = useAdminProtection();
 
   // State for collapsible sections in the Redaction tab
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -2065,7 +2070,6 @@ export default function SettingsPage() {
           </div>
         );
       }
-      case "redactPolicyFile":
         return (
           <div>
             <SettingHelp
@@ -3948,6 +3952,8 @@ case "upstreamGeminiCodeAssistUrl":
         </DialogContent>
       </Dialog>
     </MainLayout>
+      )}
+    </>
   );
 }
 
