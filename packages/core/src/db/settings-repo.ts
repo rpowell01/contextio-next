@@ -568,14 +568,14 @@ export function upsertSettings(settings: Settings): void {
 	const row = settingsToRow(settings);
 
 	const stmt = db.prepare(`
-		INSERT INTO settings (
+INSERT INTO settings (
 			id, log_dir, max_sessions, redact_preset, redact_reversible, redact_policy_file,
 			redact_policy_enabled, redact_paths_only, redact_paths_skip, redact_disabled_rules,
 			redact_providers,
 			encryption_at_rest, capture_cleanup_enabled, capture_cleanup_interval_hours,
 			capture_cleanup_max_age_days, theme, oidc_enabled, oidc_public_url, oidc_issuer,
 			show_page_load_time, feedback_store_enabled, feedback_store_type, feedback_store_path,
-			detector_mode, detector_model_name, detector_threshold,
+			detector_mode, detector_model_name, detector_threshold, detector_labels,
 			rate_limiter, streaming_retry,
 			enable_logger, enable_redact, enable_rate_limiter, log_traffic,
 			rate_limiter_max_entries, rate_limiter_cleanup_interval_ms, rate_limiter_entry_ttl_ms,
@@ -586,7 +586,7 @@ export function upsertSettings(settings: Settings): void {
 			upstream_gemini_url, upstream_vertex_url, upstream_nvidia_url, upstream_kilo_url,
 			upstream_gemini_code_assist_url
 ) VALUES (
-			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 		ON CONFLICT(id) DO UPDATE SET
 			log_dir = excluded.log_dir,
@@ -614,6 +614,7 @@ export function upsertSettings(settings: Settings): void {
 			detector_mode = excluded.detector_mode,
 			detector_model_name = excluded.detector_model_name,
 			detector_threshold = excluded.detector_threshold,
+			detector_labels = excluded.detector_labels,
 			rate_limiter = excluded.rate_limiter,
 			streaming_retry = excluded.streaming_retry,
 			enable_logger = excluded.enable_logger,
@@ -671,6 +672,7 @@ export function upsertSettings(settings: Settings): void {
 			row.detector_mode,
 			row.detector_model_name,
 			row.detector_threshold,
+			row.detector_labels,
 			row.rate_limiter,
 			row.streaming_retry,
 			row.enable_logger,
