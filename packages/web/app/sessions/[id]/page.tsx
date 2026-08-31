@@ -10,6 +10,7 @@ import {
   useState,
   useEffect,
   useMemo,
+  useCallback,
   Suspense,
 } from "react";
 import { useSearchParams } from "next/navigation";
@@ -24,7 +25,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Copy } from "lucide-react";
-import { useAdminProtection } from "@/hooks/use-admin-auth";
 import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
 
 function renderJson(data: unknown): string {
@@ -97,8 +97,49 @@ function SessionContent({
   const [filters, setFilters] = useState<CaptureFilters>(DEFAULT_FILTERS);
   const searchParams = useSearchParams();
 
-  // Admin authentication protection for capture detail view
-  const { showContent: showCaptureDetail, showAccessDenied, setShowAccessDenied, authState } = useAdminProtection();
+  // Admin access denied dialog state - only shown when user tries to view capture detail
+  const [showAccessDenied, setShowAccessDenied] = useState(false);
+  const [accessDeniedAuthState, setAccessDeniedAuthState] = useState<{ userEmail?: string; isAuthenticated?: boolean }>({});
+  const [showCaptureDetail, setShowCaptureDetail] = useState(true);
+
+  // Check admin status when capture detail is requested
+  const checkAdminForCaptureDetail = useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth/check-admin");
+      const adminData = await response.json();
+      
+      if (!adminData.authenticated) {
+        setAccessDeniedAuthState({ userEmail: adminData.email, isAuthenticated: false });
+        setShowAccessDenied(true);
+        setShowCaptureDetail(false);
+        return false;
+      }
+      
+      if (!adminData.isAdmin) {
+        setAccessDeniedAuthState({ userEmail: adminData.email, isAuthenticated: true });
+        setShowAccessDenied(true);
+        setShowCaptureDetail(false);
+        return false;
+      }
+      
+      setShowCaptureDetail(true);
+      return true;
+    } catch (error) {
+      console.error("Failed to check admin status:", error);
+      setShowCaptureDetail(false);
+      return false;
+    }
+  }, []);
+
+  // Trigger admin check when capture detail is requested
+  useEffect(() => {
+    if (selectedCaptureId) {
+      checkAdminForCaptureDetail();
+    } else {
+      setShowCaptureDetail(true);
+      setShowAccessDenied(false);
+    }
+  }, [selectedCaptureId, checkAdminForCaptureDetail]);
 
   // Page load tracking for footer - NOW INSIDE MainLayout
   const { registerPageLoad, registerPageReady } = usePageLoad();
@@ -351,8 +392,8 @@ function SessionContent({
         <AdminAccessDeniedDialog
           open={showAccessDenied}
           onClose={() => setShowAccessDenied(false)}
-          userEmail={authState.userEmail}
-          isAuthenticated={authState.isAuthenticated}
+          userEmail={accessDeniedAuthState.userEmail}
+          isAuthenticated={accessDeniedAuthState.isAuthenticated}
         />
 
         {showCaptureDetail && (captureDetailLoading || captureDetail || captureDetailError) ? (

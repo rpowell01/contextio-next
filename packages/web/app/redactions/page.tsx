@@ -6,7 +6,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 import { DiffDialog } from "@/components/ui/diff-dialog";
 import { FalsePositiveManager } from "@/components/FalsePositiveManager";
-import { useAdminProtection } from "@/hooks/use-admin-auth";
 import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
 
 // Admin status cache key and TTL (5 minutes)
@@ -80,8 +79,9 @@ export default function RedactionsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [_error, _setError] = useState<string | null>(null);
 
-  // Admin authentication protection - only for dialog actions, not the main page
-  const { showAccessDenied, setShowAccessDenied, authState } = useAdminProtection();
+  // Admin access denied dialog state - only shown when user tries to access protected feature
+  const [showAccessDenied, setShowAccessDenied] = useState(false);
+  const [accessDeniedAuthState, setAccessDeniedAuthState] = useState<{ userEmail?: string; isAuthenticated?: boolean }>({});
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -198,9 +198,17 @@ export default function RedactionsPage() {
     lastFocusedTrigger.current = e.currentTarget as HTMLElement;
 
     // Check admin auth before opening diff dialog
-    if (authState.oidcEnabled && (!authState.isAuthenticated || !authState.isAdmin)) {
-      setShowAccessDenied(true);
-      return;
+    try {
+      const response = await fetch("/api/auth/check-admin");
+      const adminData = await response.json();
+      
+      if (adminData.oidcEnabled && (!adminData.authenticated || !adminData.isAdmin)) {
+        setAccessDeniedAuthState({ userEmail: adminData.email, isAuthenticated: adminData.authenticated });
+        setShowAccessDenied(true);
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to check admin status:", error);
     }
 
     setDiffDialogLoading(true);
@@ -341,11 +349,13 @@ export default function RedactionsPage() {
     const cached = getCachedAdminStatus();
     if (cached) {
       if (!cached.authenticated) {
-        alert("You must be logged in with an admin account to add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please log in with an admin account or contact your administrator.");
+        setAccessDeniedAuthState({ userEmail: cached.email, isAuthenticated: false });
+        setShowAccessDenied(true);
         return;
       }
       if (!cached.isAdmin) {
-        alert("Admin role required: Only users with admin privileges can add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please contact your administrator to request admin access.");
+        setAccessDeniedAuthState({ userEmail: cached.email, isAuthenticated: true });
+        setShowAccessDenied(true);
         return;
       }
       // Cached admin status is valid, open dialog immediately
@@ -367,12 +377,14 @@ export default function RedactionsPage() {
       });
       
       if (!adminData.authenticated) {
-        alert("You must be logged in with an admin account to add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please log in with an admin account or contact your administrator.");
+        setAccessDeniedAuthState({ userEmail: adminData.email, isAuthenticated: false });
+        setShowAccessDenied(true);
         return;
       }
       
       if (!adminData.isAdmin) {
-        alert("Admin role required: Only users with admin privileges can add false positives. Your account email must be included in the ADMIN_EMAILS environment variable on the server. Please contact your administrator to request admin access.");
+        setAccessDeniedAuthState({ userEmail: adminData.email, isAuthenticated: true });
+        setShowAccessDenied(true);
         return;
       }
       
@@ -498,8 +510,8 @@ export default function RedactionsPage() {
       <AdminAccessDeniedDialog
         open={showAccessDenied}
         onClose={() => setShowAccessDenied(false)}
-        userEmail={authState.userEmail}
-        isAuthenticated={authState.isAuthenticated}
+        userEmail={accessDeniedAuthState.userEmail}
+        isAuthenticated={accessDeniedAuthState.isAuthenticated}
       />
       <MainLayout>
           <div className="space-y-6">
