@@ -202,13 +202,24 @@ export default function RedactionsPage() {
       const response = await fetch("/api/auth/check-admin");
       const adminData = await response.json();
       
-      if (adminData.oidcEnabled && (!adminData.authenticated || !adminData.isAdmin)) {
-        setAccessDeniedAuthState({ userEmail: adminData.email, isAuthenticated: adminData.authenticated });
+      // Require authentication and admin status to view diff dialog
+      if (!adminData.authenticated) {
+        setAccessDeniedAuthState({ userEmail: adminData.email, isAuthenticated: false });
+        setShowAccessDenied(true);
+        return;
+      }
+      
+      if (!adminData.isAdmin) {
+        setAccessDeniedAuthState({ userEmail: adminData.email, isAuthenticated: true });
         setShowAccessDenied(true);
         return;
       }
     } catch (error) {
       console.error("Failed to check admin status:", error);
+      // On error, deny access to be safe
+      setAccessDeniedAuthState({ isAuthenticated: false });
+      setShowAccessDenied(true);
+      return;
     }
 
     setDiffDialogLoading(true);
