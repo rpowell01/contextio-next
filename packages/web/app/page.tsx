@@ -27,7 +27,7 @@ const Spinner = ({ size = 16, className = "" }: { size?: number; className?: str
     height={size}
     viewBox="0 0 24 24"
     fill="none"
-    xmlns="[URL_4]
+    xmlns="http://www.w3.org/2000/svg"
   >
     <circle
       className="opacity-25"
