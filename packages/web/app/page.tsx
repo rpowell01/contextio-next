@@ -6,6 +6,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState, useCallback } from "react";
 import { useTheme } from "@/components/theme-provider";
+import { apiClient } from "@/lib/api";
+import type { Settings } from "@/lib/settings";
 
 interface BuildInfo {
   version: string;
@@ -25,7 +27,7 @@ const Spinner = ({ size = 16, className = "" }: { size?: number; className?: str
     height={size}
     viewBox="0 0 24 24"
     fill="none"
-    xmlns="http://www.w3.org/2000/svg"
+    xmlns="[URL_4]
   >
     <circle
       className="opacity-25"
@@ -48,6 +50,30 @@ export default function HomePage() {
   const [redactionsSummary, setRedactionsSummary] = useState<RedactionsSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const { theme, setTheme } = useTheme();
+
+  // Persist theme changes to database (replicates settings page handleSubmit logic for theme)
+  const persistTheme = useCallback(async (newTheme: Settings["theme"]) => {
+    try {
+      const response = await apiClient.getSettings();
+      const currentSettings = response.settings as Settings;
+      const mergedSettings: Settings = {
+        ...currentSettings,
+        theme: newTheme,
+      };
+      await apiClient.saveSettings(mergedSettings);
+    } catch (error) {
+      console.error("Failed to persist theme:", error);
+    }
+  }, []);
+
+  // Wrap setTheme to also persist to database
+  const handleThemeChange = useCallback(
+    (newTheme: Settings["theme"]) => {
+      setTheme(newTheme);
+      persistTheme(newTheme);
+    },
+    [setTheme, persistTheme]
+  );
 
   const fetchSummary = useCallback(async () => {
     console.log("[Dashboard] fetchSummary called, current refreshing:", refreshing);
@@ -106,7 +132,7 @@ export default function HomePage() {
                 <div>{new Date(buildInfo.buildTime).toLocaleString()}</div>
               </div>
             )}
-            <ThemeSelector value={theme} onChange={setTheme} />
+            <ThemeSelector value={theme} onChange={handleThemeChange} />
           </div>
         </div>
 
