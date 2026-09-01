@@ -75,6 +75,9 @@ interface DiffDialogProps {
 
 type ViewMode = "diff" | "segments" | "syntax";
 
+// Default to segments view as it's the primary view for redaction validation
+const DEFAULT_VIEW_MODE: ViewMode = "segments";
+
 function isValidJson(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
@@ -158,9 +161,8 @@ export function DiffDialog({
 
   // Build focused view segments around each redaction
   // Each segment shows ~100 chars context around the redaction position.
-  // Uses nth-occurrence matching to correctly associate each match with its
-  // corresponding occurrence in the content. Falls back to placeholder-based
-  // positioning if exact values aren't found.
+  // Uses robust position finding: first tries exact match at the correct occurrence,
+  // then falls back to finding all occurrences and picking by index, then placeholder matching.
   const redactionSegments = useMemo((): Array<{
     preContext: string;
     postContext: string;
@@ -183,54 +185,75 @@ export function DiffDialog({
       path: string;
     }> = [];
 
-    // Helper: find the nth occurrence of a substring in a string
-    const findNthOccurrence = (
+    // Helper: find ALL occurrences of a substring in a string, returning start/end positions
+    const findAllOccurrences = (
       str: string,
-      substr: string,
-      n: number
-    ): number => {
+      substr: string
+    ): Array<{ start: number; end: number }> => {
+      const positions: Array<{ start: number; end: number }> = [];
       let start = 0;
-      let found = -1;
-      for (let i = 0; i < n; i++) {
-        found = str.indexOf(substr, start);
-        if (found === -1) return -1;
+      while (true) {
+        const found = str.indexOf(substr, start);
+        if (found === -1) break;
+        positions.push({ start: found, end: found + substr.length });
         start = found + substr.length;
       }
-      return found;
+      return positions;
     };
 
-    // Helper: find nth occurrence, returning start and end indices
-    const findNthPosition = (
-      str: string,
-      substr: string,
-      n: number
-    ): { start: number; end: number } | null => {
-      const start = findNthOccurrence(str, substr, n);
-      if (start === -1) return null;
-      return { start, end: start + substr.length };
+    // Helper: find all placeholder positions in post-content
+    const findPlaceholderPositions = (str: string): Array<{ start: number; end: number; placeholder: string }> => {
+      const positions: Array<{ start: number; end: number; placeholder: string }> = [];
+      const pattern = new RegExp(`\\[[A-Z][A-Z0-9_-]*(?:_REDACTED|_\\d+)\\]`, 'g');
+      let match;
+      while ((match = pattern.exec(str)) !== null) {
+        positions.push({ start: match.index, end: match.index + match[0].length, placeholder: match[0] });
+      }
+      return positions;
     };
+
+    // Pre-compute all occurrences for each match's preValue and postValue
+    // This avoids re-scanning the content for each match
+    const preValuePositions = new Map<string, Array<{ start: number; end: number }>>();
+    const postValuePositions = new Map<string, Array<{ start: number; end: number }>>();
+
+    for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
+      const match = matches[matchIdx];
+      if (match.preValue && !preValuePositions.has(match.preValue)) {
+        preValuePositions.set(match.preValue, findAllOccurrences(diffPreContent, match.preValue));
+      }
+      if (match.postValue && !postValuePositions.has(match.postValue)) {
+        postValuePositions.set(match.postValue, findAllOccurrences(diffPostContent, match.postValue));
+      }
+    }
+
+    // Pre-compute all placeholder positions in post-content
+    const placeholderPositions = findPlaceholderPositions(diffPostContent);
 
     for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
       const match = matches[matchIdx];
       if (!match.preValue || !match.postValue) continue;
 
-      // Find position in pre-content using nth occurrence (matchIdx + 1 occurrence)
-      let prePos = findNthPosition(diffPreContent, match.preValue, matchIdx + 1);
+      // Find position in pre-content: use the matchIdx-th occurrence of this preValue
+      const prePositions = preValuePositions.get(match.preValue) || [];
+      let prePos = prePositions[matchIdx];
 
-      // If exact preValue not found, fall back to case-insensitive search
-      // This handles cases where the preValue was normalized or trimmed during storage
+      // If exact preValue not found at this index, try case-insensitive search for first occurrence
       if (!prePos) {
         const safePreContent = diffPreContent.toLowerCase();
         const safePreValue = match.preValue.toLowerCase();
-        const fallbackIndex = safePreContent.indexOf(safePreValue);
-        if (fallbackIndex !== -1) {
-          prePos = { start: fallbackIndex, end: fallbackIndex + match.preValue.length };
+        const fallbackPositions = findAllOccurrences(safePreContent, safePreValue);
+        if (fallbackPositions.length > matchIdx) {
+          prePos = fallbackPositions[matchIdx];
           console.debug("Using case-insensitive fallback for preValue position", {
             matchIdx,
             preValue: match.preValue?.slice(0, 50),
-            fallbackIndex,
+            fallbackIndex: prePos.start,
             preContentLen: diffPreContent.length
           });
+        } else if (fallbackPositions.length > 0) {
+          // Fall back to first occurrence if index out of bounds
+          prePos = fallbackPositions[0];
         }
       }
 
@@ -239,29 +262,24 @@ export function DiffDialog({
           matchIdx,
           preValue: match.preValue?.slice(0, 50),
           occurrence: matchIdx + 1,
-          preContentLen: diffPreContent.length
+          preContentLen: diffPreContent.length,
+          totalOccurrences: prePositions.length
         });
         continue;
       }
 
-      // Find position in post-content using nth occurrence first
-      let postPos = findNthPosition(diffPostContent, match.postValue, matchIdx + 1);
+      // Find position in post-content: use the matchIdx-th occurrence of this postValue
+      const postPositions = postValuePositions.get(match.postValue) || [];
+      let postPos = postPositions[matchIdx];
 
-      // If exact postValue not found, fall back to nth placeholder position
+      // If exact postValue not found, fall back to placeholder position matching
       if (!postPos) {
-        const placeholderPositions: Array<{ start: number; end: number }> = [];
-        let placeholderMatch;
-        const pattern = new RegExp(`\\[[A-Z][A-Z0-9_-]*(?:_REDACTED|_\\d+)\\]`, 'g');
-        while ((placeholderMatch = pattern.exec(diffPostContent)) !== null) {
-          const idx = placeholderMatch.index;
-          const end = idx + placeholderMatch[0].length;
-          placeholderPositions.push({ start: idx, end });
-        }
-        // Use the placeholder at the same match index (0-based)
+        // Use placeholder at the same match index
         if (placeholderPositions.length > matchIdx) {
-          postPos = placeholderPositions[matchIdx];
+          postPos = { start: placeholderPositions[matchIdx].start, end: placeholderPositions[matchIdx].end };
         } else if (placeholderPositions.length > 0) {
-          postPos = placeholderPositions[placeholderPositions.length - 1];
+          // Fall back to last placeholder if index out of bounds
+          postPos = { start: placeholderPositions[placeholderPositions.length - 1].start, end: placeholderPositions[placeholderPositions.length - 1].end };
         }
       }
 
@@ -270,7 +288,8 @@ export function DiffDialog({
         console.debug("Skipping match - couldn't find postValue/placeholder position", {
           matchIdx,
           preValue: match.preValue?.slice(0, 50),
-          postValue: match.postValue?.slice(0, 50)
+          postValue: match.postValue?.slice(0, 50),
+          placeholderCount: placeholderPositions.length
         });
         continue;
       }
@@ -684,8 +703,8 @@ export function DiffDialog({
     return isValidJson(diffPreContent) || isValidJson(diffPostContent);
   }, [diffPreContent, diffPostContent]);
 
-  // View mode state - default to diff view, allow switching to syntax highlighted view for JSON
-  const [viewMode, setViewMode] = useState<ViewMode>("diff");
+  // View mode state - default to segments view (focused redaction segments)
+  const [viewMode, setViewMode] = useState<ViewMode>(DEFAULT_VIEW_MODE);
 
   // Synchronized scrolling state - separate refs for each view mode
   const leftPaneDiffRef = useRef<HTMLDivElement>(null);

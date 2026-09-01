@@ -25,7 +25,7 @@ interface RedactionDetailResponse {
   fullOriginal?: string;
   fullRedacted?: string;
   // All matches for this capture with their pre/post values for precise diff highlighting
-  matches?: Array<{
+  matches: Array<{
     ruleId: string;
     preValue: string;
     postValue: string;
@@ -104,6 +104,7 @@ export async function GET(
 
       let match: MetaMatch;
       let redactionType: string;
+      let allMatches: Array<{ ruleId: string; preValue: string; postValue: string; path: string }>;
 
       if (metaMatches.length > 0) {
         const index = parseInt(matchIndex, 10);
@@ -125,7 +126,7 @@ export async function GET(
         redactionType = match.ruleId ?? "";
 
         // Build all matches for precise highlighting
-        const allMatches = metaMatches.map((m) => ({
+        allMatches = metaMatches.map((m) => ({
           ruleId: m.ruleId ?? "",
           preValue: m.preValue ?? "",
           postValue: m.postValue ?? "",
@@ -166,6 +167,7 @@ export async function GET(
           captureId,
           preRedactionValue: "",
           postRedactionValue: "",
+          matches: [{ ruleId: firstRule, preValue: "", postValue: "", path: "" }],
           // Use meta.timestamp (consistent with list API using createdAt)
           timestamp: (meta.timestamp as string) ?? (captureData.timestamp as string) ?? new Date().toISOString(),
         };
