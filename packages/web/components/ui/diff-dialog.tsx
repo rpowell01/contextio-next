@@ -130,16 +130,9 @@ export function DiffDialog({
     }
   }, [isOpen, preContent, postContent, fullOriginal, fullRedacted, matches, onReady]);
 
-  // Use full body content for diff view if available, otherwise use match snippets
-  // For segments view, we use the match snippets directly (preContent/postContent)
-  // to avoid searching in full JSON bodies which gives wrong context
+  // Use full body content for diff if available, otherwise use match snippets
   const diffPreContent = fullOriginal ?? preContent;
   const diffPostContent = fullRedacted ?? postContent;
-  
-  // For segments view: use the individual match snippets as the base content
-  // This avoids searching for match values in full JSON bodies
-  const segmentsPreContent = preContent;
-  const segmentsPostContent = postContent;
 
   // Helper to extract rule info from postValue placeholder
   // Defined as a regular function (not a hook) to avoid TDZ issues when called from useMemo
@@ -221,22 +214,22 @@ export function DiffDialog({
 
     // Pre-compute all occurrences for each match's preValue and postValue
     // This avoids re-scanning the content for each match
-    // Use segmentsPreContent/segmentsPostContent (match snippets) instead of full bodies
+    // Use diffPreContent/diffPostContent (full JSON bodies) to find match positions
     const preValuePositions = new Map<string, Array<{ start: number; end: number }>>();
     const postValuePositions = new Map<string, Array<{ start: number; end: number }>>();
 
     for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
       const match = matches[matchIdx];
       if (match.preValue && !preValuePositions.has(match.preValue)) {
-        preValuePositions.set(match.preValue, findAllOccurrences(segmentsPreContent, match.preValue));
+        preValuePositions.set(match.preValue, findAllOccurrences(diffPreContent, match.preValue));
       }
       if (match.postValue && !postValuePositions.has(match.postValue)) {
-        postValuePositions.set(match.postValue, findAllOccurrences(segmentsPostContent, match.postValue));
+        postValuePositions.set(match.postValue, findAllOccurrences(diffPostContent, match.postValue));
       }
     }
 
     // Pre-compute all placeholder positions in post-content
-    const placeholderPositions = findPlaceholderPositions(segmentsPostContent);
+    const placeholderPositions = findPlaceholderPositions(diffPostContent);
 
     for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
       const match = matches[matchIdx];
@@ -248,7 +241,7 @@ export function DiffDialog({
 
       // If exact preValue not found at this index, try case-insensitive search for first occurrence
       if (!prePos) {
-        const safePreContent = segmentsPreContent.toLowerCase();
+        const safePreContent = diffPreContent.toLowerCase();
         const safePreValue = match.preValue.toLowerCase();
         const fallbackPositions = findAllOccurrences(safePreContent, safePreValue);
         if (fallbackPositions.length > matchIdx) {
@@ -257,7 +250,7 @@ export function DiffDialog({
             matchIdx,
             preValue: match.preValue?.slice(0, 50),
             fallbackIndex: prePos.start,
-            preContentLen: segmentsPreContent.length
+            preContentLen: diffPreContent.length
           });
         } else if (fallbackPositions.length > 0) {
           // Fall back to first occurrence if index out of bounds
@@ -270,7 +263,7 @@ export function DiffDialog({
           matchIdx,
           preValue: match.preValue?.slice(0, 50),
           occurrence: matchIdx + 1,
-          preContentLen: segmentsPreContent.length,
+          preContentLen: diffPreContent.length,
           totalOccurrences: prePositions.length
         });
         continue;
@@ -304,15 +297,15 @@ export function DiffDialog({
 
       // Extract context around the redaction
       const preStart = Math.max(0, prePos.start - CONTEXT_LENGTH);
-      const preEnd = Math.min(segmentsPreContent.length, prePos.end + CONTEXT_LENGTH);
+      const preEnd = Math.min(diffPreContent.length, prePos.end + CONTEXT_LENGTH);
       const postStart = Math.max(0, postPos.start - CONTEXT_LENGTH);
-      const postEnd = Math.min(segmentsPostContent.length, postPos.end + CONTEXT_LENGTH);
+      const postEnd = Math.min(diffPostContent.length, postPos.end + CONTEXT_LENGTH);
 
       const ruleInfo = extractRuleInfo(match.postValue);
 
       segments.push({
-        preContext: segmentsPreContent.slice(preStart, preEnd),
-        postContext: segmentsPostContent.slice(postStart, postEnd),
+        preContext: diffPreContent.slice(preStart, preEnd),
+        postContext: diffPostContent.slice(postStart, postEnd),
         preValue: match.preValue,
         postValue: match.postValue,
         ruleId: match.ruleId ?? ruleInfo.ruleId,
@@ -322,7 +315,7 @@ export function DiffDialog({
     }
 
     return segments;
-  }, [segmentsPreContent, segmentsPostContent, matches]);
+  }, [diffPreContent, diffPostContent, matches]);
 
   // Normalize post-content by replacing redaction placeholders with their pre-values.
   // This ensures the diff algorithm treats redactions as "equal" chunks instead of
