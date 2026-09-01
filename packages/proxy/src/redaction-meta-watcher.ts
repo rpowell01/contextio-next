@@ -405,15 +405,15 @@ export function createRedactionMetaWatcher(
         errorCount: metadata.errorCount,
         model: metadata.model,
         // Convert watcher's match format (original/placeholder) to DB format (preValue/postValue)
-                matches: metadata.matches?.map((m) => ({
-                  ruleId: m.ruleId,
-                  preValue: m.original,
-                  postValue: m.placeholder,
-                  path: m.path,
-                  lineNumber: m.lineNumber,
-                  startCharIndex: m.startCharIndex,
-                  endCharIndex: m.endCharIndex,
-                })),
+        matches: metadata.matches?.map((m) => ({
+          ruleId: m.ruleId,
+          preValue: m.original,
+          postValue: m.placeholder,
+          path: m.path,
+          lineNumber: m.lineNumber,
+          startCharIndex: m.startCharIndex,
+          endCharIndex: m.endCharIndex,
+        })),
               };
       opts.persistToSqlite(sqliteMetadata);
     } catch (err) {

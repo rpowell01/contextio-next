@@ -359,11 +359,11 @@ async function applyDetectorSpans(
       // Reversible mode: use ReplacementMap which generates [LABEL_N] format
       replacement = map.getOrCreate(match, ruleId);
     } else {
-      // Non-reversible mode: use consistent [LABEL_REDACTED] format
+      // Non-reversible mode: use incrementing [LABEL_N] format
       const count = (nonReversibleCounters.get(ruleId) ?? 0) + 1;
       nonReversibleCounters.set(ruleId, count);
       const label = ruleId.toUpperCase().replace(/[^A-Z0-9]/g, "_");
-      replacement = `[${label}_REDACTED]`;
+      replacement = `[${label}_${count}]`;
     }
 
     replacements.push({ span, match, ruleId, replacement });

@@ -609,11 +609,9 @@ function RedactionSection({
         SECTION_STYLES[id] || ""
       } ${disabled ? "opacity-50" : ""}`}
       open={isOpen}
+      onToggle={onToggle}
     >
-      <summary
-        className="flex items-center gap-3 cursor-pointer list-none select-none"
-        onClick={(e) => { e.preventDefault(); onToggle(); }}
-      >
+      <summary className="flex items-center gap-3 cursor-pointer list-none select-none">
         <span className="text-xl" aria-hidden="true">{icon}</span>
         <div className="flex-1 min-w-0">
           <Tooltip delayDuration={300} content={<p className="max-w-[300px]">{description}</p>}>
