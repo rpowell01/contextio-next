@@ -130,9 +130,16 @@ export function DiffDialog({
     }
   }, [isOpen, preContent, postContent, fullOriginal, fullRedacted, matches, onReady]);
 
-  // Use full body content for diff if available, otherwise use match snippets
+  // Use full body content for diff view if available, otherwise use match snippets
+  // For segments view, we use the match snippets directly (preContent/postContent)
+  // to avoid searching in full JSON bodies which gives wrong context
   const diffPreContent = fullOriginal ?? preContent;
   const diffPostContent = fullRedacted ?? postContent;
+  
+  // For segments view: use the individual match snippets as the base content
+  // This avoids searching for match values in full JSON bodies
+  const segmentsPreContent = preContent;
+  const segmentsPostContent = postContent;
 
   // Helper to extract rule info from postValue placeholder
   // Defined as a regular function (not a hook) to avoid TDZ issues when called from useMemo
@@ -240,7 +247,7 @@ export function DiffDialog({
 
       // If exact preValue not found at this index, try case-insensitive search for first occurrence
       if (!prePos) {
-        const safePreContent = diffPreContent.toLowerCase();
+        const safePreContent = segmentsPreContent.toLowerCase();
         const safePreValue = match.preValue.toLowerCase();
         const fallbackPositions = findAllOccurrences(safePreContent, safePreValue);
         if (fallbackPositions.length > matchIdx) {
@@ -296,15 +303,15 @@ export function DiffDialog({
 
       // Extract context around the redaction
       const preStart = Math.max(0, prePos.start - CONTEXT_LENGTH);
-      const preEnd = Math.min(diffPreContent.length, prePos.end + CONTEXT_LENGTH);
+      const preEnd = Math.min(segmentsPreContent.length, prePos.end + CONTEXT_LENGTH);
       const postStart = Math.max(0, postPos.start - CONTEXT_LENGTH);
-      const postEnd = Math.min(diffPostContent.length, postPos.end + CONTEXT_LENGTH);
+      const postEnd = Math.min(segmentsPostContent.length, postPos.end + CONTEXT_LENGTH);
 
       const ruleInfo = extractRuleInfo(match.postValue);
 
       segments.push({
-        preContext: diffPreContent.slice(preStart, preEnd),
-        postContext: diffPostContent.slice(postStart, postEnd),
+        preContext: segmentsPreContent.slice(preStart, preEnd),
+        postContext: segmentsPostContent.slice(postStart, postEnd),
         preValue: match.preValue,
         postValue: match.postValue,
         ruleId: match.ruleId ?? ruleInfo.ruleId,
@@ -314,7 +321,7 @@ export function DiffDialog({
     }
 
     return segments;
-  }, [diffPreContent, diffPostContent, matches]);
+  }, [segmentsPreContent, segmentsPostContent, matches]);
 
   // Normalize post-content by replacing redaction placeholders with their pre-values.
   // This ensures the diff algorithm treats redactions as "equal" chunks instead of
