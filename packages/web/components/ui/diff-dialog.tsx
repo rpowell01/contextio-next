@@ -943,7 +943,7 @@ export function DiffDialog({
     const placeholderPattern = /\[[A-Z][A-Z0-9_]*(?:_REDACTED|_\d+)\]/g;
     const safeValue = String(value || "");
 
-  if (isPre && matches.length > 0) {
+    if (isPre && matches.length > 0) {
       // Left pane: highlight pre-values using exact string matching.
       // Each match's preValue is highlighted, and clicking passes the original
       // pre-redaction value to onAddFalsePositive for unified false positive handling.

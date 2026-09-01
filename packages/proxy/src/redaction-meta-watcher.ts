@@ -403,8 +403,8 @@ export function createRedactionMetaWatcher(
         tokensPerSecond: metadata.tokensPerSecond,
         successCount: metadata.successCount,
         errorCount: metadata.errorCount,
-                model: metadata.model,
-                // Convert watcher's match format (original/placeholder) to DB format (preValue/postValue)
+        model: metadata.model,
+        // Convert watcher's match format (original/placeholder) to DB format (preValue/postValue)
                 matches: metadata.matches?.map((m) => ({
                   ruleId: m.ruleId,
                   preValue: m.original,

@@ -9,6 +9,8 @@ interface TooltipProps {
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
   delayDuration?: number;
+  sideOffset?: number;
+  alignOffset?: number;
   disabled?: boolean;
 }
 
@@ -50,6 +52,8 @@ export function Tooltip({
   side = "top",
   align = "center",
   delayDuration = 200,
+  sideOffset = 4,
+  alignOffset = 0,
   disabled = false,
 }: TooltipProps) {
   const child = React.Children.only(children);
@@ -95,6 +99,8 @@ export function Tooltip({
           content={content}
           side={side}
           align={align}
+          sideOffset={sideOffset}
+          alignOffset={alignOffset}
         />
       )}
     </div>
@@ -113,19 +119,21 @@ export function TooltipContent({
   content,
   side = "top",
   align = "center",
+  sideOffset = 4,
+  alignOffset = 0,
   className,
 }: TooltipContentProps & { content: React.ReactNode; side?: "top" | "right" | "bottom" | "left"; align?: "start" | "center" | "end" }) {
   
   const sideStyles: Record<string, React.CSSProperties> = {
-    top: { bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 4 },
-    bottom: { top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: 4 },
-    left: { right: "100%", top: "50%", transform: "translateY(-50%)", marginRight: 4 },
-    right: { left: "100%", top: "50%", transform: "translateY(-50%)", marginLeft: 4 },
+    top: { bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: sideOffset },
+    bottom: { top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: sideOffset },
+    left: { right: "100%", top: "50%", transform: "translateY(-50%)", marginRight: sideOffset },
+    right: { left: "100%", top: "50%", transform: "translateY(-50%)", marginLeft: sideOffset },
   };
 
   const alignStyles: Record<string, React.CSSProperties> = {
-    start: { left: 0, transform: "translateX(0)" },
-    end: { right: 0, transform: "translateX(0)" },
+    start: { left: alignOffset, transform: "translateX(0)" },
+    end: { right: alignOffset, transform: "translateX(0)" },
     center: {},
   };
 
