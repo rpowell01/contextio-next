@@ -221,22 +221,21 @@ export function DiffDialog({
 
     // Pre-compute all occurrences for each match's preValue and postValue
     // This avoids re-scanning the content for each match
-    // Use segmentsPreContent/segmentsPostContent (match snippets) instead of full bodies
     const preValuePositions = new Map<string, Array<{ start: number; end: number }>>();
     const postValuePositions = new Map<string, Array<{ start: number; end: number }>>();
 
     for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
       const match = matches[matchIdx];
       if (match.preValue && !preValuePositions.has(match.preValue)) {
-        preValuePositions.set(match.preValue, findAllOccurrences(segmentsPreContent, match.preValue));
+        preValuePositions.set(match.preValue, findAllOccurrences(diffPreContent, match.preValue));
       }
       if (match.postValue && !postValuePositions.has(match.postValue)) {
-        postValuePositions.set(match.postValue, findAllOccurrences(segmentsPostContent, match.postValue));
+        postValuePositions.set(match.postValue, findAllOccurrences(diffPostContent, match.postValue));
       }
     }
 
     // Pre-compute all placeholder positions in post-content
-    const placeholderPositions = findPlaceholderPositions(segmentsPostContent);
+    const placeholderPositions = findPlaceholderPositions(diffPostContent);
 
     for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
       const match = matches[matchIdx];
@@ -257,7 +256,7 @@ export function DiffDialog({
             matchIdx,
             preValue: match.preValue?.slice(0, 50),
             fallbackIndex: prePos.start,
-            preContentLen: segmentsPreContent.length
+            preContentLen: diffPreContent.length
           });
         } else if (fallbackPositions.length > 0) {
           // Fall back to first occurrence if index out of bounds
@@ -270,7 +269,7 @@ export function DiffDialog({
           matchIdx,
           preValue: match.preValue?.slice(0, 50),
           occurrence: matchIdx + 1,
-          preContentLen: segmentsPreContent.length,
+          preContentLen: diffPreContent.length,
           totalOccurrences: prePositions.length
         });
         continue;
