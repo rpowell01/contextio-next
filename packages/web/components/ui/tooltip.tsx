@@ -159,7 +159,7 @@ export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps
     return React.cloneElement(child, {
       // Forward ref to the underlying DOM node - prevents double tab stops
       // when child is already focusable (e.g., button, link)
-      ref: child.ref,
+      ref: (child as any).ref,
       // Add aria-describedby when tooltip is visible
       "aria-describedby": isVisible ? tooltipId : undefined,
       // Merge mouse event handlers to show/hide tooltip (without double-firing)
