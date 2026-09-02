@@ -69,6 +69,8 @@ services:
       # Required secrets (set via .env file or Docker secrets)
       # CSRF_SECRET: ${CSRF_SECRET}
       # CONTEXTIO_LOGGER_ENCRYPTION_KEY: ${CONTEXTIO_LOGGER_ENCRYPTION_KEY}
+      # Use baked-in default providers.json instead of volume mount
+      PROVIDERS_FILE: /app/default-providers.json
 
       # OIDC configuration (optional)
       # CONTEXTIO_OIDC_ENABLED: "false"
