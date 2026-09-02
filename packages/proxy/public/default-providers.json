@@ -16,7 +16,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": true,
@@ -39,7 +42,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": true,
@@ -62,7 +68,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": true,
@@ -85,7 +94,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": true,
@@ -108,7 +120,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": true,
@@ -131,7 +146,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": true,
@@ -154,7 +172,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": true,
@@ -177,7 +198,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": true,
@@ -200,7 +224,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": false,
@@ -223,7 +250,10 @@
       "baseDelayMs": 1000,
       "maxDelayMs": 30000,
       "retryableStatuses": [429, 500, 502, 503, 504],
-      "jitterFactor": 0.2
+      "jitterFactor": 0.2,
+      "maxStreamRetries": 3,
+      "maxResponseBufferSize": 10485760,
+      "enabled": true
     },
     "customHeaders": {},
     "allowBaseUrlOverride": true,
