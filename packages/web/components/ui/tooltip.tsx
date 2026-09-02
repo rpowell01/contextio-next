@@ -142,7 +142,7 @@ export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps
       return children;
     }
     
-    const child = children as React.ReactElement<Record<string, unknown>>;
+    const child = children as React.ReactElement<any>;
     const childProps = child.props;
     
     // Merge event handlers: call both child's handler and our handler
