@@ -80,6 +80,8 @@ ENV LOGGER_CAPTURE_DIR=/app/captures
 ENV REDACT_POLICY_FILE=/app/custom-policy/custom-policy.json
 ENV NEXT_CACHE_DIR=/app/captures/.next/cache
 ENV CONTEXTIO_DB_PATH=/app/custom-policy/contextio.db
+# Use baked-in default providers.json instead of volume mount
+ENV PROVIDERS_FILE=/app/default-providers.json
 
 # Memory management: enable GC and limit heap to 1.5GB (container limit is 2GB)
 ENV NODE_OPTIONS="--expose-gc --max-old-space-size=1536"
