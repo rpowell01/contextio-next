@@ -201,7 +201,7 @@ export const SETTING_ENV_MAP: Record<
   },
   detectorLabels: {
     envVar: "REDACT_DETECTOR_LABELS",
-    dynamic: true,
+    dynamic: false,
   },
   rateLimiter: {
     envVar: "", // No direct env var - configured via settings file/UI with per-provider keys

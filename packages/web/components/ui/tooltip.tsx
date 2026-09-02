@@ -40,14 +40,14 @@ interface TooltipContentProps {
  * Simple CSS-based Tooltip component.
  * Uses pure CSS for positioning and visibility - no complex ref handling needed.
  * 
- * Usage:
+ * Usage with asChild (recommended - preserves child layout and accessibility):
  *   <Tooltip content="Tooltip text">
  *     <TooltipTrigger asChild>
  *       <button>Hover me</button>
  *     </TooltipTrigger>
  *   </Tooltip>
  * 
- * Or without asChild:
+ * Usage without asChild (wraps child in a span):
  *   <Tooltip content="Tooltip text">
  *     <TooltipTrigger>
  *       <span>Hover me</span>
@@ -100,23 +100,16 @@ export function Tooltip({
     setIsVisible,
   };
   
-  // Apply aria-describedby to the child when tooltip is visible
-  const childWithAria = React.isValidElement(child)
-    ? React.cloneElement(child as React.ReactElement<Record<string, unknown>>, {
-        "aria-describedby": isVisible ? tooltipId : undefined,
-      })
-    : child;
-  
-  // Wrap the child in a tooltip container
+  // Don't wrap in a div - let the child determine its own display
+  // The child will receive aria-describedby via TooltipTrigger when asChild is used
   return (
     <TooltipContext.Provider value={contextValue}>
-      <div 
+      <span
         className="relative inline-block"
-        style={{ display: 'inline-block' }}
         onMouseEnter={disabled ? undefined : showTooltip}
         onMouseLeave={disabled ? undefined : hideTooltip}
       >
-        {childWithAria}
+        {child}
         {!disabled && isVisible && (
           <TooltipContent
             content={content}
@@ -126,7 +119,7 @@ export function Tooltip({
             alignOffset={alignOffset}
           />
         )}
-      </div>
+      </span>
     </TooltipContext.Provider>
   );
 }
@@ -144,12 +137,39 @@ export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps
   const { tooltipId, isVisible } = context;
   
   if (asChild) {
-    // Clone the child element and add aria-describedby when tooltip is visible
-    return React.isValidElement(children)
-      ? React.cloneElement(children as React.ReactElement<Record<string, unknown>>, {
-          "aria-describedby": isVisible ? tooltipId : undefined,
-        })
-      : children;
+    // Properly implement asChild pattern: clone element and merge props without wrapping
+    if (!React.isValidElement(children)) {
+      return children;
+    }
+    
+    const child = children as React.ReactElement<Record<string, unknown>>;
+    const childProps = child.props;
+    
+    // Merge event handlers: call both child's handler and our handler
+    const mergeHandlers = <T extends (...args: unknown[]) => void>(
+      childHandler: T | undefined,
+      parentHandler: (...args: unknown[]) => void
+    ): T => {
+      return ((...args: unknown[]) => {
+        childHandler?.(...args);
+        parentHandler(...args);
+      }) as T;
+    };
+    
+    return React.cloneElement(child, {
+      // Forward ref to the underlying DOM node - prevents double tab stops
+      // when child is already focusable (e.g., button, link)
+      ref: child.ref,
+      // Add aria-describedby when tooltip is visible
+      "aria-describedby": isVisible ? tooltipId : undefined,
+      // Merge mouse event handlers to show/hide tooltip (without double-firing)
+      onMouseEnter: mergeHandlers(childProps.onMouseEnter, () => context.setIsVisible(true)),
+      onMouseLeave: mergeHandlers(childProps.onMouseLeave, () => context.setIsVisible(false)),
+      onFocus: mergeHandlers(childProps.onFocus, () => context.setIsVisible(true)),
+      onBlur: mergeHandlers(childProps.onBlur, () => context.setIsVisible(false)),
+      // Preserve any other existing props by spreading
+      ...childProps,
+    });
   }
   
   return (

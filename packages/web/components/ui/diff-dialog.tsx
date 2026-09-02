@@ -523,24 +523,72 @@ export function DiffDialog({
     // Sort positions by start
     positions.sort((a, b) => a.start - b.start);
 
-    // Calculate truncation bounds
-    const firstRedactionStart = positions[0].start;
-    const lastRedactionEnd = positions[positions.length - 1].end;
+    // Group nearby redactions into clusters
+    // If redactions are close together (within CLUSTER_GAP chars), show them in one window
+    const CLUSTER_GAP = 120; // Max gap between redactions to be in same cluster
+    const CONTEXT_PER_CLUSTER = 60; // Chars to show before/after each cluster
 
-    const truncateStart = Math.max(0, firstRedactionStart - CONTEXT_CHARS);
-    const truncateEnd = Math.min(value.length, lastRedactionEnd + CONTEXT_CHARS);
+    const clusters: Array<{ start: number; end: number }> = [];
+    let currentCluster = { start: positions[0].start, end: positions[0].end };
 
-    // If the truncation window covers most of the string, don't truncate
-    if (truncateStart === 0 && truncateEnd === value.length) {
-      return { value, isTruncated: false };
+    for (let i = 1; i < positions.length; i++) {
+      const pos = positions[i];
+      // If this redaction is close to the current cluster, extend the cluster
+      if (pos.start - currentCluster.end <= CLUSTER_GAP) {
+        currentCluster.end = pos.end;
+      } else {
+        // Gap is too large - start a new cluster
+        clusters.push(currentCluster);
+        currentCluster = { start: pos.start, end: pos.end };
+      }
+    }
+    clusters.push(currentCluster);
+
+    // If only one cluster and it covers most of the string, don't truncate
+    if (clusters.length === 1) {
+      const truncateStart = Math.max(0, clusters[0].start - CONTEXT_CHARS);
+      const truncateEnd = Math.min(value.length, clusters[0].end + CONTEXT_CHARS);
+      
+      if (truncateStart === 0 && truncateEnd === value.length) {
+        return { value, isTruncated: false };
+      }
+
+      let truncated = "";
+      if (truncateStart > 0) {
+        truncated += "…";
+      }
+      truncated += value.slice(truncateStart, truncateEnd);
+      if (truncateEnd < value.length) {
+        truncated += "…";
+      }
+      return { value: truncated, isTruncated: true };
     }
 
+    // Multiple clusters - build output with context around each cluster, separated by ellipsis
     let truncated = "";
-    if (truncateStart > 0) {
-      truncated += "…";
+    
+    for (let i = 0; i < clusters.length; i++) {
+      const cluster = clusters[i];
+      const clusterStart = Math.max(0, cluster.start - CONTEXT_PER_CLUSTER);
+      const clusterEnd = Math.min(value.length, cluster.end + CONTEXT_PER_CLUSTER);
+
+      // Add ellipsis before cluster if there's a gap from previous content
+      if (i === 0) {
+        if (clusterStart > 0) {
+          truncated += "…";
+        }
+      } else {
+        // Between clusters - always add ellipsis to indicate skipped content
+        truncated += " … ";
+      }
+
+      truncated += value.slice(clusterStart, clusterEnd);
     }
-    truncated += value.slice(truncateStart, truncateEnd);
-    if (truncateEnd < value.length) {
+
+    // Add trailing ellipsis if last cluster doesn't reach the end
+    const lastCluster = clusters[clusters.length - 1];
+    const lastClusterEnd = Math.min(value.length, lastCluster.end + CONTEXT_PER_CLUSTER);
+    if (lastClusterEnd < value.length) {
       truncated += "…";
     }
 
