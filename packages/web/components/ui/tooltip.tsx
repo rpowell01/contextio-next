@@ -14,6 +14,14 @@ interface TooltipProps {
   disabled?: boolean;
 }
 
+interface TooltipContextValue {
+  tooltipId: string;
+  isVisible: boolean;
+  setIsVisible: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const TooltipContext = React.createContext<TooltipContextValue | null>(null);
+
 interface TooltipTriggerProps {
   children: React.ReactElement;
   asChild?: boolean;
@@ -57,6 +65,7 @@ export function Tooltip({
   disabled = false,
 }: TooltipProps) {
   const child = React.Children.only(children);
+  const tooltipId = React.useId();
   
   // State for tooltip visibility
   const [isVisible, setIsVisible] = React.useState(false);
@@ -85,34 +94,69 @@ export function Tooltip({
     };
   }, [timeoutId]);
   
+  const contextValue: TooltipContextValue = {
+    tooltipId,
+    isVisible,
+    setIsVisible,
+  };
+  
+  // Apply aria-describedby to the child when tooltip is visible
+  const childWithAria = React.isValidElement(child)
+    ? React.cloneElement(child as React.ReactElement<Record<string, unknown>>, {
+        "aria-describedby": isVisible ? tooltipId : undefined,
+      })
+    : child;
+  
   // Wrap the child in a tooltip container
   return (
-    <div 
-      className="relative inline-block"
-      style={{ display: 'inline-block' }}
-      onMouseEnter={disabled ? undefined : showTooltip}
-      onMouseLeave={disabled ? undefined : hideTooltip}
-    >
-      {child}
-      {!disabled && isVisible && (
-        <TooltipContent
-          content={content}
-          side={side}
-          align={align}
-          sideOffset={sideOffset}
-          alignOffset={alignOffset}
-        />
-      )}
-    </div>
+    <TooltipContext.Provider value={contextValue}>
+      <div 
+        className="relative inline-block"
+        style={{ display: 'inline-block' }}
+        onMouseEnter={disabled ? undefined : showTooltip}
+        onMouseLeave={disabled ? undefined : hideTooltip}
+      >
+        {childWithAria}
+        {!disabled && isVisible && (
+          <TooltipContent
+            content={content}
+            side={side}
+            align={align}
+            sideOffset={sideOffset}
+            alignOffset={alignOffset}
+          />
+        )}
+      </div>
+    </TooltipContext.Provider>
   );
 }
 
 
 
 export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps) {
-  // For simplicity, just render the child directly
-  // The Tooltip component handles the wrapper
-  return asChild ? children : <span>{children}</span>;
+  const context = React.useContext(TooltipContext);
+  
+  if (!context) {
+    // TooltipTrigger must be used within a Tooltip component
+    return asChild ? children : <span>{children}</span>;
+  }
+  
+  const { tooltipId, isVisible } = context;
+  
+  if (asChild) {
+    // Clone the child element and add aria-describedby when tooltip is visible
+    return React.isValidElement(children)
+      ? React.cloneElement(children as React.ReactElement<Record<string, unknown>>, {
+          "aria-describedby": isVisible ? tooltipId : undefined,
+        })
+      : children;
+  }
+  
+  return (
+    <span aria-describedby={isVisible ? tooltipId : undefined}>
+      {children}
+    </span>
+  );
 }
 
 export function TooltipContent({ 
@@ -123,6 +167,8 @@ export function TooltipContent({
   alignOffset = 0,
   className,
 }: TooltipContentProps & { content: React.ReactNode; side?: "top" | "right" | "bottom" | "left"; align?: "start" | "center" | "end" }) {
+  const context = React.useContext(TooltipContext);
+  const tooltipId = context?.tooltipId;
   
   const sideStyles: Record<string, React.CSSProperties> = {
     top: { bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: sideOffset },
@@ -146,6 +192,7 @@ export function TooltipContent({
 
   return (
     <div
+      id={tooltipId}
       className={cn("z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[300px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95", className)}
       style={tooltipStyle}
       role="tooltip"
