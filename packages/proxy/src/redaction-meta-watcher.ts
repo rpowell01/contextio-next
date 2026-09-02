@@ -414,7 +414,7 @@ export function createRedactionMetaWatcher(
           startCharIndex: m.startCharIndex,
           endCharIndex: m.endCharIndex,
         })),
-              };
+      };
       opts.persistToSqlite(sqliteMetadata);
     } catch (err) {
       console.error(

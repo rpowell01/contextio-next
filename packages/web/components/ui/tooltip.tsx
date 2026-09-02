@@ -141,8 +141,7 @@ export function TooltipContent({
     ...sideStyles[side],
     ...(align !== "center" ? alignStyles[align] : {}),
     position: "absolute",
-    zIndex: 50,
-    whiteSpace: "normal",
+    // z-index and whitespace handled by className to avoid conflicts
   };
 
   return (
