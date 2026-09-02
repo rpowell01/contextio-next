@@ -201,7 +201,7 @@ const SETTING_DESCRIPTIONS: Record<keyof Omit<Settings, "theme">, string> = {
   detectorThreshold:
     "Minimum confidence threshold for LLM-based detections (0-1). Higher values reduce false positives but may miss some entities. Applied dynamically per request.",
   detectorLabels:
-    "Entity types for LLM-based PII detection (e.g., PERSON, ORGANIZATION, LOCATION, EMAIL_ADDRESS, PHONE_NUMBER, CREDIT_CARD, US_SSN, IP_ADDRESS, URL, DATE_TIME). Used in llm/hybrid/auto modes. Changes apply dynamically per request.",
+    "Entity types for LLM-based PII detection (e.g., PERSON, ORGANIZATION, LOCATION, EMAIL_ADDRESS, PHONE_NUMBER, CREDIT_CARD, US_SSN, IP_ADDRESS, URL, DATE_TIME). Used in llm/hybrid/auto modes. Requires a proxy restart to apply.",
   strictBoundaries:
     "Enable strict word boundary checking for LLM-based detections. When enabled, prevents substring matches (e.g., 10-digit phone number within a 25-digit string, organization names within longer text). Applied dynamically per request. Requires LLM detector mode (llm, hybrid, or auto).",
   rateLimiter:

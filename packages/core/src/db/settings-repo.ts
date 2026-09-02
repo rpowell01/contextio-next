@@ -748,7 +748,7 @@ export function getSettingsWithMeta(appliedEnvKeys?: Set<keyof Settings>): { set
 		detectorMode: { envVar: "REDACT_DETECTOR_MODE", dynamic: true },
 		detectorModelName: { envVar: "REDACT_DETECTOR_MODEL_NAME", dynamic: true },
 		detectorThreshold: { envVar: "REDACT_DETECTOR_THRESHOLD", dynamic: true },
-		detectorLabels: { envVar: "REDACT_DETECTOR_LABELS", dynamic: true },
+		detectorLabels: { envVar: "REDACT_DETECTOR_LABELS", dynamic: false },
 	rateLimiter: { envVar: "", dynamic: false },
 	streamingRetry: { envVar: "", dynamic: false },
 	redactProviders: { envVar: "", dynamic: false },
