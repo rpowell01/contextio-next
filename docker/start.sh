@@ -22,13 +22,13 @@ else
 fi
 echo "Active policy contents:"
 cat "$POLICY_FILE"
-# Providers config file in mounted directory
+# Providers config file in mounted directory - always use baked-in defaults to ensure valid config
 PROVIDERS_FILE="/app/custom-policy/providers.json"
-if [ ! -f "$PROVIDERS_FILE" ]; then
-    echo "Providers file not found at $PROVIDERS_FILE, creating from default..."
-    cp /app/default-providers.json "$PROVIDERS_FILE"
-fi
+echo "Ensuring providers config uses validated baked-in defaults..."
+cp /app/default-providers.json "$PROVIDERS_FILE"
 chmod 600 "$PROVIDERS_FILE" 2>/dev/null || true
+# Ensure PROVIDERS_FILE env var points to the validated config
+export PROVIDERS_FILE="$PROVIDERS_FILE"
 mkdir -p "$CAPTURE_DIR"
 chmod 700 "$CAPTURE_DIR" 2>/dev/null || true
 # Ensure Next.js cache directories exist and are writable
