@@ -12,6 +12,8 @@ WORKDIR /app
 ARG BUILDTIME
 ARG VERSION
 ARG REVISION
+# Force rebuild when providers config changes
+ARG PROVIDERS_CONFIG_VERSION=2
 # CSRF secret for runtime (passed as build arg so Coolify can inject it)
 ARG CSRF_SECRET
 # Encryption key for logger plugin (passed as build arg so Coolify can inject it)
@@ -57,7 +59,7 @@ RUN ls -la /app/packages/core/dist/db/migrations/ && \
     test -f /app/packages/core/dist/db/migrations/015_add_upstream_urls.sql
 
 # Copy default providers config to a known location that persists in the build stage
-RUN cp /app/packages/proxy/public/default-providers.json /app/default-providers.json
+RUN cp /app/packages/proxy/public/default-providers.json /app/default-providers.json && echo "providers config version: ${PROVIDERS_CONFIG_VERSION}"
 
 
 # =============================================================================
