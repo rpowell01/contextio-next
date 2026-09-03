@@ -13,7 +13,7 @@ ARG BUILDTIME
 ARG VERSION
 ARG REVISION
 # Force rebuild when providers config changes
-ARG PROVIDERS_CONFIG_VERSION=2
+ARG PROVIDERS_CONFIG_VERSION=3
 # CSRF secret for runtime (passed as build arg so Coolify can inject it)
 ARG CSRF_SECRET
 # Encryption key for logger plugin (passed as build arg so Coolify can inject it)
