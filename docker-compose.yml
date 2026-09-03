@@ -2,7 +2,9 @@ version: "3.8"
 
 services:
   contextio-next:
-    image: ghcr.io/rpowell01/contextio-next:main
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "4040:4040"
     volumes:
