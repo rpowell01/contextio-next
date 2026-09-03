@@ -29,7 +29,7 @@ function normalizeUpstreamUrl(url: string): string {
 
 /** Get providers file path, checking environment variable at call time for test flexibility. */
 function getProvidersFilePath(): string {
-  return process.env.PROVIDERS_FILE || "/app/custom-policy/providers.json";
+  return process.env.PROVIDERS_FILE || "/app/default-providers.json";
 }
 
 /** Web UI settings interface for capture cleanup and OIDC settings. */
