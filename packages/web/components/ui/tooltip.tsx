@@ -347,9 +347,10 @@ export function TooltipContent({
     right: { left: "100%", top: "50%", transform: "translateY(-50%)", marginLeft: sideOffset },
   };
 
+  const isVerticalSide = side === "left" || side === "right";
   const alignStyles: Record<string, React.CSSProperties> = {
-    start: { left: alignOffset, transform: "translateX(0)" },
-    end: { right: alignOffset, transform: "translateX(0)" },
+    start: { left: alignOffset, transform: isVerticalSide ? "translateX(0) translateY(-50%)" : "translateX(0)" },
+    end: { right: alignOffset, transform: isVerticalSide ? "translateX(0) translateY(-50%)" : "translateX(0)" },
     center: {},
   };
 
