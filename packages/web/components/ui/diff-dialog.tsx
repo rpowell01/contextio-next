@@ -9,6 +9,7 @@ import {
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { computeDiff, filterDiffWithContext, type DiffChunk } from "@/lib/diff";
 import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
 
@@ -1044,17 +1045,26 @@ export function DiffDialog({
           }
         };
 
+        const tooltipContent = (
+          <div className="max-w-[300px]">
+            <p className="font-mono text-xs truncate">Source: {preValue.slice(0, 200)}{preValue.length > 200 ? "…" : ""}</p>
+            <p className="text-xs text-muted-foreground">Click to add as false positive</p>
+          </div>
+        );
+
         result.push(
-          <mark
-            key={`exact-${matchIdx}`}
-            className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
-            data-redaction={postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted")}
-            data-match-index={matchIdx}
-            onClick={handleClick}
-            title="Click to add as false positive"
-          >
-            {preValue}
-          </mark>
+          <Tooltip key={`exact-${matchIdx}`} content={tooltipContent} side="top" align="center" delayDuration={200}>
+            <TooltipTrigger asChild>
+              <mark
+                className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
+                data-redaction={postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted")}
+                data-match-index={matchIdx}
+                onClick={handleClick}
+              >
+                {preValue}
+              </mark>
+            </TooltipTrigger>
+          </Tooltip>
         );
 
         lastIndex = matchIndex + preValue.length;
@@ -1108,21 +1118,30 @@ export function DiffDialog({
                   // Use the original pre-value (actual content from the redaction metadata)
                   const value = correspondingMatch?.preValue ?? placeholder.replace(/[\[\]]/g, "");
 
+                  const tooltipContent = (
+                    <div className="max-w-[300px]">
+                      <p className="font-mono text-xs truncate">Source: {value.slice(0, 200)}{value.length > 200 ? "…" : ""}</p>
+                      <p className="text-xs text-muted-foreground">Click to add as false positive</p>
+                    </div>
+                  );
+
                   return (
-                    <mark
-                      key={`ph-${i}`}
-                      className="redaction-placeholder cursor-pointer hover:bg-primary/10"
-                      data-redaction={normalizedPlaceholder}
-                      data-match-index={matchIdx}
-                      onClick={() => {
-                        if (onAddFalsePositive) {
-                          onAddFalsePositive({ value, ruleId, label: ruleInfo.label, path });
-                        }
-                      }}
-                      title="Click to add as false positive"
-                    >
-                      {placeholder}
-                    </mark>
+                    <Tooltip key={`ph-${i}`} content={tooltipContent} side="top" align="center" delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <mark
+                          className="redaction-placeholder cursor-pointer hover:bg-primary/10"
+                          data-redaction={normalizedPlaceholder}
+                          data-match-index={matchIdx}
+                          onClick={() => {
+                            if (onAddFalsePositive) {
+                              onAddFalsePositive({ value, ruleId, label: ruleInfo.label, path });
+                            }
+                          }}
+                        >
+                          {placeholder}
+                        </mark>
+                      </TooltipTrigger>
+                    </Tooltip>
                   );
                 })()}
               </span>
@@ -1208,10 +1227,21 @@ export function DiffDialog({
               }
             };
 
+            const tooltipContent = (
+              <div className="max-w-[300px]">
+                <p className="font-mono text-xs truncate">Source: {matchStr.slice(0, 200)}{matchStr.length > 200 ? "…" : ""}</p>
+                <p className="text-xs text-muted-foreground">Click to add as false positive</p>
+              </div>
+            );
+
             newParts.push(
-              <mark key={`pii-${piiMatchIdx}-${matchIndex}`} className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10" data-match-index={piiMatchIdx} onClick={handleClick} title="Click to add as false positive">
-                {matchStr}
-              </mark>
+              <Tooltip key={`pii-${piiMatchIdx}-${matchIndex}`} content={tooltipContent} side="top" align="center" delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <mark className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10" data-match-index={piiMatchIdx} onClick={handleClick}>
+                    {matchStr}
+                  </mark>
+                </TooltipTrigger>
+              </Tooltip>
             );
             piiMatchIdx++;
             lastIndex = matchIndex + matchStr.length;
