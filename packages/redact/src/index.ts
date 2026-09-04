@@ -27,6 +27,7 @@ import type {
   RequestContext,
   ResponseContext,
   Provider,
+  CaptureData,
 } from "@contextio/core";
 
 import fs from "node:fs";
@@ -217,6 +218,8 @@ interface SessionState {
   map: ReplacementMap;
   rehydrator: ReturnType<typeof createStreamRehydrator>;
   lastSeen: number;
+  /** Redaction stats per capture ID, for use in onCapture hook. */
+  redactionStats?: Map<string, ReturnType<typeof createStats>>;
 }
 
 /** Detector pipeline state (lazy initialized). */
@@ -950,8 +953,17 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
       console.error(`[redact]${sid} Provider check: ctx.provider="${ctx.provider}", disabledProviders=${JSON.stringify(disabledProviders)}, match=${disabledProviders?.includes(ctx.provider as Provider)}`);
     }
 
-    const map = reversible ? getSession(ctx.sessionId).map : null;
+    const session = getSession(ctx.sessionId);
+    const map = reversible ? session.map : null;
     const stats = createStats();
+
+    // Store stats in session for later use in onCapture hook
+    if (ctx.captureId) {
+      if (!session.redactionStats) {
+        session.redactionStats = new Map();
+      }
+      session.redactionStats.set(ctx.captureId, stats);
+    }
 
     // Helper to run post-redaction logic shared by both detector and rule paths
     async function finalizeRedaction(
@@ -961,19 +973,7 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
     ): Promise<RequestContext> {
       // Reset stream rehydrator for this session (new response coming)
       if (reversible) {
-        const session = getSession(ctx.sessionId);
         session.rehydrator = createStreamRehydrator(session.map);
-      }
-
-      // Call onRedactionMetadata callback if configured
-      if (config?.onRedactionMetadata && ctx.captureId) {
-        const metadata = buildFullRedactionMetadata(ctx.captureId, {
-          provider: ctx.provider,
-          sessionId: ctx.sessionId,
-          targetUrl: ctx.targetUrl,
-          source: ctx.source,
-        }, stats);
-        config.onRedactionMetadata(metadata);
       }
 
       if (stats.totalReplacements > 0 && verbose) {
@@ -1049,6 +1049,30 @@ export function createRedactPlugin(config?: RedactPluginConfig): RedactPlugin {
           return session.rehydrator.onEnd();
         }
       : undefined,
+
+    // Called when the capture is complete (after response, before/while writing to disk).
+    // This is the correct time to persist redaction metadata because the capture file
+    // has all session fields (source, provider, targetUrl, timings, etc.) populated.
+    onCapture(capture: CaptureData): void {
+      if (!config?.onRedactionMetadata || !capture.captureId) return;
+
+      const session = getSession(capture.sessionId);
+      const stats = session.redactionStats?.get(capture.captureId);
+      if (!stats) return;
+
+      // Build complete metadata from the capture data (which has all fields populated)
+      const metadata = buildFullRedactionMetadata(capture.captureId, {
+        provider: capture.provider,
+        sessionId: capture.sessionId,
+        targetUrl: capture.targetUrl,
+        source: capture.source,
+      }, stats);
+
+      config.onRedactionMetadata(metadata);
+
+      // Clean up the stored stats for this capture
+      session.redactionStats?.delete(capture.captureId);
+    },
 
     shutdown() {
       // Shut down detector pipeline if initialized

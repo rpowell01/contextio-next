@@ -75,7 +75,7 @@ describe("redact plugin - SQLite integration", () => {
 		assert.equal(plugin.onResponse, undefined);
 	});
 
-	it("calls onRedactionMetadata callback with complete metadata", async () => {
+it("calls onRedactionMetadata callback with complete metadata in onCapture", async () => {
 		const config: RedactPluginConfig = {
 			preset: "secrets",
 			reversible: false,
@@ -88,6 +88,7 @@ describe("redact plugin - SQLite integration", () => {
 		const plugin = createRedactPlugin(config);
 
 		// Process request with API key - use a format that matches the api-key-prefixed pattern
+		// Pattern: \b(?:sk|pk|api|key|token)[-_][A-Za-z0-9_-]{20,}\b
 		const requestBody = {
 			model: "gpt-4",
 			messages: [
@@ -125,6 +126,32 @@ describe("redact plugin - SQLite integration", () => {
 			} as any);
 		}
 
+		// Call onCapture with complete CaptureData (simulating logger plugin)
+		if (plugin.onCapture) {
+			await plugin.onCapture({
+				timestamp: new Date().toISOString(),
+				sessionId: "test-session-1",
+				method: "POST",
+				path: "/v1/chat/completions",
+				source: "test-proxy",
+				provider: "openai",
+				apiFormat: "chat-completions",
+				targetUrl: "https://api.openai.com/v1/chat/completions",
+				requestHeaders: { "content-type": "application/json" },
+				requestBody,
+				originalRequestBody: requestBody,
+				requestBytes: Buffer.from(JSON.stringify(requestBody)).length,
+				responseStatus: 200,
+				responseHeaders: { "content-type": "application/json" },
+				responseBody: JSON.stringify(responseBody),
+				responseIsStreaming: false,
+				responseBytes: Buffer.from(JSON.stringify(responseBody)).length,
+				captureId: "test-capture-1",
+				redactionStats: { totalRedactions: 0, byRule: {} },
+				timings: { send_ms: 10, wait_ms: 50, receive_ms: 20, total_ms: 80 },
+			} as any);
+		}
+
 		// Verify callback was called
 		assert.ok(sqliteCalls.length > 0, "onRedactionMetadata callback should have been called");
 
@@ -141,7 +168,7 @@ describe("redact plugin - SQLite integration", () => {
 		assert.equal(metadata.errorCount, 0);
 	});
 
-	it("calls onRedactionMetadata with correct rule counts for pii preset", async () => {
+it("calls onRedactionMetadata with correct rule counts for pii preset in onCapture", async () => {
 		const config: RedactPluginConfig = {
 			preset: "pii",
 			reversible: false,
@@ -160,7 +187,7 @@ describe("redact plugin - SQLite integration", () => {
 
 		const requestBody = {
 			user: {
-				email: "john.doe@example.com",
+				email: "test@example.com",
 				phone: "555-123-4567",
 				ssn: "123-45-6789"
 			}
@@ -177,12 +204,12 @@ describe("redact plugin - SQLite integration", () => {
 				body: requestBody,
 				rawBody: Buffer.from(JSON.stringify(requestBody)),
 				captureId: "pii-test-1",
-				targetUrl: "https://test.com",
+				targetUrl: "https://api.test.com/test",
 			} as any);
 		}
 
 		const responseBody = {
-			user: { email: "jane.doe@example.com" }
+			user: { email: "another@example.com" }
 		};
 
 		if (plugin.onResponse) {
@@ -195,6 +222,32 @@ describe("redact plugin - SQLite integration", () => {
 			} as any);
 		}
 
+		// Call onCapture with complete CaptureData
+		if (plugin.onCapture) {
+			await plugin.onCapture({
+				timestamp: new Date().toISOString(),
+				sessionId: "pii-session-1",
+				method: "POST",
+				path: "/test",
+				source: "pii-test",
+				provider: "test",
+				apiFormat: "raw",
+				targetUrl: "https://api.test.com/test",
+				requestHeaders: { "content-type": "application/json" },
+				requestBody: requestBody,
+				originalRequestBody: requestBody,
+				requestBytes: Buffer.from(JSON.stringify(requestBody)).length,
+				responseStatus: 200,
+				responseHeaders: { "content-type": "application/json" },
+				responseBody: JSON.stringify(responseBody),
+				responseIsStreaming: false,
+				responseBytes: Buffer.from(JSON.stringify(responseBody)).length,
+				captureId: "pii-test-1",
+				redactionStats: { totalRedactions: 0, byRule: {} },
+				timings: { send_ms: 10, wait_ms: 50, receive_ms: 20, total_ms: 80 },
+			} as any);
+		}
+
 		const metadata = sqliteCalls[sqliteCalls.length - 1];
 		assert.ok(metadata.totalRedactions > 0, "Should have some redactions");
 		assert.ok(Object.keys(metadata.ruleCounts).length > 0, "Should have rule counts");
@@ -203,7 +256,7 @@ describe("redact plugin - SQLite integration", () => {
 		assert.equal(metadata.source, "pii-test");
 	});
 
-	it("does not create .redact-meta.json files on filesystem", async () => {
+it("does not create .redact-meta.json files on filesystem", async () => {
 		const captureDir = "/tmp/contextio-test-captures-" + Date.now();
 
 		// Create temp directory
@@ -233,7 +286,7 @@ describe("redact plugin - SQLite integration", () => {
 				body: requestBody,
 				rawBody: Buffer.from(JSON.stringify(requestBody)),
 				captureId: "fs-test-1",
-				targetUrl: "https://test.com",
+				targetUrl: "https://api.test.com/test",
 			} as any);
 		}
 
@@ -246,6 +299,32 @@ describe("redact plugin - SQLite integration", () => {
 				body: JSON.stringify(responseBody),
 				isStreaming: false,
 				sessionId: "fs-session",
+			} as any);
+		}
+
+		// Call onCapture
+		if (plugin.onCapture) {
+			await plugin.onCapture({
+				timestamp: new Date().toISOString(),
+				sessionId: "fs-session",
+				method: "POST",
+				path: "/test",
+				source: "test",
+				provider: "test",
+				apiFormat: "raw",
+				targetUrl: "https://api.test.com/test",
+				requestHeaders: { "content-type": "application/json" },
+				requestBody: requestBody,
+				originalRequestBody: requestBody,
+				requestBytes: Buffer.from(JSON.stringify(requestBody)).length,
+				responseStatus: 200,
+				responseHeaders: { "content-type": "application/json" },
+				responseBody: JSON.stringify(responseBody),
+				responseIsStreaming: false,
+				responseBytes: Buffer.from(JSON.stringify(responseBody)).length,
+				captureId: "fs-test-1",
+				redactionStats: { totalRedactions: 0, byRule: {} },
+				timings: { send_ms: 10, wait_ms: 50, receive_ms: 20, total_ms: 80 },
 			} as any);
 		}
 

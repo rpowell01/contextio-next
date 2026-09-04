@@ -181,11 +181,9 @@ const config: RedactPluginConfig = {
 			return disabled.length > 0 ? disabled : undefined;
 		})(),
 		onRedactionMetadata: (metadata: RedactionMetadata) => {
-			// Only persist redaction metadata when the capture session metadata is fully populated.
-			// If source, provider, or targetUrl are null/undefined, the capture session is still
-			// being written and the metadata would have incomplete data, which would cause the
-			// redaction diff dialog to show invalid data in the left and right panes.
-			// buildFullRedactionMetadata converts undefined to null, so we check for null here.
+			// The redact plugin's onCapture hook ensures this is only called when the capture
+			// is fully complete (with source, provider, targetUrl, timings, etc. populated).
+			// This check remains as defense-in-depth.
 			if (metadata.source !== null && metadata.provider !== null && metadata.targetUrl !== null) {
 				upsertRedactionMetadata(metadata);
 			}
