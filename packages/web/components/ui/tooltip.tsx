@@ -117,6 +117,7 @@ export function Tooltip({
             align={align}
             sideOffset={sideOffset}
             alignOffset={alignOffset}
+            tooltipId={tooltipId}
           />
         )}
       </span>
@@ -186,10 +187,8 @@ export function TooltipContent({
   sideOffset = 4,
   alignOffset = 0,
   className,
-}: TooltipContentProps & { content: React.ReactNode; side?: "top" | "right" | "bottom" | "left"; align?: "start" | "center" | "end" }) {
-  const context = React.useContext(TooltipContext);
-  const tooltipId = context?.tooltipId;
-  
+  tooltipId,
+}: TooltipContentProps & { content: React.ReactNode; side?: "top" | "right" | "bottom" | "left"; align?: "start" | "center" | "end"; tooltipId: string }) {
   const sideStyles: Record<string, React.CSSProperties> = {
     top: { bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: sideOffset },
     bottom: { top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: sideOffset },
@@ -213,7 +212,7 @@ export function TooltipContent({
   return (
     <div
       id={tooltipId}
-      className={cn("z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[300px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95", className)}
+      className={cn("z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[500px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95", className)}
       style={tooltipStyle}
       role="tooltip"
     >

@@ -1046,8 +1046,8 @@ export function DiffDialog({
         };
 
         const tooltipContent = (
-          <div className="max-w-[300px]">
-            <p className="font-mono text-xs truncate">Source: {preValue.slice(0, 200)}{preValue.length > 200 ? "…" : ""}</p>
+          <div>
+            <p className="font-mono text-xs truncate max-w-[480px]">Source: {preValue.slice(0, 200)}{preValue.length > 200 ? "…" : ""}</p>
             <p className="text-xs text-muted-foreground">Click to add as false positive</p>
           </div>
         );
@@ -1090,7 +1090,8 @@ export function DiffDialog({
       const placeholderMatches = safeValue.match(placeholderPattern);
 
       if (placeholderMatches && placeholderMatches.length > 0) {
-        const placeholderOccurrenceCount = new Map<string, number>();
+        // Track which matches have been used to handle duplicate placeholders correctly
+        const usedMatchIndices = new Set<number>();
 
         function normalizePlaceholderForDataAttr(placeholder: string): string {
           let n = placeholder.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-");
@@ -1105,13 +1106,24 @@ export function DiffDialog({
                 {i < placeholderMatches.length && (() => {
                   const placeholder = placeholderMatches[i];
                   const normalizedPlaceholder = normalizePlaceholderForDataAttr(placeholder);
-                  // Compute occurrence index for this placeholder type (0, 1, 2...)
-                  const occurrenceCount = placeholderOccurrenceCount.get(placeholder) || 0;
-                  placeholderOccurrenceCount.set(placeholder, occurrenceCount + 1);
-                  const matchIdx = occurrenceCount;
-
-                  // Find the corresponding match from the matches array using matchIdx
-                  const correspondingMatch = matches?.[matchIdx];
+                  
+                  // Find the corresponding match from the matches array by finding
+                  // the next unused match with a matching postValue (placeholder)
+                  let correspondingMatch: typeof matches[0] | undefined;
+                  let matchIdx = -1;
+                  if (matches && matches.length > 0) {
+                    for (let idx = 0; idx < matches.length; idx++) {
+                      if (usedMatchIndices.has(idx)) continue;
+                      const m = matches[idx];
+                      if (m.postValue === placeholder) {
+                        correspondingMatch = m;
+                        matchIdx = idx;
+                        usedMatchIndices.add(idx);
+                        break;
+                      }
+                    }
+                  }
+                  
                   const ruleInfo = extractRuleInfo(placeholder);
                   const ruleId = correspondingMatch?.ruleId ?? ruleInfo.ruleId;
                   const path = correspondingMatch?.path ?? "";
@@ -1119,8 +1131,8 @@ export function DiffDialog({
                   const value = correspondingMatch?.preValue ?? placeholder.replace(/[\[\]]/g, "");
 
                   const tooltipContent = (
-                    <div className="max-w-[300px]">
-                      <p className="font-mono text-xs truncate">Source: {value.slice(0, 200)}{value.length > 200 ? "…" : ""}</p>
+                    <div>
+                      <p className="font-mono text-xs truncate max-w-[480px]">Source: {value.slice(0, 200)}{value.length > 200 ? "…" : ""}</p>
                       <p className="text-xs text-muted-foreground">Click to add as false positive</p>
                     </div>
                   );
@@ -1228,8 +1240,8 @@ export function DiffDialog({
             };
 
             const tooltipContent = (
-              <div className="max-w-[300px]">
-                <p className="font-mono text-xs truncate">Source: {matchStr.slice(0, 200)}{matchStr.length > 200 ? "…" : ""}</p>
+              <div>
+                <p className="font-mono text-xs truncate max-w-[480px]">Source: {matchStr.slice(0, 200)}{matchStr.length > 200 ? "…" : ""}</p>
                 <p className="text-xs text-muted-foreground">Click to add as false positive</p>
               </div>
             );
