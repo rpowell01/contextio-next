@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import * as ReactDOM from "react-dom";
 import { cn } from "@/lib/utils";
 
 interface TooltipProps {
@@ -18,6 +19,11 @@ interface TooltipContextValue {
   tooltipId: string;
   isVisible: boolean;
   setIsVisible: React.Dispatch<React.SetStateAction<boolean>>;
+  triggerRef: React.RefObject<HTMLSpanElement | null>;
+  side: "top" | "right" | "bottom" | "left";
+  align: "start" | "center" | "end";
+  sideOffset: number;
+  alignOffset: number;
 }
 
 const TooltipContext = React.createContext<TooltipContextValue | null>(null);
@@ -70,6 +76,8 @@ export function Tooltip({
   // State for tooltip visibility
   const [isVisible, setIsVisible] = React.useState(false);
   const [timeoutId, setTimeoutId] = React.useState<ReturnType<typeof setTimeout> | null>(null);
+  // Ref to the trigger element for position calculation
+  const triggerRef = React.useRef<HTMLSpanElement>(null);
 
   const showTooltip = () => {
     const id = setTimeout(() => {
@@ -98,6 +106,11 @@ export function Tooltip({
     tooltipId,
     isVisible,
     setIsVisible,
+    triggerRef,
+    side,
+    align,
+    sideOffset,
+    alignOffset,
   };
   
   // Don't wrap in a div - let the child determine its own display
@@ -105,19 +118,22 @@ export function Tooltip({
   return (
     <TooltipContext.Provider value={contextValue}>
       <span
+        ref={triggerRef}
         className="relative inline-block"
         onMouseEnter={disabled ? undefined : showTooltip}
         onMouseLeave={disabled ? undefined : hideTooltip}
+        aria-describedby={isVisible ? tooltipId : undefined}
       >
         {child}
-        {!disabled && isVisible && (
-          <TooltipContent
+        {!disabled && isVisible && triggerRef.current && (
+          <TooltipPortal
             content={content}
+            tooltipId={tooltipId}
+            triggerRef={triggerRef}
             side={side}
             align={align}
             sideOffset={sideOffset}
             alignOffset={alignOffset}
-            tooltipId={tooltipId}
           />
         )}
       </span>
@@ -177,6 +193,135 @@ export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps
     <span aria-describedby={isVisible ? tooltipId : undefined}>
       {children}
     </span>
+  );
+}
+
+interface TooltipPortalProps {
+  content: React.ReactNode;
+  tooltipId: string;
+  triggerRef: React.RefObject<HTMLSpanElement | null>;
+  side: "top" | "right" | "bottom" | "left";
+  align: "start" | "center" | "end";
+  sideOffset: number;
+  alignOffset: number;
+}
+
+function TooltipPortal({
+  content,
+  tooltipId,
+  triggerRef,
+  side,
+  align,
+  sideOffset,
+  alignOffset,
+}: TooltipPortalProps) {
+  const [position, setPosition] = React.useState<{ top?: number; left?: number; right?: number; bottom?: number; transform?: string } | null>(null);
+
+  React.useEffect(() => {
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+
+      const rect = trigger.getBoundingClientRect();
+      let top: number | undefined = 0;
+      let left: number | undefined;
+      let right: number | undefined;
+      let bottom: number | undefined;
+      let transform: string | undefined;
+
+      switch (side) {
+        case "top":
+          top = rect.top - sideOffset;
+          if (align === "center") {
+            left = rect.left + rect.width / 2;
+            transform = "translateX(-50%)";
+          } else if (align === "start") {
+            left = rect.left + alignOffset;
+            transform = "translateX(0)";
+          } else { // end
+            right = window.innerWidth - rect.right + alignOffset;
+            transform = "translateX(0)";
+          }
+          break;
+        case "bottom":
+          top = rect.bottom + sideOffset;
+          if (align === "center") {
+            left = rect.left + rect.width / 2;
+            transform = "translateX(-50%)";
+          } else if (align === "start") {
+            left = rect.left + alignOffset;
+            transform = "translateX(0)";
+          } else { // end
+            right = window.innerWidth - rect.right + alignOffset;
+            transform = "translateX(0)";
+          }
+          break;
+        case "left":
+          if (align === "center") {
+            top = rect.top + rect.height / 2;
+            transform = "translateY(-50%)";
+          } else if (align === "start") {
+            top = rect.top + alignOffset;
+            transform = "translateY(0)";
+          } else { // end
+            bottom = window.innerHeight - rect.bottom + alignOffset;
+            transform = "translateY(0)";
+            top = undefined;
+          }
+          left = rect.left - sideOffset;
+          break;
+        case "right":
+          if (align === "center") {
+            top = rect.top + rect.height / 2;
+            transform = "translateY(-50%)";
+          } else if (align === "start") {
+            top = rect.top + alignOffset;
+            transform = "translateY(0)";
+          } else { // end
+            bottom = window.innerHeight - rect.bottom + alignOffset;
+            transform = "translateY(0)";
+            top = undefined;
+          }
+          left = rect.right + sideOffset;
+          break;
+      }
+
+      setPosition({ top, left, right, bottom, transform });
+    };
+
+    updatePosition();
+    // Update position on scroll/resize
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [triggerRef, side, align, sideOffset, alignOffset]);
+
+  if (!position) return null;
+
+  const tooltipStyle: React.CSSProperties = {
+    position: "fixed",
+    top: position.top,
+    left: position.left,
+    right: position.right,
+    bottom: position.bottom,
+    transform: position.transform,
+    pointerEvents: "none",
+    zIndex: 100,
+  };
+
+  return ReactDOM.createPortal(
+    <div
+      id={tooltipId}
+      className={cn("px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[500px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95")}
+      style={tooltipStyle}
+      role="tooltip"
+    >
+      {content}
+    </div>,
+    document.body
   );
 }
 
