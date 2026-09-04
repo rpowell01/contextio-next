@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
  * Throttle function using requestAnimationFrame to limit the rate of function calls.
  * Ensures the callback is called at most once per animation frame.
  */
-function rafThrottle<T extends (...args: unknown[]) => void>(callback: T): T {
+function rafThrottle<T extends (...args: unknown[]) => void>(callback: T): T & { cancel: () => void } {
   let rafId: number | null = null;
   let lastArgs: unknown[] | null = null;
 
@@ -25,7 +25,7 @@ function rafThrottle<T extends (...args: unknown[]) => void>(callback: T): T {
   };
 
   // Add a cancel method to clean up pending RAF
-  (throttled as T & { cancel: () => void }).cancel = () => {
+  throttled.cancel = () => {
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
       rafId = null;
