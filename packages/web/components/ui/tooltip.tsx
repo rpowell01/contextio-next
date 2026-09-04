@@ -4,6 +4,37 @@ import * as React from "react";
 import * as ReactDOM from "react-dom";
 import { cn } from "@/lib/utils";
 
+/**
+ * Throttle function using requestAnimationFrame to limit the rate of function calls.
+ * Ensures the callback is called at most once per animation frame.
+ */
+function rafThrottle<T extends (...args: unknown[]) => void>(callback: T): T {
+  let rafId: number | null = null;
+  let lastArgs: unknown[] | null = null;
+
+  const throttled = (...args: unknown[]) => {
+    lastArgs = args;
+    if (rafId === null) {
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (lastArgs !== null) {
+          callback(...lastArgs);
+        }
+      });
+    }
+  };
+
+  // Add a cancel method to clean up pending RAF
+  (throttled as T & { cancel: () => void }).cancel = () => {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  };
+
+  return throttled as T & { cancel: () => void };
+}
+
 interface TooltipProps {
   children: React.ReactNode;
   content: React.ReactNode;
@@ -294,13 +325,17 @@ function TooltipPortal({
       setPosition({ top, left, right, bottom, transform });
     };
 
+    // Throttle position updates to once per animation frame
+    const throttledUpdatePosition = rafThrottle(updatePosition);
+
     updatePosition();
-    // Update position on scroll/resize
-    window.addEventListener("scroll", updatePosition, true);
-    window.addEventListener("resize", updatePosition);
+    // Update position on scroll/resize (throttled)
+    window.addEventListener("scroll", throttledUpdatePosition, true);
+    window.addEventListener("resize", throttledUpdatePosition);
     return () => {
-      window.removeEventListener("scroll", updatePosition, true);
-      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", throttledUpdatePosition, true);
+      window.removeEventListener("resize", throttledUpdatePosition);
+      throttledUpdatePosition.cancel();
     };
   }, [triggerRef, side, align, sideOffset, alignOffset]);
 
