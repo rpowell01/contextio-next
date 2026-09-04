@@ -180,15 +180,16 @@ export function TooltipTrigger({ children, asChild = true }: TooltipTriggerProps
       // Forward ref to the underlying DOM node - prevents double tab stops
       // when child is already focusable (e.g., button, link)
       ref: (child as any).ref,
+      // Preserve all child props first
+      ...childProps,
       // Add aria-describedby when tooltip is visible
       "aria-describedby": isVisible ? tooltipId : undefined,
       // Merge mouse event handlers to show/hide tooltip (without double-firing)
+      // These override child's handlers to ensure tooltip behavior works
       onMouseEnter: mergeHandlers(childProps.onMouseEnter, () => context.setIsVisible(true)),
       onMouseLeave: mergeHandlers(childProps.onMouseLeave, () => context.setIsVisible(false)),
       onFocus: mergeHandlers(childProps.onFocus, () => context.setIsVisible(true)),
       onBlur: mergeHandlers(childProps.onBlur, () => context.setIsVisible(false)),
-      // Preserve any other existing props by spreading
-      ...childProps,
     });
   }
   
