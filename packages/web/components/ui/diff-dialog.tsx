@@ -905,30 +905,40 @@ export function DiffDialog({
 
     // Get the match index from the right pane
     const matchIndex = rightTarget.getAttribute("data-match-index");
-    if (matchIndex === null) {
-      // No match index, just scroll both to their first found elements
-      scrollToTarget(rightPane, rightTarget as HTMLElement);
-
-      const leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
-      if (leftTarget) {
-        scrollToTarget(leftPane, leftTarget as HTMLElement);
-      }
-      return;
-    }
 
     // Scroll RIGHT pane to the found element
     scrollToTarget(rightPane, rightTarget as HTMLElement);
 
-    // Find and scroll LEFT pane to the element with the SAME match index
-    const leftTarget = leftPane.querySelector(`mark[data-match-index="${matchIndex}"]`);
+    // Try to find corresponding element in LEFT pane using match index
+    // Skip lookup if matchIndex is "-1" (indicates no corresponding match was found)
+    let leftTarget: Element | null = null;
+    if (matchIndex !== null && matchIndex !== "-1") {
+      leftTarget = leftPane.querySelector(`mark[data-match-index="${matchIndex}"]`);
+    }
+
+    // If match index lookup failed or was -1, use occurrence-based fallback
+    // This finds the nth occurrence of this redaction type in left pane,
+    // where n = occurrence index of rightTarget in right pane
+    if (!leftTarget) {
+      const rightMarks = Array.from(rightPane.querySelectorAll(`mark[data-redaction="${kebabType}"]`));
+      const occurrenceIndex = rightMarks.indexOf(rightTarget as Element);
+
+      if (occurrenceIndex >= 0) {
+        const leftMarks = Array.from(leftPane.querySelectorAll(`mark[data-redaction="${kebabType}"]`));
+        if (leftMarks[occurrenceIndex]) {
+          leftTarget = leftMarks[occurrenceIndex];
+        } else if (leftMarks.length > 0) {
+          // Fallback to last available if occurrence index out of bounds
+          leftTarget = leftMarks[leftMarks.length - 1];
+        }
+      } else {
+        // Final fallback: first match of this redaction type
+        leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
+      }
+    }
+
     if (leftTarget) {
       scrollToTarget(leftPane, leftTarget as HTMLElement);
-    } else {
-      // Fallback: try to find by data-redaction in left pane
-      const leftFallback = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
-      if (leftFallback) {
-        scrollToTarget(leftPane, leftFallback as HTMLElement);
-      }
     }
   }, [viewMode, apiToPlaceholderMap, scrollToTarget]);
 
@@ -1139,13 +1149,18 @@ export function DiffDialog({
                     </div>
                   );
 
+                  // Only set data-match-index when a valid match was found (>= 0).
+                  // When no corresponding match exists in the matches array, omit the attribute
+                  // and let scrollToRedactionType use occurrence-based fallback instead.
+                  const matchIndexAttr = matchIdx >= 0 ? matchIdx : undefined;
+
                   return (
                     <Tooltip key={`ph-${i}`} content={tooltipContent} side="top" align="center" delayDuration={200} maxWidth={800}>
                       <TooltipTrigger asChild>
                         <mark
                           className="redaction-placeholder cursor-pointer hover:bg-primary/10"
                           data-redaction={normalizedPlaceholder}
-                          data-match-index={matchIdx}
+                          data-match-index={matchIndexAttr}
                           onClick={() => {
                             if (onAddFalsePositive) {
                               onAddFalsePositive({ value, ruleId, label: ruleInfo.label, path });
