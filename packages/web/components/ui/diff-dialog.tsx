@@ -1047,13 +1047,14 @@ export function DiffDialog({
 
         const tooltipContent = (
           <div>
-            <p className="font-mono text-xs truncate max-w-[480px]">Source: {preValue.slice(0, 200)}{preValue.length > 200 ? "…" : ""}</p>
-            <p className="text-xs text-muted-foreground">Click to add as false positive</p>
+            <p className="font-medium text-xs text-muted-foreground">Pre-Redaction value:</p>
+            <p className="font-mono text-xs whitespace-pre-wrap break-words">{preValue}</p>
+            <p className="text-xs text-muted-foreground mt-1">Click to add as false positive</p>
           </div>
         );
 
         result.push(
-          <Tooltip key={`exact-${matchIdx}`} content={tooltipContent} side="top" align="center" delayDuration={200}>
+          <Tooltip key={`exact-${matchIdx}`} content={tooltipContent} side="top" align="center" delayDuration={200} maxWidth={800}>
             <TooltipTrigger asChild>
               <mark
                 className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
@@ -1132,13 +1133,14 @@ export function DiffDialog({
 
                   const tooltipContent = (
                     <div>
-                      <p className="font-mono text-xs truncate max-w-[480px]">Source: {value.slice(0, 200)}{value.length > 200 ? "…" : ""}</p>
-                      <p className="text-xs text-muted-foreground">Click to add as false positive</p>
+                      <p className="font-medium text-xs text-muted-foreground">Pre-Redaction value:</p>
+                      <p className="font-mono text-xs whitespace-pre-wrap break-words">{value}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Click to add as false positive</p>
                     </div>
                   );
 
                   return (
-                    <Tooltip key={`ph-${i}`} content={tooltipContent} side="top" align="center" delayDuration={200}>
+                    <Tooltip key={`ph-${i}`} content={tooltipContent} side="top" align="center" delayDuration={200} maxWidth={800}>
                       <TooltipTrigger asChild>
                         <mark
                           className="redaction-placeholder cursor-pointer hover:bg-primary/10"
@@ -1241,13 +1243,14 @@ export function DiffDialog({
 
             const tooltipContent = (
               <div>
-                <p className="font-mono text-xs truncate max-w-[480px]">Source: {matchStr.slice(0, 200)}{matchStr.length > 200 ? "…" : ""}</p>
-                <p className="text-xs text-muted-foreground">Click to add as false positive</p>
+                <p className="font-medium text-xs text-muted-foreground">Pre-Redaction value:</p>
+                <p className="font-mono text-xs whitespace-pre-wrap break-words">{matchStr}</p>
+                <p className="text-xs text-muted-foreground mt-1">Click to add as false positive</p>
               </div>
             );
 
             newParts.push(
-              <Tooltip key={`pii-${piiMatchIdx}-${matchIndex}`} content={tooltipContent} side="top" align="center" delayDuration={200}>
+              <Tooltip key={`pii-${piiMatchIdx}-${matchIndex}`} content={tooltipContent} side="top" align="center" delayDuration={200} maxWidth={800}>
                 <TooltipTrigger asChild>
                   <mark className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10" data-match-index={piiMatchIdx} onClick={handleClick}>
                     {matchStr}

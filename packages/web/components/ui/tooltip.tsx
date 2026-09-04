@@ -13,6 +13,7 @@ interface TooltipProps {
   sideOffset?: number;
   alignOffset?: number;
   disabled?: boolean;
+  maxWidth?: string | number;
 }
 
 interface TooltipContextValue {
@@ -69,6 +70,7 @@ export function Tooltip({
   sideOffset = 4,
   alignOffset = 0,
   disabled = false,
+  maxWidth,
 }: TooltipProps) {
   const child = React.Children.only(children);
   const tooltipId = React.useId();
@@ -134,6 +136,7 @@ export function Tooltip({
             align={align}
             sideOffset={sideOffset}
             alignOffset={alignOffset}
+            maxWidth={maxWidth}
           />
         )}
       </span>
@@ -214,7 +217,8 @@ function TooltipPortal({
   align,
   sideOffset,
   alignOffset,
-}: TooltipPortalProps) {
+  maxWidth,
+}: TooltipPortalProps & { maxWidth?: string | number }) {
   const [position, setPosition] = React.useState<{ top?: number; left?: number; right?: number; bottom?: number; transform?: string } | null>(null);
 
   React.useEffect(() => {
@@ -315,8 +319,8 @@ function TooltipPortal({
   return ReactDOM.createPortal(
     <div
       id={tooltipId}
-      className={cn("px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[500px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95")}
-      style={tooltipStyle}
+      className={cn("px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg whitespace-normal break-words animate-in fade-in-0 zoom-in-95")}
+      style={{ ...tooltipStyle, maxWidth: maxWidth ? (typeof maxWidth === "number" ? `${maxWidth}px` : maxWidth) : "500px" }}
       role="tooltip"
     >
       {content}
@@ -333,7 +337,8 @@ export function TooltipContent({
   alignOffset = 0,
   className,
   tooltipId,
-}: TooltipContentProps & { content: React.ReactNode; side?: "top" | "right" | "bottom" | "left"; align?: "start" | "center" | "end"; tooltipId: string }) {
+  maxWidth,
+}: TooltipContentProps & { content: React.ReactNode; side?: "top" | "right" | "bottom" | "left"; align?: "start" | "center" | "end"; tooltipId: string; maxWidth?: string | number }) {
   const sideStyles: Record<string, React.CSSProperties> = {
     top: { bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: sideOffset },
     bottom: { top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: sideOffset },
@@ -357,8 +362,8 @@ export function TooltipContent({
   return (
     <div
       id={tooltipId}
-      className={cn("z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg max-w-[500px] whitespace-normal break-words animate-in fade-in-0 zoom-in-95", className)}
-      style={tooltipStyle}
+      className={cn("z-[100] px-3 py-2 text-xs font-medium text-popover-foreground bg-popover border border-border rounded-lg shadow-lg whitespace-normal break-words animate-in fade-in-0 zoom-in-95", className)}
+      style={{ ...tooltipStyle, maxWidth: maxWidth ? (typeof maxWidth === "number" ? `${maxWidth}px` : maxWidth) : "500px" }}
       role="tooltip"
     >
       {content}
