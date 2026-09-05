@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
-import { X, Code } from "lucide-react";
+import { X, ExternalLink } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { computeDiff, filterDiffWithContext, type DiffChunk } from "@/lib/diff";
-import { SyntaxHighlighter } from "@/components/ui/syntax-highlighter";
 
 const Spinner = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
   <svg
@@ -47,6 +46,7 @@ interface DiffDialogProps {
   fullOriginal?: string;
   fullRedacted?: string;
   captureId: string;
+  sessionId: string | null;
   redactionType: string;
   provider: string;
   targetUrl: string;
@@ -74,22 +74,6 @@ interface DiffDialogProps {
   onReady?: () => void;
 }
 
-type ViewMode = "diff" | "segments" | "syntax";
-
-// Default to segments view as it's the primary view for redaction validation
-const DEFAULT_VIEW_MODE: ViewMode = "segments";
-
-function isValidJson(content: string): boolean {
-  const trimmed = content.trim();
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
-  try {
-    JSON.parse(trimmed);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function DiffDialog({
   isOpen,
   onClose,
@@ -99,6 +83,7 @@ export function DiffDialog({
   fullOriginal,
   fullRedacted,
   captureId,
+  sessionId,
   redactionType,
   provider,
   targetUrl,
@@ -160,163 +145,7 @@ export function DiffDialog({
     };
   };
 
-  // Build focused view segments around each redaction
-  // Each segment shows ~100 chars context around the redaction position.
-  // Uses robust position finding: first tries exact match at the correct occurrence,
-  // then falls back to finding all occurrences and picking by index, then placeholder matching.
-  const redactionSegments = useMemo((): Array<{
-    preContext: string;
-    postContext: string;
-    preValue: string;
-    postValue: string;
-    ruleId: string;
-    label: string;
-    path: string;
-  }> => {
-    if (!matches || matches.length === 0) return [];
-
-    const CONTEXT_LENGTH = 100;
-    const segments: Array<{
-      preContext: string;
-      postContext: string;
-      preValue: string;
-      postValue: string;
-      ruleId: string;
-      label: string;
-      path: string;
-    }> = [];
-
-    // Helper: find ALL occurrences of a substring in a string, returning start/end positions
-    const findAllOccurrences = (
-      str: string,
-      substr: string
-    ): Array<{ start: number; end: number }> => {
-      const positions: Array<{ start: number; end: number }> = [];
-      let start = 0;
-      while (true) {
-        const found = str.indexOf(substr, start);
-        if (found === -1) break;
-        positions.push({ start: found, end: found + substr.length });
-        start = found + substr.length;
-      }
-      return positions;
-    };
-
-    // Helper: find all placeholder positions in post-content
-    const findPlaceholderPositions = (str: string): Array<{ start: number; end: number; placeholder: string }> => {
-      const positions: Array<{ start: number; end: number; placeholder: string }> = [];
-      const pattern = new RegExp(`\\[[A-Z][A-Z0-9_-]*(?:_REDACTED|_\\d+)\\]`, 'g');
-      let match;
-      while ((match = pattern.exec(str)) !== null) {
-        positions.push({ start: match.index, end: match.index + match[0].length, placeholder: match[0] });
-      }
-      return positions;
-    };
-
-    // Pre-compute all occurrences for each match's preValue and postValue
-    // This avoids re-scanning the content for each match
-    // Use diffPreContent/diffPostContent (full JSON bodies) to find match positions
-    const preValuePositions = new Map<string, Array<{ start: number; end: number }>>();
-    const postValuePositions = new Map<string, Array<{ start: number; end: number }>>();
-
-    for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
-      const match = matches[matchIdx];
-      if (match.preValue && !preValuePositions.has(match.preValue)) {
-        preValuePositions.set(match.preValue, findAllOccurrences(diffPreContent, match.preValue));
-      }
-      if (match.postValue && !postValuePositions.has(match.postValue)) {
-        postValuePositions.set(match.postValue, findAllOccurrences(diffPostContent, match.postValue));
-      }
-    }
-
-    // Pre-compute all placeholder positions in post-content
-    const placeholderPositions = findPlaceholderPositions(diffPostContent);
-
-    for (let matchIdx = 0; matchIdx < matches.length; matchIdx++) {
-      const match = matches[matchIdx];
-      if (!match.preValue || !match.postValue) continue;
-
-      // Find position in pre-content: use the matchIdx-th occurrence of this preValue
-      const prePositions = preValuePositions.get(match.preValue) || [];
-      let prePos = prePositions[matchIdx];
-
-      // If exact preValue not found at this index, try case-insensitive search for first occurrence
-      if (!prePos) {
-        const safePreContent = diffPreContent.toLowerCase();
-        const safePreValue = match.preValue.toLowerCase();
-        const fallbackPositions = findAllOccurrences(safePreContent, safePreValue);
-        if (fallbackPositions.length > matchIdx) {
-          prePos = fallbackPositions[matchIdx];
-          console.debug("Using case-insensitive fallback for preValue position", {
-            matchIdx,
-            preValue: match.preValue?.slice(0, 50),
-            fallbackIndex: prePos.start,
-            preContentLen: diffPreContent.length
-          });
-        } else if (fallbackPositions.length > 0) {
-          // Fall back to first occurrence if index out of bounds
-          prePos = fallbackPositions[0];
-        }
-      }
-
-      if (!prePos) {
-        console.debug("Skipping match - couldn't find preValue position", {
-          matchIdx,
-          preValue: match.preValue?.slice(0, 50),
-          occurrence: matchIdx + 1,
-          preContentLen: diffPreContent.length,
-          totalOccurrences: prePositions.length
-        });
-        continue;
-      }
-
-      // Find position in post-content: use the matchIdx-th occurrence of this postValue
-      const postPositions = postValuePositions.get(match.postValue) || [];
-      let postPos = postPositions[matchIdx];
-
-      // If exact postValue not found, fall back to placeholder position matching
-      if (!postPos) {
-        // Use placeholder at the same match index
-        if (placeholderPositions.length > matchIdx) {
-          postPos = { start: placeholderPositions[matchIdx].start, end: placeholderPositions[matchIdx].end };
-        } else if (placeholderPositions.length > 0) {
-          // Fall back to last placeholder if index out of bounds
-          postPos = { start: placeholderPositions[placeholderPositions.length - 1].start, end: placeholderPositions[placeholderPositions.length - 1].end };
-        }
-      }
-
-      // If we still can't find post position, skip this match
-      if (!postPos) {
-        console.debug("Skipping match - couldn't find postValue/placeholder position", {
-          matchIdx,
-          preValue: match.preValue?.slice(0, 50),
-          postValue: match.postValue?.slice(0, 50),
-          placeholderCount: placeholderPositions.length
-        });
-        continue;
-      }
-
-      // Extract context around the redaction
-      const preStart = Math.max(0, prePos.start - CONTEXT_LENGTH);
-      const preEnd = Math.min(diffPreContent.length, prePos.end + CONTEXT_LENGTH);
-      const postStart = Math.max(0, postPos.start - CONTEXT_LENGTH);
-      const postEnd = Math.min(diffPostContent.length, postPos.end + CONTEXT_LENGTH);
-
-      const ruleInfo = extractRuleInfo(match.postValue);
-
-      segments.push({
-        preContext: diffPreContent.slice(preStart, preEnd),
-        postContext: diffPostContent.slice(postStart, postEnd),
-        preValue: match.preValue,
-        postValue: match.postValue,
-        ruleId: match.ruleId ?? ruleInfo.ruleId,
-        label: ruleInfo.label,
-        path: match.path ?? "",
-      });
-    }
-
-    return segments;
-  }, [diffPreContent, diffPostContent, matches]);
+  
 
   // Normalize post-content by replacing redaction placeholders with their pre-values.
   // This ensures the diff algorithm treats redactions as "equal" chunks instead of
@@ -748,19 +577,11 @@ export function DiffDialog({
     </div>
   ), [diff, renderLine]);
 
-  // Detect if content is valid JSON for syntax highlighting
-  const isJsonContent = useMemo(() => {
-    return isValidJson(diffPreContent) || isValidJson(diffPostContent);
-  }, [diffPreContent, diffPostContent]);
-
-  // View mode state - default to segments view (focused redaction segments)
-  const [viewMode, setViewMode] = useState<ViewMode>(DEFAULT_VIEW_MODE);
-
-  // Synchronized scrolling state - separate refs for each view mode
+  // Synchronized scrolling state
   const leftPaneDiffRef = useRef<HTMLDivElement>(null);
-  const rightPaneDiffRef = useRef<HTMLDivElement>(null);
-  const leftPaneSyntaxRef = useRef<HTMLDivElement>(null);
-  const rightPaneSyntaxRef = useRef<HTMLDivElement>(null);
+  // const rightPaneDiffRef = useRef<HTMLDivElement>(null);
+  // const leftPaneSyntaxRef = useRef<HTMLDivElement>(null);
+  // const rightPaneSyntaxRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
 
   // Parse redaction types from the comma-separated string like "[RULE_REDACTED] (count), [RULE2_REDACTED] (count)"
@@ -879,110 +700,29 @@ export function DiffDialog({
     setTimeout(() => target.classList.remove("scroll-target-highlight"), 2000);
   }, []);
 
-  // Scroll to a specific redaction type in both panes
+  // Scroll to a specific redaction type in the left pane (Post-Redaction diff)
   const scrollToRedactionType = useCallback((apiType: string) => {
-    const panes = viewMode === "diff"
-      ? [leftPaneDiffRef.current, rightPaneDiffRef.current]
-      : [leftPaneSyntaxRef.current, rightPaneSyntaxRef.current];
-
-    const [leftPane, rightPane] = panes;
-    if (!leftPane || !rightPane) return;
+    const leftPane = leftPaneDiffRef.current;
+    if (!leftPane) return;
 
     // Look up the placeholder type for this API type
     const placeholderType = apiToPlaceholderMap.get(apiType) || apiType;
     const kebabType = placeholderType.toLowerCase().replace(/_/g, "-");
 
-    // Find the first matching redaction in the RIGHT pane (post-redaction, where placeholders are)
-    const rightTarget = rightPane.querySelector(`mark[data-redaction="${kebabType}"]`);
-    if (!rightTarget) {
-      // Fallback: just find any in left pane
-      const leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
-      if (leftTarget) {
-        scrollToTarget(leftPane, leftTarget as HTMLElement);
-      }
-      return;
-    }
-
-    // Get the match index from the right pane
-    const matchIndex = rightTarget.getAttribute("data-match-index");
-
-    // Scroll RIGHT pane to the found element
-    scrollToTarget(rightPane, rightTarget as HTMLElement);
-
-    // Try to find corresponding element in LEFT pane using match index
-    // Skip lookup if matchIndex is "-1" (indicates no corresponding match was found)
-    let leftTarget: Element | null = null;
-    if (matchIndex !== null && matchIndex !== "-1") {
-      leftTarget = leftPane.querySelector(`mark[data-match-index="${matchIndex}"]`);
-    }
-
-    // If match index lookup failed or was -1, use occurrence-based fallback
-    // This finds the nth occurrence of this redaction type in left pane,
-    // where n = occurrence index of rightTarget in right pane
-    if (!leftTarget) {
-      const rightMarks = Array.from(rightPane.querySelectorAll(`mark[data-redaction="${kebabType}"]`));
-      const occurrenceIndex = rightMarks.indexOf(rightTarget as Element);
-
-      if (occurrenceIndex >= 0) {
-        const leftMarks = Array.from(leftPane.querySelectorAll(`mark[data-redaction="${kebabType}"]`));
-        if (leftMarks[occurrenceIndex]) {
-          leftTarget = leftMarks[occurrenceIndex];
-        } else if (leftMarks.length > 0) {
-          // Fallback to last available if occurrence index out of bounds
-          leftTarget = leftMarks[leftMarks.length - 1];
-        }
-      } else {
-        // Final fallback: first match of this redaction type
-        leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
-      }
-    }
-
+    // Find the first matching redaction in the left pane (Post-Redaction, where placeholders are)
+    const leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
     if (leftTarget) {
       scrollToTarget(leftPane, leftTarget as HTMLElement);
     }
-  }, [viewMode, apiToPlaceholderMap, scrollToTarget]);
+  }, [apiToPlaceholderMap, scrollToTarget]);
 
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>, source: "left" | "right") => {
+  const handleScroll = useCallback((_: React.UIEvent<HTMLDivElement>) => {
     if (isScrollingRef.current) return;
     isScrollingRef.current = true;
 
-    const sourcePane = e.currentTarget;
-    const targetPane = viewMode === "diff"
-      ? (source === "left" ? rightPaneDiffRef.current : leftPaneDiffRef.current)
-      : (source === "left" ? rightPaneSyntaxRef.current : leftPaneSyntaxRef.current);
-
-    if (!targetPane) {
-      requestAnimationFrame(() => { isScrollingRef.current = false; });
-      return;
-    }
-
-    // Find the first visible line in source pane by checking data-diff-index
-    const sourceLines = sourcePane.querySelectorAll('[data-diff-index]');
-    let firstVisibleIndex = -1;
-    const sourceRect = sourcePane.getBoundingClientRect();
-
-    for (const line of sourceLines) {
-      const lineRect = line.getBoundingClientRect();
-      // Check if line is visible in the scroll viewport (at least 50% visible or top is at/above viewport top)
-      if (lineRect.top < sourceRect.bottom && lineRect.bottom > sourceRect.top) {
-        const indexAttr = line.getAttribute('data-diff-index');
-        if (indexAttr !== null) {
-          firstVisibleIndex = parseInt(indexAttr, 10);
-          break;
-        }
-      }
-    }
-
-    if (firstVisibleIndex >= 0) {
-      // Find the corresponding line in target pane and scroll to it
-      const targetLine = targetPane.querySelector(`[data-diff-index="${firstVisibleIndex}"]`);
-      if (targetLine) {
-        targetLine.scrollIntoView({ behavior: "auto", block: "start", inline: "nearest" });
-      }
-    }
-
+    // Only one pane now, no synchronized scrolling needed
     requestAnimationFrame(() => { isScrollingRef.current = false; });
-  }, [viewMode]);
+  }, []);
 
   // Highlights redaction placeholders in text.
   // For pre-redaction (isPre=true): highlights the exact original values from matches
@@ -1290,54 +1030,43 @@ export function DiffDialog({
     return <code className="font-mono text-xs">{parts}</code>;
   }, []);
 
-  const renderSyntaxPane = (content: string) => (
-    <SyntaxHighlighter code={content} lang="json" />
-  );
+  // Build redaction details summary from matches - grouped by unique placeholder (e.g., URL_1, URL_2, ORGANIZATION_1)
+  const redactionDetails = useMemo(() => {
+    if (!matches || matches.length === 0) return [];
 
-  // Render focused redaction segments - each shows ~100 chars context around the redaction
-  const renderRedactionSegments = (side: "left" | "right") => {
-    if (!redactionSegments || redactionSegments.length === 0) {
-      return (
-        <div className="p-4 text-center text-muted-foreground">
-          No redactions found in this capture.
-        </div>
-      );
+    // Group by unique placeholder (postValue) - each instance like [URL_1], [URL_2], [EMAIL_1], etc.
+    const summaryMap = new Map<string, { placeholder: string; sourceValue: string; ruleId: string; label: string; path: string }>();
+
+    for (const match of matches) {
+      const placeholder = match.postValue; // e.g., "[URL_1]"
+      const ruleInfo = extractRuleInfo(match.postValue);
+      
+      // Only add if we haven't seen this exact placeholder before
+      if (!summaryMap.has(placeholder)) {
+        summaryMap.set(placeholder, {
+          placeholder,
+          sourceValue: match.preValue,
+          ruleId: match.ruleId ?? ruleInfo.ruleId,
+          label: ruleInfo.label,
+          path: match.path ?? "",
+        });
+      }
     }
 
-    return (
-      <div className="space-y-4">
-        {redactionSegments.map((segment, index) => (
-          <div key={index} className="border border-border rounded-lg bg-background p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-mono text-primary">
-                {segment.ruleId}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {segment.path && <span className="font-mono">{segment.path}</span>}
-              </span>
-            </div>
-            <div className="font-mono text-xs bg-muted/50 rounded p-3 overflow-x-auto">
-              {side === "left" ? (
-                <RedactionHighlight
-                  value={segment.preContext}
-                  isPre
-                  matches={[{ preValue: segment.preValue, postValue: segment.postValue, ruleId: segment.ruleId, path: segment.path }]}
-                  onAddFalsePositive={onAddFalsePositive}
-                />
-              ) : (
-                <RedactionHighlight
-                  value={segment.postContext}
-                  isPre={false}
-                  matches={[{ preValue: segment.preValue, postValue: segment.postValue, ruleId: segment.ruleId, path: segment.path }]}
-                  onAddFalsePositive={onAddFalsePositive}
-                />
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
+    return Array.from(summaryMap.values())
+      .sort((a, b) => {
+        // Sort by placeholder type first, then by the number in the placeholder
+        const aType = a.placeholder.match(/\[([A-Z][A-Z0-9_-]*)_\d+\]/);
+        const bType = b.placeholder.match(/\[([A-Z][A-Z0-9_-]*)_\d+\]/);
+        if (aType && bType && aType[1] !== bType[1]) {
+          return aType[1].localeCompare(bType[1]);
+        }
+        // Extract number from placeholder for secondary sort
+        const aNum = parseInt(a.placeholder.match(/_(\d+)\]/)?.[1] || "0", 10);
+        const bNum = parseInt(b.placeholder.match(/_(\d+)\]/)?.[1] || "0", 10);
+        return aNum - bNum;
+      });
+  }, [matches]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -1425,197 +1154,86 @@ export function DiffDialog({
               </tr>
             </tbody>
           </table>
+</div>
+
+      {/* Fixed header bar above panes - shows context info and View Full Capture link */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-4 border-b border-border flex-shrink-0 bg-muted/30">
+        {hasHiddenLines && (
+          <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded flex-shrink-0">
+            Showing changes with context ({diff.length} lines of {fullDiff.length})
+          </span>
+        )}
+        {sessionId && (
+          <a
+            href={`/sessions/${sessionId}?captureId=${captureId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-primary hover:underline px-2 py-1 rounded hover:bg-accent hover:text-accent-foreground transition-colors"
+            title="View full capture in session"
+          >
+            <ExternalLink className="h-3 w-3" />
+            View Full Capture
+          </a>
+        )}
+      </div>
+
+      {/* Diff panels - flex-1 to fill remaining space */}
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row">
+        {/* Left pane: Post-Redaction (Redacted) diff */}
+        <div className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
+          <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
+            <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
+          </div>
+          <div
+            ref={leftPaneDiffRef}
+            className="flex-1 overflow-auto p-4 min-h-0"
+            onScroll={handleScroll}
+            role="tabpanel"
+            id="left-panel-diff"
+            aria-labelledby="diff-tab"
+          >
+            {renderDiffPane(diff, "right")}
+          </div>
         </div>
 
-        {/* Fixed header bar above panes - shows context info and view mode toggle */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-4 border-b border-border flex-shrink-0 bg-muted/30">
-          {hasHiddenLines && (
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded flex-shrink-0">
-              Showing changes with context ({diff.length} lines of {fullDiff.length})
-            </span>
-          )}
-          {/* View mode toggle for JSON content */}
-          {isJsonContent && (
-            <div className="flex items-center gap-2" role="tablist" aria-label="View mode">
-              <button
-                role="tab"
-                aria-selected={viewMode === "diff"}
-                aria-controls="left-panel-diff right-panel-diff"
-                id="diff-tab"
-                onClick={() => setViewMode("diff")}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowRight") {
-                    e.preventDefault();
-                    setViewMode("segments");
-                  }
-                }}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  viewMode === "diff"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-              >
-                Diff View
-              </button>
-              <button
-                role="tab"
-                aria-selected={viewMode === "segments"}
-                aria-controls="left-panel-segments right-panel-segments"
-                id="segments-tab"
-                onClick={() => setViewMode("segments")}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowLeft") {
-                    e.preventDefault();
-                    setViewMode("diff");
-                  } else if (e.key === "ArrowRight") {
-                    e.preventDefault();
-                    setViewMode("syntax");
-                  }
-                }}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  viewMode === "segments"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-              >
-                Focused Segments
-              </button>
-              <button
-                role="tab"
-                aria-selected={viewMode === "syntax"}
-                aria-controls="left-panel-syntax right-panel-syntax"
-                id="syntax-tab"
-                onClick={() => setViewMode("syntax")}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowLeft") {
-                    e.preventDefault();
-                    setViewMode("segments");
-                  }
-                }}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  viewMode === "syntax"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-              >
-                <Code className="h-3 w-3 mr-1" />
-                Syntax Highlighted
-              </button>
-            </div>
-          )}
+        {/* Right pane: Redaction Details Summary table */}
+        <div className="w-full md:w-1/2 min-w-0 flex flex-col min-h-0">
+          <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
+            <h4 className="text-xs font-semibold text-muted-foreground">Redaction Details Summary</h4>
+          </div>
+          <div className="flex-1 overflow-auto p-4 min-h-0">
+            {redactionDetails.length > 0 ? (
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left pb-2 font-medium text-foreground w-1/2">Redaction Label</th>
+                    <th className="text-left pb-2 font-medium text-foreground w-1/2">Source Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {redactionDetails.map((item) => (
+                    <tr key={item.placeholder} className="border-b border-border/50 hover:bg-accent/50 cursor-pointer"
+                        onClick={() => scrollToRedactionType(item.placeholder)}
+                        style={{ cursor: "pointer" }}>
+                      <td className="py-2 font-mono text-primary">
+                        {item.placeholder}
+                      </td>
+                      <td className="py-2 font-mono text-foreground break-all max-w-[300px]" title={item.sourceValue}>
+                        {item.sourceValue || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="p-4 text-center text-muted-foreground">
+                No redactions found in this capture.
+              </div>
+            )}
+          </div>
         </div>
-
-        {/* Diff/Syntax panels - flex-1 to fill remaining space */}
-        <div className="flex-1 min-h-0 flex flex-col">
-          {/* Diff View Panels (shown when viewMode === "diff") - Full diff with line numbers */}
-          {viewMode === "diff" && (
-            <div className="flex flex-col md:flex-row flex-1 min-h-0">
-              <div className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
-                <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
-                  <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
-                </div>
-                <div
-                  ref={leftPaneDiffRef}
-                  className="flex-1 overflow-auto p-4 min-h-0"
-                  onScroll={(e) => handleScroll(e, "left")}
-                  role="tabpanel"
-                  id="left-panel-diff"
-                  aria-labelledby="diff-tab"
-                >
-                  {renderDiffPane(diff, "left")}
-                </div>
-              </div>
-              <div className="w-full md:w-1/2 min-w-0 flex flex-col min-h-0">
-                <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
-                  <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
-                </div>
-                <div
-                  ref={rightPaneDiffRef}
-                  className="flex-1 overflow-auto p-4 min-h-0"
-                  onScroll={(e) => handleScroll(e, "right")}
-                  role="tabpanel"
-                  id="right-panel-diff"
-                  aria-labelledby="diff-tab"
-                >
-                  {renderDiffPane(diff, "right")}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Focused Segments View (shown when viewMode === "segments") - Redaction-focused context segments */}
-          {viewMode === "segments" && (
-            <div className="flex flex-col md:flex-row flex-1 min-h-0">
-              <div className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
-                <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
-                  <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
-                </div>
-                <div
-                  ref={leftPaneDiffRef}
-                  className="flex-1 overflow-auto p-4 min-h-0"
-                  onScroll={(e) => handleScroll(e, "left")}
-                  role="tabpanel"
-                  id="left-panel-segments"
-                  aria-labelledby="segments-tab"
-                >
-                  {renderRedactionSegments("left")}
-                </div>
-              </div>
-              <div className="w-full md:w-1/2 min-w-0 flex flex-col min-h-0">
-                <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
-                  <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
-                </div>
-                <div
-                  ref={rightPaneDiffRef}
-                  className="flex-1 overflow-auto p-4 min-h-0"
-                  onScroll={(e) => handleScroll(e, "right")}
-                  role="tabpanel"
-                  id="right-panel-segments"
-                  aria-labelledby="segments-tab"
-                >
-                  {renderRedactionSegments("right")}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Syntax Highlighted Panels (shown when viewMode === "syntax") */}
-          {viewMode === "syntax" && (
-            <div className="flex flex-col md:flex-row overflow-hidden flex-1 min-h-0">
-              <div className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
-                <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
-                  <h4 className="text-xs font-semibold text-muted-foreground">Pre-Redaction (Original)</h4>
-                </div>
-                <div
-                  ref={leftPaneSyntaxRef}
-                  className="flex-1 overflow-auto p-4 min-h-0"
-                  onScroll={(e) => handleScroll(e, "left")}
-                  role="tabpanel"
-                  id="left-panel-syntax"
-                  aria-labelledby="syntax-tab"
-                >
-                  {renderSyntaxPane(diffPreContent)}
-                </div>
-              </div>
-              <div className="w-full md:w-1/2 min-w-0 flex flex-col min-h-0">
-                <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
-                  <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
-                </div>
-                <div
-                  ref={rightPaneSyntaxRef}
-                  className="flex-1 overflow-auto p-4 min-h-0"
-                  onScroll={(e) => handleScroll(e, "right")}
-                  role="tabpanel"
-                  id="right-panel-syntax"
-                  aria-labelledby="syntax-tab"
-                >
-                  {renderSyntaxPane(diffPostContent)}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+      </div>
+    </DialogContent>
+  </Dialog>
+);
 }

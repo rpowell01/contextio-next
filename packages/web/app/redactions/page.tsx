@@ -93,6 +93,7 @@ export default function RedactionsPage() {
     fullOriginal?: string;
     fullRedacted?: string;
     captureId: string;
+    sessionId: string | null;
     redactionType: string;
     provider: string;
     targetUrl: string;
@@ -260,6 +261,7 @@ export default function RedactionsPage() {
       fullRedacted,
       matches,
       captureId: row.captureId,
+      sessionId: row.sessionId,
       redactionType: row.redactionSummary,
       provider: row.requestProvider,
       targetUrl: row.requestTarget,
@@ -783,6 +785,7 @@ export default function RedactionsPage() {
         matches={diffDialogData?.matches}
         title="Redaction Diff"
         captureId={diffDialogData?.captureId || ""}
+        sessionId={diffDialogData?.sessionId || null}
         redactionType={diffDialogData?.redactionType || ""}
         provider={diffDialogData?.provider || ""}
         targetUrl={diffDialogData?.targetUrl || ""}
