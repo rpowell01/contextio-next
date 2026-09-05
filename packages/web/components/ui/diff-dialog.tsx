@@ -1184,12 +1184,12 @@ export function DiffDialog({
                   {redactionDetails.map((item) => (
                     <tr key={item.placeholder} className="border-b border-border/50 hover:bg-accent/50"
                         style={{ cursor: "default" }}>
-                      <Tooltip content={<div className="text-xs text-muted-foreground">Scroll to redaction</div>} side="top" align="center" delayDuration={200}>
-                        <td className="py-2 font-mono text-primary whitespace-nowrap cursor-pointer"
-                            onClick={() => scrollToRedactionType(item.placeholder)}>
+                      <td className="py-2 font-mono text-primary whitespace-nowrap cursor-pointer"
+                          onClick={() => scrollToRedactionType(item.placeholder)}>
+                        <Tooltip content={<div className="text-xs text-muted-foreground">Scroll to redaction</div>} side="top" align="center" delayDuration={200}>
                           {item.placeholder}
-                        </td>
-                      </Tooltip>
+                        </Tooltip>
+                      </td>
                       <Tooltip content={<div className="text-xs text-muted-foreground">Click to add false positive</div>} side="top" align="center" delayDuration={200}>
                         <td className="py-2 font-mono text-foreground break-all max-w-[300px] whitespace-nowrap cursor-pointer" title={item.sourceValue}
                             onClick={() => {
