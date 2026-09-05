@@ -662,14 +662,6 @@ export function DiffDialog({
     return map;
   }, [rawRedactionTypes, placeholderTypes]);
 
-  // Build final redaction types with placeholder type for scrolling
-  const redactionTypes = useMemo(() => {
-    return rawRedactionTypes.map(r => ({
-      ...r,
-      placeholderType: apiToPlaceholderMap.get(r.apiType) || r.apiType,
-    }));
-  }, [rawRedactionTypes, apiToPlaceholderMap]);
-
   // Helper to scroll a pane to center a target element both vertically and horizontally
   const scrollToTarget = useCallback((pane: HTMLDivElement, target: HTMLElement) => {
     if (!pane || !target) return;
@@ -1111,28 +1103,6 @@ export function DiffDialog({
           <table className="w-full text-xs text-muted-foreground border-collapse">
             <tbody>
               <tr>
-                <td className="font-medium text-foreground w-24 pb-2">Type</td>
-                <td className="pb-2">
-                  {redactionTypes.length > 0 ? (
-                    <span className="flex flex-wrap gap-1">
-                      {redactionTypes.map((r) => (
-                        <button
-                          key={r.apiType}
-                          type="button"
-                          onClick={() => scrollToRedactionType(r.apiType)}
-                          className="px-2 py-1 text-xs rounded transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                          aria-label={`Scroll to ${r.apiType} (${r.count} occurrences)`}
-                        >
-                          {r.apiType} ({r.count})
-                        </button>
-                      ))}
-                    </span>
-                  ) : (
-                    <span className="font-mono capitalize">{redactionType.replace(/_/g, " ")}</span>
-                  )}
-                </td>
-              </tr>
-              <tr>
                 <td className="font-medium text-foreground w-24 pb-2">Provider</td>
                 <td className="pb-2 font-mono">{provider}</td>
               </tr>
@@ -1182,7 +1152,7 @@ export function DiffDialog({
         {/* Left pane: Post-Redaction (Redacted) diff */}
         <div className="w-full md:w-1/2 min-w-0 border-r border-border flex flex-col min-h-0">
           <div className="p-2 bg-muted/50 border-b border-border flex-shrink-0">
-            <h4 className="text-xs font-semibold text-muted-foreground">Post-Redaction (Redacted)</h4>
+            <h4 className="text-xs font-semibold text-muted-foreground">Redactions (with Surrounding Context)</h4>
           </div>
           <div
             ref={leftPaneDiffRef}
@@ -1207,20 +1177,34 @@ export function DiffDialog({
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left pb-2 font-medium text-foreground w-1/2">Redaction Label</th>
-                    <th className="text-left pb-2 font-medium text-foreground w-1/2">Source Value</th>
+                    <th className="text-left pb-2 font-medium text-foreground w-1/2">Pre-Redaction Value</th>
                   </tr>
                 </thead>
                 <tbody>
                   {redactionDetails.map((item) => (
                     <tr key={item.placeholder} className="border-b border-border/50 hover:bg-accent/50 cursor-pointer"
-                        onClick={() => scrollToRedactionType(item.placeholder)}
+                        onClick={() => {
+                          if (onAddFalsePositive) {
+                            onAddFalsePositive({
+                              value: item.sourceValue || item.placeholder,
+                              ruleId: item.ruleId,
+                              label: item.label,
+                              path: item.path,
+                            });
+                          }
+                          scrollToRedactionType(item.placeholder);
+                        }}
                         style={{ cursor: "pointer" }}>
-                      <td className="py-2 font-mono text-primary">
-                        {item.placeholder}
-                      </td>
-                      <td className="py-2 font-mono text-foreground break-all max-w-[300px]" title={item.sourceValue}>
-                        {item.sourceValue || "—"}
-                      </td>
+                      <Tooltip content={<div className="text-xs text-muted-foreground">Click to add false positive</div>} side="top" align="center" delayDuration={200}>
+                        <td className="py-2 font-mono text-primary">
+                          {item.placeholder}
+                        </td>
+                      </Tooltip>
+                      <Tooltip content={<div className="text-xs text-muted-foreground">Click to add false positive</div>} side="top" align="center" delayDuration={200}>
+                        <td className="py-2 font-mono text-foreground break-all max-w-[300px]" title={item.sourceValue}>
+                          {item.sourceValue || "—"}
+                        </td>
+                      </Tooltip>
                     </tr>
                   ))}
                 </tbody>
