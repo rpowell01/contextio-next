@@ -786,7 +786,6 @@ export default function RedactionsPage() {
         title="Redaction Diff"
         captureId={diffDialogData?.captureId || ""}
         sessionId={diffDialogData?.sessionId || null}
-        redactionType={diffDialogData?.redactionType || ""}
         provider={diffDialogData?.provider || ""}
         targetUrl={diffDialogData?.targetUrl || ""}
         timestamp={diffDialogData?.timestamp || ""}

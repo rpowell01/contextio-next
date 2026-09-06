@@ -47,7 +47,6 @@ interface DiffDialogProps {
   fullRedacted?: string;
   captureId: string;
   sessionId: string | null;
-  redactionType: string;
   provider: string;
   targetUrl: string;
   timestamp: string;
@@ -84,7 +83,6 @@ export function DiffDialog({
   fullRedacted,
   captureId,
   sessionId,
-  redactionType,
   provider,
   targetUrl,
   timestamp,
@@ -584,84 +582,6 @@ export function DiffDialog({
   // const rightPaneSyntaxRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
 
-  // Parse redaction types from the comma-separated string like "[RULE_REDACTED] (count), [RULE2_REDACTED] (count)"
-  // Also handles pipeline detector format "[RULE_N] (count)" where N is a sequence number
-  // Supports hyphens in rule names like "API-KEY-PREFIXED_REDACTED"
-  const rawRedactionTypes = useMemo(() => {
-    if (!redactionType) return [];
-    // Match both [RULE_REDACTED] (count) and [RULE_N] (count) formats
-    const matches = redactionType.match(/\[([A-Z][A-Z0-9_-]*(?:_REDACTED|_\d+))\]\s*\((\d+)\)/g);
-    if (!matches) return [];
-    return matches.map((m) => {
-      const ruleMatch = m.match(/\[([A-Z][A-Z0-9_-]*(?:_REDACTED|_\d+))\]/);
-      const countMatch = m.match(/\((\d+)\)/);
-      let apiType = ruleMatch ? ruleMatch[1] : "";
-      // Normalize pipeline format [PIPELINE_N] -> PIPELINE_REDACTED for display consistency
-      if (apiType.match(/_\d+$/)) {
-        apiType = apiType.replace(/_\d+$/, "_REDACTED");
-      }
-      return {
-        apiType,
-        count: countMatch ? parseInt(countMatch[1], 10) : 0,
-        display: m,
-      };
-    }).filter(r => r.apiType);
-  }, [redactionType]);
-
-  // Extract actual placeholder types (e.g., [API_KEY_REDACTED], [PIPELINE_1]) from post-redaction content
-  const placeholderTypes = useMemo(() => {
-    const types = new Set<string>();
-    // Check both pre and post content for placeholders
-    const allContent = [diffPreContent, diffPostContent].filter(Boolean).join("\n");
-    // Match both [RULE_REDACTED] and [RULE_N] formats
-    const matches = allContent.match(/\[([A-Z][A-Z0-9_]*(?:_REDACTED|_\d+))\]/g);
-    if (matches) {
-      matches.forEach(m => {
-        const t = m.match(/\[([A-Z][A-Z0-9_]*(?:_REDACTED|_\d+))\]/);
-        if (t) {
-          let type = t[1];
-          // Normalize pipeline format [PIPELINE_N] -> PIPELINE_REDACTED
-          if (type.match(/_\d+$/)) {
-            type = type.replace(/_\d+$/, "_REDACTED");
-          }
-          types.add(type);
-        }
-      });
-    }
-    return Array.from(types);
-  }, [diffPreContent, diffPostContent]);
-
-  // Map API type to placeholder type for scrolling
-  // e.g., API-KEY-PREFIXED_REDACTED -> API_KEY_REDACTED
-  const apiToPlaceholderMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const apiType of rawRedactionTypes.map(r => r.apiType)) {
-      // Try exact match first
-      if (placeholderTypes.includes(apiType)) {
-        map.set(apiType, apiType);
-        continue;
-      }
-      // Try normalized: remove hyphens, remove suffixes like -PREFIXED, -US, etc.
-      const normalized = apiType
-        .replace(/-/g, "_")
-        .replace(/_PREFIXED(_REDACTED)$/, "$1")
-        .replace(/_US(_REDACTED)$/, "$1");
-      if (placeholderTypes.includes(normalized)) {
-        map.set(apiType, normalized);
-        continue;
-      }
-      // Fallback: find placeholder that starts with the same base (e.g., API_KEY for API-KEY-PREFIXED)
-      const base = apiType.split("_")[0].replace(/-/g, "_");
-      const match = placeholderTypes.find(p => p.startsWith(base + "_"));
-      if (match) {
-        map.set(apiType, match);
-      } else {
-        map.set(apiType, apiType); // fallback to itself
-      }
-    }
-    return map;
-  }, [rawRedactionTypes, placeholderTypes]);
-
   // Helper to scroll a pane to center a target element both vertically and horizontally
   const scrollToTarget = useCallback((pane: HTMLDivElement, target: HTMLElement) => {
     if (!pane || !target) return;
@@ -692,21 +612,32 @@ export function DiffDialog({
     setTimeout(() => target.classList.remove("scroll-target-highlight"), 2000);
   }, []);
 
-  // Scroll to a specific redaction type in the left pane (Post-Redaction diff)
-  const scrollToRedactionType = useCallback((apiType: string) => {
+  // Scroll to a specific redaction in the left pane (Post-Redaction diff) by finding the exact placeholder text
+  const scrollToRedactionType = useCallback((placeholder: string) => {
     const leftPane = leftPaneDiffRef.current;
     if (!leftPane) return;
 
-    // Look up the placeholder type for this API type
-    const placeholderType = apiToPlaceholderMap.get(apiType) || apiType;
-    const kebabType = placeholderType.toLowerCase().replace(/_/g, "-");
+    // Extract the placeholder text from the placeholder string (e.g., "[URL_20]" -> "[URL_20]")
+    const placeholderMatch = placeholder.match(/\[([A-Z][A-Z0-9_]*(?:_REDACTED|_\d+))\]/);
+    if (!placeholderMatch) return;
+    const searchText = placeholderMatch[0]; // e.g., "[URL_20]"
 
-    // Find the first matching redaction in the left pane (Post-Redaction, where placeholders are)
-    const leftTarget = leftPane.querySelector(`mark[data-redaction="${kebabType}"]`);
-    if (leftTarget) {
-      scrollToTarget(leftPane, leftTarget as HTMLElement);
+    // Search for the exact placeholder text in the left pane's text content
+    // Walk through all text nodes to find the exact placeholder
+    const walker = document.createTreeWalker(leftPane, NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.textContent && node.textContent.includes(searchText)) {
+        // Found the text node containing the placeholder
+        // Get the parent element (should be the mark or surrounding element)
+        const parent = node.parentElement;
+        if (parent) {
+          scrollToTarget(leftPane, parent as HTMLElement);
+          break;
+        }
+      }
     }
-  }, [apiToPlaceholderMap, scrollToTarget]);
+  }, [scrollToTarget]);
 
   const handleScroll = useCallback((_: React.UIEvent<HTMLDivElement>) => {
     if (isScrollingRef.current) return;
