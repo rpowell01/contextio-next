@@ -534,28 +534,25 @@ export function DiffDialog({
   const scrollToTarget = useCallback((pane: HTMLDivElement, target: HTMLElement) => {
     if (!pane || !target) return;
 
-    // Get bounding rects
     const paneRect = pane.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
 
-    // Vertical: use scrollIntoView for smooth block scrolling
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
-
-    // Horizontal: manually calculate scrollLeft to center the target
-    // targetRect.left is relative to viewport, paneRect.left is viewport-relative
-    // We need: pane.scrollLeft + (targetRect.left - paneRect.left) - (paneRect.width - targetRect.width) / 2
     const targetCenterOffset = targetRect.left - paneRect.left;
     const paneCenterOffset = paneRect.width / 2;
     const targetCenterInPane = targetCenterOffset + targetRect.width / 2;
     const desiredScrollLeft = pane.scrollLeft + targetCenterInPane - paneCenterOffset;
 
-    // Apply with smooth animation
+    const targetTopInPane = targetRect.top - paneRect.top;
+    const paneCenterOffsetY = paneRect.height / 2;
+    const targetCenterInPaneY = targetTopInPane + targetRect.height / 2;
+    const desiredScrollTop = pane.scrollTop + targetCenterInPaneY - paneCenterOffsetY;
+
     pane.scrollTo({
+      top: desiredScrollTop,
       left: desiredScrollLeft,
       behavior: "smooth",
     });
 
-    // Highlight animation
     target.classList.add("scroll-target-highlight");
     setTimeout(() => target.classList.remove("scroll-target-highlight"), 2000);
   }, []);
