@@ -145,61 +145,9 @@ export function DiffDialog({
 
   
 
-  // Normalize post-content by replacing redaction placeholders with their pre-values.
-  // This ensures the diff algorithm treats redactions as "equal" chunks instead of
-  // delete+insert pairs, so both panes show the same structure with highlights.
-  const normalizedPostContent = useMemo(() => {
-    if (!matches || matches.length === 0) return diffPostContent;
-    
-    // Safety: limit total normalized content size to prevent "Invalid string length" errors
-    const MAX_NORMALIZED_LENGTH = 500000; // ~500KB max
-    let normalized = diffPostContent;
-    
-    // Early exit if content is already too large
-    if (normalized.length > MAX_NORMALIZED_LENGTH) {
-      console.warn("Post content too large for normalization, skipping");
-      return diffPostContent;
-    }
-
-    // Sort matches by postValue length descending to avoid partial replacements
-    const sortedMatches = [...matches].sort((a, b) => 
-      (b.postValue?.length ?? 0) - (a.postValue?.length ?? 0)
-    );
-
-    for (const match of sortedMatches) {
-      if (!match.postValue || !match.preValue) continue;
-
-      // Safety: skip if preValue is excessively large (would bloat normalized string)
-      if (match.preValue.length > 10000) {
-        console.debug("Skipping large preValue normalization", { preValueLength: match.preValue.length });
-        continue;
-      }
-
-      const escapedPostValue = match.postValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedPostValue, 'g');
-
-      // Perform replacement with safety check
-      const beforeLength = normalized.length;
-      normalized = normalized.replace(regex, match.preValue);
-
-      // Safety: abort if string grows too large
-      if (normalized.length > MAX_NORMALIZED_LENGTH) {
-        console.warn("Normalized content exceeded max length, reverting to original");
-        return diffPostContent;
-      }
-
-      // Safety: prevent infinite replacement loops
-      if (normalized.length === beforeLength && match.preValue.includes(match.postValue)) {
-        console.warn("Replacement would cause infinite loop, skipping");
-        continue;
-      }
-    }
-
-    return normalized;
-  }, [diffPostContent, matches]);
-
   // Also compute full diff for overview (optional, for non-redaction changes)
-  const fullDiff = useMemo(() => computeDiff(diffPreContent, normalizedPostContent), [diffPreContent, normalizedPostContent]);
+  // Use actual redacted content (with placeholders) so left pane shows post-redaction view
+  const fullDiff = useMemo(() => computeDiff(diffPreContent, diffPostContent), [diffPreContent, diffPostContent]);
 
   // Filter diff to show only changes with context
   const { chunks: diff, hasHiddenLines } = useMemo(
