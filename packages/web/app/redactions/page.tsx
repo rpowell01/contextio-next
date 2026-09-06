@@ -133,6 +133,7 @@ export default function RedactionsPage() {
   } | null>(null);
 
   const lastFocusedTrigger = useRef<HTMLElement | null>(null);
+  const [refreshDetailsTrigger, setRefreshDetailsTrigger] = useState(0);
 
   const Spinner = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
     <svg
@@ -200,6 +201,7 @@ export default function RedactionsPage() {
     const interval = setInterval(() => {
       console.log("[Redactions] Auto-refresh triggered");
       fetchSummary();
+      setRefreshDetailsTrigger((prev) => prev + 1);
     }, 60 * 1000); // 60 seconds
     return () => clearInterval(interval);
   }, [fetchSummary]);
@@ -352,7 +354,7 @@ export default function RedactionsPage() {
     };
     fetchDetails();
     return () => { cancelled = true; };
-  }, [page, debouncedFilters, sortConfig]);
+  }, [page, debouncedFilters, sortConfig, refreshDetailsTrigger]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
