@@ -7,9 +7,9 @@ import type {
   MetricsData,
   TimeRange,
 } from "@/types/api";
-import type { RateLimiterMetrics } from "@/types/client-api";
+import type { RateLimiterMetrics, RetryMetrics, RetryProviderMetrics } from "@/types/client-api";
 import { TrafficChart } from "@/components/traffic-chart";
-import { RateLimiterChart } from "@/components/rate-limiter-chart";
+import { CombinedRateLimiterRetryChart } from "@/components/combined-rate-limiter-retry-chart";
 import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
 import React from "react";
 import { usePageLoad } from "@/components/page-load-context";
@@ -66,6 +66,7 @@ function MetricsContent() {
 
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [rateLimiterMetrics, setRateLimiterMetrics] = useState<RateLimiterMetrics | null>(null);
+  const [retryMetrics, setRetryMetrics] = useState<RetryMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
@@ -73,6 +74,8 @@ function MetricsContent() {
   const [maxDataPoints, setMaxDataPoints] = useState<number>(50);
   const [rateLimiterError, setRateLimiterError] = useState<string | null>(null);
   const [rateLimiterLoading, setRateLimiterLoading] = useState(true);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [retryLoading, setRetryLoading] = useState(true);
 
   // Tab state - initialize to default, then sync from URL/localStorage
   const [activeTab, setActiveTab] = useState<MetricsTab>("rateLimiter");
@@ -134,11 +137,14 @@ function MetricsContent() {
   // Refs for polling
   const rateLimiterPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const metricsPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rateLimiterAbortControllerRef = useRef<AbortController | null>(null);
   const metricsAbortControllerRef = useRef<AbortController | null>(null);
+  const retryAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const requestIdRef = useRef(0);
   const metricsRequestIdRef = useRef(0);
+  const retryRequestIdRef = useRef(0);
 
   const progressPercent = progress && progress.total > 0
     ? Math.round((progress.current / progress.total) * 100)
@@ -278,6 +284,78 @@ function MetricsContent() {
     }
   }, []);
 
+  // Fetch retry metrics
+  const fetchRetryMetrics = useCallback(async (signal?: AbortSignal, requestId?: number, isInitialLoad = false): Promise<boolean> => {
+    if (!isMountedRef.current) return false;
+    if (isInitialLoad) {
+      setRetryLoading(true);
+    }
+    try {
+      const data = await apiClient.getRetryMetrics(signal);
+      // Only update if this request is still the latest one
+      if (isMountedRef.current && (requestId === undefined || requestId === retryRequestIdRef.current)) {
+        setRetryMetrics(prev => {
+          // Compare providers to avoid unnecessary re-renders
+          if (!prev || !prev.providers) return data;
+
+          const prevProviders = prev.providers;
+          const newProviders = data.providers;
+
+          if (prevProviders.length !== newProviders.length) return data;
+
+          for (let i = 0; i < prevProviders.length; i++) {
+            const pp = prevProviders[i];
+            const np = newProviders[i];
+            if (
+              pp.provider !== np.provider ||
+              pp.nonStreamingRetryAttempts !== np.nonStreamingRetryAttempts ||
+              pp.streamingRetryAttempts !== np.streamingRetryAttempts ||
+              pp.totalRetryAttempts !== np.totalRetryAttempts ||
+              pp.currentBufferUsageMB !== np.currentBufferUsageMB ||
+              pp.maxBufferUsageMB !== np.maxBufferUsageMB ||
+              pp.bufferUtilizationPercent !== np.bufferUtilizationPercent ||
+              pp.activeStreamingSessions !== np.activeStreamingSessions ||
+              pp.maxRetries !== np.maxRetries
+            ) {
+              return data;
+            }
+          }
+
+          // Also check totals
+          if (prev.totals.totalRetryAttempts !== data.totals.totalRetryAttempts ||
+              prev.totals.totalNonStreamingRetries !== data.totals.totalNonStreamingRetries ||
+              prev.totals.totalStreamingRetries !== data.totals.totalStreamingRetries ||
+              prev.totals.totalActiveStreamingSessions !== data.totals.totalActiveStreamingSessions ||
+              prev.totals.totalCurrentBufferUsageMB !== data.totals.totalCurrentBufferUsageMB ||
+              prev.totals.totalMaxBufferUsageMB !== data.totals.totalMaxBufferUsageMB) {
+            return data;
+          }
+
+          return prev;
+        });
+        setRetryError(null);
+      }
+      return true;
+    } catch (e) {
+      if (e instanceof RequestAbortedError) {
+        return false;
+      }
+      if (isMountedRef.current && (requestId === undefined || requestId === retryRequestIdRef.current)) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        setRetryMetrics(null);
+        setRetryError(`Failed to fetch retry metrics: ${errorMessage}`);
+      }
+      if (isConnectionError(e)) {
+        throw e;
+      }
+      return false;
+    } finally {
+      if (isMountedRef.current && (requestId === undefined || requestId === retryRequestIdRef.current) && isInitialLoad) {
+        setRetryLoading(false);
+      }
+    }
+  }, []);
+
   // Poll for rate limiter metrics (only when rate limiter tab is active or on initial load)
   useEffect(() => {
     // Only poll if rate limiter tab is active or we're doing initial load
@@ -340,6 +418,69 @@ function MetricsContent() {
       }
     };
   }, [fetchRateLimiterMetrics, activeTab]);
+
+  // Poll for retry metrics (only when rate limiter tab is active) - every 5 seconds
+  useEffect(() => {
+    // Only poll if rate limiter tab is active
+    const shouldPoll = activeTab === "rateLimiter";
+
+    if (!shouldPoll) {
+      // Clear any existing polling when not on rate limiter tab
+      if (retryPollingIntervalRef.current) {
+        clearTimeout(retryPollingIntervalRef.current);
+        retryPollingIntervalRef.current = null;
+      }
+      if (retryAbortControllerRef.current) {
+        retryAbortControllerRef.current.abort();
+        retryAbortControllerRef.current = null;
+      }
+      return;
+    }
+
+    let cancelled = false;
+    let isFirstPoll = true;
+
+    const runPoll = async () => {
+      if (cancelled) return;
+      // Abort any in-flight request from previous poll
+      if (retryAbortControllerRef.current) {
+        retryAbortControllerRef.current.abort();
+      }
+      // Increment request ID to track this request
+      const requestId = ++retryRequestIdRef.current;
+      // Create new abort controller for this request
+      const abortController = new AbortController();
+      retryAbortControllerRef.current = abortController;
+      try {
+        await fetchRetryMetrics(abortController.signal, requestId, isFirstPoll);
+      } catch (e) {
+        // Connection error - stop polling to avoid infinite failed requests
+        if (isConnectionError(e)) {
+          console.error("[metrics] Retry polling stopped due to connection error:", e.message);
+          return;
+        }
+      }
+      isFirstPoll = false;
+      // Schedule next poll after current one completes
+      if (!cancelled) {
+        retryPollingIntervalRef.current = setTimeout(runPoll, 5000);
+      }
+    };
+
+    runPoll();
+
+    return () => {
+      cancelled = true;
+      if (retryPollingIntervalRef.current) {
+        clearTimeout(retryPollingIntervalRef.current);
+        retryPollingIntervalRef.current = null;
+      }
+      if (retryAbortControllerRef.current) {
+        retryAbortControllerRef.current.abort();
+        retryAbortControllerRef.current = null;
+      }
+    };
+  }, [fetchRetryMetrics, activeTab]);
 
   // Poll for traffic metrics (only when traffic tab is active) - every 60 seconds
   useEffect(() => {
@@ -411,6 +552,13 @@ function MetricsContent() {
       fetchTrafficMetrics(undefined, undefined, true);
     }
   }, [fetchTrafficMetrics, activeTab, timeRange, maxDataPoints]);
+
+  // Fetch retry metrics when rate limiter tab becomes active
+  useEffect(() => {
+    if (activeTab === "rateLimiter") {
+      fetchRetryMetrics(undefined, undefined, true);
+    }
+  }, [fetchRetryMetrics, activeTab]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -523,10 +671,11 @@ function MetricsContent() {
       {activeTab === "rateLimiter" && (
         <div className="rounded-lg border p-4" role="tabpanel" id="panel-rateLimiter" aria-labelledby="tab-rateLimiter">
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Rate Limiter Status</h3>
-            {rateLimiterError && (
+            <h3 className="text-lg font-semibold mb-4">Rate Limiter / Retry Metrics</h3>
+            {(rateLimiterError || retryError) && (
               <div className="rounded-lg border border-destructive bg-destructive/10 p-4 mb-4">
-                <p className="text-destructive">{rateLimiterError}</p>
+                {rateLimiterError && <p className="text-destructive">Rate Limiter: {rateLimiterError}</p>}
+                {retryError && <p className="text-destructive">Retry Metrics: {retryError}</p>}
               </div>
             )}
             {rateLimiterMetrics && !rateLimiterMetrics.config.enabled && (
@@ -544,13 +693,50 @@ function MetricsContent() {
               </div>
             )}
             {rateLimiterMetrics && rateLimiterMetrics.config.enabled && (
-              <div className="space-y-4">
-                {/* Chart */}
+              <div className="space-y-6">
+                {/* Retry Summary Cards */}
+                {retryMetrics && (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                    <div className="rounded-lg border p-4 bg-amber/10 border-amber/20">
+                      <div className="text-sm text-muted-foreground">Total Retry Attempts</div>
+                      <div className="text-2xl font-bold text-amber-600">
+                        {formatNumber(retryMetrics.totals.totalRetryAttempts)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-4 bg-amber/10 border-amber/20">
+                      <div className="text-sm text-muted-foreground">Non-Streaming Retries</div>
+                      <div className="text-2xl font-bold text-amber-600">
+                        {formatNumber(retryMetrics.totals.totalNonStreamingRetries)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-4 bg-purple/10 border-purple/20">
+                      <div className="text-sm text-muted-foreground">Streaming Retries</div>
+                      <div className="text-2xl font-bold text-purple-600">
+                        {formatNumber(retryMetrics.totals.totalStreamingRetries)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-4 bg-blue/10 border-blue/20">
+                      <div className="text-sm text-muted-foreground">Active Streaming Sessions</div>
+                      <div className="text-2xl font-bold text-blue-600">
+                        {formatNumber(retryMetrics.totals.totalActiveStreamingSessions)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-4 bg-green/10 border-green/20">
+                      <div className="text-sm text-muted-foreground">Buffer Memory Active</div>
+                      <div className="text-2xl font-bold text-green-600">
+                        {retryMetrics.totals.totalCurrentBufferUsageMB.toFixed(1)} MB
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Combined Chart */}
                 <div className="rounded-lg border p-4">
-                  <h4 className="text-md font-medium mb-3">Request Bucket States</h4>
-                  <RateLimiterChart
-                    buckets={rateLimiterMetrics.buckets}
-                    loading={rateLimiterLoading}
+                  <h4 className="text-md font-medium mb-3">Combined Rate Limiter & Retry Metrics</h4>
+                  <CombinedRateLimiterRetryChart
+                    rateLimiterMetrics={rateLimiterMetrics}
+                    retryMetrics={retryMetrics}
+                    loading={rateLimiterLoading || retryLoading}
                     maxDataPoints={maxDataPoints}
                   />
                 </div>
@@ -625,6 +811,49 @@ function MetricsContent() {
                                 </td>
                               </tr>
                             ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Provider Retry Details Table */}
+                {retryMetrics && retryMetrics.providers.length > 0 && (
+                  <div className="rounded-lg border p-4">
+                    <h4 className="text-md font-medium mb-3">Provider Retry Details</h4>
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left p-2 font-medium">Provider</th>
+                            <th className="text-right p-2 font-medium">Non-Streaming Retries</th>
+                            <th className="text-right p-2 font-medium">Streaming Retries</th>
+                            <th className="text-right p-2 font-medium">Total Retries</th>
+                            <th className="text-right p-2 font-medium">Max Retries</th>
+                            <th className="text-right p-2 font-medium">Buffer Usage (MB)</th>
+                            <th className="text-right p-2 font-medium">Max Buffer (MB)</th>
+                            <th className="text-right p-2 font-medium">Buffer Util %</th>
+                            <th className="text-right p-2 font-medium">Active Sessions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {retryMetrics.providers.map((provider: RetryProviderMetrics) => (
+                            <tr key={provider.provider} className="border-b last:border-0">
+                              <td className="p-2 font-medium">{provider.provider}</td>
+                              <td className="p-2 text-right">{formatNumber(provider.nonStreamingRetryAttempts)}</td>
+                              <td className="p-2 text-right">{formatNumber(provider.streamingRetryAttempts)}</td>
+                              <td className="p-2 text-right font-mono">{formatNumber(provider.totalRetryAttempts)}</td>
+                              <td className="p-2 text-right">{formatNumber(provider.maxRetries)}</td>
+                              <td className="p-2 text-right">{provider.currentBufferUsageMB.toFixed(1)}</td>
+                              <td className="p-2 text-right">{provider.maxBufferUsageMB.toFixed(1)}</td>
+                              <td className="p-2 text-right">
+                                <span className={provider.bufferUtilizationPercent > 80 ? "text-destructive font-medium" : ""}>
+                                  {provider.bufferUtilizationPercent.toFixed(1)}%
+                                </span>
+                              </td>
+                              <td className="p-2 text-right">{formatNumber(provider.activeStreamingSessions)}</td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
