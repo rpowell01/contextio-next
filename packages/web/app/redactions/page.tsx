@@ -195,6 +195,15 @@ export default function RedactionsPage() {
     fetchSummary();
   }, [fetchSummary]);
 
+  // 60-second automatic refresh interval
+  useEffect(() => {
+    const interval = setInterval(() => {
+      console.log("[Redactions] Auto-refresh triggered");
+      fetchSummary();
+    }, 60 * 1000); // 60 seconds
+    return () => clearInterval(interval);
+  }, [fetchSummary]);
+
   const handleOpenDiff = useCallback(async (e: React.MouseEvent, row: RedactionCaptureRow) => {
     lastFocusedTrigger.current = e.currentTarget as HTMLElement;
 
