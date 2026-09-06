@@ -991,21 +991,6 @@ export function DiffDialog({
       });
   }, [matches]);
 
-  // Helper to convert placeholder like "[URL_1]" to API type "URL_REDACTED"
-  const placeholderToApiType = useCallback((placeholder: string): string => {
-    // Remove brackets, remove _N suffix, add _REDACTED
-    const match = placeholder.match(/\[([A-Z][A-Z0-9_]*)_\d+\]/);
-    if (match) {
-      return match[1] + "_REDACTED";
-    }
-    // Handle _REDACTED format
-    const redactedMatch = placeholder.match(/\[([A-Z][A-Z0-9_]*)_REDACTED\]/);
-    if (redactedMatch) {
-      return redactedMatch[1] + "_REDACTED";
-    }
-    return placeholder;
-  }, []);
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
@@ -1131,7 +1116,7 @@ export function DiffDialog({
                     <tr key={item.placeholder} className="border-b border-border/50 hover:bg-accent/50"
                         style={{ cursor: "default" }}>
                       <td className="py-2 font-mono text-primary whitespace-nowrap cursor-pointer"
-                          onClick={() => scrollToRedactionType(placeholderToApiType(item.placeholder))}>
+                          onClick={() => scrollToRedactionType(item.placeholder)}>
                         <Tooltip content={<div className="text-xs text-muted-foreground">Scroll to redaction</div>} side="top" align="center" delayDuration={200}>
                           <TooltipTrigger asChild>
                             <span>{item.placeholder}</span>
@@ -1150,7 +1135,7 @@ export function DiffDialog({
                                     path: item.path,
                                   });
                                 }
-                                scrollToRedactionType(placeholderToApiType(item.placeholder));
+                                scrollToRedactionType(item.placeholder);
                               }}>
                             {item.sourceValue || "—"}
                           </td>
