@@ -310,13 +310,13 @@ function CombinedRateLimiterRetryChartComponent({
     );
   }
 
-  // Find global max for X axis domain - we need to consider all three bar groups
+  // Find max for counts axis (requests + retries)
   const globalMaxRequests = Math.max(1, Math.max(...chartData.map((d) => d.totalRequestsInWindow)));
   const globalMaxRetries = Math.max(1, Math.max(...chartData.map((d) => d.totalRetryAttempts)));
-  const globalMaxBuffer = Math.max(1, Math.max(...chartData.map((d) => d.maxBufferUsageMB)));
+  const globalMaxCounts = Math.max(globalMaxRequests, globalMaxRetries);
   
-  // For grouped bar chart, we need a common scale. Use the max of all three.
-  const globalMax = Math.max(globalMaxRequests, globalMaxRetries, globalMaxBuffer);
+  // Find max for buffer axis (MB) - separate scale
+  const globalMaxBuffer = Math.max(1, Math.max(...chartData.map((d) => d.maxBufferUsageMB)));
 
   return (
     <div className="w-full space-y-4">
@@ -355,25 +355,43 @@ function CombinedRateLimiterRetryChartComponent({
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
 
-            {/* X Axis - Unified numeric scale */}
+            {/* X Axis 1 - Counts (Requests + Retries) - Bottom */}
             <XAxis
+              xAxisId={0}
               type="number"
               label={{
-                value: "Count / MB",
+                value: "Count (Requests / Retries)",
                 position: "outsideBottom",
-                offset: 100,
+                offset: 40,
                 style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
               }}
               tick={{ fill: "#666", fontSize: 11 }}
               tickLine={{ stroke: "#999" }}
               axisLine={{ stroke: "#999" }}
               tickFormatter={(value) => {
-                // Format differently based on magnitude
                 if (value >= 1000000) return formatNumber(value);
                 if (value >= 1000) return formatNumber(value);
                 return value.toFixed(value < 10 ? 1 : 0);
               }}
-              domain={[0, globalMax * 1.2]}
+              domain={[0, globalMaxCounts * 1.2]}
+            />
+            
+            {/* X Axis 2 - Buffer Usage (MB) - Top */}
+            <XAxis
+              xAxisId={1}
+              type="number"
+              label={{
+                value: "Buffer Usage (MB)",
+                position: "outsideTop",
+                offset: 40,
+                style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+              }}
+              tick={{ fill: "#666", fontSize: 11 }}
+              tickLine={{ stroke: "#999" }}
+              axisLine={{ stroke: "#999" }}
+              tickFormatter={(value) => value.toFixed(1)}
+              domain={[0, globalMaxBuffer * 1.2]}
+              orientation="top"
             />
 
             {/* Y Axis - Provider names */}
@@ -449,6 +467,7 @@ function CombinedRateLimiterRetryChartComponent({
 
             {/* GROUP 1: Request Buckets - Rate Limiter Usage */}
             <Bar
+              xAxisId={0}
               dataKey="totalRequestsInWindow"
               name="Request Buckets: Requests Used"
               fill="#3b82f6" // Blue for requests
@@ -457,6 +476,7 @@ function CombinedRateLimiterRetryChartComponent({
 
             {/* GROUP 2: Retry Attempts - Stacked Non-Streaming + Streaming */}
             <Bar
+              xAxisId={0}
               dataKey="nonStreamingRetryAttempts"
               name="Retry Attempts: Non-Streaming"
               fill="#f59e0b" // Amber for non-streaming
@@ -464,6 +484,7 @@ function CombinedRateLimiterRetryChartComponent({
               stackId="retries"
             />
             <Bar
+              xAxisId={0}
               dataKey="streamingRetryAttempts"
               name="Retry Attempts: Streaming"
               fill="#8b5cf6" // Purple for streaming (distinct from Request Buckets blue)
@@ -473,6 +494,7 @@ function CombinedRateLimiterRetryChartComponent({
 
             {/* GROUP 3: Streaming Retry Buffer Usage - Grouped bars (not stacked) */}
             <Bar
+              xAxisId={1}
               dataKey="maxBufferUsageMB"
               name="Buffer Usage: Max Buffer (MB)"
               fill="#d1d5db" // Light gray for max
@@ -480,6 +502,7 @@ function CombinedRateLimiterRetryChartComponent({
               stackId="buffer-max"
             />
             <Bar
+              xAxisId={1}
               dataKey="currentBufferUsageMB"
               name="Buffer Usage: Active Buffer (MB)"
               fill="#10b981" // Green for active buffer
@@ -488,11 +511,12 @@ function CombinedRateLimiterRetryChartComponent({
               stackId="buffer-current"
             />
 
-            {/* Reference lines for max retries and max buffer */}
+            {/* Reference lines for max retries (counts axis) and max buffer (buffer axis) */}
             {chartData.map((p, idx) => (
               <React.Fragment key={p.provider}>
                 {p.maxRetries > 0 && (
                   <ReferenceLine
+                    xAxisId={0}
                     x={p.maxRetries}
                     stroke="#f59e0b"
                     strokeWidth={1}
@@ -510,6 +534,7 @@ function CombinedRateLimiterRetryChartComponent({
                 )}
                 {p.maxBufferUsageMB > 0 && (
                   <ReferenceLine
+                    xAxisId={1}
                     x={p.maxBufferUsageMB}
                     stroke="#6b7280"
                     strokeWidth={1}

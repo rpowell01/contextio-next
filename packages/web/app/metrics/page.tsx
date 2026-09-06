@@ -137,14 +137,11 @@ function MetricsContent() {
   // Refs for polling
   const rateLimiterPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const metricsPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryPollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rateLimiterAbortControllerRef = useRef<AbortController | null>(null);
   const metricsAbortControllerRef = useRef<AbortController | null>(null);
-  const retryAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const requestIdRef = useRef(0);
   const metricsRequestIdRef = useRef(0);
-  const retryRequestIdRef = useRef(0);
 
   const progressPercent = progress && progress.total > 0
     ? Math.round((progress.current / progress.total) * 100)
@@ -293,7 +290,7 @@ function MetricsContent() {
     try {
       const data = await apiClient.getRetryMetrics(signal);
       // Only update if this request is still the latest one
-      if (isMountedRef.current && (requestId === undefined || requestId === retryRequestIdRef.current)) {
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
         setRetryMetrics(prev => {
           // Compare providers to avoid unnecessary re-renders
           if (!prev || !prev.providers) return data;
@@ -340,7 +337,7 @@ function MetricsContent() {
       if (e instanceof RequestAbortedError) {
         return false;
       }
-      if (isMountedRef.current && (requestId === undefined || requestId === retryRequestIdRef.current)) {
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
         const errorMessage = e instanceof Error ? e.message : String(e);
         setRetryMetrics(null);
         setRetryError(`Failed to fetch retry metrics: ${errorMessage}`);
@@ -350,15 +347,15 @@ function MetricsContent() {
       }
       return false;
     } finally {
-      if (isMountedRef.current && (requestId === undefined || requestId === retryRequestIdRef.current) && isInitialLoad) {
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current) && isInitialLoad) {
         setRetryLoading(false);
       }
     }
   }, []);
 
-  // Poll for rate limiter metrics (only when rate limiter tab is active or on initial load)
+  // Poll for rate limiter and retry metrics (only when rate limiter tab is active)
   useEffect(() => {
-    // Only poll if rate limiter tab is active or we're doing initial load
+    // Only poll if rate limiter tab is active
     const shouldPoll = activeTab === "rateLimiter";
 
     if (!shouldPoll) {
@@ -389,11 +386,15 @@ function MetricsContent() {
       const abortController = new AbortController();
       rateLimiterAbortControllerRef.current = abortController;
       try {
-        await fetchRateLimiterMetrics(abortController.signal, requestId, isFirstPoll);
+        // Fetch both rate limiter and retry metrics in parallel
+        await Promise.all([
+          fetchRateLimiterMetrics(abortController.signal, requestId, isFirstPoll),
+          fetchRetryMetrics(abortController.signal, requestId, isFirstPoll),
+        ]);
       } catch (e) {
         // Connection error - stop polling to avoid infinite failed requests
         if (isConnectionError(e)) {
-          console.error("[metrics] Rate limiter polling stopped due to connection error:", e.message);
+          console.error("[metrics] Rate limiter/retry polling stopped due to connection error:", e.message);
           return;
         }
       }
@@ -417,70 +418,7 @@ function MetricsContent() {
         rateLimiterAbortControllerRef.current = null;
       }
     };
-  }, [fetchRateLimiterMetrics, activeTab]);
-
-  // Poll for retry metrics (only when rate limiter tab is active) - every 5 seconds
-  useEffect(() => {
-    // Only poll if rate limiter tab is active
-    const shouldPoll = activeTab === "rateLimiter";
-
-    if (!shouldPoll) {
-      // Clear any existing polling when not on rate limiter tab
-      if (retryPollingIntervalRef.current) {
-        clearTimeout(retryPollingIntervalRef.current);
-        retryPollingIntervalRef.current = null;
-      }
-      if (retryAbortControllerRef.current) {
-        retryAbortControllerRef.current.abort();
-        retryAbortControllerRef.current = null;
-      }
-      return;
-    }
-
-    let cancelled = false;
-    let isFirstPoll = true;
-
-    const runPoll = async () => {
-      if (cancelled) return;
-      // Abort any in-flight request from previous poll
-      if (retryAbortControllerRef.current) {
-        retryAbortControllerRef.current.abort();
-      }
-      // Increment request ID to track this request
-      const requestId = ++retryRequestIdRef.current;
-      // Create new abort controller for this request
-      const abortController = new AbortController();
-      retryAbortControllerRef.current = abortController;
-      try {
-        await fetchRetryMetrics(abortController.signal, requestId, isFirstPoll);
-      } catch (e) {
-        // Connection error - stop polling to avoid infinite failed requests
-        if (isConnectionError(e)) {
-          console.error("[metrics] Retry polling stopped due to connection error:", e.message);
-          return;
-        }
-      }
-      isFirstPoll = false;
-      // Schedule next poll after current one completes
-      if (!cancelled) {
-        retryPollingIntervalRef.current = setTimeout(runPoll, 5000);
-      }
-    };
-
-    runPoll();
-
-    return () => {
-      cancelled = true;
-      if (retryPollingIntervalRef.current) {
-        clearTimeout(retryPollingIntervalRef.current);
-        retryPollingIntervalRef.current = null;
-      }
-      if (retryAbortControllerRef.current) {
-        retryAbortControllerRef.current.abort();
-        retryAbortControllerRef.current = null;
-      }
-    };
-  }, [fetchRetryMetrics, activeTab]);
+  }, [fetchRateLimiterMetrics, fetchRetryMetrics, activeTab]);
 
   // Poll for traffic metrics (only when traffic tab is active) - every 60 seconds
   useEffect(() => {
@@ -552,13 +490,6 @@ function MetricsContent() {
       fetchTrafficMetrics(undefined, undefined, true);
     }
   }, [fetchTrafficMetrics, activeTab, timeRange, maxDataPoints]);
-
-  // Fetch retry metrics when rate limiter tab becomes active
-  useEffect(() => {
-    if (activeTab === "rateLimiter") {
-      fetchRetryMetrics(undefined, undefined, true);
-    }
-  }, [fetchRetryMetrics, activeTab]);
 
   // Cleanup on unmount
   useEffect(() => {
