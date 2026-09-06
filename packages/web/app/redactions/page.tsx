@@ -692,7 +692,7 @@ export default function RedactionsPage() {
                         sessionId: "Session ID",
                         captureId: "Capture ID",
                         timestamp: "Date/Time",
-                        totalRedactions: "Cummulative Total (All Sessions)",
+                        totalRedactions: "Total / Session",
                         redactionsByType: "Types / Session",
                       };
                       const isLast = idx === columnOrder.length - 1;

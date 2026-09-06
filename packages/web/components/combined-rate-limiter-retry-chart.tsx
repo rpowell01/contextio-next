@@ -45,6 +45,25 @@ interface ProviderData {
   maxRetries: number;
 }
 
+// Color constants for consistent theming across charts
+const CHART_COLORS = {
+  // Request buckets
+  requestBucketsUsed: "#3b82f6",        // Blue
+  requestBucketsQueue: "#60a5fa",       // Light blue for queue
+  // Retry attempts
+  retryNonStreaming: "#f59e0b",         // Amber
+  retryStreaming: "#8b5cf6",            // Purple (distinct from blue)
+  // Buffer usage
+  bufferMax: "#d1d5db",                 // Gray for max capacity
+  bufferCurrent: "#10b981",             // Green for active usage
+  // Reference lines
+  threshold70: "#fbbf24",               // Amber for 70%
+  threshold90: "#ef4444",               // Red for 90%
+  maxRetries: "#f59e0b",                // Amber for max retries
+  maxBuffer: "#6b7280",                 // Gray for max buffer
+  maxRequests: "#6b7280",               // Gray for max requests (same as max buffer for consistency)
+} as const;
+
 /**
  * Format a percentage value to maximum 2 decimal places, trimming trailing zeros.
  * e.g., 50 -> "50", 50.5 -> "50.5", 50.555 -> "50.56", 50.50 -> "50.5"
@@ -53,12 +72,19 @@ function formatPercent(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
+interface BufferUsageShapeProps {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  payload: ProviderData | undefined;
+}
+
 /**
  * Custom shape for buffer usage bar - renders max buffer as background
  * and current usage as a green overlay capped at max.
  */
-const BufferUsageShape = (props: any) => {
-  const { x, y, width, height, payload } = props;
+const BufferUsageShape = ({ x, y, width, height, payload }: BufferUsageShapeProps) => {
   const data = payload;
   if (!data) return <g />;
 
@@ -81,7 +107,7 @@ const BufferUsageShape = (props: any) => {
         y={y}
         width={width}
         height={height}
-        fill="#d1d5db"
+        fill={CHART_COLORS.bufferMax}
         stroke="#9ca3af"
         strokeWidth={0.5}
       />
@@ -92,7 +118,7 @@ const BufferUsageShape = (props: any) => {
           y={y}
           width={Math.min(usageWidth, width)}
           height={height}
-          fill="#10b981"
+          fill={CHART_COLORS.bufferCurrent}
           opacity={0.9}
         />
       )}
@@ -399,9 +425,12 @@ function CombinedRateLimiterRetryChartComponent({
       </div>
 
       <div id="combined-chart-description" className="sr-only">
-        Grouped vertical bar chart displaying three metric groups per provider:
-        Request Buckets (rate limiter usage), Retry Attempts (non-streaming + streaming stacked),
-        and Streaming Retry Buffer Usage (max buffer as gray background with green active overlay). Hover bars for exact values and provider details.
+        Grouped vertical bar chart displaying three metric groups per AI provider:
+        1. Request Buckets (blue) — rate limiter usage showing requests used vs maximum capacity, with 70%, 90%, and 100% threshold lines.
+        2. Retry Attempts (amber + purple stacked) — non-streaming and streaming retry counts with max retries reference line.
+        3. Streaming Retry Buffer Usage (gray background with green overlay) — buffer capacity in MB with 70%, 90%, and 100% threshold lines.
+        Each provider shown as a row. Hover or focus any bar for detailed metrics including utilization percentages, queue lengths, and active sessions.
+        Color coding: Green = healthy (&lt;70&gt;), Amber = warning (70-89%), Red = critical (90&gt;). Blue represents request usage, purple represents streaming retries.
       </div>
 
       <div className="max-h-[700px] overflow-y-auto">
@@ -409,6 +438,7 @@ function CombinedRateLimiterRetryChartComponent({
           <BarChart
             data={chartData}
             aria-labelledby="combined-chart-description"
+            aria-label="Combined Rate Limiter and Retry Metrics Chart"
             role="img"
             layout="vertical"
             margin={{ top: 20, right: 20, bottom: 80, left: 160 }}
@@ -471,9 +501,10 @@ function CombinedRateLimiterRetryChartComponent({
             />
 
             <Tooltip
-              formatter={(value: number, name: string) => {
-                // Format based on the metric name
-                if (name.includes("Buffer")) {
+              formatter={(value: number, name: string, props: { xAxisId?: number } | undefined) => {
+                // Format based on the metric name and xAxisId
+                const isBufferAxis = props?.xAxisId === 1;
+                if (isBufferAxis || name.includes("Buffer")) {
                   return [value.toFixed(1) + " MB", name];
                 }
                 return [formatNumber(value), name];
@@ -481,26 +512,33 @@ function CombinedRateLimiterRetryChartComponent({
               labelFormatter={(label, payload) => {
                 if (payload && payload.length > 0 && payload[0].payload) {
                   const p = payload[0].payload;
-                  const parts = [`${p.provider}`];
+                  const parts = [`Provider: ${p.provider}`];
                   
                   // Request buckets info
                   if (p.requestBuckets > 0) {
+                    const maxReq = p.maxRequests + p.bufferCapacity;
+                    const queueInfo = p.totalQueueLength > 0 ? ` | Queued: ${formatNumber(p.totalQueueLength)}` : "";
+                    const utilColor = p.utilizationPercent >= 90 ? "🔴" : p.utilizationPercent >= 70 ? "🟡" : "🟢";
                     parts.push(
-                      `Buckets: ${p.requestBuckets} | Used: ${formatNumber(p.totalRequestsInWindow)}/${formatNumber(p.maxRequests + p.bufferCapacity)} (${formatPercent(p.utilizationPercent)}%)${p.totalQueueLength > 0 ? ` | Queued: ${p.totalQueueLength}` : ""}`
+                      `Buckets: ${p.requestBuckets} | Used: ${formatNumber(p.totalRequestsInWindow)}/${formatNumber(maxReq)} (${formatPercent(p.utilizationPercent)}% ${utilColor})${queueInfo}`
                     );
                   }
                   
                   // Retry attempts info
                   if (p.totalRetryAttempts > 0) {
+                    const retryTotal = p.nonStreamingRetryAttempts + p.streamingRetryAttempts;
+                    const retryRatio = p.maxRetries > 0 ? (retryTotal / p.maxRetries * 100).toFixed(1) : "0";
+                    const retryColor = parseFloat(retryRatio) >= 90 ? "🔴" : parseFloat(retryRatio) >= 70 ? "🟡" : "🟢";
                     parts.push(
-                      `Retries: Non-Stream ${formatNumber(p.nonStreamingRetryAttempts)} + Stream ${formatNumber(p.streamingRetryAttempts)} = ${formatNumber(p.totalRetryAttempts)} (Max: ${p.maxRetries})`
+                      `Retries: Non-Stream ${formatNumber(p.nonStreamingRetryAttempts)} + Stream ${formatNumber(p.streamingRetryAttempts)} = ${formatNumber(retryTotal)} / ${p.maxRetries} (${retryRatio}% ${retryColor})`
                     );
                   }
                   
                   // Buffer usage info
                   if (p.maxBufferUsageMB > 0) {
+                    const bufUtilColor = p.bufferUtilizationPercent >= 90 ? "🔴" : p.bufferUtilizationPercent >= 70 ? "🟡" : "🟢";
                     parts.push(
-                      `Buffer: ${p.currentBufferUsageMB.toFixed(1)}/${p.maxBufferUsageMB.toFixed(1)} MB (${p.bufferUtilizationPercent.toFixed(1)}%) | Sessions: ${p.activeStreamingSessions}`
+                      `Buffer: ${p.currentBufferUsageMB.toFixed(1)}/${p.maxBufferUsageMB.toFixed(1)} MB (${p.bufferUtilizationPercent.toFixed(1)}% ${bufUtilColor}) | Active Sessions: ${p.activeStreamingSessions}`
                     );
                   }
                   
@@ -513,7 +551,9 @@ function CombinedRateLimiterRetryChartComponent({
                 border: "1px solid #ddd",
                 borderRadius: "8px",
                 boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                maxWidth: "400px",
+                maxWidth: "480px",
+                fontSize: "12px",
+                lineHeight: "1.5",
               }}
               cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
             />
@@ -530,7 +570,7 @@ function CombinedRateLimiterRetryChartComponent({
               xAxisId={0}
               dataKey="totalRequestsInWindow"
               name="Request Buckets: Requests Used"
-              fill="#3b82f6" // Blue for requests
+              fill={CHART_COLORS.requestBucketsUsed}
               animationDuration={0}
             />
 
@@ -539,7 +579,7 @@ function CombinedRateLimiterRetryChartComponent({
               xAxisId={0}
               dataKey="nonStreamingRetryAttempts"
               name="Retry Attempts: Non-Streaming"
-              fill="#f59e0b" // Amber for non-streaming
+              fill={CHART_COLORS.retryNonStreaming}
               animationDuration={0}
               stackId="retries"
             />
@@ -547,7 +587,7 @@ function CombinedRateLimiterRetryChartComponent({
               xAxisId={0}
               dataKey="streamingRetryAttempts"
               name="Retry Attempts: Streaming"
-              fill="#8b5cf6" // Purple for streaming (distinct from Request Buckets blue)
+              fill={CHART_COLORS.retryStreaming}
               animationDuration={0}
               stackId="retries"
             />
@@ -557,49 +597,139 @@ function CombinedRateLimiterRetryChartComponent({
               xAxisId={1}
               dataKey="maxBufferUsageMB"
               name="Buffer Usage: Max Buffer (MB)"
-              fill="#d1d5db"
+              fill={CHART_COLORS.bufferMax}
               shape={BufferUsageShape}
               animationDuration={0}
             />
 
-            {/* Reference lines for max retries (counts axis) and max buffer (buffer axis) */}
+            {/* Reference lines for thresholds (counts axis - 70%, 90% of max) */}
             {chartData.map((p, idx) => (
               <React.Fragment key={p.provider}>
+                {/* Max requests threshold lines (70%, 90%, max) on counts axis */}
+                {p.maxRequests > 0 && (
+                  <>
+                    <ReferenceLine
+                      xAxisId={0}
+                      x={Math.round(p.maxRequests * 0.7)}
+                      stroke={CHART_COLORS.threshold70}
+                      strokeWidth={1}
+                      strokeDasharray="4 4"
+                      label={
+                        <Label
+                          value={`70% Max Requests (${Math.round(p.maxRequests * 0.7)})`}
+                          position="center"
+                          fill={CHART_COLORS.threshold70}
+                          fontSize={8}
+                          offset={10 + idx * 30}
+                        />
+                      }
+                    />
+                    <ReferenceLine
+                      xAxisId={0}
+                      x={Math.round(p.maxRequests * 0.9)}
+                      stroke={CHART_COLORS.threshold90}
+                      strokeWidth={1}
+                      strokeDasharray="4 4"
+                      label={
+                        <Label
+                          value={`90% Max Requests (${Math.round(p.maxRequests * 0.9)})`}
+                          position="center"
+                          fill={CHART_COLORS.threshold90}
+                          fontSize={8}
+                          offset={10 + idx * 30 + 15}
+                        />
+                      }
+                    />
+                    <ReferenceLine
+                      xAxisId={0}
+                      x={p.maxRequests + p.bufferCapacity}
+                      stroke={CHART_COLORS.maxRequests}
+                      strokeWidth={1}
+                      strokeDasharray="6 4"
+                      label={
+                        <Label
+                          value={`Max Requests (${formatNumber(p.maxRequests + p.bufferCapacity)})`}
+                          position="center"
+                          fill={CHART_COLORS.maxRequests}
+                          fontSize={8}
+                          fontWeight={600}
+                          offset={10 + idx * 30 + 30}
+                        />
+                      }
+                    />
+                  </>
+                )}
+                {/* Max retries reference line on counts axis */}
                 {p.maxRetries > 0 && (
                   <ReferenceLine
                     xAxisId={0}
                     x={p.maxRetries}
-                    stroke="#f59e0b"
+                    stroke={CHART_COLORS.maxRetries}
                     strokeWidth={1}
                     strokeDasharray="2 2"
                     label={
                       <Label
                         value={`${p.provider}: Max Retries (${p.maxRetries})`}
                         position="center"
-                        fill="#f59e0b"
+                        fill={CHART_COLORS.maxRetries}
                         fontSize={8}
-                        offset={10 + idx * 25}
+                        offset={10 + idx * 30 + 45}
                       />
                     }
                   />
                 )}
+                {/* Buffer usage threshold lines (70%, 90%, max) on buffer axis */}
                 {p.maxBufferUsageMB > 0 && (
-                  <ReferenceLine
-                    xAxisId={1}
-                    x={p.maxBufferUsageMB}
-                    stroke="#6b7280"
-                    strokeWidth={1}
-                    strokeDasharray="2 2"
-                    label={
-                      <Label
-                        value={`${p.provider}: Max Buffer (${p.maxBufferUsageMB.toFixed(1)} MB)`}
-                        position="center"
-                        fill="#6b7280"
-                        fontSize={8}
-                        offset={10 + idx * 25 + (p.maxRetries > 0 ? 15 : 0)}
-                      />
-                    }
-                  />
+                  <>
+                    <ReferenceLine
+                      xAxisId={1}
+                      x={p.maxBufferUsageMB * 0.7}
+                      stroke={CHART_COLORS.threshold70}
+                      strokeWidth={1}
+                      strokeDasharray="4 4"
+                      label={
+                        <Label
+                          value={`70% Max Buffer (${(p.maxBufferUsageMB * 0.7).toFixed(1)} MB)`}
+                          position="center"
+                          fill={CHART_COLORS.threshold70}
+                          fontSize={8}
+                          offset={10 + idx * 30}
+                        />
+                      }
+                    />
+                    <ReferenceLine
+                      xAxisId={1}
+                      x={p.maxBufferUsageMB * 0.9}
+                      stroke={CHART_COLORS.threshold90}
+                      strokeWidth={1}
+                      strokeDasharray="4 4"
+                      label={
+                        <Label
+                          value={`90% Max Buffer (${(p.maxBufferUsageMB * 0.9).toFixed(1)} MB)`}
+                          position="center"
+                          fill={CHART_COLORS.threshold90}
+                          fontSize={8}
+                          offset={10 + idx * 30 + 15}
+                        />
+                      }
+                    />
+                    <ReferenceLine
+                      xAxisId={1}
+                      x={p.maxBufferUsageMB}
+                      stroke={CHART_COLORS.maxBuffer}
+                      strokeWidth={1}
+                      strokeDasharray="2 2"
+                      label={
+                        <Label
+                          value={`${p.provider}: Max Buffer (${p.maxBufferUsageMB.toFixed(1)} MB)`}
+                          position="center"
+                          fill={CHART_COLORS.maxBuffer}
+                          fontSize={8}
+                          offset={10 + idx * 30 + 30}
+                        />
+                      }
+                    />
+                  </>
                 )}
               </React.Fragment>
             ))}
@@ -608,29 +738,41 @@ function CombinedRateLimiterRetryChartComponent({
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded" style={{ background: "#3b82f6" }} />
-          <span>Request Buckets: Used</span>
+      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground" role="list" aria-label="Chart legend">
+        <div className="flex items-center gap-2" role="listitem">
+          <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.requestBucketsUsed }} />
+          <span>Request Buckets: Requests Used</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded" style={{ background: "#f59e0b" }} />
+        <div className="flex items-center gap-2" role="listitem">
+          <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.retryNonStreaming }} />
           <span>Retry Attempts: Non-Streaming</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded" style={{ background: "#8b5cf6" }} />
+        <div className="flex items-center gap-2" role="listitem">
+          <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.retryStreaming }} />
           <span>Retry Attempts: Streaming</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-4 rounded" style={{ background: "linear-gradient(90deg, #d1d5db 50%, #10b981 50%)" }} />
+        <div className="flex items-center gap-2" role="listitem">
+          <div className="w-8 h-4 rounded" style={{ background: `linear-gradient(90deg, ${CHART_COLORS.bufferMax} 50%, ${CHART_COLORS.bufferCurrent} 50%)` }} />
           <span>Buffer: Max (gray) / Active (green overlay)</span>
         </div>
-        <div className="flex items-center gap-1 ml-4">
-          <div className="w-4 h-1" style={{ background: "#f59e0b", borderTop: "1px dashed #f59e0b" }} />
+        <div className="flex items-center gap-1 ml-4" role="listitem">
+          <div className="w-4 h-1" style={{ background: CHART_COLORS.threshold70, borderTop: `1px dashed ${CHART_COLORS.threshold70}` }} />
+          <span className="text-xs">70% Threshold</span>
+        </div>
+        <div className="flex items-center gap-1" role="listitem">
+          <div className="w-4 h-1" style={{ background: CHART_COLORS.threshold90, borderTop: `1px dashed ${CHART_COLORS.threshold90}` }} />
+          <span className="text-xs">90% Threshold</span>
+        </div>
+        <div className="flex items-center gap-1" role="listitem">
+          <div className="w-4 h-1" style={{ background: CHART_COLORS.maxRequests, borderTop: `1px dashed ${CHART_COLORS.maxRequests}` }} />
+          <span className="text-xs">Max Requests</span>
+        </div>
+        <div className="flex items-center gap-1" role="listitem">
+          <div className="w-4 h-1" style={{ background: CHART_COLORS.maxRetries, borderTop: `1px dashed ${CHART_COLORS.maxRetries}` }} />
           <span className="text-xs">Max Retries</span>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-4 h-1" style={{ background: "#6b7280", borderTop: "1px dashed #6b7280" }} />
+        <div className="flex items-center gap-1" role="listitem">
+          <div className="w-4 h-1" style={{ background: CHART_COLORS.maxBuffer, borderTop: `1px dashed ${CHART_COLORS.maxBuffer}` }} />
           <span className="text-xs">Max Buffer</span>
         </div>
       </div>

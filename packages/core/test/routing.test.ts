@@ -119,9 +119,9 @@ describe("classifyRequest", () => {
     assert.equal(result.provider, "openai");
   });
 
-  it("returns unknown for unrecognized paths", () => {
+  it("defaults to openai for unrecognized paths", () => {
     const result = classifyRequest("/unknown/path", {});
-    assert.equal(result.provider, "unknown");
+    assert.equal(result.provider, "openai");
     assert.equal(result.apiFormat, "unknown");
   });
 
@@ -206,6 +206,70 @@ it("classifies Kilo by x-kilo-baseurl header", () => {
   });
   assert.equal(result.provider, "kilo");
   assert.equal(result.apiFormat, "chat-completions");
+});
+
+it("classifies Kilo by x-target-url header with api.kilo.ai domain (no upstream configured)", () => {
+  const result = classifyRequest("/v1/chat/completions", {
+    "x-target-url": "https://api.kilo.ai/api/gateway/v1/chat/completions"
+  });
+  assert.equal(result.provider, "kilo");
+  assert.equal(result.apiFormat, "chat-completions");
+});
+
+it("classifies Kilo by x-target-url header with subdomain.kilo.ai domain (no upstream configured)", () => {
+  const result = classifyRequest("/v1/chat/completions", {
+    "x-target-url": "https://subdomain.kilo.ai/api/gateway/v1/chat/completions"
+  });
+  assert.equal(result.provider, "kilo");
+  assert.equal(result.apiFormat, "chat-completions");
+});
+
+it("classifies NVIDIA by x-target-url header with integrate.api.nvidia.com domain (no upstream configured)", () => {
+  const result = classifyRequest("/v1/chat/completions", {
+    "x-target-url": "https://integrate.api.nvidia.com/v1/chat/completions"
+  });
+  assert.equal(result.provider, "nvidia");
+  assert.equal(result.apiFormat, "chat-completions");
+});
+
+it("classifies NVIDIA by x-target-url header with api.nvidia.com domain (no upstream configured)", () => {
+  const result = classifyRequest("/v1/chat/completions", {
+    "x-target-url": "https://api.nvidia.com/v1/chat/completions"
+  });
+  assert.equal(result.provider, "nvidia");
+  assert.equal(result.apiFormat, "chat-completions");
+});
+
+it("classifies NVIDIA by x-target-url header with subdomain.nvidia.com domain (no upstream configured)", () => {
+  const result = classifyRequest("/v1/chat/completions", {
+    "x-target-url": "https://subdomain.nvidia.com/v1/chat/completions"
+  });
+  assert.equal(result.provider, "nvidia");
+  assert.equal(result.apiFormat, "chat-completions");
+});
+
+it("classifies OpenRouter by x-target-url header with openrouter.ai domain (no upstream configured)", () => {
+  const result = classifyRequest("/v1/chat/completions", {
+    "x-target-url": "https://openrouter.ai/api/v1/chat/completions"
+  });
+  assert.equal(result.provider, "openrouter");
+  assert.equal(result.apiFormat, "chat-completions");
+});
+
+it("classifies Anthropic by x-target-url header with anthropic.com domain (no upstream configured)", () => {
+  const result = classifyRequest("/v1/messages", {
+    "x-target-url": "https://api.anthropic.com/v1/messages"
+  });
+  assert.equal(result.provider, "anthropic");
+  assert.equal(result.apiFormat, "anthropic-messages");
+});
+
+it("classifies Google/Gemini by x-target-url header with googleapis.com domain (no upstream configured)", () => {
+  const result = classifyRequest("/models/gemini-pro:generateContent", {
+    "x-target-url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+  });
+  assert.equal(result.provider, "gemini");
+  assert.equal(result.apiFormat, "gemini");
 });
 
 it("ignores provider headers when strictUrlForwarding is true and classifies by path", () => {
@@ -722,15 +786,16 @@ it("still detects NVIDIA by Bearer token in strict mode (token detection unaffec
   assert.equal(result.targetUrl, "https://integrate.api.nvidia.com/v1/chat/completions");
 });
 
-it("returns undefined targetUrl for unknown provider", () => {
+it("returns openai upstream for unrecognized provider (defaults to openai)", () => {
   const result = resolveTargetUrl(
     "/unknown/path",
     "",
     {},
     mockUpstreams,
   );
-  assert.equal(result.provider, "unknown");
-  assert.equal(result.targetUrl, undefined);
+  // classifyRequest defaults to openai for unrecognized paths, so resolveTargetUrl returns openai upstream
+  assert.equal(result.provider, "openai");
+  assert.ok(result.targetUrl !== undefined);
 });
 });
 

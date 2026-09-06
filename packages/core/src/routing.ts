@@ -162,27 +162,110 @@ export function classifyRequest(
   // This handles cases where the client sends requests to the proxy with an explicit
   // target URL (e.g., via mitmproxy or direct forwarding)
   const targetUrlHeader = headers["x-target-url"];
-  if (targetUrlHeader && typeof targetUrlHeader === "string" && upstreams) {
+  if (targetUrlHeader && typeof targetUrlHeader === "string") {
     try {
       const targetUrlObj = new URL(targetUrlHeader);
       const hostname = targetUrlObj.hostname;
-      for (const [upstreamProvider, upstreamUrl] of Object.entries(upstreams)) {
-        if (upstreamUrl) {
-          const upstreamUrlObj = new URL(upstreamUrl);
-          if (hostname === upstreamUrlObj.hostname || hostname.endsWith(`.${upstreamUrlObj.hostname}`)) {
-            // For NVIDIA, OpenRouter, Kilo - they use chat-completions format
-            let apiFormat: ApiFormat = "chat-completions";
-            if (upstreamProvider === "anthropic") apiFormat = "anthropic-messages";
-            else if (upstreamProvider === "gemini" || upstreamProvider === "vertex") apiFormat = "gemini";
-            else if (upstreamProvider === "chatgpt") apiFormat = "chatgpt-backend";
-            else if (upstreamProvider === "openai") apiFormat = "chat-completions";
 
-            if (process.env.DEBUG_ROUTING === "true") {
-              console.error(
-                `[DEBUG_ROUTING] Provider fallback detection via x-target-url: ${upstreamProvider} (${hostname})`,
-              );
+      // First, check for known provider domains (before upstream matching)
+      // This handles cases where the client sends requests with x-target-url to known provider domains
+      // but hasn't configured the corresponding upstream in proxy config.
+      if (!strictUrlForwarding) {
+        // Kilo Code Gateway domains
+        if (
+          hostname === "api.kilo.ai" ||
+          hostname === "kilo.ai" ||
+          hostname.endsWith(".kilo.ai")
+        ) {
+          if (process.env.DEBUG_ROUTING === "true") {
+            console.error(
+              `[DEBUG_ROUTING] Detected Kilo Code Gateway via x-target-url: ${hostname}`,
+            );
+          }
+          return { provider: "kilo", apiFormat: "chat-completions" };
+        }
+
+        // NVIDIA domains (integrate.api.nvidia.com, api.nvidia.com, etc.)
+        if (
+          hostname === "integrate.api.nvidia.com" ||
+          hostname === "api.nvidia.com" ||
+          hostname.endsWith(".api.nvidia.com") ||
+          hostname.endsWith(".nvidia.com")
+        ) {
+          if (process.env.DEBUG_ROUTING === "true") {
+            console.error(
+              `[DEBUG_ROUTING] Detected NVIDIA via x-target-url: ${hostname}`,
+            );
+          }
+          return { provider: "nvidia", apiFormat: "chat-completions" };
+        }
+
+        // OpenRouter domains
+        if (
+          hostname === "openrouter.ai" ||
+          hostname === "api.openrouter.ai" ||
+          hostname.endsWith(".openrouter.ai")
+        ) {
+          if (process.env.DEBUG_ROUTING === "true") {
+            console.error(
+              `[DEBUG_ROUTING] Detected OpenRouter via x-target-url: ${hostname}`,
+            );
+          }
+          return { provider: "openrouter", apiFormat: "chat-completions" };
+        }
+
+        // Anthropic domains
+        if (
+          hostname === "api.anthropic.com" ||
+          hostname.endsWith(".anthropic.com")
+        ) {
+          if (process.env.DEBUG_ROUTING === "true") {
+            console.error(
+              `[DEBUG_ROUTING] Detected Anthropic via x-target-url: ${hostname}`,
+            );
+          }
+          return { provider: "anthropic", apiFormat: "anthropic-messages" };
+        }
+
+        // Google/Gemini domains
+        if (
+          hostname === "generativelanguage.googleapis.com" ||
+          hostname === "aiplatform.googleapis.com" ||
+          hostname.endsWith(".googleapis.com")
+        ) {
+          if (process.env.DEBUG_ROUTING === "true") {
+            console.error(
+              `[DEBUG_ROUTING] Detected Google/Gemini via x-target-url: ${hostname}`,
+            );
+          }
+          return { provider: "gemini", apiFormat: "gemini" };
+        }
+
+        // Vertex AI domains (uses googleapis.com but with specific path patterns)
+        // Vertex is already handled by path-based classification, but we can also
+        // detect by domain if needed
+      }
+
+      // Then, match against configured upstreams
+      if (upstreams) {
+        for (const [upstreamProvider, upstreamUrl] of Object.entries(upstreams)) {
+          if (upstreamUrl) {
+            const upstreamUrlObj = new URL(upstreamUrl);
+            if (hostname === upstreamUrlObj.hostname || hostname.endsWith(`.${upstreamUrlObj.hostname}`)) {
+              // For NVIDIA, OpenRouter, Kilo - they use chat-completions format
+              let apiFormat: ApiFormat = "chat-completions";
+              if (upstreamProvider === "anthropic") apiFormat = "anthropic-messages";
+              else if (upstreamProvider === "gemini" || upstreamProvider === "vertex") apiFormat = "gemini";
+              else if (upstreamProvider === "chatgpt") apiFormat = "chatgpt-backend";
+              else if (upstreamProvider === "openai") apiFormat = "chat-completions";
+
+              if (process.env.DEBUG_ROUTING === "true") {
+                console.error(
+                  `[DEBUG_ROUTING] Provider fallback detection via x-target-url: ${upstreamProvider} (${hostname})`,
+                );
+              }
+              return { provider: upstreamProvider as Provider, apiFormat };
             }
-            return { provider: upstreamProvider as Provider, apiFormat };
           }
         }
       }
