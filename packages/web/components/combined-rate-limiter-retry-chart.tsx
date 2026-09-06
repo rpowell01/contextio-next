@@ -54,6 +54,66 @@ function formatPercent(value: number): string {
 }
 
 /**
+ * Custom shape for buffer usage bar - renders max buffer as background
+ * and current usage as a green overlay capped at max.
+ */
+const BufferUsageShape = (props: any) => {
+  const { x, y, width, height, payload } = props;
+  const data = payload;
+  if (!data) return <g />;
+
+  const maxBuffer = data.maxBufferUsageMB ?? 0;
+  const currentBuffer = data.currentBufferUsageMB ?? 0;
+  const bufferUtilization = data.bufferUtilizationPercent ?? 0;
+
+  if (maxBuffer === 0) return <g />;
+
+  // Current usage cannot exceed max - cap it visually
+  const cappedCurrent = Math.min(currentBuffer, maxBuffer);
+  const usageRatio = cappedCurrent / maxBuffer;
+  const usageWidth = usageRatio * width;
+
+  return (
+    <g>
+      {/* Max buffer background - gray */}
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill="#d1d5db"
+        stroke="#9ca3af"
+        strokeWidth={0.5}
+      />
+      {/* Current usage overlay - green, capped at max */}
+      {cappedCurrent > 0 && (
+        <rect
+          x={x}
+          y={y}
+          width={Math.min(usageWidth, width)}
+          height={height}
+          fill="#10b981"
+          opacity={0.9}
+        />
+      )}
+      {/* Utilization percentage label at end of max bar */}
+      {bufferUtilization > 0 && (
+        <text
+          x={x + width + 8}
+          y={y + height / 2 + 4}
+          fill="#6b7280"
+          fontSize={10}
+          fontWeight={500}
+          dominantBaseline="middle"
+        >
+          {bufferUtilization.toFixed(1)}%
+        </text>
+      )}
+    </g>
+  );
+};
+
+/**
  * Downsample data to a maximum number of points by grouping adjacent points
  * and taking the max totalRequestsInWindow in each group (to preserve most constrained providers).
  */
@@ -341,7 +401,7 @@ function CombinedRateLimiterRetryChartComponent({
       <div id="combined-chart-description" className="sr-only">
         Grouped vertical bar chart displaying three metric groups per provider:
         Request Buckets (rate limiter usage), Retry Attempts (non-streaming + streaming stacked),
-        and Streaming Retry Buffer Usage (max vs active grouped). Hover bars for exact values and provider details.
+        and Streaming Retry Buffer Usage (max buffer as gray background with green active overlay). Hover bars for exact values and provider details.
       </div>
 
       <div className="max-h-[700px] overflow-y-auto">
@@ -492,23 +552,14 @@ function CombinedRateLimiterRetryChartComponent({
               stackId="retries"
             />
 
-            {/* GROUP 3: Streaming Retry Buffer Usage - Grouped bars (not stacked) */}
+            {/* GROUP 3: Streaming Retry Buffer Usage - Custom shape with max as background, current as overlay */}
             <Bar
               xAxisId={1}
               dataKey="maxBufferUsageMB"
               name="Buffer Usage: Max Buffer (MB)"
-              fill="#d1d5db" // Light gray for max
+              fill="#d1d5db"
+              shape={BufferUsageShape}
               animationDuration={0}
-              stackId="buffer-max"
-            />
-            <Bar
-              xAxisId={1}
-              dataKey="currentBufferUsageMB"
-              name="Buffer Usage: Active Buffer (MB)"
-              fill="#10b981" // Green for active buffer
-              opacity={0.9}
-              animationDuration={0}
-              stackId="buffer-current"
             />
 
             {/* Reference lines for max retries (counts axis) and max buffer (buffer axis) */}
@@ -571,12 +622,8 @@ function CombinedRateLimiterRetryChartComponent({
           <span>Retry Attempts: Streaming</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded" style={{ background: "#d1d5db" }} />
-          <span>Buffer: Max</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded" style={{ background: "#10b981" }} />
-          <span>Buffer: Active</span>
+          <div className="w-8 h-4 rounded" style={{ background: "linear-gradient(90deg, #d1d5db 50%, #10b981 50%)" }} />
+          <span>Buffer: Max (gray) / Active (green overlay)</span>
         </div>
         <div className="flex items-center gap-1 ml-4">
           <div className="w-4 h-1" style={{ background: "#f59e0b", borderTop: "1px dashed #f59e0b" }} />
