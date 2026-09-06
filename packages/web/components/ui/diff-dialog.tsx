@@ -612,32 +612,28 @@ export function DiffDialog({
     setTimeout(() => target.classList.remove("scroll-target-highlight"), 2000);
   }, []);
 
-  // Scroll to a specific redaction in the left pane (Post-Redaction diff) by finding the exact placeholder text
+  // Scroll to a specific redaction in the left pane (Post-Redaction diff) by finding the mark element with matching data-match-index
   const scrollToRedactionType = useCallback((placeholder: string) => {
     const leftPane = leftPaneDiffRef.current;
     if (!leftPane) return;
 
-    // Extract the placeholder text from the placeholder string (e.g., "[URL_20]" -> "[URL_20]")
-    const placeholderMatch = placeholder.match(/\[([A-Z][A-Z0-9_]*(?:_REDACTED|_\d+))\]/);
-    if (!placeholderMatch) return;
-    const searchText = placeholderMatch[0]; // e.g., "[URL_20]"
-
-    // Search for the exact placeholder text in the left pane's text content
-    // Walk through all text nodes to find the exact placeholder
-    const walker = document.createTreeWalker(leftPane, NodeFilter.SHOW_TEXT, null);
-    let node;
-    while ((node = walker.nextNode())) {
-      if (node.textContent && node.textContent.includes(searchText)) {
-        // Found the text node containing the placeholder
-        // Get the parent element (should be the mark or surrounding element)
-        const parent = node.parentElement;
-        if (parent) {
-          scrollToTarget(leftPane, parent as HTMLElement);
-          break;
-        }
-      }
+    // Find the index in the matches array for this placeholder
+    // redactionDetails is built from matches grouped by unique postValue
+    // So we need to find the first match in the full matches array with this postValue
+    const matchIndex = (matches ?? []).findIndex(m => m.postValue === placeholder);
+    if (matchIndex === -1) {
+      console.debug("No match found for placeholder", placeholder);
+      return;
     }
-  }, [scrollToTarget]);
+
+    // Find the mark element with this data-match-index
+    const target = leftPane.querySelector(`mark[data-match-index="${matchIndex}"]`);
+    if (target) {
+      scrollToTarget(leftPane, target as HTMLElement);
+    } else {
+      console.debug("No mark element found for matchIndex", matchIndex);
+    }
+  }, [matches, scrollToTarget]);
 
   const handleScroll = useCallback((_: React.UIEvent<HTMLDivElement>) => {
     if (isScrollingRef.current) return;
