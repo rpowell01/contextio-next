@@ -612,28 +612,20 @@ export function DiffDialog({
     setTimeout(() => target.classList.remove("scroll-target-highlight"), 2000);
   }, []);
 
-  // Scroll to a specific redaction in the left pane (Post-Redaction diff) by finding the mark element with matching data-match-index
+  // Scroll to a specific redaction in the left pane (Post-Redaction diff) by finding the mark element with matching data-placeholder
   const scrollToRedactionType = useCallback((placeholder: string) => {
     const leftPane = leftPaneDiffRef.current;
     if (!leftPane) return;
 
-    // Find the index in the matches array for this placeholder
-    // redactionDetails is built from matches grouped by unique postValue
-    // So we need to find the first match in the full matches array with this postValue
-    const matchIndex = (matches ?? []).findIndex(m => m.postValue === placeholder);
-    if (matchIndex === -1) {
-      console.debug("No match found for placeholder", placeholder);
-      return;
-    }
-
-    // Find the mark element with this data-match-index
-    const target = leftPane.querySelector(`mark[data-match-index="${matchIndex}"]`);
+    // Find the mark element with this data-placeholder (e.g., "[URL_1]")
+    // This works regardless of chunk boundaries or local match indices
+    const target = leftPane.querySelector(`mark[data-placeholder="${placeholder}"]`);
     if (target) {
       scrollToTarget(leftPane, target as HTMLElement);
     } else {
-      console.debug("No mark element found for matchIndex", matchIndex);
+      console.debug("No mark element found for placeholder", placeholder);
     }
-  }, [matches, scrollToTarget]);
+  }, [scrollToTarget]);
 
   const handleScroll = useCallback((_: React.UIEvent<HTMLDivElement>) => {
     if (isScrollingRef.current) return;
@@ -728,6 +720,7 @@ export function DiffDialog({
               <mark
                 className="redaction-placeholder pre-redaction-highlight cursor-pointer hover:bg-primary/10"
                 data-redaction={postValue.replace(/[\[\]]/g, "").toLowerCase().replace(/_/g, "-").replace(/-\d+$/, "-redacted")}
+                data-placeholder={postValue}
                 data-match-index={matchIdx}
                 onClick={handleClick}
               >
@@ -819,6 +812,7 @@ export function DiffDialog({
                         <mark
                           className="redaction-placeholder cursor-pointer hover:bg-primary/10"
                           data-redaction={normalizedPlaceholder}
+                          data-placeholder={placeholder}
                           data-match-index={matchIndexAttr}
                           onClick={() => {
                             if (onAddFalsePositive) {
