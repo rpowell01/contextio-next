@@ -563,7 +563,7 @@ export default function RedactionsPage() {
             <div className="rounded-lg border p-4 bg-accent border-border"
                  title="Sum of maximum redactions per session. For each session, the highest count of each placeholder type across all its captures is used. This matches the 'Unique Redactions (per session)' on the Metrics page.">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Totals Redactions / Session</div>
+                <div className="text-sm text-muted-foreground">Total / Session</div>
                 <button
                   onClick={fetchSummary}
                   disabled={refreshing}
@@ -681,8 +681,8 @@ export default function RedactionsPage() {
                         sessionId: "Session ID",
                         captureId: "Capture ID",
                         timestamp: "Date/Time",
-                        totalRedactions: "Totals Redactions / Session",
-                        redactionsByType: "Redaction by Type / Session",
+                        totalRedactions: "Total / Session",
+                        redactionsByType: "Types / Session",
                       };
                       const isLast = idx === columnOrder.length - 1;
                       return (
