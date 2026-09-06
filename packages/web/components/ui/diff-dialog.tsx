@@ -1135,7 +1135,6 @@ export function DiffDialog({
                                     path: item.path,
                                   });
                                 }
-                                scrollToRedactionType(item.placeholder);
                               }}>
                             {item.sourceValue || "—"}
                           </td>
