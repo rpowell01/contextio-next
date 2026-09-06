@@ -1187,24 +1187,28 @@ export function DiffDialog({
                       <td className="py-2 font-mono text-primary whitespace-nowrap cursor-pointer"
                           onClick={() => scrollToRedactionType(item.placeholder)}>
                         <Tooltip content={<div className="text-xs text-muted-foreground">Scroll to redaction</div>} side="top" align="center" delayDuration={200}>
-                          {item.placeholder}
+                          <TooltipTrigger asChild>
+                            <span>{item.placeholder}</span>
+                          </TooltipTrigger>
                         </Tooltip>
                       </td>
                       <Tooltip content={<div className="text-xs text-muted-foreground">Click to add false positive</div>} side="top" align="center" delayDuration={200}>
-                        <td className="py-2 font-mono text-foreground break-all max-w-[300px] whitespace-nowrap cursor-pointer" title={item.sourceValue}
-                            onClick={() => {
-                              if (onAddFalsePositive) {
-                                onAddFalsePositive({
-                                  value: item.sourceValue || item.placeholder,
-                                  ruleId: item.ruleId,
-                                  label: item.label,
-                                  path: item.path,
-                                });
-                              }
-                              scrollToRedactionType(item.placeholder);
-                            }}>
-                          {item.sourceValue || "—"}
-                        </td>
+                        <TooltipTrigger asChild>
+                          <td className="py-2 font-mono text-foreground break-all max-w-[300px] whitespace-nowrap cursor-pointer" title={item.sourceValue}
+                              onClick={() => {
+                                if (onAddFalsePositive) {
+                                  onAddFalsePositive({
+                                    value: item.sourceValue || item.placeholder,
+                                    ruleId: item.ruleId,
+                                    label: item.label,
+                                    path: item.path,
+                                  });
+                                }
+                                scrollToRedactionType(item.placeholder);
+                              }}>
+                            {item.sourceValue || "—"}
+                          </td>
+                        </TooltipTrigger>
                       </Tooltip>
                     </tr>
                   ))}
