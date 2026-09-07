@@ -17,6 +17,76 @@ import {
 } from "recharts";
 import { Copy, Loader2 } from "lucide-react";
 
+/**
+ * Custom tooltip content that renders each metric group on its own line
+ * to prevent overflow from combining multiple metrics on the first line.
+ */
+function CustomTooltipContent({ active, payload }: { active?: boolean; payload?: Array<{ payload: ProviderData; name: string; value: number; color: string }> }) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const p = payload[0].payload;
+  const parts: React.ReactNode[] = [];
+
+  // Provider name header
+  parts.push(
+    <div key="provider" style={{ fontWeight: 600, marginBottom: 4, color: "rgb(var(--color-popover-foreground))" }}>
+      Provider: {p.provider}
+    </div>
+  );
+
+  // Request buckets info
+  if (p.requestBuckets > 0) {
+    const maxReq = p.maxRequests + p.bufferCapacity;
+    const queueInfo = p.totalQueueLength > 0 ? ` | Queued: ${formatNumber(p.totalQueueLength)}` : "";
+    const utilColor = p.utilizationPercent >= 90 ? "🔴" : p.utilizationPercent >= 70 ? "🟡" : "🟢";
+    parts.push(
+      <div key="buckets" style={{ marginBottom: 2, fontSize: "11px", color: "rgb(var(--color-popover-foreground))" }}>
+        Buckets: {p.requestBuckets} | Used: {formatNumber(p.totalRequestsInWindow)}/{formatNumber(maxReq)} ({formatPercent(p.utilizationPercent)}% {utilColor}){queueInfo}
+      </div>
+    );
+  }
+
+  // Retry attempts info
+  if (p.totalRetryAttempts > 0) {
+    const retryTotal = p.nonStreamingRetryAttempts + p.streamingRetryAttempts;
+    const retryRatio = p.maxRetries > 0 ? (retryTotal / p.maxRetries * 100).toFixed(1) : "0";
+    const retryColor = parseFloat(retryRatio) >= 90 ? "🔴" : parseFloat(retryRatio) >= 70 ? "🟡" : "🟢";
+    parts.push(
+      <div key="retries" style={{ marginBottom: 2, fontSize: "11px", color: "rgb(var(--color-popover-foreground))" }}>
+        Retries: Non-Stream {formatNumber(p.nonStreamingRetryAttempts)} + Stream {formatNumber(p.streamingRetryAttempts)} = {formatNumber(retryTotal)} / {p.maxRetries} ({retryRatio}% {retryColor})
+      </div>
+    );
+  }
+
+  // Buffer usage info
+  if (p.maxBufferUsageMB > 0) {
+    const bufUtilColor = p.bufferUtilizationPercent >= 90 ? "🔴" : p.bufferUtilizationPercent >= 70 ? "🟡" : "🟢";
+    parts.push(
+      <div key="buffer" style={{ fontSize: "11px", color: "rgb(var(--color-popover-foreground))" }}>
+        Buffer: {p.currentBufferUsageMB.toFixed(1)}/{p.maxBufferUsageMB.toFixed(1)} MB ({p.bufferUtilizationPercent.toFixed(1)}% {bufUtilColor}) | Active Sessions: {p.activeStreamingSessions}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        backgroundColor: "rgb(var(--color-popover))",
+        border: "1px solid rgb(var(--color-border))",
+        borderRadius: "8px",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+        padding: "8px 12px",
+        maxWidth: "480px",
+        fontSize: "12px",
+        lineHeight: "1.5",
+        color: "rgb(var(--color-popover-foreground))",
+      }}
+    >
+      {parts}
+    </div>
+  );
+}
+
 interface CombinedRateLimiterRetryChartProps {
   rateLimiterMetrics: RateLimiterMetrics | null;
   retryMetrics: RetryMetrics | null;
@@ -495,61 +565,7 @@ function CombinedRateLimiterRetryChartComponent({
             />
 
             <Tooltip
-              formatter={(value: number, name: string) => {
-                // Format based on the metric name - buffer metrics use MB, counts use numbers
-                const isBufferMetric = name.includes("Buffer");
-                if (isBufferMetric) {
-                  return [value.toFixed(1) + " MB", name];
-                }
-                return [formatNumber(value), name];
-              }}
-              labelFormatter={(label, payload) => {
-                if (payload && payload.length > 0 && payload[0].payload) {
-                  const p = payload[0].payload;
-                  const parts = [`Provider: ${p.provider}`];
-                  
-                  // Request buckets info
-                  if (p.requestBuckets > 0) {
-                    const maxReq = p.maxRequests + p.bufferCapacity;
-                    const queueInfo = p.totalQueueLength > 0 ? ` | Queued: ${formatNumber(p.totalQueueLength)}` : "";
-                    const utilColor = p.utilizationPercent >= 90 ? "🔴" : p.utilizationPercent >= 70 ? "🟡" : "🟢";
-                    parts.push(
-                      `Buckets: ${p.requestBuckets} | Used: ${formatNumber(p.totalRequestsInWindow)}/${formatNumber(maxReq)} (${formatPercent(p.utilizationPercent)}% ${utilColor})${queueInfo}`
-                    );
-                  }
-                  
-                  // Retry attempts info
-                  if (p.totalRetryAttempts > 0) {
-                    const retryTotal = p.nonStreamingRetryAttempts + p.streamingRetryAttempts;
-                    const retryRatio = p.maxRetries > 0 ? (retryTotal / p.maxRetries * 100).toFixed(1) : "0";
-                    const retryColor = parseFloat(retryRatio) >= 90 ? "🔴" : parseFloat(retryRatio) >= 70 ? "🟡" : "🟢";
-                    parts.push(
-                      `Retries: Non-Stream ${formatNumber(p.nonStreamingRetryAttempts)} + Stream ${formatNumber(p.streamingRetryAttempts)} = ${formatNumber(retryTotal)} / ${p.maxRetries} (${retryRatio}% ${retryColor})`
-                    );
-                  }
-                  
-                  // Buffer usage info
-                  if (p.maxBufferUsageMB > 0) {
-                    const bufUtilColor = p.bufferUtilizationPercent >= 90 ? "🔴" : p.bufferUtilizationPercent >= 70 ? "🟡" : "🟢";
-                    parts.push(
-                      `Buffer: ${p.currentBufferUsageMB.toFixed(1)}/${p.maxBufferUsageMB.toFixed(1)} MB (${p.bufferUtilizationPercent.toFixed(1)}% ${bufUtilColor}) | Active Sessions: ${p.activeStreamingSessions}`
-                    );
-                  }
-                  
-                  return parts.join(" | ");
-                }
-                return `Provider: ${label}`;
-              }}
-              contentStyle={{
-                backgroundColor: "rgb(var(--color-popover))",
-                border: "1px solid rgb(var(--color-border))",
-                borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                maxWidth: "480px",
-                fontSize: "12px",
-                lineHeight: "1.5",
-                color: "rgb(var(--color-popover-foreground))",
-              }}
+              content={<CustomTooltipContent />}
               cursor={{ fill: "rgb(var(--color-border) / 0.1)" }}
             />
 
