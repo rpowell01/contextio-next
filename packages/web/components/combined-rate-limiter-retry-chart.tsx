@@ -557,9 +557,9 @@ function CombinedRateLimiterRetryChartComponent({
 
       <div id="combined-chart-description" className="sr-only">
         Grouped vertical bar chart displaying three metric groups per AI provider:
-        1. Streaming Retry Buffer Usage (gray background with green overlay) — buffer capacity in MB with 70%, 90%, and 100% threshold lines.
-        2. Request Buckets (blue) — rate limiter usage showing requests used vs maximum capacity, with 70%, 90%, and 100% threshold lines.
-        3. Retry Attempts (amber + purple stacked) — non-streaming and streaming retry counts with max retries reference line.
+        1. Request Buckets (blue) \u2014 rate limiter usage showing requests used vs maximum capacity, with 70%, 90%, and 100% threshold lines.
+        2. Streaming Retry Buffer Usage (gray background with green overlay) \u2014 buffer capacity in MB with 70%, 90%, and 100% threshold lines.
+        3. Retry Attempts (amber + purple stacked) \u2014 non-streaming and streaming retry counts with max retries reference line.
         Each provider shown as a row. Hover or focus any bar for detailed metrics including utilization percentages, queue lengths, and active sessions.
         Color coding: Green = healthy (&lt;70%), Amber = warning (70-89%), Red = critical (&gt;90%). Blue represents request usage, purple represents streaming retries.
       </div>
@@ -643,22 +643,22 @@ function CombinedRateLimiterRetryChartComponent({
               wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
             />
 
-            {/* GROUP 1: Streaming Retry Buffer Usage - Custom shape with max as background, current as overlay */}
+            {/* GROUP 1: Request Buckets - Rate Limiter Usage (first/top bar) */}
+            <Bar
+              xAxisId={1}
+              dataKey="totalMaxRequests"
+              name="Request Buckets: Max (gray) / Used (blue overlay)"
+              shape={RequestBucketsShape}
+              animationDuration={0}
+            />
+
+            {/* GROUP 2: Streaming Retry Buffer Usage - Custom shape with max as background, current as overlay */}
             <Bar
               xAxisId={0}
               dataKey="maxBufferUsageMB"
               name="Buffer Usage: Max Buffer (MB)"
               fill={CHART_COLORS.bufferMax}
               shape={BufferUsageShape}
-              animationDuration={0}
-            />
-
-            {/* GROUP 2: Request Buckets - Rate Limiter Usage */}
-            <Bar
-              xAxisId={1}
-              dataKey="totalMaxRequests"
-              name="Request Buckets: Max (gray) / Used (blue overlay)"
-              shape={RequestBucketsShape}
               animationDuration={0}
             />
 
