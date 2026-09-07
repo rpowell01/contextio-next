@@ -494,7 +494,7 @@ function CombinedRateLimiterRetryChartComponent({
         2. Retry Attempts (amber + purple stacked) — non-streaming and streaming retry counts with max retries reference line.
         3. Streaming Retry Buffer Usage (gray background with green overlay) — buffer capacity in MB with 70%, 90%, and 100% threshold lines.
         Each provider shown as a row. Hover or focus any bar for detailed metrics including utilization percentages, queue lengths, and active sessions.
-        Color coding: Green = healthy (&lt;70&gt;), Amber = warning (70-89%), Red = critical (90&gt;). Blue represents request usage, purple represents streaming retries.
+        Color coding: Green = healthy (&lt;70%&gt;), Amber = warning (70-89%), Red = critical (&gt;90%). Blue represents request usage, purple represents streaming retries.
       </div>
 
       <div className="max-h-[700px] overflow-y-auto">
