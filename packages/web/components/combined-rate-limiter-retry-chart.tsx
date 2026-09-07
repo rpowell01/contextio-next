@@ -72,19 +72,13 @@ function formatPercent(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
-interface BufferUsageShapeProps {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  payload: ProviderData | undefined;
-}
-
 /**
  * Custom shape for buffer usage bar - renders max buffer as background
  * and current usage as a green overlay capped at max.
+ * Accepts the full Bar props from recharts (including payload).
  */
-const BufferUsageShape = ({ x, y, width, height, payload }: BufferUsageShapeProps) => {
+const BufferUsageShape = (props: any) => {
+  const { x, y, width, height, payload } = props;
   const data = payload;
   if (!data) return <g />;
 
