@@ -605,13 +605,13 @@ function CombinedRateLimiterRetryChartComponent({
                   <>
                     <ReferenceLine
                       xAxisId={0}
-                      x={Math.round(p.maxRequests * 0.7)}
+                      x={Math.round((p.maxRequests + p.bufferCapacity) * 0.7)}
                       stroke={CHART_COLORS.threshold70}
                       strokeWidth={1}
                       strokeDasharray="4 4"
                       label={
                         <Label
-                          value={`70% Max Requests (${Math.round(p.maxRequests * 0.7)})`}
+                          value={`70% Max Requests (${Math.round((p.maxRequests + p.bufferCapacity) * 0.7)})`}
                           position="center"
                           fill={CHART_COLORS.threshold70}
                           fontSize={8}
@@ -621,13 +621,13 @@ function CombinedRateLimiterRetryChartComponent({
                     />
                     <ReferenceLine
                       xAxisId={0}
-                      x={Math.round(p.maxRequests * 0.9)}
+                      x={Math.round((p.maxRequests + p.bufferCapacity) * 0.9)}
                       stroke={CHART_COLORS.threshold90}
                       strokeWidth={1}
                       strokeDasharray="4 4"
                       label={
                         <Label
-                          value={`90% Max Requests (${Math.round(p.maxRequests * 0.9)})`}
+                          value={`90% Max Requests (${Math.round((p.maxRequests + p.bufferCapacity) * 0.9)})`}
                           position="center"
                           fill={CHART_COLORS.threshold90}
                           fontSize={8}
