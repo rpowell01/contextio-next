@@ -100,9 +100,10 @@ interface ProviderData {
   requestBuckets: number;
   maxRequests: number;
   bufferCapacity: number;
+  totalMaxRequests: number; // maxRequests + bufferCapacity (total capacity)
   totalRequestsInWindow: number;
   totalQueueLength: number;
-  utilizationPercent: number;
+  utilizationPercent: number; // totalRequestsInWindow / totalMaxRequests * 100
   // Retry Attempts (from retry metrics)
   nonStreamingRetryAttempts: number;
   streamingRetryAttempts: number;
@@ -197,6 +198,67 @@ const BufferUsageShape = (props: any) => {
           dominantBaseline="middle"
         >
           {bufferUtilization.toFixed(1)}%
+        </text>
+      )}
+    </g>
+  );
+};
+
+/**
+ * Custom shape for request buckets bar - renders max requests as background
+ * and current usage as a blue overlay capped at max.
+ * Accepts the full Bar props from recharts (including payload).
+ */
+const RequestBucketsShape = (props: any) => {
+  const { x, y, width, height, payload } = props;
+  const data = payload;
+  if (!data) return <g />;
+
+  const maxRequests = data.totalMaxRequests ?? 0;
+  const currentRequests = data.totalRequestsInWindow ?? 0;
+  const utilizationPercent = data.utilizationPercent ?? 0;
+
+  if (maxRequests === 0) return <g />;
+
+  // Current usage cannot exceed max - cap it visually
+  const cappedCurrent = Math.min(currentRequests, maxRequests);
+  const usageRatio = cappedCurrent / maxRequests;
+  const usageWidth = usageRatio * width;
+
+  return (
+    <g>
+      {/* Max requests background - gray */}
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={CHART_COLORS.maxRequests}
+        stroke="rgb(var(--color-border))"
+        strokeWidth={0.5}
+      />
+      {/* Current usage overlay - blue, capped at max */}
+      {cappedCurrent > 0 && (
+        <rect
+          x={x}
+          y={y}
+          width={Math.min(usageWidth, width)}
+          height={height}
+          fill={CHART_COLORS.requestBucketsUsed}
+          opacity={0.9}
+        />
+      )}
+      {/* Utilization percentage label at end of max bar */}
+      {utilizationPercent > 0 && (
+        <text
+          x={x + width + 8}
+          y={y + height / 2 + 4}
+          fill="rgb(var(--color-text-muted))"
+          fontSize={10}
+          fontWeight={500}
+          dominantBaseline="middle"
+        >
+          {utilizationPercent.toFixed(1)}%
         </text>
       )}
     </g>
@@ -303,6 +365,8 @@ function CombinedRateLimiterRetryChartComponent({
       rateLimiterMetrics.buckets.forEach((bucket) => {
         const provider = bucket.provider ?? "unknown";
         const maxRequests = bucket.maxTokens - bucket.bufferCapacity;
+        const bufferCapacity = bucket.bufferCapacity;
+        const totalMaxRequests = bucket.maxTokens; // maxRequests + bufferCapacity
         const requestsInWindow = bucket.requestsInWindow ?? 0;
 
         const existing = providerMap.get(provider);
@@ -311,10 +375,11 @@ function CombinedRateLimiterRetryChartComponent({
             provider,
             requestBuckets: 1,
             maxRequests,
-            bufferCapacity: bucket.bufferCapacity,
+            bufferCapacity,
+            totalMaxRequests,
             totalRequestsInWindow: requestsInWindow,
             totalQueueLength: bucket.queueLength,
-            utilizationPercent: maxRequests > 0 ? Math.round((requestsInWindow / maxRequests) * 10000) / 100 : 0,
+            utilizationPercent: totalMaxRequests > 0 ? Math.round((requestsInWindow / totalMaxRequests) * 10000) / 100 : 0,
             // Retry fields - will be filled from retry metrics
             nonStreamingRetryAttempts: 0,
             streamingRetryAttempts: 0,
@@ -329,11 +394,12 @@ function CombinedRateLimiterRetryChartComponent({
         } else {
           existing.requestBuckets += 1;
           existing.maxRequests += maxRequests;
-          existing.bufferCapacity += bucket.bufferCapacity;
+          existing.bufferCapacity += bufferCapacity;
+          existing.totalMaxRequests += totalMaxRequests;
           existing.totalRequestsInWindow += requestsInWindow;
           existing.totalQueueLength += bucket.queueLength;
-          existing.utilizationPercent = existing.maxRequests > 0
-            ? Math.round((existing.totalRequestsInWindow / existing.maxRequests) * 10000) / 100
+          existing.utilizationPercent = existing.totalMaxRequests > 0
+            ? Math.round((existing.totalRequestsInWindow / existing.totalMaxRequests) * 10000) / 100
             : 0;
         }
       });
@@ -352,6 +418,7 @@ function CombinedRateLimiterRetryChartComponent({
             requestBuckets: 0,
             maxRequests: 0,
             bufferCapacity: 0,
+            totalMaxRequests: 0,
             totalRequestsInWindow: 0,
             totalQueueLength: 0,
             utilizationPercent: 0,
@@ -462,8 +529,9 @@ function CombinedRateLimiterRetryChartComponent({
 
   // Find max for counts axis (requests + retries)
   const globalMaxRequests = Math.max(1, Math.max(...chartData.map((d) => d.totalRequestsInWindow)));
+  const globalMaxTotalRequests = Math.max(1, Math.max(...chartData.map((d) => d.totalMaxRequests)));
   const globalMaxRetries = Math.max(1, Math.max(...chartData.map((d) => d.totalRetryAttempts)));
-  const globalMaxCounts = Math.max(globalMaxRequests, globalMaxRetries);
+  const globalMaxCounts = Math.max(globalMaxRequests, globalMaxTotalRequests, globalMaxRetries);
   
   // Find max for buffer axis (MB) - separate scale
   const globalMaxBuffer = Math.max(1, Math.max(...chartData.map((d) => d.maxBufferUsageMB)));
@@ -579,9 +647,9 @@ function CombinedRateLimiterRetryChartComponent({
             {/* GROUP 1: Request Buckets - Rate Limiter Usage */}
             <Bar
               xAxisId={0}
-              dataKey="totalRequestsInWindow"
-              name="Request Buckets: Requests Used"
-              fill={CHART_COLORS.requestBucketsUsed}
+              dataKey="totalMaxRequests"
+              name="Request Buckets: Max (gray) / Used (blue overlay)"
+              shape={RequestBucketsShape}
               animationDuration={0}
             />
 
@@ -751,8 +819,8 @@ function CombinedRateLimiterRetryChartComponent({
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground" role="list" aria-label="Chart legend">
         <div className="flex items-center gap-2" role="listitem">
-          <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.requestBucketsUsed }} />
-          <span>Request Buckets: Requests Used</span>
+          <div className="w-8 h-4 rounded" style={{ background: `linear-gradient(90deg, ${CHART_COLORS.maxRequests} 50%, ${CHART_COLORS.requestBucketsUsed} 50%)` }} />
+          <span>Request Buckets: Max (gray) / Used (blue overlay)</span>
         </div>
         <div className="flex items-center gap-2" role="listitem">
           <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.retryNonStreaming }} />
