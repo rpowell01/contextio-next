@@ -646,13 +646,12 @@ function CombinedRateLimiterRetryChartComponent({
               wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
             />
 
-            {/* GROUP 1: Buffer Usage - Custom shape with max as background, current as overlay (renders first/back) */}
+            {/* GROUP 1: Request Buckets - Rate Limiter Usage (renders first/leftmost) */}
             <Bar
-              xAxisId={0}
-              dataKey="maxBufferUsageMB"
-              name="Buffer Usage: Max Buffer (MB)"
-              fill={CHART_COLORS.bufferMax}
-              shape={BufferUsageShape}
+              xAxisId={1}
+              dataKey="totalMaxRequests"
+              name="Request Buckets: Max (gray) / Used (blue overlay)"
+              shape={RequestBucketsShape}
               animationDuration={0}
             />
 
@@ -674,12 +673,13 @@ function CombinedRateLimiterRetryChartComponent({
               stackId="retries"
             />
 
-            {/* GROUP 3: Request Buckets - Rate Limiter Usage (renders last/front - most visible) */}
+            {/* GROUP 3: Buffer Usage - Custom shape with max as background, current as overlay (renders last/rightmost) */}
             <Bar
-              xAxisId={1}
-              dataKey="totalMaxRequests"
-              name="Request Buckets: Max (gray) / Used (blue overlay)"
-              shape={RequestBucketsShape}
+              xAxisId={0}
+              dataKey="maxBufferUsageMB"
+              name="Buffer Usage: Max Buffer (MB)"
+              fill={CHART_COLORS.bufferMax}
+              shape={BufferUsageShape}
               animationDuration={0}
             />
 
