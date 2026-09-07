@@ -1,15 +1,5 @@
-// Provider type defined locally to avoid importing from @contextio/core (server-only)
-// Must match @contextio/core's Provider type exactly
-export type Provider =
-  | "anthropic"
-  | "openai"
-  | "chatgpt"
-  | "gemini"
-  | "geminiCodeAssist"
-  | "vertex"
-  | "nvidia"
-  | "openrouter"
-  | "kilo";
+// Provider type imported from @contextio/core to keep in sync
+import type { Provider } from "@contextio/core";
 
 export interface RateLimitConfig {
   /** Maximum requests allowed within the time window. */
@@ -704,6 +694,7 @@ export const DEFAULT_SETTINGS: Settings = {
     nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+    unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
   },
   streamingRetry: {
     anthropic: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
@@ -715,6 +706,7 @@ export const DEFAULT_SETTINGS: Settings = {
     nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
     openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
     kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+    unknown: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
   },
   // Redaction enabled per provider (true = redact this provider)
   redactProviders: {
@@ -727,6 +719,7 @@ export const DEFAULT_SETTINGS: Settings = {
     nvidia: true,
     openrouter: true,
     kilo: true,
+    unknown: true,
   },
   // Feature flags
   enableLogger: true,

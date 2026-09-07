@@ -18,6 +18,7 @@ const DEFAULT_REDACT_PROVIDERS: Record<Provider, boolean> = {
 	nvidia: true,
 	openrouter: true,
 	kilo: true,
+	unknown: true,
 };
 
 /**
@@ -216,6 +217,7 @@ const DEFAULT_RATE_LIMITER: Record<Provider, RateLimitConfig> = {
 	nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 	openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 	kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+	unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 };
 
 /**
@@ -231,6 +233,7 @@ const DEFAULT_STREAMING_RETRY: Record<Provider, StreamingRetryConfig> = {
 	nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 	openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 	kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+	unknown: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 };
 
 /**
@@ -343,6 +346,7 @@ const DEFAULT_SETTINGS: Settings = {
 		nvidia: true,
 		openrouter: true,
 		kilo: true,
+		unknown: true,
 	},
 	// Proxy configuration
 	proxyBindHost: "0.0.0.0",

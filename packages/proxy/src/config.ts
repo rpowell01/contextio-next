@@ -709,6 +709,7 @@ for (const upstreamKey of requiredUpstreams) {
     nvidia: parseRateLimitForProvider("nvidia", providersConfig.nvidia?.rateLimit),
     openrouter: parseRateLimitForProvider("openrouter", providersConfig.openrouter?.rateLimit),
     kilo: parseRateLimitForProvider("kilo", providersConfig.kilo?.rateLimit),
+    unknown: parseRateLimitForProvider("unknown", providersConfig.unknown?.rateLimit),
   };
 
   function resolveRetryForProvider(
@@ -903,6 +904,7 @@ for (const upstreamKey of requiredUpstreams) {
     nvidia: resolveRetryForProvider("nvidia", providersConfig.nvidia?.retry),
     openrouter: resolveRetryForProvider("openrouter", providersConfig.openrouter?.retry),
     kilo: resolveRetryForProvider("kilo", providersConfig.kilo?.retry),
+    unknown: resolveRetryForProvider("unknown", providersConfig.unknown?.retry),
   };
 
   // Plugin enable flags (default to true)

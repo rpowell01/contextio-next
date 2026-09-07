@@ -3,9 +3,10 @@
 import { MainLayout } from "@/components/main-layout";
 import { apiClient } from "@/lib/api";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
-import type { Settings, SettingMeta, Provider, RateLimitConfig, StreamingRetryConfig } from "@/lib/settings";
+import type { Settings, SettingMeta, RateLimitConfig, StreamingRetryConfig } from "@/lib/settings";
 import type { ProviderConfig, ProviderMetadata, MaintenanceOperation, MaintenanceResult } from "@/types/api";
 import type { PresetName } from "@contextio/redact";
+import type { Provider } from "@contextio/core";
 import { useState, useEffect, useRef } from "react";
 import { useAdminProtection } from "@/hooks/use-admin-auth";
 import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
@@ -773,6 +774,7 @@ export default function SettingsPage() {
       nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
       kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+      unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
     },
     streamingRetry: {
       anthropic: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
@@ -784,6 +786,7 @@ export default function SettingsPage() {
       nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
       openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
       kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+      unknown: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
     },
     // Redaction enabled per provider
     redactProviders: {
@@ -796,6 +799,7 @@ export default function SettingsPage() {
       nvidia: true,
       openrouter: true,
       kilo: true,
+      unknown: true,
     },
     // Feature flags
     enableLogger: true,
