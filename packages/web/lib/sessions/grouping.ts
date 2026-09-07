@@ -193,8 +193,8 @@ export function groupCapturesIntoSessions(
     };
   }
 
-  // Sort summaries by lastTimestamp descending (newest sessions first)
-  summaries.sort((a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime());
+  // Sort summaries by firstTimestamp descending (newest sessions first, matching displayed date)
+  summaries.sort((a, b) => new Date(b.firstTimestamp).getTime() - new Date(a.firstTimestamp).getTime());
 
   return { summaries, metrics };
 }
