@@ -110,6 +110,7 @@ interface ProviderData {
   // Streaming Retry Buffer Usage
   currentBufferUsageMB: number;
   maxBufferUsageMB: number;
+  maxResponseBufferSizeMB: number; // Configured max buffer size from settings
   bufferUtilizationPercent: number;
   activeStreamingSessions: number;
   maxRetries: number;
@@ -154,7 +155,8 @@ const BufferUsageShape = ({ x, y, width, height, payload }: any) => {
   if (!data || typeof x !== 'number' || typeof y !== 'number' || typeof width !== 'number' || typeof height !== 'number' ||
       !isFinite(x) || !isFinite(y) || !isFinite(width) || !isFinite(height)) return <g />;
 
-  const maxBuffer = data.maxBufferUsageMB ?? 0;
+  // Use observed max buffer, or fall back to configured max response buffer size
+  const maxBuffer = data.maxBufferUsageMB ?? data.maxResponseBufferSizeMB ?? 0;
   const currentBuffer = data.currentBufferUsageMB ?? 0;
   const bufferUtilization = data.bufferUtilizationPercent ?? 0;
 
@@ -392,6 +394,7 @@ function CombinedRateLimiterRetryChartComponent({
             // Buffer fields
             currentBufferUsageMB: 0,
             maxBufferUsageMB: 0,
+            maxResponseBufferSizeMB: 0,
             bufferUtilizationPercent: 0,
             activeStreamingSessions: 0,
             maxRetries: 0,
@@ -432,6 +435,7 @@ function CombinedRateLimiterRetryChartComponent({
             totalRetryAttempts: retryProvider.totalRetryAttempts,
             currentBufferUsageMB: retryProvider.currentBufferUsageMB,
             maxBufferUsageMB: retryProvider.maxBufferUsageMB,
+            maxResponseBufferSizeMB: retryProvider.maxResponseBufferSizeMB,
             bufferUtilizationPercent: retryProvider.bufferUtilizationPercent,
             activeStreamingSessions: retryProvider.activeStreamingSessions,
             maxRetries: retryProvider.maxRetries,
@@ -443,6 +447,7 @@ function CombinedRateLimiterRetryChartComponent({
           existing.totalRetryAttempts = retryProvider.totalRetryAttempts;
           existing.currentBufferUsageMB = retryProvider.currentBufferUsageMB;
           existing.maxBufferUsageMB = retryProvider.maxBufferUsageMB;
+          existing.maxResponseBufferSizeMB = retryProvider.maxResponseBufferSizeMB;
           existing.bufferUtilizationPercent = retryProvider.bufferUtilizationPercent;
           existing.activeStreamingSessions = retryProvider.activeStreamingSessions;
           existing.maxRetries = retryProvider.maxRetries;
