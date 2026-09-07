@@ -102,7 +102,7 @@ const BufferUsageShape = (props: any) => {
         width={width}
         height={height}
         fill={CHART_COLORS.bufferMax}
-        stroke="#9ca3af"
+        stroke="rgb(var(--color-border))"
         strokeWidth={0.5}
       />
       {/* Current usage overlay - green, capped at max */}
@@ -121,7 +121,7 @@ const BufferUsageShape = (props: any) => {
         <text
           x={x + width + 8}
           y={y + height / 2 + 4}
-          fill="#6b7280"
+          fill="rgb(var(--color-text-muted))"
           fontSize={10}
           fontWeight={500}
           dominantBaseline="middle"
@@ -437,7 +437,7 @@ function CombinedRateLimiterRetryChartComponent({
             layout="vertical"
             margin={{ top: 20, right: 20, bottom: 80, left: 160 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" vertical={false} />
 
             {/* X Axis 1 - Counts (Requests + Retries) - Bottom */}
             <XAxis
@@ -447,11 +447,11 @@ function CombinedRateLimiterRetryChartComponent({
                 value: "Count (Requests / Retries)",
                 position: "outsideBottom",
                 offset: 40,
-                style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
               }}
-              tick={{ fill: "#666", fontSize: 11 }}
-              tickLine={{ stroke: "#999" }}
-              axisLine={{ stroke: "#999" }}
+              tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
+              tickLine={{ stroke: "rgb(var(--color-border))" }}
+              axisLine={{ stroke: "rgb(var(--color-border))" }}
               tickFormatter={(value) => {
                 if (value >= 1000000) return formatNumber(value);
                 if (value >= 1000) return formatNumber(value);
@@ -468,11 +468,11 @@ function CombinedRateLimiterRetryChartComponent({
                 value: "Buffer Usage (MB)",
                 position: "outsideTop",
                 offset: 40,
-                style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
               }}
-              tick={{ fill: "#666", fontSize: 11 }}
-              tickLine={{ stroke: "#999" }}
-              axisLine={{ stroke: "#999" }}
+              tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
+              tickLine={{ stroke: "rgb(var(--color-border))" }}
+              axisLine={{ stroke: "rgb(var(--color-border))" }}
               tickFormatter={(value) => value.toFixed(1)}
               domain={[0, globalMaxBuffer * 1.2]}
               orientation="top"
@@ -487,11 +487,11 @@ function CombinedRateLimiterRetryChartComponent({
                 value: "Provider",
                 position: "outsideLeft",
                 offset: 30,
-                style: { textAnchor: "middle", fill: "#333", fontSize: 12, fontWeight: 500 },
+                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
               }}
-              tick={{ fill: "#333", fontSize: 11 }}
-              tickLine={{ stroke: "#999" }}
-              axisLine={{ stroke: "#999" }}
+              tick={{ fill: "rgb(var(--color-text))", fontSize: 11 }}
+              tickLine={{ stroke: "rgb(var(--color-border))" }}
+              axisLine={{ stroke: "rgb(var(--color-border))" }}
             />
 
             <Tooltip
@@ -541,15 +541,16 @@ function CombinedRateLimiterRetryChartComponent({
                 return `Provider: ${label}`;
               }}
               contentStyle={{
-                backgroundColor: "rgba(255, 255, 255, 0.98)",
-                border: "1px solid #ddd",
+                backgroundColor: "rgb(var(--color-popover))",
+                border: "1px solid rgb(var(--color-border))",
                 borderRadius: "8px",
                 boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                 maxWidth: "480px",
                 fontSize: "12px",
                 lineHeight: "1.5",
+                color: "rgb(var(--color-popover-foreground))",
               }}
-              cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+              cursor={{ fill: "rgb(var(--color-border) / 0.1)" }}
             />
 
             <Legend
