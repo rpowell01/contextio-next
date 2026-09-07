@@ -151,7 +151,9 @@ function formatPercent(value: number): string {
  */
 const BufferUsageShape = ({ x, y, width, height, payload }: any) => {
   const data = payload;
-  if (!data) return <g />;
+  // Validate all required numeric props
+  if (!data || typeof x !== 'number' || typeof y !== 'number' || typeof width !== 'number' || typeof height !== 'number' ||
+      !isFinite(x) || !isFinite(y) || !isFinite(width) || !isFinite(height)) return <g />;
 
   const maxBuffer = data.maxBufferUsageMB ?? 0;
   const currentBuffer = data.currentBufferUsageMB ?? 0;
@@ -214,7 +216,9 @@ const BufferUsageShape = ({ x, y, width, height, payload }: any) => {
 const RequestBucketsShape = (props: any) => {
   const { x, y, width, height, payload } = props;
   const data = payload;
-  if (!data) return <g />;
+  // Validate all required numeric props
+  if (!data || typeof x !== 'number' || typeof y !== 'number' || typeof width !== 'number' || typeof height !== 'number' ||
+      !isFinite(x) || !isFinite(y) || !isFinite(width) || !isFinite(height)) return <g />;
 
   const maxRequests = data.totalMaxRequests ?? 0;
   const currentRequests = data.totalRequestsInWindow ?? 0;
@@ -628,9 +632,8 @@ function CombinedRateLimiterRetryChartComponent({
               wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
             />
 
-            {/* GROUP 1: Request Buckets - Rate Limiter Usage (renders first/leftmost) */}
+            {/* GROUP 1: Request Buckets - Rate Limiter Usage (renders first/top) */}
             <Bar
-              xAxisId={1}
               dataKey="totalMaxRequests"
               name="Request Buckets: Max (gray) / Used (blue overlay)"
               shape={RequestBucketsShape}
@@ -639,7 +642,6 @@ function CombinedRateLimiterRetryChartComponent({
 
             {/* GROUP 2: Retry Attempts - Stacked Non-Streaming + Streaming (renders second/middle) */}
             <Bar
-              xAxisId={1}
               dataKey="nonStreamingRetryAttempts"
               name="Retry Attempts: Non-Streaming"
               fill={CHART_COLORS.retryNonStreaming}
@@ -647,7 +649,6 @@ function CombinedRateLimiterRetryChartComponent({
               stackId="retries"
             />
             <Bar
-              xAxisId={1}
               dataKey="streamingRetryAttempts"
               name="Retry Attempts: Streaming"
               fill={CHART_COLORS.retryStreaming}
@@ -655,7 +656,7 @@ function CombinedRateLimiterRetryChartComponent({
               stackId="retries"
             />
 
-            {/* GROUP 3: Buffer Usage - Custom shape with max as background, current as overlay (renders last/rightmost) */}
+            {/* GROUP 3: Buffer Usage - Custom shape with max as background, current as overlay (renders last/bottom) */}
             <Bar
               dataKey="maxBufferUsageMB"
               name="Buffer Usage: Max Buffer (MB)"
