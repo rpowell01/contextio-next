@@ -579,24 +579,7 @@ function CombinedRateLimiterRetryChartComponent({
           >
             <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" vertical={false} />
 
-            {/* X Axis 0 - Buffer Usage (MB) - Bottom */}
-            <XAxis
-              xAxisId={0}
-              type="number"
-              label={{
-                value: "Buffer Usage (MB)",
-                position: "outsideBottom",
-                offset: 40,
-                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
-              }}
-              tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
-              tickLine={{ stroke: "rgb(var(--color-border))" }}
-              axisLine={{ stroke: "rgb(var(--color-border))" }}
-              tickFormatter={(value) => value.toFixed(1)}
-              domain={[0, globalMaxBuffer * 1.2]}
-            />
-            
-            {/* X Axis 1 - Counts (Requests + Retries) - Top */}
+            {/* X Axis 1 - Counts (Requests + Retries) - Top (defined first to render bars on top) */}
             <XAxis
               xAxisId={1}
               type="number"
@@ -616,6 +599,23 @@ function CombinedRateLimiterRetryChartComponent({
               }}
               domain={[0, globalMaxCounts * 1.2]}
               orientation="top"
+            />
+
+            {/* X Axis 0 - Buffer Usage (MB) - Bottom (defined second to render bars on bottom) */}
+            <XAxis
+              xAxisId={0}
+              type="number"
+              label={{
+                value: "Buffer Usage (MB)",
+                position: "outsideBottom",
+                offset: 40,
+                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
+              }}
+              tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
+              tickLine={{ stroke: "rgb(var(--color-border))" }}
+              axisLine={{ stroke: "rgb(var(--color-border))" }}
+              tickFormatter={(value) => value.toFixed(1)}
+              domain={[0, globalMaxBuffer * 1.2]}
             />
 
             {/* Y Axis - Provider names */}
