@@ -41,7 +41,7 @@ function CustomTooltipContent({ active, payload }: { active?: boolean; payload?:
     const utilColor = p.utilizationPercent >= 90 ? "🔴" : p.utilizationPercent >= 70 ? "🟡" : "🟢";
     parts.push(
       <div key="buckets" style={{ marginBottom: 2, fontSize: "11px", color: "rgb(var(--color-popover-foreground))" }}>
-        Buckets: {p.requestBuckets} | Used: {formatNumber(p.totalRequestsInWindow)}/{formatNumber(maxReq)} ({formatPercent(p.utilizationPercent)}% {utilColor}){queueInfo}
+        Rate Limiter Requests Used: {formatNumber(p.totalRequestsInWindow)}/{formatNumber(maxReq)} ({formatPercent(p.utilizationPercent)}% {utilColor}){queueInfo}
       </div>
     );
   }
@@ -147,6 +147,7 @@ function formatPercent(value: number): string {
  * Custom shape for buffer usage bar - renders max buffer as background
  * and current usage as a green overlay capped at max.
  * Accepts the full Bar props from recharts (including payload).
+ * Always renders the max buffer bar even when current usage is 0.
  */
 const BufferUsageShape = ({ x, y, width, height, payload }: any) => {
   const data = payload;
@@ -156,16 +157,18 @@ const BufferUsageShape = ({ x, y, width, height, payload }: any) => {
   const currentBuffer = data.currentBufferUsageMB ?? 0;
   const bufferUtilization = data.bufferUtilizationPercent ?? 0;
 
+  // Always render the max buffer bar (gray background) even when current usage is 0
+  // Only return empty if maxBuffer is 0 (no buffer capacity at all)
   if (maxBuffer === 0) return <g />;
 
   // Current usage cannot exceed max - cap it visually
   const cappedCurrent = Math.min(currentBuffer, maxBuffer);
-  const usageRatio = cappedCurrent / maxBuffer;
+  const usageRatio = maxBuffer > 0 ? cappedCurrent / maxBuffer : 0;
   const usageWidth = usageRatio * width;
 
   return (
     <g>
-      {/* Max buffer background - gray */}
+      {/* Max buffer background - gray (always visible) */}
       <rect
         x={x}
         y={y}
@@ -175,7 +178,7 @@ const BufferUsageShape = ({ x, y, width, height, payload }: any) => {
         stroke="rgb(var(--color-border))"
         strokeWidth={0.5}
       />
-      {/* Current usage overlay - green, capped at max */}
+      {/* Current usage overlay - green, capped at max (only when > 0) */}
       {cappedCurrent > 0 && (
         <rect
           x={x}
@@ -652,17 +655,7 @@ function CombinedRateLimiterRetryChartComponent({
               animationDuration={0}
             />
 
-            {/* GROUP 2: Streaming Retry Buffer Usage - Custom shape with max as background, current as overlay */}
-            <Bar
-              xAxisId={0}
-              dataKey="maxBufferUsageMB"
-              name="Buffer Usage: Max Buffer (MB)"
-              fill={CHART_COLORS.bufferMax}
-              shape={BufferUsageShape}
-              animationDuration={0}
-            />
-
-            {/* GROUP 3: Retry Attempts - Stacked Non-Streaming + Streaming */}
+            {/* GROUP 2: Retry Attempts - Stacked Non-Streaming + Streaming */}
             <Bar
               xAxisId={1}
               dataKey="nonStreamingRetryAttempts"
@@ -678,6 +671,16 @@ function CombinedRateLimiterRetryChartComponent({
               fill={CHART_COLORS.retryStreaming}
               animationDuration={0}
               stackId="retries"
+            />
+
+            {/* GROUP 3: Streaming Retry Buffer Usage - Custom shape with max as background, current as overlay */}
+            <Bar
+              xAxisId={0}
+              dataKey="maxBufferUsageMB"
+              name="Buffer Usage: Max Buffer (MB)"
+              fill={CHART_COLORS.bufferMax}
+              shape={BufferUsageShape}
+              animationDuration={0}
             />
 
             {/* Reference lines for thresholds (counts axis - 70%, 90% of max) */}

@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { DiffDialog } from "@/components/ui/diff-dialog";
 import { FalsePositiveManager } from "@/components/FalsePositiveManager";
 import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Admin status cache key and TTL (5 minutes)
 const ADMIN_CACHE_KEY = "contextio_admin_status";
@@ -467,17 +468,20 @@ export default function RedactionsPage() {
     switch (key) {
       case "redactionsByType":
         return (
-          <span
-            className="text-primary underline cursor-pointer hover:text-primary/80"
-            onClick={(e) => { e.stopPropagation(); handleOpenDiff(e as React.MouseEvent, row); }}
-            title={row.redactionSummary}
-          >
-            {row.redactionSummary.split(", ").map((item, idx) => (
-              <span key={idx} className="block whitespace-nowrap">
-                {item}
+          <Tooltip content="View Pre/Post Redaction Diff" side="top" align="center">
+            <TooltipTrigger asChild>
+              <span
+                className="text-primary underline cursor-pointer hover:text-primary/80"
+                onClick={(e) => { e.stopPropagation(); handleOpenDiff(e as React.MouseEvent, row); }}
+              >
+                {row.redactionSummary.split(", ").map((item, idx) => (
+                  <span key={idx} className="block whitespace-nowrap">
+                    {item}
+                  </span>
+                ))}
               </span>
-            ))}
-          </span>
+            </TooltipTrigger>
+          </Tooltip>
         );
       case "requestSource":
         return <span className="text-muted-foreground">{row.requestSource ?? "—"}</span>;
@@ -708,9 +712,20 @@ export default function RedactionsPage() {
                           onDragEnd={handleDragEnd}
                           style={{ width: columnWidths[key] ? `${columnWidths[key]}px` : undefined }}
                         >
-                          {labelMap[key]}
-                          {sortConfig?.key === key && (
-                            <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                          {key === "redactionsByType" ? (
+                            <>
+                              {labelMap[key]}
+                              {sortConfig?.key === key && (
+                                <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {labelMap[key]}
+                              {sortConfig?.key === key && (
+                                <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                              )}
+                            </>
                           )}
                           {!isLast && (
                             <div
