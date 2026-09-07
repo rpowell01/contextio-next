@@ -3442,7 +3442,7 @@ case "upstreamKiloUrl":
               id="upstreamKiloUrl"
               value={settings.upstreamKiloUrl}
               onChange={(e) => updateSetting("upstreamKiloUrl", e.target.value)}
-              placeholder="https://api.kilo.ai"
+              placeholder="[URL_98]"
               disabled={isSettingOverridden("upstreamKiloUrl")}
               className={isSettingOverridden("upstreamKiloUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
