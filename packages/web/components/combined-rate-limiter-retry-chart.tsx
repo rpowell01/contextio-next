@@ -579,12 +579,11 @@ function CombinedRateLimiterRetryChartComponent({
           >
             <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" vertical={false} />
 
-            {/* X Axis 1 - Counts (Requests + Retries) - Top (defined first to render bars on top) */}
+            {/* Single X Axis - Counts (Requests + Retries + Buffer) - Top */}
             <XAxis
-              xAxisId={1}
               type="number"
               label={{
-                value: "Count (Requests / Retries)",
+                value: "Count (Requests / Retries / Buffer MB)",
                 position: "outsideTop",
                 offset: 40,
                 style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
@@ -597,7 +596,7 @@ function CombinedRateLimiterRetryChartComponent({
                 if (value >= 1000) return formatNumber(value);
                 return value.toFixed(value < 10 ? 1 : 0);
               }}
-              domain={[0, globalMaxCounts * 1.2]}
+              domain={[0, Math.max(globalMaxCounts, globalMaxBuffer) * 1.2]}
               orientation="top"
             />
 
@@ -675,7 +674,6 @@ function CombinedRateLimiterRetryChartComponent({
 
             {/* GROUP 3: Buffer Usage - Custom shape with max as background, current as overlay (renders last/rightmost) */}
             <Bar
-              xAxisId={0}
               dataKey="maxBufferUsageMB"
               name="Buffer Usage: Max Buffer (MB)"
               fill={CHART_COLORS.bufferMax}
@@ -683,14 +681,13 @@ function CombinedRateLimiterRetryChartComponent({
               animationDuration={0}
             />
 
-            {/* Reference lines for thresholds (counts axis - 70%, 90% of max) */}
+            {/* Reference lines for thresholds */}
             {chartData.map((p, idx) => (
               <React.Fragment key={p.provider}>
-                {/* Buffer usage threshold lines (70%, 90%, max) on buffer axis (xAxisId=0) */}
+                {/* Buffer usage threshold lines (70%, 90%, max) */}
                 {p.maxBufferUsageMB > 0 && (
                   <>
                     <ReferenceLine
-                      xAxisId={0}
                       x={p.maxBufferUsageMB * 0.7}
                       stroke={CHART_COLORS.threshold70}
                       strokeWidth={1}
@@ -706,7 +703,6 @@ function CombinedRateLimiterRetryChartComponent({
                       }
                     />
                     <ReferenceLine
-                      xAxisId={0}
                       x={p.maxBufferUsageMB * 0.9}
                       stroke={CHART_COLORS.threshold90}
                       strokeWidth={1}
@@ -722,7 +718,6 @@ function CombinedRateLimiterRetryChartComponent({
                       }
                     />
                     <ReferenceLine
-                      xAxisId={0}
                       x={p.maxBufferUsageMB}
                       stroke={CHART_COLORS.maxBuffer}
                       strokeWidth={1}
@@ -739,11 +734,10 @@ function CombinedRateLimiterRetryChartComponent({
                     />
                   </>
                 )}
-                {/* Max requests threshold lines (70%, 90%, max) on counts axis (xAxisId=1) */}
+                {/* Max requests threshold lines (70%, 90%, max) */}
                 {p.maxRequests > 0 && (
                   <>
                     <ReferenceLine
-                      xAxisId={1}
                       x={Math.round((p.maxRequests + p.bufferCapacity) * 0.7)}
                       stroke={CHART_COLORS.threshold70}
                       strokeWidth={1}
@@ -759,7 +753,6 @@ function CombinedRateLimiterRetryChartComponent({
                       }
                     />
                     <ReferenceLine
-                      xAxisId={1}
                       x={Math.round((p.maxRequests + p.bufferCapacity) * 0.9)}
                       stroke={CHART_COLORS.threshold90}
                       strokeWidth={1}
@@ -775,7 +768,6 @@ function CombinedRateLimiterRetryChartComponent({
                       }
                     />
                     <ReferenceLine
-                      xAxisId={1}
                       x={p.maxRequests + p.bufferCapacity}
                       stroke={CHART_COLORS.maxRequests}
                       strokeWidth={1}
@@ -793,10 +785,9 @@ function CombinedRateLimiterRetryChartComponent({
                     />
                   </>
                 )}
-                {/* Max retries reference line on counts axis (xAxisId=1) */}
+                {/* Max retries reference line */}
                 {p.maxRetries > 0 && (
                   <ReferenceLine
-                    xAxisId={1}
                     x={p.maxRetries}
                     stroke={CHART_COLORS.maxRetries}
                     strokeWidth={1}
