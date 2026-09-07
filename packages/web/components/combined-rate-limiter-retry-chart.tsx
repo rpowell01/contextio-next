@@ -10,7 +10,6 @@ import {
   YAxis,
   CartesianGrid,
   ResponsiveContainer,
-  Legend,
   Tooltip,
   ReferenceLine,
   Label,
@@ -623,13 +622,6 @@ function CombinedRateLimiterRetryChartComponent({
             <Tooltip
               content={<CustomTooltipContent />}
               cursor={{ fill: "rgb(var(--color-border) / 0.1)" }}
-            />
-
-            <Legend
-              verticalAlign="top"
-              align="center"
-              iconSize={12}
-              wrapperStyle={{ fontSize: 11, fontWeight: 500, marginBottom: 8 }}
             />
 
             {/* GROUP 1: Request Buckets - Rate Limiter Usage (renders first/top) */}
