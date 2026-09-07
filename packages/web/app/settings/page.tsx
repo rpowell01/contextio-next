@@ -1422,7 +1422,33 @@ export default function SettingsPage() {
                 {renderSetting("strictUrlForwarding")}
               </div>
               <div className="pt-2 border-t">
-                <h4 className="text-sm font-medium text-muted-foreground mb-3">Upstream Configuration</h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-muted-foreground">Upstream Configuration</h4>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSettings((prev) => ({
+                        ...prev,
+                        upstreamOpenAiUrl: DEFAULT_SETTINGS.upstreamOpenAiUrl,
+                        upstreamAnthropicUrl: DEFAULT_SETTINGS.upstreamAnthropicUrl,
+                        upstreamChatGptUrl: DEFAULT_SETTINGS.upstreamChatGptUrl,
+                        upstreamGeminiUrl: DEFAULT_SETTINGS.upstreamGeminiUrl,
+                        upstreamVertexUrl: DEFAULT_SETTINGS.upstreamVertexUrl,
+                        upstreamNvidiaUrl: DEFAULT_SETTINGS.upstreamNvidiaUrl,
+                        upstreamOpenRouterUrl: DEFAULT_SETTINGS.upstreamOpenRouterUrl,
+                        upstreamKiloUrl: DEFAULT_SETTINGS.upstreamKiloUrl,
+                        upstreamGeminiCodeAssistUrl: DEFAULT_SETTINGS.upstreamGeminiCodeAssistUrl,
+                      }));
+                      setSaveMessage({ type: "success", message: "All upstream URLs reset to defaults. Click Save to persist." });
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset to Defaults
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground mb-4">
                   Override default upstream API base URLs. Leave empty to use built-in defaults. Environment variables (UPSTREAM_*_URL) take precedence.
                 </p>
@@ -3290,7 +3316,7 @@ case "upstreamOpenAiUrl":
               id="upstreamOpenAiUrl"
               value={settings.upstreamOpenAiUrl}
               onChange={(e) => updateSetting("upstreamOpenAiUrl", e.target.value)}
-              placeholder="[URL_5]"
+              placeholder="https://api.openai.com/v1"
               disabled={isSettingOverridden("upstreamOpenAiUrl")}
               className={isSettingOverridden("upstreamOpenAiUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
@@ -3308,7 +3334,7 @@ case "upstreamAnthropicUrl":
               id="upstreamAnthropicUrl"
               value={settings.upstreamAnthropicUrl}
               onChange={(e) => updateSetting("upstreamAnthropicUrl", e.target.value)}
-              placeholder="[URL_6]"
+              placeholder="https://api.anthropic.com"
               disabled={isSettingOverridden("upstreamAnthropicUrl")}
               className={isSettingOverridden("upstreamAnthropicUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
@@ -3326,7 +3352,7 @@ case "upstreamChatGptUrl":
               id="upstreamChatGptUrl"
               value={settings.upstreamChatGptUrl}
               onChange={(e) => updateSetting("upstreamChatGptUrl", e.target.value)}
-              placeholder="[URL_7]"
+              placeholder="https://chatgpt.com/backend-api"
               disabled={isSettingOverridden("upstreamChatGptUrl")}
               className={isSettingOverridden("upstreamChatGptUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
@@ -3344,7 +3370,7 @@ case "upstreamGeminiUrl":
               id="upstreamGeminiUrl"
               value={settings.upstreamGeminiUrl}
               onChange={(e) => updateSetting("upstreamGeminiUrl", e.target.value)}
-              placeholder="[URL_8]"
+              placeholder="https://generativelanguage.googleapis.com"
               disabled={isSettingOverridden("upstreamGeminiUrl")}
               className={isSettingOverridden("upstreamGeminiUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
@@ -3362,7 +3388,7 @@ case "upstreamVertexUrl":
               id="upstreamVertexUrl"
               value={settings.upstreamVertexUrl}
               onChange={(e) => updateSetting("upstreamVertexUrl", e.target.value)}
-              placeholder="[URL_9]"
+              placeholder="https://us-central1-aiplatform.googleapis.com/v1"
               disabled={isSettingOverridden("upstreamVertexUrl")}
               className={isSettingOverridden("upstreamVertexUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
@@ -3380,7 +3406,7 @@ case "upstreamNvidiaUrl":
               id="upstreamNvidiaUrl"
               value={settings.upstreamNvidiaUrl}
               onChange={(e) => updateSetting("upstreamNvidiaUrl", e.target.value)}
-              placeholder="[URL_10]"
+              placeholder="https://integrate.api.nvidia.com/v1"
               disabled={isSettingOverridden("upstreamNvidiaUrl")}
               className={isSettingOverridden("upstreamNvidiaUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
@@ -3398,7 +3424,7 @@ case "upstreamOpenRouterUrl":
               id="upstreamOpenRouterUrl"
               value={settings.upstreamOpenRouterUrl}
               onChange={(e) => updateSetting("upstreamOpenRouterUrl", e.target.value)}
-              placeholder="[URL_11]"
+              placeholder="https://openrouter.ai/api/v1"
               disabled={isSettingOverridden("upstreamOpenRouterUrl")}
               className={isSettingOverridden("upstreamOpenRouterUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
@@ -3416,7 +3442,7 @@ case "upstreamKiloUrl":
               id="upstreamKiloUrl"
               value={settings.upstreamKiloUrl}
               onChange={(e) => updateSetting("upstreamKiloUrl", e.target.value)}
-              placeholder="[URL_12]"
+              placeholder="https://api.kilo.ai"
               disabled={isSettingOverridden("upstreamKiloUrl")}
               className={isSettingOverridden("upstreamKiloUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
@@ -3434,7 +3460,7 @@ case "upstreamGeminiCodeAssistUrl":
               id="upstreamGeminiCodeAssistUrl"
               value={settings.upstreamGeminiCodeAssistUrl}
               onChange={(e) => updateSetting("upstreamGeminiCodeAssistUrl", e.target.value)}
-              placeholder="[URL_8]"
+              placeholder="https://generativelanguage.googleapis.com"
               disabled={isSettingOverridden("upstreamGeminiCodeAssistUrl")}
               className={isSettingOverridden("upstreamGeminiCodeAssistUrl") ? "bg-muted cursor-not-allowed" : ""}
             />
