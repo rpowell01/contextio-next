@@ -148,8 +148,7 @@ function formatPercent(value: number): string {
  * and current usage as a green overlay capped at max.
  * Accepts the full Bar props from recharts (including payload).
  */
-const BufferUsageShape = (props: any) => {
-  const { x, y, width, height, payload } = props;
+const BufferUsageShape = ({ x, y, width, height, payload }: any) => {
   const data = payload;
   if (!data) return <g />;
 
