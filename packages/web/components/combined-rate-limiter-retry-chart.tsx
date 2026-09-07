@@ -501,10 +501,10 @@ function CombinedRateLimiterRetryChartComponent({
             />
 
             <Tooltip
-              formatter={(value: number, name: string, props: { xAxisId?: number } | undefined) => {
-                // Format based on the metric name and xAxisId
-                const isBufferAxis = props?.xAxisId === 1;
-                if (isBufferAxis || name.includes("Buffer")) {
+              formatter={(value: number, name: string) => {
+                // Format based on the metric name - buffer metrics use MB, counts use numbers
+                const isBufferMetric = name.includes("Buffer");
+                if (isBufferMetric) {
                   return [value.toFixed(1) + " MB", name];
                 }
                 return [formatNumber(value), name];
