@@ -80,8 +80,10 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 		redactPreset: "pii",
 		redactReversible: false,
 		redactPolicyFile: "",
+		redactPolicyEnabled: false,
 		redactPathsOnly: ["messages[*].content"],
 		redactPathsSkip: [],
+		redactDisabledRules: [],
 		encryptionAtRest: false,
 		captureCleanupEnabled: true,
 		captureCleanupIntervalHours: 24,
@@ -89,10 +91,12 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 		theme: "system",
 		oidcEnabled: false,
 		oidcPublicUrl: "",
+		oidcIssuer: "",
 		showPageLoadTime: false,
 		detectorMode: "rules",
 		detectorModelName: "Xenova/bert-base-NER",
 		detectorThreshold: 0.5,
+		detectorLabels: [],
 		rateLimiter: {
 			anthropic: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 			openai: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
@@ -103,6 +107,7 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 			nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 			openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 			kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+			unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 		},
 		streamingRetry: {
 			anthropic: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
@@ -114,6 +119,7 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 			nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 			openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 			kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+			unknown: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 		},
 		// Feature flags (default true)
 		enableLogger: true,
@@ -130,6 +136,10 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 		retryCleanupIntervalMs: 30000,
 		retryMaxBufferSize: 5242880,
 		retryMaxStreamRetries: 3,
+		// Feedback store settings (for false positive management)
+		feedbackStoreEnabled: false,
+		feedbackStoreType: "sqlite",
+		feedbackStorePath: "",
 		// Redaction enabled per provider
 		redactProviders: {
 			anthropic: true,
@@ -141,6 +151,7 @@ function createTestSettings(overrides: Partial<Settings> = {}): Settings {
 			nvidia: true,
 			openrouter: true,
 			kilo: true,
+			unknown: true,
 		},
 		// Proxy configuration
 		proxyBindHost: "[IP_ADDRESS_1786835330040]",
@@ -267,17 +278,18 @@ describe("settings-repo.ts", () => {
 		});
 
 		it("correctly serializes rateLimiter as JSON", () => {
-			const customRateLimiter = {
-				anthropic: { maxRequests: 100, windowMs: 120000, bufferCapacity: 20 },
-				openai: { maxRequests: 80, windowMs: 60000, bufferCapacity: 15 },
-				chatgpt: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				gemini: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				geminiCodeAssist: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				vertex: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-				kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
-			};
+const customRateLimiter = {
+			anthropic: { maxRequests: 100, windowMs: 120000, bufferCapacity: 20 },
+			openai: { maxRequests: 80, windowMs: 60000, bufferCapacity: 15 },
+			chatgpt: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+			gemini: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+			geminiCodeAssist: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+			vertex: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+			nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+			openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+			kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+			unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+		};
 			const customSettings = createTestSettings({ rateLimiter: customRateLimiter });
 			upsertSettings(customSettings);
 
@@ -296,17 +308,18 @@ describe("settings-repo.ts", () => {
 		});
 
 		it("correctly serializes streamingRetry as JSON", () => {
-			const customStreamingRetry = {
-				anthropic: { enabled: false, maxRetries: 5, maxBufferSizeMB: 20 },
-				openai: { enabled: true, maxRetries: 2, maxBufferSizeMB: 5 },
-				chatgpt: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
-				gemini: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
-				geminiCodeAssist: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
-				vertex: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
-				nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
-				openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
-				kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
-			};
+const customStreamingRetry = {
+			anthropic: { enabled: false, maxRetries: 5, maxBufferSizeMB: 20 },
+			openai: { enabled: true, maxRetries: 2, maxBufferSizeMB: 5 },
+			chatgpt: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+			gemini: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+			geminiCodeAssist: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+			vertex: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+			nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+			openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+			kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+			unknown: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+		};
 			const customSettings = createTestSettings({ streamingRetry: customStreamingRetry });
 			upsertSettings(customSettings);
 
@@ -699,6 +712,7 @@ describe("settings-repo.ts", () => {
 					nvidia: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 					openrouter: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 					kilo: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
+					unknown: { maxRequests: 60, windowMs: 60000, bufferCapacity: 10 },
 				},
 				streamingRetry: {
 					anthropic: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
@@ -710,6 +724,7 @@ describe("settings-repo.ts", () => {
 					nvidia: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 					openrouter: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 					kilo: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
+					unknown: { enabled: true, maxRetries: 3, maxBufferSizeMB: 10 },
 				},
 			});
 			// Change one value to make it different from defaults
