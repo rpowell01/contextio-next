@@ -1,8 +1,8 @@
 # ContextIO-Next
 
 [![CI](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml/badge.svg)](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml)
-![Docker Pulls](https://img.shields.io/docker/pulls/ghcr.io/rpowell01/contextio-next)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
+[![Docker Pulls](https://img.shields.io/docker/pulls/rpowell01/contextio-next)](https://github.com/rpowell01/contextio-next/pkgs/container/contextio-next)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## MIT License and Attribution
 
