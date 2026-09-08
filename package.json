@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "turbo build",
-    "build:test": "turbo build && tsc -p tsconfig.test.json",
+    "build:test": "turbo build && tsc -p tsconfig.test.json && cp -r packages/core/dist test/dist/packages/core/dist && cp -r packages/proxy/dist test/dist/packages/proxy/dist && cp -r packages/redact/dist test/dist/packages/redact/dist && cp -r packages/logger/dist test/dist/packages/logger/dist 2>/dev/null || true",
     "test": "pnpm run build:test && node --test --test-concurrency=1 'test/dist/**/*.test.js'",
     "dev": "turbo dev",
     "lint": "turbo lint",
@@ -26,6 +26,7 @@
   "devDependencies": {
     "@types/mime-types": "^3.0.1",
     "@types/node": "^22",
+    "better-sqlite3": "^11.0.0",
     "server-only": "^0.0.1",
     "tsx": "^4.23.1",
     "turbo": "^2",
