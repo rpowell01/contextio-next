@@ -660,8 +660,8 @@ for (const upstreamKey of requiredUpstreams) {
       ?? settingsRateLimit?.bufferCapacity?.toString()
       ?? effectiveFileConfig?.bufferCapacity?.toString();
 
-    // For optional providers (geminiCodeAssist), provide sensible defaults if no config found
-    const isOptionalProvider = provider === "geminiCodeAssist";
+    // For optional providers (geminiCodeAssist, unknown), provide sensible defaults if no config found
+    const isOptionalProvider = provider === "geminiCodeAssist" || provider === "unknown";
     const maxRequests = maxRequestsRaw !== undefined
       ? Number.parseInt(String(maxRequestsRaw), 10)
       : (isOptionalProvider ? 60 : (() => { throw new Error(`Rate limit config for provider "${provider}" missing maxRequests (no env var ${prefix}_MAX_REQUESTS, no settings, and no file config)`); })());
@@ -719,7 +719,7 @@ for (const upstreamKey of requiredUpstreams) {
     const prefix = `CONTEXTIO_RETRY_${provider.toUpperCase()}`;
     // Use file config as base, env vars override, no hardcoded fallbacks
     // If fileConfig is missing, env vars must provide all required fields
-    const isOptionalProvider = provider === "geminiCodeAssist";
+    const isOptionalProvider = provider === "geminiCodeAssist" || provider === "unknown";
 
     const maxRetries = (() => {
       const raw = process.env[`${prefix}_MAX_RETRIES`];

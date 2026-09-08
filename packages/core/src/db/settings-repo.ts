@@ -901,7 +901,7 @@ function validateAndMergeSettings(input: unknown): Settings {
 		}
 		const rlObj = rl as Record<string, unknown>;
 		const result = {} as Record<Provider, RateLimitConfig>;
-		for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "vertex", "nvidia", "openrouter", "kilo", "geminiCodeAssist"] as Provider[]) {
+		for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "vertex", "nvidia", "openrouter", "kilo", "geminiCodeAssist", "unknown"] as Provider[]) {
 			const p = rlObj[provider];
 			if (typeof p === "object" && p !== null) {
 				const pObj = p as { maxRequests?: unknown; windowMs?: unknown; bufferCapacity?: unknown };
@@ -924,7 +924,7 @@ function validateAndMergeSettings(input: unknown): Settings {
 		}
 		const srObj = sr as Record<string, unknown>;
 		const result = {} as Record<Provider, StreamingRetryConfig>;
-		for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "openrouter", "kilo"] as Provider[]) {
+		for (const provider of ["anthropic", "openai", "chatgpt", "gemini", "geminiCodeAssist", "vertex", "nvidia", "openrouter", "kilo", "unknown"] as Provider[]) {
 			const p = srObj[provider];
 			if (typeof p === "object" && p !== null) {
 				const pObj = p as { enabled?: unknown; maxRetries?: unknown; maxBufferSizeMB?: unknown };
