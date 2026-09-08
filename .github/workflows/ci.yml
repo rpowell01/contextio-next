@@ -22,7 +22,8 @@ jobs:
       # - run: pnpm test
       - name: Verify all packages build correctly
         run: |
-          for pkg in packages/*; do
+          # Check packages that build to dist/ (exclude web which builds to .next/)
+          for pkg in packages/cli packages/core packages/proxy packages/redact packages/logger; do
             [ -d "$pkg/dist" ] || { echo "ERROR: $pkg/dist missing"; exit 1; }
           done
           # CLI has main.js, others have index.js
@@ -31,4 +32,6 @@ jobs:
           [ -f "packages/proxy/dist/index.js" ] || { echo "ERROR: proxy dist/index.js missing"; exit 1; }
           [ -f "packages/redact/dist/index.js" ] || { echo "ERROR: redact dist/index.js missing"; exit 1; }
           [ -f "packages/logger/dist/index.js" ] || { echo "ERROR: logger dist/index.js missing"; exit 1; }
+          # Web package (Next.js) builds to .next/
+          [ -d "packages/web/.next" ] || { echo "ERROR: web/.next missing"; exit 1; }
           echo "All packages built successfully"
