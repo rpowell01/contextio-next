@@ -1701,13 +1701,13 @@ export class RetryPlugin implements ProxyPlugin {
 
     // Aggregate from streamState (streaming retries and buffers)
     // Use forward.ts buffer sizes if provided, otherwise fall back to internal counter
-    for (const state of this.streamState.values()) {
+    // streamState is keyed by sessionId, which matches forwardBufferSizes keys
+    for (const [sessionId, state] of this.streamState.entries()) {
       const provider = state.provider ?? "unknown";
       const existing = providerMap.get(provider);
       
-      // Get buffer size from forward.ts if available, otherwise use internal counter
-      const forwardBufferSize = forwardBufferSizes?.get(state.requestId) ?? 
-                                forwardBufferSizes?.get(state.captureId ?? "") ?? 0;
+      // Get buffer size from forward.ts using sessionId (the key used in forward.ts streamBufferSizes Map)
+      const forwardBufferSize = forwardBufferSizes?.get(sessionId) ?? 0;
       const bufferMB = (forwardBufferSize || state.totalBufferSize) / (1024 * 1024);
       const maxBufferMB = state.maxBufferSize / (1024 * 1024);
       
