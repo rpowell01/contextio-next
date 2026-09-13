@@ -627,7 +627,42 @@ function MetricsContent() {
               <div className="space-y-6">
                 {/* Retry Summary Cards */}
                 {retryMetrics && (
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+                    {/* Rate Limiter Usage Per Provider */}
+                    {rateLimiterMetrics && rateLimiterMetrics.config.enabled && rateLimiterMetrics.buckets.length > 0 && (
+                      <>
+                        {(() => {
+                          // Aggregate buckets by provider
+                          const providerMap = new Map<string, { current: number; max: number }>();
+                          rateLimiterMetrics.buckets.forEach((bucket) => {
+                            const provider = bucket.provider ?? "unknown";
+                            const existing = providerMap.get(provider) ?? { current: 0, max: 0 };
+                            existing.current += bucket.requestsInWindow ?? 0;
+                            existing.max += bucket.maxTokens;
+                            providerMap.set(provider, existing);
+                          });
+                          return Array.from(providerMap.entries()).map(([provider, data]) => (
+                            <div
+                              key={provider}
+                              className="rounded-lg border p-4 bg-cyan/10 border-cyan/20"
+                              title={`Provider: ${provider}`}
+                            >
+                              <div className="text-sm text-muted-foreground truncate">{provider}</div>
+                              <div className="flex items-baseline gap-1 mt-1">
+                                <span className="text-2xl font-bold text-cyan-600">{formatNumber(data.current)}</span>
+                                <span className="text-muted-foreground">/</span>
+                                <span className="text-xl font-medium text-muted-foreground">{formatNumber(data.max)}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {data.max > 0
+                                  ? `${((data.current / data.max) * 100).toFixed(1)}% used`
+                                  : "N/A"}
+                              </div>
+                            </div>
+                          ));
+                        })()}
+                      </>
+                    )}
                     <div className="rounded-lg border p-4 bg-amber/10 border-amber/20">
                       <div className="text-sm text-muted-foreground">Total Retry Attempts</div>
                       <div className="text-2xl font-bold text-amber-600">
