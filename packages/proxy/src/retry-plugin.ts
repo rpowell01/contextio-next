@@ -551,39 +551,72 @@ export class RetryPlugin implements ProxyPlugin {
   }
 
   /**
+   * Split a string containing potentially concatenated JSON objects into individual objects.
+   * Returns an array of JSON strings, or the original string if it doesn't appear concatenated.
+   */
+  private splitConcatenatedJson(dataStr: string): string[] {
+    // Quick check: if the string doesn't contain }{ pattern (with optional whitespace), it's likely a single object
+    // Use regex to check for } followed by optional whitespace and {
+    if (!/}\s*{/.test(dataStr)) {
+      return [dataStr];
+    }
+
+    // Split by }{ boundary (with optional whitespace)
+    // This regex finds the boundary between two JSON objects
+    const parts = dataStr.split(/(?<=})\s*(?={)/);
+    
+    // Filter out empty parts and validate each looks like a JSON object
+    const validParts: string[] = [];
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+        validParts.push(trimmed);
+      }
+    }
+
+    // If we found valid parts, return them; otherwise return original
+    return validParts.length > 0 ? validParts : [dataStr];
+  }
+
+  /**
    * Check a data field string for error patterns.
-   * Handles multi-line data per SSE spec.
+   * Handles multi-line data per SSE spec and concatenated JSON objects.
    */
   private checkDataForError(dataStr: string): { isError: boolean; status: number | null; message: string | null } {
     if (!dataStr || dataStr === "[DONE]") return { isError: false, status: null, message: null };
+
+    // Split concatenated JSON objects and check each one
+    const jsonParts = this.splitConcatenatedJson(dataStr);
     
-    try {
-      const parsed = JSON.parse(dataStr);
-      
-      // Check for explicit error event in data (Anthropic style: { type: "error", error: {...} })
-      if (parsed.type === "error" && parsed.error) {
-        const err = parsed.error;
-        const status = err.status ?? err.code ?? parsed.status ?? parsed.code ?? null;
-        const message = err.message ?? JSON.stringify(err);
-        return { isError: true, status: typeof status === 'number' ? status : null, message };
+for (const part of jsonParts) {
+      try {
+        const parsed = JSON.parse(part);
+       
+        // Check for explicit error event in data (Anthropic style: { type: "error", error: {...} })
+        if (parsed.type === "error" && parsed.error) {
+          const err = parsed.error;
+          const status = err.status ?? err.code ?? parsed.status ?? parsed.code ?? null;
+          const message = err.message ?? JSON.stringify(err);
+          return { isError: true, status: typeof status === 'number' ? status : null, message };
+        }
+        
+        // Check for error object (OpenAI style: { error: {...} })
+        if (parsed.error) {
+          const err = parsed.error;
+          const status = err.status ?? err.code ?? parsed.status ?? parsed.code ?? null;
+          const message = err.message ?? (parsed.type === "error" ? err.type : JSON.stringify(err));
+          return { isError: true, status: typeof status === 'number' ? status : null, message };
+        }
+        
+        // Check for top-level status/code (generic error format)
+        const topStatus = parsed.status ?? parsed.code ?? null;
+        if (topStatus !== null && typeof topStatus === 'number' && topStatus >= 400) {
+          const message = parsed.message ?? parsed.error?.message ?? JSON.stringify(parsed);
+          return { isError: true, status: topStatus, message };
+        }
+      } catch {
+        // Not valid JSON, continue to next part
       }
-      
-      // Check for error object (OpenAI style: { error: {...} })
-      if (parsed.error) {
-        const err = parsed.error;
-        const status = err.status ?? err.code ?? parsed.status ?? parsed.code ?? null;
-        const message = err.message ?? (parsed.type === "error" ? err.type : JSON.stringify(err));
-        return { isError: true, status: typeof status === 'number' ? status : null, message };
-      }
-      
-      // Check for top-level status/code (generic error format)
-      const topStatus = parsed.status ?? parsed.code ?? null;
-      if (topStatus !== null && typeof topStatus === 'number' && topStatus >= 400) {
-        const message = parsed.message ?? parsed.error?.message ?? JSON.stringify(parsed);
-        return { isError: true, status: topStatus, message };
-      }
-    } catch {
-      // Not valid JSON, not an error we can parse
     }
     
     return { isError: false, status: null, message: null };
@@ -609,33 +642,38 @@ export class RetryPlugin implements ProxyPlugin {
       return { isError: true, message };
     }
 
-    try {
-      const parsed = JSON.parse(responseBody);
+    // Split concatenated JSON objects and check each one
+    const jsonParts = this.splitConcatenatedJson(responseBody);
+    
+    for (const part of jsonParts) {
+      try {
+        const parsed = JSON.parse(part);
 
-      // Check for NVIDIA error format: { error: { code: "ResourceExhausted", message: "..." } }
-      if (parsed.error && parsed.error.code === "ResourceExhausted") {
-        const message = parsed.error.message ?? "ResourceExhausted";
-        if (message.includes("Worker local total request limit reached")) {
-          return { isError: true, message };
+        // Check for NVIDIA error format: { error: { code: "ResourceExhausted", message: "..." } }
+        if (parsed.error && parsed.error.code === "ResourceExhausted") {
+          const message = parsed.error.message ?? "ResourceExhausted";
+          if (message.includes("Worker local total request limit reached")) {
+            return { isError: true, message };
+          }
         }
-      }
 
-      // Also check for alternative format: { code: "ResourceExhausted", message: "..." }
-      if (parsed.code === "ResourceExhausted" && parsed.message?.includes("Worker local total request limit reached")) {
-        return { isError: true, message: parsed.message };
-      }
-
-      // Check for error envelope format: { name: "UnknownError", data: { message: "..." } }
-      if (parsed.name === "UnknownError" && parsed.data && parsed.data.message) {
-        const message = parsed.data.message;
-        // Message may contain escaped quotes: "\"ResourceExhausted: Worker local total request limit reached (32/32)\""
-        if (message.includes("ResourceExhausted") && message.includes("Worker local total request limit reached")) {
-          return { isError: true, message };
+        // Also check for alternative format: { code: "ResourceExhausted", message: "..." }
+        if (parsed.code === "ResourceExhausted" && parsed.message?.includes("Worker local total request limit reached")) {
+          return { isError: true, message: parsed.message };
         }
-      }
 
-    } catch {
-      // Not valid JSON, but we already checked raw body above
+        // Check for error envelope format: { name: "UnknownError", data: { message: "..." } }
+        if (parsed.name === "UnknownError" && parsed.data && parsed.data.message) {
+          const message = parsed.data.message;
+          // Message may contain escaped quotes: "\"ResourceExhausted: Worker local total request limit reached (32/32)\""
+          if (message.includes("ResourceExhausted") && message.includes("Worker local total request limit reached")) {
+            return { isError: true, message };
+          }
+        }
+
+      } catch {
+        // Not valid JSON, continue to next part
+      }
     }
 
     return { isError: false, message: null };
@@ -650,50 +688,57 @@ export class RetryPlugin implements ProxyPlugin {
   private checkRateLimitInData(dataStr: string): { isRateLimit: boolean; message: string | null } {
     if (!dataStr) return { isRateLimit: false, message: null };
 
-    try {
-      const parsed = JSON.parse(dataStr);
+    // Split concatenated JSON objects and check each one
+    const jsonParts = this.splitConcatenatedJson(dataStr);
+    
+    for (const part of jsonParts) {
+      try {
+        const parsed = JSON.parse(part);
 
-      // Check for explicit rate limit error type (Anthropic style: { type: "rate_limit_error", ... })
-      if (parsed.type && typeof parsed.type === 'string') {
-        const type = parsed.type.toLowerCase();
-        if (type.includes('rate_limit') || type.includes('ratelimit') || type.includes('rate-limit')) {
-          return { isRateLimit: true, message: parsed.message ?? JSON.stringify(parsed) };
+        // Check for explicit rate limit error type (Anthropic style: { type: "rate_limit_error", ... })
+        if (parsed.type && typeof parsed.type === 'string') {
+          const type = parsed.type.toLowerCase();
+          if (type.includes('rate_limit') || type.includes('ratelimit') || type.includes('rate-limit')) {
+            return { isRateLimit: true, message: parsed.message ?? JSON.stringify(parsed) };
+          }
         }
-      }
 
-      // Check for error object with rate limit type (Anthropic: { error: { type: "rate_limit_error", ... } })
-      if (parsed.error && parsed.error.type) {
-        const type = parsed.error.type.toLowerCase();
-        if (type.includes('rate_limit') || type.includes('ratelimit') || type.includes('rate-limit')) {
-          return { isRateLimit: true, message: parsed.error.message ?? JSON.stringify(parsed.error) };
+        // Check for error object with rate limit type (Anthropic: { error: { type: "rate_limit_error", ... } })
+        if (parsed.error && parsed.error.type) {
+          const type = parsed.error.type.toLowerCase();
+          if (type.includes('rate_limit') || type.includes('ratelimit') || type.includes('rate-limit')) {
+            return { isRateLimit: true, message: parsed.error.message ?? JSON.stringify(parsed.error) };
+          }
         }
-      }
 
-      // Check for rate limit indicators in message field
-      if (parsed.message && typeof parsed.message === 'string') {
-        const msg = parsed.message.toLowerCase();
-        if (msg.includes('rate limit') || msg.includes('ratelimit') || msg.includes('rate-limit') ||
-            msg.includes('too many requests') || msg.includes('quota exceeded') || msg.includes('throttle')) {
-          return { isRateLimit: true, message: parsed.message };
+        // Check for rate limit indicators in message field
+        if (parsed.message && typeof parsed.message === 'string') {
+          const msg = parsed.message.toLowerCase();
+          if (msg.includes('rate limit') || msg.includes('ratelimit') || msg.includes('rate-limit') ||
+              msg.includes('too many requests') || msg.includes('quota exceeded') || msg.includes('throttle')) {
+            return { isRateLimit: true, message: parsed.message };
+          }
         }
-      }
 
-      // Check for generic error object with code/message
-      if (parsed.code && parsed.message) {
-        const msg = parsed.message.toLowerCase();
-        if (msg.includes('rate limit') || msg.includes('ratelimit') || msg.includes('rate-limit') ||
-            msg.includes('too many requests') || msg.includes('quota exceeded') || msg.includes('throttle')) {
-          return { isRateLimit: true, message: parsed.message };
+        // Check for generic error object with code/message
+        if (parsed.code && parsed.message) {
+          const msg = parsed.message.toLowerCase();
+          if (msg.includes('rate limit') || msg.includes('ratelimit') || msg.includes('rate-limit') ||
+              msg.includes('too many requests') || msg.includes('quota exceeded') || msg.includes('throttle')) {
+            return { isRateLimit: true, message: parsed.message };
+          }
         }
-      }
 
-    } catch {
-      // Not valid JSON, check raw string
-      const rawLower = dataStr.toLowerCase();
-      if (rawLower.includes('rate limit') || rawLower.includes('ratelimit') || rawLower.includes('rate-limit') ||
-          rawLower.includes('too many requests') || rawLower.includes('quota exceeded') || rawLower.includes('throttle')) {
-        return { isRateLimit: true, message: dataStr };
+      } catch {
+        // Not valid JSON, continue to next part
       }
+    }
+
+    // Fallback: check raw string for rate limit indicators (handles non-JSON or concatenated edge cases)
+    const rawLower = dataStr.toLowerCase();
+    if (rawLower.includes('rate limit') || rawLower.includes('ratelimit') || rawLower.includes('rate-limit') ||
+        rawLower.includes('too many requests') || rawLower.includes('quota exceeded') || rawLower.includes('throttle')) {
+      return { isRateLimit: true, message: dataStr };
     }
 
     return { isRateLimit: false, message: null };
