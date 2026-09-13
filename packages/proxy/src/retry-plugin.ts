@@ -147,6 +147,9 @@ interface StreamState {
   // Production buffering is handled by forward.ts streamBufferChunks.
   totalBufferSize: number;
   maxBufferSize: number;
+  // Peak buffer size observed during this stream (for metrics).
+  // Tracks the maximum totalBufferSize reached before any reset/retry.
+  peakBufferSize: number;
   bufferOverflow: boolean;
   // Pending retry signal for streaming responses
   pendingRetry?: {
@@ -898,6 +901,7 @@ export class RetryPlugin implements ProxyPlugin {
           hasErrorEvent: false,
           totalBufferSize: 0,
           maxBufferSize,
+          peakBufferSize: 0,
           bufferOverflow: false,
           streamRetryCount: 0,
         });
@@ -1147,6 +1151,10 @@ export class RetryPlugin implements ProxyPlugin {
       } else {
         // Track buffer size (O(1) instead of O(n²) Buffer.concat)
         streamState.totalBufferSize = newSize;
+        // Update peak buffer size for metrics
+        if (newSize > streamState.peakBufferSize) {
+          streamState.peakBufferSize = newSize;
+        }
       }
     }
 
@@ -1709,13 +1717,16 @@ export class RetryPlugin implements ProxyPlugin {
       // Get buffer size from forward.ts using sessionId (the key used in forward.ts streamBufferSizes Map)
       const forwardBufferSize = forwardBufferSizes?.get(sessionId) ?? 0;
       const bufferMB = (forwardBufferSize || state.totalBufferSize) / (1024 * 1024);
-      const maxBufferMB = state.maxBufferSize / (1024 * 1024);
+      // Use peakBufferSize (max observed during stream) for maxBufferUsageMB
+      const maxBufferMB = state.peakBufferSize / (1024 * 1024);
+      // Configured max buffer size for maxResponseBufferSizeMB
+      const configuredMaxBufferMB = state.maxBufferSize / (1024 * 1024);
       
       if (!existing) {
         providerMap.set(provider, {
           provider,
           maxRetries: this.globalConfig.maxRetries ?? DEFAULT_MAX_RETRIES,
-          maxResponseBufferSizeMB: maxBufferMB,
+          maxResponseBufferSizeMB: configuredMaxBufferMB,
           nonStreamingRetryAttempts: 0,
           streamingRetryAttempts: state.streamRetryCount ?? 0,
           activeStreamingSessions: 1,
