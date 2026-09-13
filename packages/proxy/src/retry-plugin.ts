@@ -1638,14 +1638,16 @@ export class RetryPlugin implements ProxyPlugin {
     this.upstream429Counts.set(provider, currentCount + 1);
   }
 
-  /**
+/**
    * Get comprehensive retry metrics for monitoring.
    * Returns per-provider statistics including retry attempts, buffer usage, and active sessions.
-   * 
-   * @param forwardBufferSizes - Optional Map of sessionId -> bufferSize (bytes) from forward.ts.
+   
+   * @param forwardBufferSizes - Optional Map of sessionId -> current bufferSize (bytes) from forward.ts.
    *   If provided, these actual buffer sizes will be used instead of the internal retry plugin counters.
+   * @param forwardPeakBufferSizes - Optional Map of sessionId -> peak bufferSize (bytes) from forward.ts.
+   *   If provided, these peak buffer sizes will be used for maxBufferUsageMB.
    */
-  getRetryMetrics(forwardBufferSizes?: Map<string, number>): {
+  getRetryMetrics(forwardBufferSizes?: Map<string, number>, forwardPeakBufferSizes?: Map<string, number>): {
     providers: Array<{
       provider: string;
       maxRetries: number;
@@ -1717,8 +1719,9 @@ export class RetryPlugin implements ProxyPlugin {
       // Get buffer size from forward.ts using sessionId (the key used in forward.ts streamBufferSizes Map)
       const forwardBufferSize = forwardBufferSizes?.get(sessionId) ?? 0;
       const bufferMB = (forwardBufferSize || state.totalBufferSize) / (1024 * 1024);
-      // Use peakBufferSize (max observed during stream) for maxBufferUsageMB
-      const maxBufferMB = state.peakBufferSize / (1024 * 1024);
+      // Use forward.ts peak buffer size for maxBufferUsageMB (source of truth for actual buffer usage)
+      const forwardPeakBufferSize = forwardPeakBufferSizes?.get(sessionId) ?? 0;
+      const maxBufferMB = (forwardPeakBufferSize || state.peakBufferSize) / (1024 * 1024);
       // Configured max buffer size for maxResponseBufferSizeMB
       const configuredMaxBufferMB = state.maxBufferSize / (1024 * 1024);
       

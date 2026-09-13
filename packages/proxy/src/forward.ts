@@ -47,11 +47,23 @@ import { SERVICE_IDENTIFIER } from "@contextio/core";
 const streamBufferSizes = new Map<string, number>();
 
 /**
+ * Module-level map to track peak buffer sizes per session (for metrics).
+ * Retains the maximum buffer size observed even after the buffer is cleared.
+ */
+const peakStreamBufferSizes = new Map<string, number>();
+
+/**
  * Update the buffer size for a streaming session.
  * Called from doForward when buffering streaming responses for retry.
+ * Also tracks peak buffer size for metrics.
  */
 export function updateStreamBufferSize(sessionId: string, size: number): void {
   streamBufferSizes.set(sessionId, size);
+  // Update peak buffer size
+  const currentPeak = peakStreamBufferSizes.get(sessionId) ?? 0;
+  if (size > currentPeak) {
+    peakStreamBufferSizes.set(sessionId, size);
+  }
 }
 
 /**
@@ -69,7 +81,16 @@ export function getAllStreamBufferSizes(): Map<string, number> {
 }
 
 /**
- * Clear the buffer size for a session (when stream ends or buffer is flushed).
+ * Get all peak stream buffer sizes (for metrics).
+ * Returns the maximum buffer size observed per session, even after buffer is cleared.
+ */
+export function getAllPeakStreamBufferSizes(): Map<string, number> {
+  return new Map(peakStreamBufferSizes);
+}
+
+/**
+ * Clear the current buffer size for a session (when stream ends or buffer is flushed).
+ * Peak buffer size is retained for metrics.
  */
 export function clearStreamBufferSize(sessionId: string): void {
   streamBufferSizes.delete(sessionId);
