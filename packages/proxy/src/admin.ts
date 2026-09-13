@@ -12,6 +12,7 @@ import { SERVICE_IDENTIFIER } from "@contextio/core";
 import { getAllMergedProviders, type MergedProvider } from "@contextio/core/db";
 import { validateSession, type AuthSession } from "./auth.js";
 import type { FeedbackStore } from "@contextio/redact";
+import { getAllStreamBufferSizes } from "./forward.js";
 
 /**
  * Extract session from request for admin authentication.
@@ -119,7 +120,7 @@ function isRetryPlugin(plugin: ProxyPlugin): plugin is ProxyPlugin & { _internal
 }
 
 interface RetryInternal {
-  getRetryMetrics: () => {
+  getRetryMetrics: (forwardBufferSizes?: Map<string, number>) => {
     providers: Array<{
       provider: string;
       maxRetries: number;
@@ -694,10 +695,12 @@ export function createAdminHandler(options: AdminOptions): http.RequestListener 
             return;
           }
  
-          try {
+try {
             const getRetryMetrics = retryPlugin._internal.getRetryMetrics.bind(retryPlugin);
-            const metrics = getRetryMetrics();
- 
+            // Get forward.ts buffer sizes for accurate metrics
+            const forwardBufferSizes = getAllStreamBufferSizes();
+            const metrics = getRetryMetrics(forwardBufferSizes);
+
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ ...metrics, service: SERVICE_IDENTIFIER }));
           } catch (innerError) {

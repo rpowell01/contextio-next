@@ -1633,8 +1633,11 @@ export class RetryPlugin implements ProxyPlugin {
   /**
    * Get comprehensive retry metrics for monitoring.
    * Returns per-provider statistics including retry attempts, buffer usage, and active sessions.
+   * 
+   * @param forwardBufferSizes - Optional Map of sessionId -> bufferSize (bytes) from forward.ts.
+   *   If provided, these actual buffer sizes will be used instead of the internal retry plugin counters.
    */
-  getRetryMetrics(): {
+  getRetryMetrics(forwardBufferSizes?: Map<string, number>): {
     providers: Array<{
       provider: string;
       maxRetries: number;
@@ -1697,10 +1700,15 @@ export class RetryPlugin implements ProxyPlugin {
     }
 
     // Aggregate from streamState (streaming retries and buffers)
+    // Use forward.ts buffer sizes if provided, otherwise fall back to internal counter
     for (const state of this.streamState.values()) {
       const provider = state.provider ?? "unknown";
       const existing = providerMap.get(provider);
-      const bufferMB = state.totalBufferSize / (1024 * 1024);
+      
+      // Get buffer size from forward.ts if available, otherwise use internal counter
+      const forwardBufferSize = forwardBufferSizes?.get(state.requestId) ?? 
+                                forwardBufferSizes?.get(state.captureId ?? "") ?? 0;
+      const bufferMB = (forwardBufferSize || state.totalBufferSize) / (1024 * 1024);
       const maxBufferMB = state.maxBufferSize / (1024 * 1024);
       
       if (!existing) {

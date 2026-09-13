@@ -40,6 +40,41 @@ import type {
 } from "@contextio/core";
 import { SERVICE_IDENTIFIER } from "@contextio/core";
 
+/**
+ * Module-level map to track streaming response buffer sizes per session.
+ * Used for metrics to show actual forward.ts buffer usage (not retry plugin's internal counter).
+ */
+const streamBufferSizes = new Map<string, number>();
+
+/**
+ * Update the buffer size for a streaming session.
+ * Called from doForward when buffering streaming responses for retry.
+ */
+export function updateStreamBufferSize(sessionId: string, size: number): void {
+  streamBufferSizes.set(sessionId, size);
+}
+
+/**
+ * Get the current buffer size for a streaming session.
+ */
+export function getStreamBufferSize(sessionId: string): number {
+  return streamBufferSizes.get(sessionId) ?? 0;
+}
+
+/**
+ * Get all current stream buffer sizes (for metrics).
+ */
+export function getAllStreamBufferSizes(): Map<string, number> {
+  return new Map(streamBufferSizes);
+}
+
+/**
+ * Clear the buffer size for a session (when stream ends or buffer is flushed).
+ */
+export function clearStreamBufferSize(sessionId: string): void {
+  streamBufferSizes.delete(sessionId);
+}
+
 export interface ForwardOptions {
   upstreams: Upstreams;
   allowTargetOverride: boolean;
@@ -848,6 +883,7 @@ export function createProxyHandler(
               // Clear the buffer to release memory
               streamBufferChunks.length = 0;
               streamBufferSize = 0;
+              if (sessionId) clearStreamBufferSize(sessionId);
             };
 
             if (!shouldBufferResponse) {
@@ -948,6 +984,7 @@ export function createProxyHandler(
                   } else if (!streamBufferOverflow) {
                     streamBufferChunks.push(outBuffer);
                     streamBufferSize = newSize;
+                    if (sessionId) updateStreamBufferSize(sessionId, streamBufferSize);
                   } else if (!res.destroyed) {
                     // Already overflowed, write directly to client
                     res.write(outBuffer);
@@ -964,6 +1001,7 @@ export function createProxyHandler(
                   } else if (!streamBufferOverflow) {
                     streamBufferChunks.push(chunk);
                     streamBufferSize = newSize;
+                    if (sessionId) updateStreamBufferSize(sessionId, streamBufferSize);
                   } else if (!res.destroyed) {
                     // Already overflowed, write directly to client
                     res.write(chunk);
@@ -992,6 +1030,7 @@ export function createProxyHandler(
                         } else {
                           streamBufferChunks.push(flushed);
                           streamBufferSize = newSize;
+                          if (sessionId) updateStreamBufferSize(sessionId, streamBufferSize);
                         }
                       } else if (!res.destroyed) {
                         // Already overflowed or not buffering for retry
@@ -1096,6 +1135,7 @@ export function createProxyHandler(
                 respChunks.length = 0;
                 streamBufferChunks.length = 0;
                 streamBufferSize = 0;
+                if (sessionId) clearStreamBufferSize(sessionId);
                 jsonBuffer = "";
 
                 // Build capture and run capture plugins
@@ -1359,6 +1399,7 @@ export function createProxyHandler(
               respChunks.length = 0;
               streamBufferChunks.length = 0;
               streamBufferSize = 0;
+              if (sessionId) clearStreamBufferSize(sessionId);
               jsonBuffer = "";
             });
 
@@ -1367,6 +1408,7 @@ export function createProxyHandler(
               respChunks.length = 0;
               streamBufferChunks.length = 0;
               streamBufferSize = 0;
+              if (sessionId) clearStreamBufferSize(sessionId);
               jsonBuffer = "";
             });
           },
