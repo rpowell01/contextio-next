@@ -667,6 +667,10 @@ for (const part of jsonParts) {
           const message = parsed.data.message;
           // Message may contain escaped quotes: "\"ResourceExhausted: Worker local total request limit reached (32/32)\""
           if (message.includes("ResourceExhausted") && message.includes("Worker local total request limit reached")) {
+        // Also check for JSON parsing failed error
+        if (message.includes("JSON parsing failed:")) {
+            return { isError: true, message };
+        }
             return { isError: true, message };
           }
         }
