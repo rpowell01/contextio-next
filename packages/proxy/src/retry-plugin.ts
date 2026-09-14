@@ -629,6 +629,8 @@ for (const part of jsonParts) {
    * Or wrapped in error envelope:
    * { "name": "UnknownError", "data": { "message": "\"ResourceExhausted: Worker local total request limit reached (32/32)\"" } }
    * Or as plain text followed by JSON (observed in some responses).
+   * Also detects NVIDIA "JSON parsing failed" errors in the same envelope format
+   * (concatenated JSON chunks in SSE data fields); these are transient and retryable.
    */
   private checkNvidiaResourceExhausted(responseBody: string): { isError: boolean; message: string | null } {
     if (!responseBody) return { isError: false, message: null };
@@ -667,10 +669,12 @@ for (const part of jsonParts) {
           const message = parsed.data.message;
           // Message may contain escaped quotes: "\"ResourceExhausted: Worker local total request limit reached (32/32)\""
           if (message.includes("ResourceExhausted") && message.includes("Worker local total request limit reached")) {
-        // Also check for JSON parsing failed error
-        if (message.includes("JSON parsing failed:")) {
             return { isError: true, message };
-        }
+          }
+          // Also check for NVIDIA JSON parsing failed error (transient, retryable):
+          // { "name": "UnknownError", "data": { "message": "JSON parsing failed: ..." } }
+          // May appear concatenated with other JSON chunks in SSE data fields.
+          if (message.includes("JSON parsing failed")) {
             return { isError: true, message };
           }
         }

@@ -589,6 +589,52 @@ describe("retry plugin - unit tests", () => {
       const streamError = (plugin as any)._internal.getStreamError("test-session-123");
       assert.ok(streamError.errorDetected);
     });
+
+    it("detects NVIDIA JSON parsing failed error envelope in SSE stream", async () => {
+      const ctx = createMockRequestContext();
+      await plugin.onRequest!(ctx);
+      
+      const errorChunk = Buffer.from(
+        'data: {"name":"UnknownError","data":{"message":"JSON parsing failed: unexpected token"}}\n\n'
+      );
+      
+      plugin.onStreamChunk!(errorChunk, "test-session-123");
+      
+      const streamError = (plugin as any)._internal.getStreamError("test-session-123");
+      assert.ok(streamError.errorDetected, "Should detect NVIDIA JSON parsing failed error");
+      assert.ok(streamError.errorMessage.includes("JSON parsing failed"));
+    });
+
+    it("detects NVIDIA JSON parsing failed error in concatenated JSON chunks", async () => {
+      const ctx = createMockRequestContext();
+      await plugin.onRequest!(ctx);
+      
+      // NVIDIA returns the error envelope concatenated with other JSON chunks
+      const errorChunk = Buffer.from(
+        'data: {"id":"chunk-1","choices":[]}\ndata: {"name":"UnknownError","data":{"message":"JSON parsing failed: unexpected token"}}\n\n'
+      );
+      
+      plugin.onStreamChunk!(errorChunk, "test-session-123");
+      
+      const streamError = (plugin as any)._internal.getStreamError("test-session-123");
+      assert.ok(streamError.errorDetected, "Should detect NVIDIA JSON parsing failed error in concatenated chunks");
+      assert.ok(streamError.errorMessage.includes("JSON parsing failed"));
+    });
+
+    it("does not detect error for normal content mentioning JSON parsing in text", async () => {
+      const ctx = createMockRequestContext();
+      await plugin.onRequest!(ctx);
+      
+      // Model output containing the phrase must not trigger a retry
+      const normalChunk = Buffer.from(
+        'data: {"type":"content_block_delta","delta":{"text":"The JSON parsing failed because of a typo."}}\n\n'
+      );
+      
+      plugin.onStreamChunk!(normalChunk, "test-session-123");
+      
+      const streamError = (plugin as any)._internal.getStreamError("test-session-123");
+      assert.ok(!streamError.errorDetected, "Should not detect error for normal model output");
+    });
   });
 
   describe("onStreamEnd - streaming retry signaling", () => {
