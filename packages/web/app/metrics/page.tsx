@@ -692,12 +692,6 @@ function MetricsContent() {
                         {formatNumber(retryMetrics.totals.totalActiveStreamingSessions)}
                       </div>
                     </div>
-                    <div className="rounded-lg border p-4 bg-green/10 border-green/20">
-                      <div className="text-sm text-muted-foreground">Buffer Memory Active</div>
-                      <div className="text-2xl font-bold text-green-600">
-                        {retryMetrics.totals.totalCurrentBufferUsageMB.toFixed(1)} MB
-                      </div>
-                    </div>
                   </div>
                 )}
 
