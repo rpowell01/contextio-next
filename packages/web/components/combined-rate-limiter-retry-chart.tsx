@@ -481,9 +481,10 @@ function CombinedRateLimiterRetryChartComponent({
   }
 
   // Find max for counts axis (requests + retries)
-  const globalMaxRequests = Math.max(1, Math.max(...chartData.map((d) => d.totalRequestsInWindow)));
-  const globalMaxTotalRequests = Math.max(1, Math.max(...chartData.map((d) => d.totalMaxRequests)));
-  const globalMaxRetries = Math.max(1, Math.max(...chartData.map((d) => d.totalRetryAttempts)));
+  // Use Number.isFinite to avoid NaN propagation (Math.max(1, NaN) === NaN)
+  const globalMaxRequests = Math.max(1, ...chartData.map((d) => (Number.isFinite(d.totalRequestsInWindow) ? d.totalRequestsInWindow : 0)));
+  const globalMaxTotalRequests = Math.max(1, ...chartData.map((d) => (Number.isFinite(d.totalMaxRequests) ? d.totalMaxRequests : 0)));
+  const globalMaxRetries = Math.max(1, ...chartData.map((d) => (Number.isFinite(d.totalRetryAttempts) ? d.totalRetryAttempts : 0)));
   const globalMaxCounts = Math.max(globalMaxRequests, globalMaxTotalRequests, globalMaxRetries);
 
   // Find max for tokens per second axis
