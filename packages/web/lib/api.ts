@@ -794,7 +794,7 @@ async getProxyStatus(signal?: AbortSignal): Promise<ProxyStatus> {
   }
 
   async getTokensPerSecondMetrics(signal?: AbortSignal): Promise<TokensPerSecondMetrics> {
-    return this.request("/api/admin/tokens-per-second", { signal });
+    return this.request("/admin/tokens-per-second", { signal });
   }
 
   async getDatabaseMaintenanceInfo(signal?: AbortSignal): Promise<{
