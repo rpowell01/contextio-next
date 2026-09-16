@@ -488,7 +488,8 @@ function CombinedRateLimiterRetryChartComponent({
   const globalMaxCounts = Math.max(globalMaxRequests, globalMaxTotalRequests, globalMaxRetries);
 
   // Find max for tokens per second axis
-  const globalMaxTokensPerSecond = Math.max(1, Math.max(...chartData.map((d) => d.avgTokensPerSecond ?? 0)));
+  // Use ?? 0 to handle undefined, and protect against NaN with || 0
+  const globalMaxTokensPerSecond = Math.max(1, ...chartData.map((d) => (d.avgTokensPerSecond ?? 0) || 0));
 
   return (
     <div className="w-full space-y-4">
