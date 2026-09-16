@@ -414,7 +414,23 @@ function CombinedRateLimiterRetryChartComponent({
 
   // Downsample if needed
   const chartData = useMemo(() => {
-    return downsampleData(providerData, maxDataPoints);
+    const raw = downsampleData(providerData, maxDataPoints);
+    // Transform to ensure no NaN values propagate to Recharts dataKey accessors
+    // Recharts Bar components access dataKey directly and Math.max(1, NaN) === NaN
+    return raw.map((d) => ({
+      ...d,
+      nonStreamingRetryAttempts:
+        Number.isFinite(d.nonStreamingRetryAttempts) ? d.nonStreamingRetryAttempts : 0,
+      streamingRetryAttempts:
+        Number.isFinite(d.streamingRetryAttempts) ? d.streamingRetryAttempts : 0,
+      totalMaxRequests: Number.isFinite(d.totalMaxRequests) ? d.totalMaxRequests : 0,
+      totalRequestsInWindow:
+        Number.isFinite(d.totalRequestsInWindow) ? d.totalRequestsInWindow : 0,
+      totalRetryAttempts:
+        Number.isFinite(d.totalRetryAttempts) ? d.totalRetryAttempts : 0,
+      avgTokensPerSecond:
+        Number.isFinite(d.avgTokensPerSecond) ? d.avgTokensPerSecond : 0,
+    }));
   }, [providerData, maxDataPoints]);
 
   const copyToClipboard = async () => {
