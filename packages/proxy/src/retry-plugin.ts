@@ -555,6 +555,13 @@ export class RetryPlugin implements ProxyPlugin {
    * Returns an array of JSON strings, or the original string if it doesn't appear concatenated.
    */
   private splitConcatenatedJson(dataStr: string): string[] {
+    // Handle [DONE] marker - OpenAI-compatible APIs send this to signal stream end
+    // It's not JSON, so preserve it as-is
+    const trimmed = dataStr.trim();
+    if (trimmed === "[DONE]") {
+      return [dataStr];
+    }
+
     // Quick check: if the string doesn't contain }{ pattern (with optional whitespace), it's likely a single object
     // Use regex to check for } followed by optional whitespace and {
     if (!/}\s*{/.test(dataStr)) {
@@ -564,7 +571,7 @@ export class RetryPlugin implements ProxyPlugin {
     // Split by }{ boundary (with optional whitespace)
     // This regex finds the boundary between two JSON objects
     const parts = dataStr.split(/(?<=})\s*(?={)/);
-    
+
     // Filter out empty parts and validate each looks like a JSON object
     const validParts: string[] = [];
     for (const part of parts) {
