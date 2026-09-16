@@ -482,6 +482,12 @@ function CombinedRateLimiterRetryChartComponent({
 
   // Find max for counts axis (requests + retries)
   // Use Number.isFinite to avoid NaN propagation (Math.max(1, NaN) === NaN)
+  // DEBUG: Log chartData values that could produce NaN
+  console.log('DEBUG chartData sample:', chartData.slice(0, 3));
+  console.log('DEBUG totalRequestsInWindow values:', chartData.map(d => d.totalRequestsInWindow));
+  console.log('DEBUG totalMaxRequests values:', chartData.map(d => d.totalMaxRequests));
+  console.log('DEBUG totalRetryAttempts values:', chartData.map(d => d.totalRetryAttempts));
+  console.log('DEBUG avgTokensPerSecond values:', chartData.map(d => d.avgTokensPerSecond));
   const globalMaxRequests = Math.max(1, ...chartData.map((d) => (Number.isFinite(d.totalRequestsInWindow) ? d.totalRequestsInWindow : 0)));
   const globalMaxTotalRequests = Math.max(1, ...chartData.map((d) => (Number.isFinite(d.totalMaxRequests) ? d.totalMaxRequests : 0)));
   const globalMaxRetries = Math.max(1, ...chartData.map((d) => (Number.isFinite(d.totalRetryAttempts) ? d.totalRetryAttempts : 0)));
@@ -489,6 +495,9 @@ function CombinedRateLimiterRetryChartComponent({
 
   // Find max for tokens per second axis
   // Use ?? 0 to handle undefined, and protect against NaN with || 0
+  // DEBUG: Check for NaN in avgTokensPerSecond before mapping
+  const hasNaNTps = chartData.some(d => !Number.isFinite(d.avgTokensPerSecond));
+  console.log('DEBUG hasNaN in avgTokensPerSecond:', hasNaNTps);
   const globalMaxTokensPerSecond = Math.max(1, ...chartData.map((d) => (d.avgTokensPerSecond ?? 0) || 0));
 
   return (
