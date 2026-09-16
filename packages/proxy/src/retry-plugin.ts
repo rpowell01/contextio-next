@@ -556,33 +556,40 @@ export class RetryPlugin implements ProxyPlugin {
    */
   private splitConcatenatedJson(dataStr: string): string[] {
     // Handle [DONE] marker - OpenAI-compatible APIs send this to signal stream end
-    // It's not JSON, so preserve it as-is
+    // It is not JSON, so preserve it as-is
     const trimmed = dataStr.trim();
     if (trimmed === "[DONE]") {
       return [dataStr];
     }
 
-    // Quick check: if the string doesn't contain }{ pattern (with optional whitespace), it's likely a single object
-    // Use regex to check for } followed by optional whitespace and {
-    if (!/}\s*{/.test(dataStr)) {
+    // Quick check: if the string doesent contain }{ pattern (with optional whitespace),
+    // it is likely a single object - no splitting needed
+    if (!/}\s*{/.test(trimmed)) {
       return [dataStr];
     }
 
-    // Split by }{ boundary (with optional whitespace)
-    // This regex finds the boundary between two JSON objects
-    const parts = dataStr.split(/(?<=})\s*(?={)/);
+    // Split by }{ boundary (with optional whitespace) using regex
+    // This is a fast initial split; may produce invalid parts for nested JSON,
+    // but the callers already handle JSON.parse failures gracefully
+    const regexParts = trimmed.split(/(?<=})\s*(?={)/);
 
-    // Filter out empty parts and validate each looks like a JSON object
-    const validParts: string[] = [];
-    for (const part of parts) {
-      const trimmed = part.trim();
-      if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-        validParts.push(trimmed);
+    // Filter parts that look like valid JSON objects (start with { and end with })
+    const regexValidParts: string[] = [];
+    for (const part of regexParts) {
+      const p = part.trim();
+      if (p.startsWith("{") && p.endsWith("}")) {
+        regexValidParts.push(p);
       }
     }
 
-    // If we found valid parts, return them; otherwise return original
-    return validParts.length > 0 ? validParts : [dataStr];
+    // If we found valid parts via regex, return them
+    if (regexValidParts.length > 1) {
+      return regexValidParts;
+    }
+
+    // If all else fails, return the original string - callers will try JSON.parse
+    // and skip invalid parts
+    return [dataStr];
   }
 
   /**
