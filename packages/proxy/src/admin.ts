@@ -10,6 +10,7 @@ import type { ProxyPlugin } from "@contextio/core";
 import type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics, ProviderConfig, Provider, OidcProviderConfig } from "@contextio/core";
 import { SERVICE_IDENTIFIER } from "@contextio/core";
 import { getAllMergedProviders, type MergedProvider } from "@contextio/core/db";
+import { getTokensPerSecondByProvider, getTokensPerSecondByProviderAndModel } from "@contextio/core/db";
 import { validateSession, type AuthSession } from "./auth.js";
 import type { FeedbackStore } from "@contextio/redact";
 import { getAllStreamBufferSizes, getAllPeakStreamBufferSizes } from "./forward.js";
@@ -953,6 +954,39 @@ try {
           );
           return;
         }
+
+        // Tokens Per Second Metrics Endpoint
+        case "tokens-per-second": {
+          if (req.method !== "GET") {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+
+          try {
+            const byProvider = getTokensPerSecondByProvider();
+            const byProviderAndModel = getTokensPerSecondByProviderAndModel();
+
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              byProvider,
+              byProviderAndModel,
+              timestamp: new Date().toISOString(),
+              service: SERVICE_IDENTIFIER,
+            }));
+          } catch (error) {
+            console.error("[admin] Tokens per second metrics error:", error);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              error: "Internal server error",
+              details: error instanceof Error ? error.message : String(error),
+              code: "TOKENS_PER_SECOND_INTERNAL_ERROR",
+              service: SERVICE_IDENTIFIER
+            }));
+          }
+          return;
+        }
+
         default: {
           console.warn("[admin] Unrecognized API state:", path);
           res.writeHead(404, { "Content-Type": "application/json" });

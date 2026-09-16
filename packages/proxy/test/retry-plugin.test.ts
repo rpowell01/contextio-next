@@ -1356,6 +1356,11 @@ describe("retry plugin - integration with proxy", () => {
     await new Promise<void>((resolve) => serverFail.listen(0, resolve));
     const portFail = getServerPort(serverFail);
     
+    // Set env var to configure built-in retry plugin with maxRetries=2 for anthropic
+    // This avoids double retries from both built-in and custom retry plugins
+    const originalRetryMaxRetries = process.env.CONTEXTIO_RETRY_ANTHROPIC_MAX_RETRIES;
+    process.env.CONTEXTIO_RETRY_ANTHROPIC_MAX_RETRIES = "2";
+    
     const retryPlugin = createRetryPlugin({
       maxRetries: 2, // Only 2 retries
       baseDelayMs: 20,
@@ -1386,6 +1391,12 @@ describe("retry plugin - integration with proxy", () => {
       await proxyFail.stop();
       serverFail.close();
       (retryPlugin as any)._internal.shutdown();
+      // Restore original env var
+      if (originalRetryMaxRetries === undefined) {
+        delete process.env.CONTEXTIO_RETRY_ANTHROPIC_MAX_RETRIES;
+      } else {
+        process.env.CONTEXTIO_RETRY_ANTHROPIC_MAX_RETRIES = originalRetryMaxRetries;
+      }
     }
   });
 });

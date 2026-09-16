@@ -86,6 +86,8 @@ export {
 	deleteRedactionMetadataByCaptureId,
 	deleteAllRedactionMetadata,
 	getRedactionAggregateStats,
+	getTokensPerSecondByProvider,
+	getTokensPerSecondByProviderAndModel,
 	importRedactionMetaFromFiles,
 	redactionMetadataExists,
 	type RedactionMetadata,

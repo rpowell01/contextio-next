@@ -153,3 +153,31 @@ export interface RetryMetrics {
   /** Aggregated totals */
   totals: RetryMetricsTotals;
 }
+
+/**
+ * Tokens per second metrics for a single provider (and optionally model)
+ */
+export interface TokensPerSecondProviderMetrics {
+  /** Provider identifier */
+  provider: string;
+  /** Model identifier (optional, when tracking by provider+model) */
+  model?: string;
+  /** Average tokens per second */
+  avgTokensPerSecond: number;
+  /** Total number of captures used for this average */
+  totalCaptures: number;
+  /** Total output tokens across all captures */
+  totalOutputTokens: number;
+}
+
+/**
+ * Complete tokens per second metrics response
+ */
+export interface TokensPerSecondMetrics {
+  /** Per-provider metrics (without model breakdown) */
+  byProvider: TokensPerSecondProviderMetrics[];
+  /** Per-provider-and-model metrics */
+  byProviderAndModel: TokensPerSecondProviderMetrics[];
+  /** Timestamp when metrics were collected */
+  timestamp: string;
+}

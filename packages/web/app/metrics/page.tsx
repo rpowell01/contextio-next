@@ -7,7 +7,7 @@ import type {
   MetricsData,
   TimeRange,
 } from "@/types/api";
-import type { RateLimiterMetrics, RetryMetrics, RetryProviderMetrics } from "@/types/client-api";
+import type { RateLimiterMetrics, RetryMetrics, RetryProviderMetrics, TokensPerSecondMetrics } from "@/types/client-api";
 import { TrafficChart } from "@/components/traffic-chart";
 import { CombinedRateLimiterRetryChart } from "@/components/combined-rate-limiter-retry-chart";
 import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
@@ -67,6 +67,7 @@ function MetricsContent() {
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [rateLimiterMetrics, setRateLimiterMetrics] = useState<RateLimiterMetrics | null>(null);
   const [retryMetrics, setRetryMetrics] = useState<RetryMetrics | null>(null);
+  const [tokensPerSecondMetrics, setTokensPerSecondMetrics] = useState<TokensPerSecondMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
@@ -353,6 +354,39 @@ function MetricsContent() {
     }
   }, []);
 
+  // Fetch tokens per second metrics
+  const fetchTokensPerSecondMetrics = useCallback(async (signal?: AbortSignal, requestId?: number, isInitialLoad = false): Promise<boolean> => {
+    if (!isMountedRef.current) return false;
+    if (isInitialLoad) {
+      setRetryLoading(true);
+    }
+    try {
+      const data = await apiClient.getTokensPerSecondMetrics(signal);
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
+        setTokensPerSecondMetrics(data);
+        setRetryError(null);
+      }
+      return true;
+    } catch (e) {
+      if (e instanceof RequestAbortedError) {
+        return false;
+      }
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        setTokensPerSecondMetrics(null);
+        setRetryError(`Failed to fetch tokens per second metrics: ${errorMessage}`);
+      }
+      if (isConnectionError(e)) {
+        throw e;
+      }
+      return false;
+    } finally {
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current) && isInitialLoad) {
+        setRetryLoading(false);
+      }
+    }
+  }, []);
+
   // Poll for rate limiter and retry metrics (only when rate limiter tab is active)
   useEffect(() => {
     // Only poll if rate limiter tab is active
@@ -386,10 +420,11 @@ function MetricsContent() {
       const abortController = new AbortController();
       rateLimiterAbortControllerRef.current = abortController;
       try {
-        // Fetch both rate limiter and retry metrics in parallel
+        // Fetch rate limiter, retry metrics, and tokens per second metrics in parallel
         await Promise.all([
           fetchRateLimiterMetrics(abortController.signal, requestId, isFirstPoll),
           fetchRetryMetrics(abortController.signal, requestId, isFirstPoll),
+          fetchTokensPerSecondMetrics(abortController.signal, requestId, isFirstPoll),
         ]);
       } catch (e) {
         // Connection error - stop polling to avoid infinite failed requests
@@ -701,6 +736,7 @@ function MetricsContent() {
                   <CombinedRateLimiterRetryChart
                     rateLimiterMetrics={rateLimiterMetrics}
                     retryMetrics={retryMetrics}
+                    tokensPerSecondMetrics={tokensPerSecondMetrics}
                     loading={rateLimiterLoading || retryLoading}
                     maxDataPoints={maxDataPoints}
                   />
@@ -810,7 +846,7 @@ function MetricsContent() {
                               <td className="p-2 text-right font-mono">{formatNumber(provider.totalRetryAttempts)}</td>
                               <td className="p-2 text-right">{formatNumber(provider.maxRetries)}</td>
                               <td className="p-2 text-right">{provider.currentBufferUsageMB.toFixed(1)}</td>
-                              <td className="p-2 text-right">{provider.maxBufferUsageMB.toFixed(1)}</td>
+                              <td className="p-2 text-right">{provider.maxResponseBufferSizeMB.toFixed(1)}</td>
                               <td className="p-2 text-right">
                                 <span className={provider.bufferUtilizationPercent > 80 ? "text-destructive font-medium" : ""}>
                                   {provider.bufferUtilizationPercent.toFixed(1)}%

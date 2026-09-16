@@ -1760,11 +1760,12 @@ for (const part of jsonParts) {
     for (const entry of this.requestStore.values()) {
       const provider = entry.provider ?? "unknown";
       const existing = providerMap.get(provider);
+      const providerConfig = this.getConfigForProvider(provider);
       if (!existing) {
         providerMap.set(provider, {
           provider,
-          maxRetries: this.globalConfig.maxRetries ?? DEFAULT_MAX_RETRIES,
-          maxResponseBufferSizeMB: (this.globalConfig.maxResponseBufferSize ?? DEFAULT_MAX_BUFFER_SIZE) / (1024 * 1024),
+          maxRetries: providerConfig.maxRetries ?? DEFAULT_MAX_RETRIES,
+          maxResponseBufferSizeMB: (providerConfig.maxResponseBufferSize ?? DEFAULT_MAX_BUFFER_SIZE) / (1024 * 1024),
           nonStreamingRetryAttempts: entry.retryCount ?? 0,
           streamingRetryAttempts: 0,
           activeStreamingSessions: 0,
@@ -1782,6 +1783,7 @@ for (const part of jsonParts) {
     for (const [sessionId, state] of this.streamState.entries()) {
       const provider = state.provider ?? "unknown";
       const existing = providerMap.get(provider);
+      const providerConfig = this.getConfigForProvider(provider);
       
       // Get buffer size from forward.ts using sessionId (the key used in forward.ts streamBufferSizes Map)
       const forwardBufferSize = forwardBufferSizes?.get(sessionId) ?? 0;
@@ -1795,7 +1797,7 @@ for (const part of jsonParts) {
       if (!existing) {
         providerMap.set(provider, {
           provider,
-          maxRetries: this.globalConfig.maxRetries ?? DEFAULT_MAX_RETRIES,
+          maxRetries: providerConfig.maxRetries ?? DEFAULT_MAX_RETRIES,
           maxResponseBufferSizeMB: configuredMaxBufferMB,
           nonStreamingRetryAttempts: 0,
           streamingRetryAttempts: state.streamRetryCount ?? 0,
@@ -1822,7 +1824,11 @@ for (const part of jsonParts) {
       activeStreamingSessions: p.activeStreamingSessions,
       currentBufferUsageMB: Math.round(p.currentBufferUsageMB * 100) / 100,
       maxBufferUsageMB: Math.round(p.maxBufferUsageMB * 100) / 100,
-      bufferUtilizationPercent: p.maxBufferUsageMB > 0 ? Math.round((p.currentBufferUsageMB / p.maxBufferUsageMB) * 10000) / 100 : 0,
+      // Use configured max buffer size (maxResponseBufferSizeMB) as denominator for utilization
+      // Fall back to actual peak (maxBufferUsageMB) if configured max is not available
+      bufferUtilizationPercent: p.maxResponseBufferSizeMB > 0
+        ? Math.round((p.currentBufferUsageMB / p.maxResponseBufferSizeMB) * 10000) / 100
+        : (p.maxBufferUsageMB > 0 ? Math.round((p.currentBufferUsageMB / p.maxBufferUsageMB) * 10000) / 100 : 0),
     }));
 
     const totals = providers.reduce((acc, p) => ({

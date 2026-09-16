@@ -2,7 +2,7 @@
 
 import React, { memo, useMemo, useState, useRef, useEffect } from "react";
 import { formatNumber } from "@/lib/utils";
-import type { RateLimiterMetrics, RetryMetrics, RetryProviderMetrics } from "@/types/client-api";
+import type { RateLimiterMetrics, RetryMetrics, RetryProviderMetrics, TokensPerSecondMetrics, TokensPerSecondProviderMetrics } from "@/types/client-api";
 import {
   BarChart,
   Bar,
@@ -57,6 +57,16 @@ function CustomTooltipContent({ active, payload }: { active?: boolean; payload?:
     );
   }
 
+  // Tokens per second info
+  if (p.avgTokensPerSecond !== undefined && p.avgTokensPerSecond > 0) {
+    const modelInfo = p.model ? ` (${p.model})` : "";
+    parts.push(
+      <div key="tokensPerSecond" style={{ marginBottom: 2, fontSize: "11px", color: "rgb(var(--color-popover-foreground))" }}>
+        Avg Tokens/sec{modelInfo}: {formatNumber(p.avgTokensPerSecond)}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -79,6 +89,7 @@ function CustomTooltipContent({ active, payload }: { active?: boolean; payload?:
 interface CombinedRateLimiterRetryChartProps {
   rateLimiterMetrics: RateLimiterMetrics | null;
   retryMetrics: RetryMetrics | null;
+  tokensPerSecondMetrics?: TokensPerSecondMetrics | null;
   loading?: boolean;
   maxDataPoints?: number;
 }
@@ -99,6 +110,9 @@ interface ProviderData {
   totalRetryAttempts: number;
   activeStreamingSessions: number;
   maxRetries: number;
+  // Tokens Per Second (from redaction metadata)
+  avgTokensPerSecond?: number;
+  model?: string; // Optional model name when tracking by provider+model
 }
 
 // Color constants for consistent theming across charts
@@ -109,6 +123,8 @@ const CHART_COLORS = {
   // Retry attempts
   retryNonStreaming: "#f59e0b",         // Amber
   retryStreaming: "#8b5cf6",            // Purple (distinct from blue)
+  // Tokens per second
+  tokensPerSecond: "#10b981",           // Emerald green
   // Reference lines
   threshold70: "#fbbf24",               // Amber for 70%
   threshold90: "#ef4444",               // Red for 90%
@@ -269,6 +285,7 @@ function chartDataEqual(prevProps: CombinedRateLimiterRetryChartProps, nextProps
 function CombinedRateLimiterRetryChartComponent({
   rateLimiterMetrics,
   retryMetrics,
+  tokensPerSecondMetrics,
   loading = false,
   maxDataPoints = 50,
 }: CombinedRateLimiterRetryChartProps) {
@@ -354,12 +371,46 @@ function CombinedRateLimiterRetryChartComponent({
       });
     }
 
+    // Finally, merge tokens per second metrics
+    if (tokensPerSecondMetrics?.byProviderAndModel) {
+      tokensPerSecondMetrics.byProviderAndModel.forEach((tpsProvider: TokensPerSecondProviderMetrics) => {
+        // Create a composite key for provider+model to allow multiple models per provider
+        const key = tpsProvider.model ? `${tpsProvider.provider}:${tpsProvider.model}` : tpsProvider.provider;
+        const existing = providerMap.get(key);
+        
+        if (!existing) {
+          // Provider+model only exists in tokens per second metrics
+          providerMap.set(key, {
+            provider: key,
+            requestBuckets: 0,
+            maxRequests: 0,
+            bufferCapacity: 0,
+            totalMaxRequests: 0,
+            totalRequestsInWindow: 0,
+            totalQueueLength: 0,
+            utilizationPercent: 0,
+            nonStreamingRetryAttempts: 0,
+            streamingRetryAttempts: 0,
+            totalRetryAttempts: 0,
+            activeStreamingSessions: 0,
+            maxRetries: 0,
+            avgTokensPerSecond: tpsProvider.avgTokensPerSecond,
+            model: tpsProvider.model,
+          });
+        } else {
+          // Merge tokens per second data
+          existing.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
+          existing.model = tpsProvider.model;
+        }
+      });
+    }
+
     // Convert to array and sort by total requests (most constrained first)
     return Array.from(providerMap.values()).sort((a, b) => {
       if (b.totalRequestsInWindow !== a.totalRequestsInWindow) return b.totalRequestsInWindow - a.totalRequestsInWindow;
       return b.totalRetryAttempts - a.totalRetryAttempts;
     });
-  }, [rateLimiterMetrics?.buckets, retryMetrics?.providers]);
+  }, [rateLimiterMetrics?.buckets, retryMetrics?.providers, tokensPerSecondMetrics?.byProviderAndModel]);
 
   // Downsample if needed
   const chartData = useMemo(() => {
@@ -435,6 +486,9 @@ function CombinedRateLimiterRetryChartComponent({
   const globalMaxRetries = Math.max(1, Math.max(...chartData.map((d) => d.totalRetryAttempts)));
   const globalMaxCounts = Math.max(globalMaxRequests, globalMaxTotalRequests, globalMaxRetries);
 
+  // Find max for tokens per second axis
+  const globalMaxTokensPerSecond = Math.max(1, Math.max(...chartData.map((d) => d.avgTokensPerSecond ?? 0)));
+
   return (
     <div className="w-full space-y-4">
       {/* Chart Header with Copy Button */}
@@ -455,12 +509,13 @@ function CombinedRateLimiterRetryChartComponent({
         )}
       </div>
 
-      <div id="combined-chart-description" className="sr-only">
-        Grouped vertical bar chart displaying two metric groups per AI provider:
+<div id="combined-chart-description" className="sr-only">
+        Grouped vertical bar chart displaying three metric groups per AI provider:
         1. Request Buckets (blue) \u2014 rate limiter usage showing requests used vs maximum capacity, with 70%, 90%, and 100% threshold lines.
-        2. Retry Attempts (amber + purple stacked) — non-streaming and streaming retry counts with max retries reference line.
-        Each provider shown as a row. Hover or focus any bar for detailed metrics including utilization percentages, queue lengths, and active sessions.
-        Color coding: Green = healthy (&lt;70%), Amber = warning (70-89%), Red = critical (&gt;90%). Blue represents request usage, purple represents streaming retries.
+        2. Retry Attempts (amber + purple stacked) \u2014 non-streaming and streaming retry counts with max retries reference line.
+        3. Average Tokens/sec (emerald) \u2014 average token generation speed per provider/model.
+        Each provider shown as a row. Hover or focus any bar for detailed metrics including utilization percentages, queue lengths, active sessions, and tokens/sec.
+        Color coding: Green = healthy (less than 70%), Amber = warning (70-89%), Red = critical (greater than 90%). Blue represents request usage, purple represents streaming retries, emerald represents tokens/sec.
       </div>
 
       <div className="max-h-[700px] overflow-y-auto">
@@ -477,6 +532,7 @@ function CombinedRateLimiterRetryChartComponent({
 
             {/* Single X Axis - Counts (Requests + Retries) - Top */}
             <XAxis
+              xAxisId="counts"
               type="number"
               label={{
                 value: "Count (Requests / Retries)",
@@ -494,6 +550,28 @@ function CombinedRateLimiterRetryChartComponent({
               }}
               domain={[0, globalMaxCounts * 1.2]}
               orientation="top"
+            />
+
+            {/* Second X Axis - Tokens Per Second - Bottom */}
+            <XAxis
+              xAxisId="tokensPerSecond"
+              type="number"
+              label={{
+                value: "Avg Tokens/sec",
+                position: "outsideBottom",
+                offset: 40,
+                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
+              }}
+              tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
+              tickLine={{ stroke: "rgb(var(--color-border))" }}
+              axisLine={{ stroke: "rgb(var(--color-border))" }}
+              tickFormatter={(value) => {
+                if (value >= 1000000) return formatNumber(value);
+                if (value >= 1000) return formatNumber(value);
+                return value.toFixed(value < 10 ? 1 : 0);
+              }}
+              domain={[0, globalMaxTokensPerSecond * 1.2]}
+              orientation="bottom"
             />
 
             {/* Y Axis - Provider names */}
@@ -539,6 +617,15 @@ function CombinedRateLimiterRetryChartComponent({
               fill={CHART_COLORS.retryStreaming}
               animationDuration={0}
               stackId="retries"
+            />
+
+            {/* GROUP 3: Tokens Per Second (Avg) - Emerald green */}
+            <Bar
+              xAxisId="tokensPerSecond"
+              dataKey="avgTokensPerSecond"
+              name="Avg Tokens/sec"
+              fill={CHART_COLORS.tokensPerSecond}
+              animationDuration={0}
             />
 
             {/* Reference lines for thresholds */}
@@ -632,6 +719,10 @@ function CombinedRateLimiterRetryChartComponent({
         <div className="flex items-center gap-2" role="listitem">
           <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.retryStreaming }} />
           <span>Retry Attempts: Streaming</span>
+        </div>
+        <div className="flex items-center gap-2" role="listitem">
+          <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.tokensPerSecond }} />
+          <span>Avg Tokens/sec</span>
         </div>
         <div className="flex items-center gap-1 ml-4" role="listitem">
           <div className="w-4 h-1" style={{ background: CHART_COLORS.threshold70, borderTop: `1px dashed ${CHART_COLORS.threshold70}` }} />

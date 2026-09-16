@@ -607,3 +607,83 @@ export function deleteAllRedactionMetadata(): number {
 	const result = db.prepare("DELETE FROM redaction_metadata").run();
 	return result.changes;
 }
+/**
+ * Get average tokens per second per provider from redaction metadata.
+ * Only includes entries where tokens_per_second is not null and provider is not null.
+ */
+export function getTokensPerSecondByProvider(): Array<{
+	provider: string;
+	avgTokensPerSecond: number;
+	totalCaptures: number;
+	totalOutputTokens: number;
+}> {
+	const db = getDb();
+	const rows = db.prepare(`
+		SELECT 
+			provider,
+			AVG(tokens_per_second) as avgTokensPerSecond,
+			COUNT(*) as totalCaptures,
+			SUM(total_output_tokens) as totalOutputTokens
+		FROM redaction_metadata
+		WHERE tokens_per_second IS NOT NULL 
+		AND provider IS NOT NULL
+		AND provider != ''
+		GROUP BY provider
+	`).all() as Array<{
+		provider: string;
+		avgTokensPerSecond: number;
+		totalCaptures: number;
+		totalOutputTokens: number | null;
+	}>;
+
+	return rows.map(row => ({
+		provider: row.provider,
+		avgTokensPerSecond: Math.round(row.avgTokensPerSecond * 100) / 100,
+		totalCaptures: row.totalCaptures,
+		totalOutputTokens: row.totalOutputTokens ?? 0,
+	}));
+}
+
+/**
+ * Get average tokens per second per provider AND model from redaction metadata.
+ * Different models have different token generation speeds, so this provides more granular metrics.
+ * Only includes entries where tokens_per_second is not null, provider is not null, and model is not null.
+ */
+export function getTokensPerSecondByProviderAndModel(): Array<{
+	provider: string;
+	model: string;
+	avgTokensPerSecond: number;
+	totalCaptures: number;
+	totalOutputTokens: number;
+}> {
+	const db = getDb();
+	const rows = db.prepare(`
+		SELECT 
+			provider,
+			model,
+			AVG(tokens_per_second) as avgTokensPerSecond,
+			COUNT(*) as totalCaptures,
+			SUM(total_output_tokens) as totalOutputTokens
+		FROM redaction_metadata
+		WHERE tokens_per_second IS NOT NULL 
+		AND provider IS NOT NULL
+		AND provider != ''
+		AND model IS NOT NULL
+		AND model != ''
+		GROUP BY provider, model
+	`).all() as Array<{
+		provider: string;
+		model: string;
+		avgTokensPerSecond: number;
+		totalCaptures: number;
+		totalOutputTokens: number | null;
+	}>;
+
+	return rows.map(row => ({
+		provider: row.provider,
+		model: row.model,
+		avgTokensPerSecond: Math.round(row.avgTokensPerSecond * 100) / 100,
+		totalCaptures: row.totalCaptures,
+		totalOutputTokens: row.totalOutputTokens ?? 0,
+	}));
+}
