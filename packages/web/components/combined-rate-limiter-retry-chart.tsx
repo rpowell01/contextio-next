@@ -686,8 +686,12 @@ const chartData = useMemo(() => {
     />
   ));
 
+  // NOTE: every Bar in a multi-XAxis chart must carry an explicit xAxisId.
+  // Bars without one default to axis id 0, which doesn't exist here, and
+  // recharts throws "Invariant failed" during axis layout.
   const elBarRequestBuckets = logComponentRender('Bar dataKey="totalMaxRequests" (RequestBucketsShape)', (
     <Bar
+      xAxisId="counts"
       dataKey="totalMaxRequests"
       name="Request Buckets: Max (gray) / Used (blue overlay)"
       shape={RequestBucketsShape}
@@ -697,6 +701,7 @@ const chartData = useMemo(() => {
 
   const elBarRetryNonStreaming = logComponentRender('Bar dataKey="nonStreamingRetryAttempts" (stackId=retries)', (
     <Bar
+      xAxisId="counts"
       dataKey="nonStreamingRetryAttempts"
       name="Retry Attempts: Non-Streaming"
       fill={CHART_COLORS.retryNonStreaming}
@@ -707,6 +712,7 @@ const chartData = useMemo(() => {
 
   const elBarRetryStreaming = logComponentRender('Bar dataKey="streamingRetryAttempts" (stackId=retries)', (
     <Bar
+      xAxisId="counts"
       dataKey="streamingRetryAttempts"
       name="Retry Attempts: Streaming"
       fill={CHART_COLORS.retryStreaming}
