@@ -147,6 +147,7 @@ interface RetryInternal {
   getUpstream429Counts: () => Record<string, number>;
   getRequestStoreSize: () => number;
   getStreamStateSize: () => number;
+  getActiveStreamingSessionIds: () => string[];
 }
 
 // --- Rate Limiter Metrics ---
@@ -964,8 +965,15 @@ try {
           }
 
           try {
-            const byProvider = getTokensPerSecondByProvider();
-            const byProviderAndModel = getTokensPerSecondByProviderAndModel();
+            // Get active streaming session IDs from retry plugin to filter tokens/sec metrics
+            const retryPlugin = plugins.find((p) => p.name === "retry");
+            let activeSessionIds: string[] = [];
+            if (retryPlugin && isRetryPlugin(retryPlugin)) {
+              activeSessionIds = retryPlugin._internal.getActiveStreamingSessionIds();
+            }
+
+            const byProvider = getTokensPerSecondByProvider(activeSessionIds);
+            const byProviderAndModel = getTokensPerSecondByProviderAndModel(activeSessionIds);
 
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({

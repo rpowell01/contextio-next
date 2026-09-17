@@ -1956,6 +1956,14 @@ for (const part of jsonParts) {
     const streamState = this.streamState.get(sessionId);
     return streamState?.totalBufferSize ?? 0;
   }
+
+  /**
+   * Get the list of currently active streaming session IDs.
+   * These are sessions that have an entry in streamState (ongoing streaming responses).
+   */
+  getActiveStreamingSessionIds(): string[] {
+    return Array.from(this.streamState.keys());
+  }
 }
 
 /**
@@ -2043,6 +2051,7 @@ export function createRetryPlugin(config: RetryConfig = {}): ProxyPlugin {
     getStreamBufferSize: (sessionId: string) => plugin.getStreamBufferSizeForTesting(sessionId),
     getRequestStoreSize: () => plugin.getRequestStoreSize(),
     getStreamStateSize: () => plugin.getStreamStateSize(),
+    getActiveStreamingSessionIds: () => plugin.getActiveStreamingSessionIds(),
     clear: () => plugin.clearForTesting(),
     shutdown: () => plugin.shutdown(),
   };

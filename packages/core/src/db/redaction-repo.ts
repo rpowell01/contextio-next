@@ -610,14 +610,29 @@ export function deleteAllRedactionMetadata(): number {
 /**
  * Get average tokens per second per provider from redaction metadata.
  * Only includes entries where tokens_per_second is not null and provider is not null.
+ * Optionally filters by active session IDs.
  */
-export function getTokensPerSecondByProvider(): Array<{
+export function getTokensPerSecondByProvider(activeSessionIds?: string[]): Array<{
 	provider: string;
 	avgTokensPerSecond: number;
 	totalCaptures: number;
 	totalOutputTokens: number;
 }> {
 	const db = getDb();
+	
+	let whereClause = `
+		WHERE tokens_per_second IS NOT NULL 
+		AND provider IS NOT NULL
+		AND provider != ''`;
+	
+	const params: any[] = [];
+	
+	if (activeSessionIds && activeSessionIds.length > 0) {
+		const placeholders = activeSessionIds.map(() => '?').join(',');
+		whereClause += ` AND session_id IN (${placeholders})`;
+		params.push(...activeSessionIds);
+	}
+	
 	const rows = db.prepare(`
 		SELECT 
 			provider,
@@ -625,11 +640,9 @@ export function getTokensPerSecondByProvider(): Array<{
 			COUNT(*) as totalCaptures,
 			SUM(total_output_tokens) as totalOutputTokens
 		FROM redaction_metadata
-		WHERE tokens_per_second IS NOT NULL 
-		AND provider IS NOT NULL
-		AND provider != ''
+		${whereClause}
 		GROUP BY provider
-	`).all() as Array<{
+	`).all(...params) as Array<{
 		provider: string;
 		avgTokensPerSecond: number;
 		totalCaptures: number;
@@ -648,8 +661,9 @@ export function getTokensPerSecondByProvider(): Array<{
  * Get average tokens per second per provider AND model from redaction metadata.
  * Different models have different token generation speeds, so this provides more granular metrics.
  * Only includes entries where tokens_per_second is not null, provider is not null, and model is not null.
+ * Optionally filters by active session IDs.
  */
-export function getTokensPerSecondByProviderAndModel(): Array<{
+export function getTokensPerSecondByProviderAndModel(activeSessionIds?: string[]): Array<{
 	provider: string;
 	model: string;
 	avgTokensPerSecond: number;
@@ -657,6 +671,22 @@ export function getTokensPerSecondByProviderAndModel(): Array<{
 	totalOutputTokens: number;
 }> {
 	const db = getDb();
+	
+	let whereClause = `
+		WHERE tokens_per_second IS NOT NULL 
+		AND provider IS NOT NULL
+		AND provider != ''
+		AND model IS NOT NULL
+		AND model != ''`;
+	
+	const params: any[] = [];
+	
+	if (activeSessionIds && activeSessionIds.length > 0) {
+		const placeholders = activeSessionIds.map(() => '?').join(',');
+		whereClause += ` AND session_id IN (${placeholders})`;
+		params.push(...activeSessionIds);
+	}
+	
 	const rows = db.prepare(`
 		SELECT 
 			provider,
@@ -665,13 +695,9 @@ export function getTokensPerSecondByProviderAndModel(): Array<{
 			COUNT(*) as totalCaptures,
 			SUM(total_output_tokens) as totalOutputTokens
 		FROM redaction_metadata
-		WHERE tokens_per_second IS NOT NULL 
-		AND provider IS NOT NULL
-		AND provider != ''
-		AND model IS NOT NULL
-		AND model != ''
+		${whereClause}
 		GROUP BY provider, model
-	`).all() as Array<{
+	`).all(...params) as Array<{
 		provider: string;
 		model: string;
 		avgTokensPerSecond: number;
