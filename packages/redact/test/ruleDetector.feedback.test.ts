@@ -193,7 +193,7 @@ function runRuleDetectorFeedbackTests(
         assert.deepEqual(texts, ["other@test.com"]);
       });
 
-"      it("should filter global false positives but not session-specific ones when no sessionId is provided", async () => {
+      it("should filter global false positives but not session-specific ones when no sessionId is provided", async () => {
         await store.clear();
 
         // Record global false positive

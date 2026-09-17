@@ -293,6 +293,8 @@ function chartDataEqual(prevProps: CombinedRateLimiterRetryChartProps, nextProps
       return false;
     }
   }
+  if (JSON.stringify(prevProps.tokensPerSecondMetrics) !== JSON.stringify(nextProps.tokensPerSecondMetrics)) return false;
+  if (JSON.stringify(prevProps.ttftMetrics) !== JSON.stringify(nextProps.ttftMetrics)) return false;
 
   return true;
 }
@@ -301,9 +303,10 @@ function CombinedRateLimiterRetryChartComponent({
   rateLimiterMetrics,
   retryMetrics,
   tokensPerSecondMetrics,
+  ttftMetrics,
   loading = false,
   maxDataPoints = 50,
-}: CombinedRateLimiterRetryChartProps) {
+}) {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
