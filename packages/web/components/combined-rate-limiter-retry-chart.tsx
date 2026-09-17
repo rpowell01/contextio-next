@@ -132,6 +132,53 @@ const CHART_COLORS = {
   maxRequests: "#6b7280",               // Gray for max requests
 } as const;
 
+// ---------------------------------------------------------------------------
+// Debug instrumentation: log each chart component's name before it is mounted
+// so we can identify exactly which Recharts component throws the error.
+const CHART_UI_TAG = "[ChartUI]";
+
+/**
+ * Logs the component name, then returns the element unchanged so it can be
+ * used inline as a JSX child of BarChart.
+ */
+function logComponentRender<T>(name: string, element: T): T {
+  console.log(`${CHART_UI_TAG} rendering component -> ${name}`);
+  return element;
+}
+
+/**
+ * Error boundary around the chart so a render crash reports the failing
+ * component name (via the React component stack) instead of surfacing only
+ * an opaque "Uncaught Error: Invariant failed".
+ */
+class ChartErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(`${CHART_UI_TAG} CHART CRASHED:`, error && error.message ? error.message : error);
+    console.error(`${CHART_UI_TAG} Failing component stack (innermost first):`);
+    console.error(info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded border border-destructive p-4 text-sm text-destructive">
+          Chart failed to render: {String(this.state.error)}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /**
  * Format a percentage value to maximum 2 decimal places, trimming trailing zeros.
  * e.g., 50 -> "50", 50.5 -> "50.5", 50.555 -> "50.56", 50.50 -> "50.5"
@@ -148,6 +195,7 @@ function formatPercent(value: number): string {
 const RequestBucketsShape = (props: any) => {
   const { x, y, width, height, payload } = props;
   const data = payload;
+  console.log(`${CHART_UI_TAG} rendering component -> RequestBucketsShape (provider: ${String(data?.provider)})`, { x, y, width, height });
   // Validate all required numeric props
   if (!data || typeof x !== 'number' || typeof y !== 'number' || typeof width !== 'number' || typeof height !== 'number' ||
       !isFinite(x) || !isFinite(y) || !isFinite(width) || !isFinite(height)) return <g />;
@@ -557,6 +605,205 @@ const chartData = useMemo(() => {
   console.log('DEBUG hasNaN in avgTokensPerSecond:', hasNaNTps);
   const globalMaxTokensPerSecond = Math.max(1, ...chartData.map((d) => (d.avgTokensPerSecond ?? 0) || 0));
 
+  console.log(`${CHART_UI_TAG} === CombinedRateLimiterRetryChart render begin (rows=${chartData.length}) ===`);
+  console.log(`${CHART_UI_TAG} domain values: globalMaxCounts=${globalMaxCounts} globalMaxTokensPerSecond=${globalMaxTokensPerSecond}`);
+
+  // Build every BarChart child as a named, logged element. The log entries
+  // appear in the exact order the components are handed to Recharts; the
+  // error boundary below then reports which one actually crashes.
+  const elCartesianGrid = logComponentRender(
+    "CartesianGrid",
+    <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" vertical={false} />
+  );
+
+  const elXAxisCounts = logComponentRender('XAxis id="counts" (top)', (
+    <XAxis
+      xAxisId="counts"
+      type="number"
+      label={{
+        value: "Count (Requests / Retries)",
+        position: "outsideTop",
+        offset: 40,
+        style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
+      }}
+      tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
+      tickLine={{ stroke: "rgb(var(--color-border))" }}
+      axisLine={{ stroke: "rgb(var(--color-border))" }}
+      tickFormatter={(value) => {
+        if (value >= 1000000) return formatNumber(value);
+        if (value >= 1000) return formatNumber(value);
+        return value.toFixed(value < 10 ? 1 : 0);
+      }}
+      domain={[0, globalMaxCounts * 1.2]}
+      orientation="top"
+    />
+  ));
+
+  const elXAxisTokensPerSecond = logComponentRender('XAxis id="tokensPerSecond" (bottom)', (
+    <XAxis
+      xAxisId="tokensPerSecond"
+      type="number"
+      label={{
+        value: "Avg Tokens/sec",
+        position: "outsideBottom",
+        offset: 40,
+        style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
+      }}
+      tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
+      tickLine={{ stroke: "rgb(var(--color-border))" }}
+      axisLine={{ stroke: "rgb(var(--color-border))" }}
+      tickFormatter={(value) => {
+        if (value >= 1000000) return formatNumber(value);
+        if (value >= 1000) return formatNumber(value);
+        return value.toFixed(value < 10 ? 1 : 0);
+      }}
+      domain={[0, globalMaxTokensPerSecond * 1.2]}
+      orientation="bottom"
+    />
+  ));
+
+  const elYAxisProviders = logComponentRender('YAxis dataKey="provider" (category)', (
+    <YAxis
+      dataKey="provider"
+      type="category"
+      width={160}
+      label={{
+        value: "Provider",
+        position: "outsideLeft",
+        offset: 30,
+        style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
+      }}
+      tick={{ fill: "rgb(var(--color-text))", fontSize: 11 }}
+      tickLine={{ stroke: "rgb(var(--color-border))" }}
+      axisLine={{ stroke: "rgb(var(--color-border))" }}
+    />
+  ));
+
+  const elTooltip = logComponentRender("Tooltip (CustomTooltipContent)", (
+    <Tooltip
+      content={<CustomTooltipContent />}
+      cursor={{ fill: "rgb(var(--color-border) / 0.1)" }}
+    />
+  ));
+
+  const elBarRequestBuckets = logComponentRender('Bar dataKey="totalMaxRequests" (RequestBucketsShape)', (
+    <Bar
+      dataKey="totalMaxRequests"
+      name="Request Buckets: Max (gray) / Used (blue overlay)"
+      shape={RequestBucketsShape}
+      animationDuration={0}
+    />
+  ));
+
+  const elBarRetryNonStreaming = logComponentRender('Bar dataKey="nonStreamingRetryAttempts" (stackId=retries)', (
+    <Bar
+      dataKey="nonStreamingRetryAttempts"
+      name="Retry Attempts: Non-Streaming"
+      fill={CHART_COLORS.retryNonStreaming}
+      animationDuration={0}
+      stackId="retries"
+    />
+  ));
+
+  const elBarRetryStreaming = logComponentRender('Bar dataKey="streamingRetryAttempts" (stackId=retries)', (
+    <Bar
+      dataKey="streamingRetryAttempts"
+      name="Retry Attempts: Streaming"
+      fill={CHART_COLORS.retryStreaming}
+      animationDuration={0}
+      stackId="retries"
+    />
+  ));
+
+  const elBarTokensPerSecond = logComponentRender('Bar dataKey="avgTokensPerSecond" (xAxisId=tokensPerSecond)', (
+    <Bar
+      xAxisId="tokensPerSecond"
+      dataKey="avgTokensPerSecond"
+      name="Avg Tokens/sec"
+      fill={CHART_COLORS.tokensPerSecond}
+      animationDuration={0}
+    />
+  ));
+
+  const elReferenceLines = chartData.map((p, idx) => {
+    console.log(`${CHART_UI_TAG} rendering component -> ReferenceLines for provider "${p.provider}" (row ${idx})`);
+    return (
+      <React.Fragment key={p.provider}>
+        {/* Max requests threshold lines (70%, 90%, max) */}
+        {p.maxRequests > 0 && (
+          <>
+            <ReferenceLine
+              x={Math.round((p.maxRequests + p.bufferCapacity) * 0.7)}
+              stroke={CHART_COLORS.threshold70}
+              strokeWidth={1}
+              strokeDasharray="4 4"
+              label={
+                <Label
+                  value={`70% Max Requests (${Math.round((p.maxRequests + p.bufferCapacity) * 0.7)})`}
+                  position="center"
+                  fill={CHART_COLORS.threshold70}
+                  fontSize={8}
+                  offset={10 + idx * 30}
+                />
+              }
+            />
+            <ReferenceLine
+              x={Math.round((p.maxRequests + p.bufferCapacity) * 0.9)}
+              stroke={CHART_COLORS.threshold90}
+              strokeWidth={1}
+              strokeDasharray="4 4"
+              label={
+                <Label
+                  value={`90% Max Requests (${Math.round((p.maxRequests + p.bufferCapacity) * 0.9)})`}
+                  position="center"
+                  fill={CHART_COLORS.threshold90}
+                  fontSize={8}
+                  offset={10 + idx * 30 + 15}
+                />
+              }
+            />
+            <ReferenceLine
+              x={p.maxRequests + p.bufferCapacity}
+              stroke={CHART_COLORS.maxRequests}
+              strokeWidth={1}
+              strokeDasharray="6 4"
+              label={
+                <Label
+                  value={`Max Requests (${formatNumber(p.maxRequests + p.bufferCapacity)})`}
+                  position="center"
+                  fill={CHART_COLORS.maxRequests}
+                  fontSize={8}
+                  fontWeight={600}
+                  offset={10 + idx * 30 + 30}
+                />
+              }
+            />
+          </>
+        )}
+        {/* Max retries reference line */}
+        {p.maxRetries > 0 && (
+          <ReferenceLine
+            x={p.maxRetries}
+            stroke={CHART_COLORS.maxRetries}
+            strokeWidth={1}
+            strokeDasharray="2 2"
+            label={
+              <Label
+                value={`${p.provider}: Max Retries (${p.maxRetries})`}
+                position="center"
+                fill={CHART_COLORS.maxRetries}
+                fontSize={8}
+                offset={10 + idx * 30 + 45}
+              />
+            }
+          />
+        )}
+      </React.Fragment>
+    );
+  });
+
+  console.log(`${CHART_UI_TAG} all 9 chart children constructed; mounting BarChart`);
+
   return (
     <div className="w-full space-y-4">
       {/* Chart Header with Copy Button */}
@@ -586,193 +833,38 @@ const chartData = useMemo(() => {
         Color coding: Green = healthy (less than 70%), Amber = warning (70-89%), Red = critical (greater than 90%). Blue represents request usage, purple represents streaming retries, emerald represents tokens/sec.
       </div>
 
-      <div className="max-h-[700px] overflow-y-auto">
-        <ResponsiveContainer width="100%" height={Math.min(700, Math.max(400, chartData.length * 60 + 160))}>
-          <BarChart
-            data={chartData}
-            aria-labelledby="combined-chart-description"
-            aria-label="Combined Rate Limiter and Retry Metrics Chart"
-            role="img"
-            layout="vertical"
-            margin={{ top: 20, right: 20, bottom: 80, left: 160 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" vertical={false} />
-
-            {/* Single X Axis - Counts (Requests + Retries) - Top */}
-            <XAxis
-              xAxisId="counts"
-              type="number"
-              label={{
-                value: "Count (Requests / Retries)",
-                position: "outsideTop",
-                offset: 40,
-                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
-              }}
-              tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
-              tickLine={{ stroke: "rgb(var(--color-border))" }}
-              axisLine={{ stroke: "rgb(var(--color-border))" }}
-              tickFormatter={(value) => {
-                if (value >= 1000000) return formatNumber(value);
-                if (value >= 1000) return formatNumber(value);
-                return value.toFixed(value < 10 ? 1 : 0);
-              }}
-              domain={[0, globalMaxCounts * 1.2]}
-              orientation="top"
-            />
-
-            {/* Second X Axis - Tokens Per Second - Bottom */}
-            <XAxis
-              xAxisId="tokensPerSecond"
-              type="number"
-              label={{
-                value: "Avg Tokens/sec",
-                position: "outsideBottom",
-                offset: 40,
-                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
-              }}
-              tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
-              tickLine={{ stroke: "rgb(var(--color-border))" }}
-              axisLine={{ stroke: "rgb(var(--color-border))" }}
-              tickFormatter={(value) => {
-                if (value >= 1000000) return formatNumber(value);
-                if (value >= 1000) return formatNumber(value);
-                return value.toFixed(value < 10 ? 1 : 0);
-              }}
-              domain={[0, globalMaxTokensPerSecond * 1.2]}
-              orientation="bottom"
-            />
-
-            {/* Y Axis - Provider names */}
-            <YAxis
-              dataKey="provider"
-              type="category"
-              width={160}
-              label={{
-                value: "Provider",
-                position: "outsideLeft",
-                offset: 30,
-                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
-              }}
-              tick={{ fill: "rgb(var(--color-text))", fontSize: 11 }}
-              tickLine={{ stroke: "rgb(var(--color-border))" }}
-              axisLine={{ stroke: "rgb(var(--color-border))" }}
-            />
-
-            <Tooltip
-              content={<CustomTooltipContent />}
-              cursor={{ fill: "rgb(var(--color-border) / 0.1)" }}
-            />
-
-            {/* GROUP 1: Request Buckets - Rate Limiter Usage (renders first/top) */}
-            <Bar
-              dataKey="totalMaxRequests"
-              name="Request Buckets: Max (gray) / Used (blue overlay)"
-              shape={RequestBucketsShape}
-              animationDuration={0}
-            />
-
-            {/* GROUP 2: Retry Attempts - Stacked Non-Streaming + Streaming */}
-            <Bar
-              dataKey="nonStreamingRetryAttempts"
-              name="Retry Attempts: Non-Streaming"
-              fill={CHART_COLORS.retryNonStreaming}
-              animationDuration={0}
-              stackId="retries"
-            />
-            <Bar
-              dataKey="streamingRetryAttempts"
-              name="Retry Attempts: Streaming"
-              fill={CHART_COLORS.retryStreaming}
-              animationDuration={0}
-              stackId="retries"
-            />
-
-            {/* GROUP 3: Tokens Per Second (Avg) - Emerald green */}
-            <Bar
-              xAxisId="tokensPerSecond"
-              dataKey="avgTokensPerSecond"
-              name="Avg Tokens/sec"
-              fill={CHART_COLORS.tokensPerSecond}
-              animationDuration={0}
-            />
-
-            {/* Reference lines for thresholds */}
-            {chartData.map((p, idx) => (
-              <React.Fragment key={p.provider}>
-                {/* Max requests threshold lines (70%, 90%, max) */}
-                {p.maxRequests > 0 && (
-                  <>
-                    <ReferenceLine
-                      x={Math.round((p.maxRequests + p.bufferCapacity) * 0.7)}
-                      stroke={CHART_COLORS.threshold70}
-                      strokeWidth={1}
-                      strokeDasharray="4 4"
-                      label={
-                        <Label
-                          value={`70% Max Requests (${Math.round((p.maxRequests + p.bufferCapacity) * 0.7)})`}
-                          position="center"
-                          fill={CHART_COLORS.threshold70}
-                          fontSize={8}
-                          offset={10 + idx * 30}
-                        />
-                      }
-                    />
-                    <ReferenceLine
-                      x={Math.round((p.maxRequests + p.bufferCapacity) * 0.9)}
-                      stroke={CHART_COLORS.threshold90}
-                      strokeWidth={1}
-                      strokeDasharray="4 4"
-                      label={
-                        <Label
-                          value={`90% Max Requests (${Math.round((p.maxRequests + p.bufferCapacity) * 0.9)})`}
-                          position="center"
-                          fill={CHART_COLORS.threshold90}
-                          fontSize={8}
-                          offset={10 + idx * 30 + 15}
-                        />
-                      }
-                    />
-                    <ReferenceLine
-                      x={p.maxRequests + p.bufferCapacity}
-                      stroke={CHART_COLORS.maxRequests}
-                      strokeWidth={1}
-                      strokeDasharray="6 4"
-                      label={
-                        <Label
-                          value={`Max Requests (${formatNumber(p.maxRequests + p.bufferCapacity)})`}
-                          position="center"
-                          fill={CHART_COLORS.maxRequests}
-                          fontSize={8}
-                          fontWeight={600}
-                          offset={10 + idx * 30 + 30}
-                        />
-                      }
-                    />
-                  </>
-                )}
-                {/* Max retries reference line */}
-                {p.maxRetries > 0 && (
-                  <ReferenceLine
-                    x={p.maxRetries}
-                    stroke={CHART_COLORS.maxRetries}
-                    strokeWidth={1}
-                    strokeDasharray="2 2"
-                    label={
-                      <Label
-                        value={`${p.provider}: Max Retries (${p.maxRetries})`}
-                        position="center"
-                        fill={CHART_COLORS.maxRetries}
-                        fontSize={8}
-                        offset={10 + idx * 30 + 45}
-                      />
-                    }
-                  />
-                )}
-              </React.Fragment>
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <ChartErrorBoundary>
+        <div className="max-h-[700px] overflow-y-auto">
+          <ResponsiveContainer width="100%" height={Math.min(700, Math.max(400, chartData.length * 60 + 160))}>
+            <BarChart
+              data={chartData}
+              aria-labelledby="combined-chart-description"
+              aria-label="Combined Rate Limiter and Retry Metrics Chart"
+              role="img"
+              layout="vertical"
+              margin={{ top: 20, right: 20, bottom: 80, left: 160 }}
+            >
+              {/* group 0: grid */}
+              {elCartesianGrid}
+              {/* group 1: axes */}
+              {elXAxisCounts}
+              {elXAxisTokensPerSecond}
+              {elYAxisProviders}
+              {/* group 2: tooltip */}
+              {elTooltip}
+              {/* group 3: request buckets (custom shape) */}
+              {elBarRequestBuckets}
+              {/* group 4: retry attempts (stacked) */}
+              {elBarRetryNonStreaming}
+              {elBarRetryStreaming}
+              {/* group 5: tokens per second */}
+              {elBarTokensPerSecond}
+              {/* group 6: reference lines */}
+              {elReferenceLines}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </ChartErrorBoundary>
 
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground" role="list" aria-label="Chart legend">
