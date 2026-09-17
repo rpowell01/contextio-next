@@ -413,11 +413,12 @@ function CombinedRateLimiterRetryChartComponent({
   }, [rateLimiterMetrics?.buckets, retryMetrics?.providers, tokensPerSecondMetrics?.byProviderAndModel]);
 
   // Downsample if needed
-  const chartData = useMemo(() => {
+const chartData = useMemo(() => {
     const raw = downsampleData(providerData, maxDataPoints);
     // Transform to ensure no NaN values propagate to Recharts dataKey accessors
     // Recharts Bar components access dataKey directly and Math.max(1, NaN) === NaN
-    return raw.map((d) => ({
+    // DEBUG: Log transformed values for each dataKey
+    const transformed = raw.map((d) => ({
       ...d,
       nonStreamingRetryAttempts:
         Number.isFinite(d.nonStreamingRetryAttempts) ? d.nonStreamingRetryAttempts : 0,
@@ -431,6 +432,46 @@ function CombinedRateLimiterRetryChartComponent({
       avgTokensPerSecond:
         Number.isFinite(d.avgTokensPerSecond) ? d.avgTokensPerSecond : 0,
     }));
+    console.log(
+      'DEBUG transformed chartData sample:',
+      transformed.slice(0, 3)
+    );
+    console.log(
+      'DEBUG transformed nonStreamingRetryAttempts:',
+      transformed.map((d) => d.nonStreamingRetryAttempts)
+    );
+    console.log(
+      'DEBUG transformed streamingRetryAttempts:',
+      transformed.map((d) => d.streamingRetryAttempts)
+    );
+    console.log(
+      'DEBUG transformed totalMaxRequests:',
+      transformed.map((d) => d.totalMaxRequests)
+    );
+    console.log(
+      'DEBUG transformed totalRequestsInWindow:',
+      transformed.map((d) => d.totalRequestsInWindow)
+    );
+    console.log(
+      'DEBUG transformed totalRetryAttempts:',
+      transformed.map((d) => d.totalRetryAttempts)
+    );
+    console.log(
+      'DEBUG transformed avgTokensPerSecond:',
+      transformed.map((d) => d.avgTokensPerSecond)
+    );
+    // Also check for any remaining NaN values
+    const anyNaN = transformed.some(
+      (d) =>
+        !Number.isFinite(d.nonStreamingRetryAttempts) ||
+        !Number.isFinite(d.streamingRetryAttempts) ||
+        !Number.isFinite(d.totalMaxRequests) ||
+        !Number.isFinite(d.totalRequestsInWindow) ||
+        !Number.isFinite(d.totalRetryAttempts) ||
+        !Number.isFinite(d.avgTokensPerSecond)
+    );
+    console.log('DEBUG any remaining NaN:', anyNaN);
+    return transformed;
   }, [providerData, maxDataPoints]);
 
   const copyToClipboard = async () => {
