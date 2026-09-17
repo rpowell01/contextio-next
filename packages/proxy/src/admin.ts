@@ -10,7 +10,7 @@ import type { ProxyPlugin } from "@contextio/core";
 import type { RateLimiterBucketState, RateLimiterConfigSummary, RateLimiterMetrics, ProviderConfig, Provider, OidcProviderConfig } from "@contextio/core";
 import { SERVICE_IDENTIFIER } from "@contextio/core";
 import { getAllMergedProviders, type MergedProvider } from "@contextio/core/db";
-import { getTokensPerSecondByProvider, getTokensPerSecondByProviderAndModel } from "@contextio/core/db";
+import { getTokensPerSecondByProvider, getTokensPerSecondByProviderAndModel, getTtftByProvider, getTtftByProviderAndModel } from "@contextio/core/db";
 import { validateSession, type AuthSession } from "./auth.js";
 import type { FeedbackStore } from "@contextio/redact";
 import { getAllStreamBufferSizes, getAllPeakStreamBufferSizes } from "./forward.js";
@@ -972,8 +972,14 @@ try {
               activeSessionIds = retryPlugin._internal.getActiveStreamingSessionIds();
             }
 
-            const byProvider = getTokensPerSecondByProvider(activeSessionIds);
-            const byProviderAndModel = getTokensPerSecondByProviderAndModel(activeSessionIds);
+            // If no active sessions, return empty results instead of all historical data
+            // (empty array would cause the DB query to return all models since [] is truthy but length is 0)
+            let byProvider: Array<any> = [];
+            let byProviderAndModel: Array<any> = [];
+            if (activeSessionIds.length > 0) {
+              byProvider = getTokensPerSecondByProvider(activeSessionIds);
+              byProviderAndModel = getTokensPerSecondByProviderAndModel(activeSessionIds);
+            }
 
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({
@@ -995,6 +1001,45 @@ try {
           return;
         }
 
+        // Time to First Token Metrics Endpoint
+        case "ttft": {
+          if (req.method !== "GET") {
+            res.writeHead(405, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Method not allowed", service: SERVICE_IDENTIFIER }));
+            return;
+          }
+
+          try {
+            // Get active streaming session IDs from retry plugin to filter TTFT metrics
+            const retryPlugin = plugins.find((p) => p.name === "retry");
+            let activeSessionIds: string[] = [];
+            if (retryPlugin && isRetryPlugin(retryPlugin)) {
+              activeSessionIds = retryPlugin._internal.getActiveStreamingSessionIds();
+            }
+
+            // Get TTFT metrics per provider and per provider+model
+            const byProvider = getTtftByProvider(activeSessionIds);
+            const byProviderAndModel = getTtftByProviderAndModel(activeSessionIds);
+
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              byProvider,
+              byProviderAndModel,
+              timestamp: new Date().toISOString(),
+              service: SERVICE_IDENTIFIER,
+            }));
+          } catch (error) {
+            console.error("[admin] TTFT metrics error:", error);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              error: "Internal server error",
+              details: error instanceof Error ? error.message : String(error),
+              code: "TTFT_INTERNAL_ERROR",
+              service: SERVICE_IDENTIFIER
+            }));
+          }
+          return;
+        }
         default: {
           console.warn("[admin] Unrecognized API state:", path);
           res.writeHead(404, { "Content-Type": "application/json" });

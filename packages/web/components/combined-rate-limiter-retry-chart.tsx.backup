@@ -139,7 +139,6 @@ const CHART_COLORS = {
   retryStreaming: "#8b5cf6",            // Purple (distinct from blue)
   // Tokens per second
   tokensPerSecond: "#10b981",           // Emerald green
-  ttft: "#fb923c", // Orange for TTFT
   // Reference lines
   threshold70: "#fbbf24",               // Amber for 70%
   threshold90: "#ef4444",               // Red for 90%
@@ -462,7 +461,7 @@ function CombinedRateLimiterRetryChartComponent({
       if (b.totalRequestsInWindow !== a.totalRequestsInWindow) return b.totalRequestsInWindow - a.totalRequestsInWindow;
       return b.totalRetryAttempts - a.totalRetryAttempts;
     });
-  }, [rateLimiterMetrics?.buckets, retryMetrics?.providers, tokensPerSecondMetrics?.byProviderAndModel, ttftMetrics?.byProviderAndModel]);
+  }, [rateLimiterMetrics?.buckets, retryMetrics?.providers, tokensPerSecondMetrics?.byProviderAndModel]);
 
   // Downsample if needed
   const chartData = useMemo(() => {
@@ -484,7 +483,7 @@ function CombinedRateLimiterRetryChartComponent({
         Number.isFinite(d.avgTokensPerSecond) ? d.avgTokensPerSecond : 0,
       avgTtftMs: Number.isFinite(d.avgTtftMs) ? d.avgTtftMs : 0,
     }));
-  }, [providerData, maxDataPoints, ttftMetrics?.byProviderAndModel]);
+  }, [providerData, maxDataPoints]);
 
   const copyToClipboard = async () => {
     try {
@@ -715,7 +714,7 @@ function CombinedRateLimiterRetryChartComponent({
               xAxisId="tokensPerSecond"
               dataKey="avgTokensPerSecond"
               name="Avg Tokens/sec"
-              fill={CHART_COLORS.ttft} // Distinct color for TTFT
+              fill={CHART_COLORS.tokensPerSecond}
               animationDuration={0}
             />
             {/* group 6: TTFT (Time to First Token) */}
@@ -723,7 +722,7 @@ function CombinedRateLimiterRetryChartComponent({
               xAxisId="ttft"
               dataKey="avgTtftMs"
               name="Avg TTFT"
-              fill={CHART_COLORS.ttft} // Distinct color for TTFT
+              fill={CHART_COLORS.tokensPerSecond} // Using same color as tokens per second for visual grouping
               animationDuration={0}
             />
             {/* group 7: reference lines */}

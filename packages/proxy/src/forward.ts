@@ -1176,6 +1176,7 @@ export function createProxyHandler(
                     ),
                     receive_ms: Math.round(endTime - firstByteTime),
                     total_ms: Math.round(endTime - startTime),
+                    firstTokenMs: Math.round(firstByteTime - startTime),
                   };
 
                   // Skip capture for title-generation requests (internal UI feature)
@@ -1252,6 +1253,8 @@ export function createProxyHandler(
                         ),
                       ),
                       receive_ms: Math.round(endTime - firstByteTime),
+                      total_ms: Math.round(endTime - startTime),
+                      firstTokenMs: Math.round(firstByteTime - startTime),
                       total_ms: Math.round(endTime - startTime),
                     };
 

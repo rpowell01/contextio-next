@@ -37,6 +37,7 @@ const REDACTION_METADATA_BULK_COLUMNS = `
   timings_wait_ms,
   timings_receive_ms,
   timings_total_ms,
+  timings_first_token_ms,
   total_input_tokens,
   total_output_tokens,
   tokens_per_second,
@@ -65,6 +66,7 @@ function mapRowToRedactionMetadataNoMatches(row: {
   timings_wait_ms: number | null;
   timings_receive_ms: number | null;
   timings_total_ms: number | null;
+  timings_first_token_ms: number | null;
   total_input_tokens: number | null;
   total_output_tokens: number | null;
   tokens_per_second: number | null;
@@ -92,6 +94,7 @@ function mapRowToRedactionMetadataNoMatches(row: {
       wait_ms: row.timings_wait_ms ?? undefined,
       receive_ms: row.timings_receive_ms ?? undefined,
       total_ms: row.timings_total_ms ?? undefined,
+      firstTokenMs: row.timings_first_token_ms ?? undefined,
     } : undefined,
     totalInputTokens: row.total_input_tokens ?? undefined,
     totalOutputTokens: row.total_output_tokens ?? undefined,
@@ -177,6 +180,8 @@ export async function getRedactionMetadataByCaptureIdFromDb(
     captureId,
     // Include matches from SQLite for precise diff highlighting
     matches: meta.matches ?? undefined,
+    // Include first token timing if available
+    firstTokenMs: meta.timings?.firstTokenMs,
   };
 }
 

@@ -713,3 +713,104 @@ export function getTokensPerSecondByProviderAndModel(activeSessionIds?: string[]
 		totalOutputTokens: row.totalOutputTokens ?? 0,
 	}));
 }
+
+
+/**
+ * Get average time to first token (TTFT) per provider from redaction metadata.
+ * TTFT measures how quickly the model starts responding, in milliseconds.
+ * Only includes entries where timings_first_token_ms is not null and provider is not null.
+ * Optionally filters by active session IDs.
+ */
+export function getTtftByProvider(activeSessionIds?: string[]): Array<{
+	provider: string;
+	avgTtftMs: number;
+	totalCaptures: number;
+}> {
+	const db = getDb();
+
+	let whereClause = `
+		WHERE timings_first_token_ms IS NOT NULL
+		AND provider IS NOT NULL
+		AND provider != ''`;
+
+	const params: any[] = [];
+
+	if (activeSessionIds && activeSessionIds.length > 0) {
+		const placeholders = activeSessionIds.map(() => '?').join(',');
+		whereClause += ` AND session_id IN (${placeholders})`;
+		params.push(...activeSessionIds);
+	}
+
+	const rows = db.prepare(`
+		SELECT
+			provider,
+			AVG(timings_first_token_ms) as avgTtftMs,
+			COUNT(*) as totalCaptures
+		FROM redaction_metadata
+		${whereClause}
+		GROUP BY provider
+	`).all(...params) as Array<{
+		provider: string;
+		avgTtftMs: number | null;
+		totalCaptures: number | null;
+	}>;
+
+	return rows.map(row => ({
+		provider: row.provider,
+		avgTtftMs: row.avgTtftMs !== null ? Math.round(row.avgTtftMs * 100) / 100 : 0,
+		totalCaptures: row.totalCaptures ?? 0,
+	}));
+}
+
+/**
+ * Get average time to first token (TTFT) per provider AND model from redaction metadata.
+ * Different models have different token generation speeds, so this provides more granular metrics.
+ * Only includes entries where timings_first_token_ms is not null, provider is not null, and model is not null.
+ * Optionally filters by active session IDs.
+ */
+export function getTtftByProviderAndModel(activeSessionIds?: string[]): Array<{
+	provider: string;
+	model: string;
+	avgTtftMs: number;
+	totalCaptures: number;
+}> {
+	const db = getDb();
+
+	let whereClause = `
+		WHERE timings_first_token_ms IS NOT NULL
+		AND provider IS NOT NULL
+		AND provider != ''
+		AND model IS NOT NULL
+		AND model != ''`;
+
+	const params: any[] = [];
+
+	if (activeSessionIds && activeSessionIds.length > 0) {
+		const placeholders = activeSessionIds.map(() => '?').join(',');
+		whereClause += ` AND session_id IN (${placeholders})`;
+		params.push(...activeSessionIds);
+	}
+
+	const rows = db.prepare(`
+		SELECT
+			provider,
+			model,
+			AVG(timings_first_token_ms) as avgTtftMs,
+			COUNT(*) as totalCaptures
+		FROM redaction_metadata
+		${whereClause}
+		GROUP BY provider, model
+	`).all(...params) as Array<{
+		provider: string;
+		model: string;
+		avgTtftMs: number | null;
+		totalCaptures: number | null;
+	}>;
+
+	return rows.map(row => ({
+		provider: row.provider,
+		model: row.model,
+		avgTtftMs: row.avgTtftMs !== null ? Math.round(row.avgTtftMs * 100) / 100 : 0,
+		totalCaptures: row.totalCaptures ?? 0,
+	}));
+}

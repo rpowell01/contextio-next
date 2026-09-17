@@ -172,6 +172,8 @@ export interface CaptureData {
     receive_ms: number;
     /** Total wall-clock time. */
     total_ms: number;
+    /** Time from request start to first token received (TTFT). */
+    firstTokenMs: number;
   };
 }
 

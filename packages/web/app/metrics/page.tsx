@@ -7,7 +7,7 @@ import type {
   MetricsData,
   TimeRange,
 } from "@/types/api";
-import type { RateLimiterMetrics, RetryMetrics, RetryProviderMetrics, TokensPerSecondMetrics } from "@/types/client-api";
+import type { RateLimiterMetrics, RetryMetrics, RetryProviderMetrics, TokensPerSecondMetrics, TtftMetrics } from "@/types/client-api";
 import { TrafficChart } from "@/components/traffic-chart";
 import { CombinedRateLimiterRetryChart } from "@/components/combined-rate-limiter-retry-chart";
 import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
@@ -68,6 +68,7 @@ function MetricsContent() {
   const [rateLimiterMetrics, setRateLimiterMetrics] = useState<RateLimiterMetrics | null>(null);
   const [retryMetrics, setRetryMetrics] = useState<RetryMetrics | null>(null);
   const [tokensPerSecondMetrics, setTokensPerSecondMetrics] = useState<TokensPerSecondMetrics | null>(null);
+  const [ttftMetrics, setTtftMetrics] = useState<TtftMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
@@ -387,6 +388,39 @@ function MetricsContent() {
     }
   }, []);
 
+  // Fetch TTFT metrics
+  const fetchTtftMetrics = useCallback(async (signal?: AbortSignal, requestId?: number, isInitialLoad = false): Promise<boolean> => {
+    if (!isMountedRef.current) return false;
+    if (isInitialLoad) {
+      setRateLimiterLoading(true);
+    }
+    try {
+      const data = await apiClient.getTtftMetrics(signal);
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
+        setTtftMetrics(data);
+        setRateLimiterError(null);
+      }
+      return true;
+    } catch (e) {
+      if (e instanceof RequestAbortedError) {
+        return false;
+      }
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current)) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        setTtftMetrics(null);
+        setRateLimiterError(`Failed to fetch TTFT metrics: ${errorMessage}`);
+      }
+      if (isConnectionError(e)) {
+        throw e;
+      }
+      return false;
+    } finally {
+      if (isMountedRef.current && (requestId === undefined || requestId === requestIdRef.current) && isInitialLoad) {
+        setRateLimiterLoading(false);
+      }
+    }
+  }, []);
+
   // Poll for rate limiter and retry metrics (only when rate limiter tab is active)
   useEffect(() => {
     // Only poll if rate limiter tab is active
@@ -420,11 +454,12 @@ function MetricsContent() {
       const abortController = new AbortController();
       rateLimiterAbortControllerRef.current = abortController;
       try {
-        // Fetch rate limiter, retry metrics, and tokens per second metrics in parallel
+        // Fetch rate limiter, retry metrics, tokens per second metrics, and TTFT metrics in parallel
         await Promise.all([
           fetchRateLimiterMetrics(abortController.signal, requestId, isFirstPoll),
           fetchRetryMetrics(abortController.signal, requestId, isFirstPoll),
           fetchTokensPerSecondMetrics(abortController.signal, requestId, isFirstPoll),
+          fetchTtftMetrics(abortController.signal, requestId, isFirstPoll),
         ]);
       } catch (e) {
         // Connection error - stop polling to avoid infinite failed requests
@@ -737,6 +772,7 @@ function MetricsContent() {
                     rateLimiterMetrics={rateLimiterMetrics}
                     retryMetrics={retryMetrics}
                     tokensPerSecondMetrics={tokensPerSecondMetrics}
+                    ttftMetrics={ttftMetrics}
                     loading={rateLimiterLoading || retryLoading}
                     maxDataPoints={maxDataPoints}
                   />
@@ -940,6 +976,43 @@ function MetricsContent() {
                 )}
               </div>
             </div>
+
+            {/* TTFT per Provider */}
+            {ttftMetrics && ttftMetrics.byProviderAndModel.length > 0 && (
+              <div className="space-y-4">
+                <div className="text-sm font-medium">Time to First Token (by Model)</div>
+                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                  {ttftMetrics.byProviderAndModel.map((ttft) => (
+                    <div
+                      key={`${ttft.provider}-${ttft.model}`}
+                      className="rounded-lg border p-3 bg-primary/5 border-primary/20"
+                      title={`Average TTFT for ${ttft.provider} ${ttft.model ? `(${ttft.model})` : ''}: ${ttft.avgTtftMs}ms`}
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="font-medium text-primary">
+                          {ttft.provider}{ttft.model ? ` ` : ''}{ttft.model ? `(${ttft.model})` : ''}
+                        </div>
+                        <div className="text-sm">{ttft.avgTtftMs}ms</div>
+                      </div>
+                      <div className="w-full bg-muted/50 rounded-full h-1.5 mt-1">
+                        <div
+                          className="flex h-full items-center justify-end bg-primary/20 text-xs font-medium text-primary/80"
+                          style={{
+                            width: `${Math.min(ttft.avgTtftMs / 2000 * 100, 100)}%`, // Scale to 2 seconds = 100% for visualization
+                            minWidth: `${Math.min(ttft.avgTtftMs / 2000 * 100, 100)}%`
+                          }}
+                        >
+                          {ttft.avgTtftMs}ms
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {ttft.totalCaptures} captures
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Unique Redactions (deduplicated by session) */}
             <div

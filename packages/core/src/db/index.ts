@@ -88,6 +88,8 @@ export {
 	getRedactionAggregateStats,
 	getTokensPerSecondByProvider,
 	getTokensPerSecondByProviderAndModel,
+	getTtftByProvider,
+	getTtftByProviderAndModel,
 	importRedactionMetaFromFiles,
 	redactionMetadataExists,
 	type RedactionMetadata,

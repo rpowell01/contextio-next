@@ -1,5 +1,5 @@
 import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, ProviderConfig, ProviderMetadata, FalsePositiveEntry, MaintenanceOperation, MaintenanceResponse } from "@/types/api";
-import type { RateLimiterMetrics, RetryMetrics, TokensPerSecondMetrics } from "@/types/client-api";
+import type { RateLimiterMetrics, RetryMetrics, TokensPerSecondMetrics, TtftByProvider } from "@/types/client-api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
 /**
@@ -796,6 +796,11 @@ async getProxyStatus(signal?: AbortSignal): Promise<ProxyStatus> {
   async getTokensPerSecondMetrics(signal?: AbortSignal): Promise<TokensPerSecondMetrics> {
     return this.request("/admin/tokens-per-second", { signal });
   }
+
+  async getTtftMetrics(signal?: AbortSignal): Promise<TtftMetrics> {
+    return this.request("/admin/ttft", { signal });
+  }
+
 
   async getDatabaseMaintenanceInfo(signal?: AbortSignal): Promise<{
     availableOperations: MaintenanceOperation[];

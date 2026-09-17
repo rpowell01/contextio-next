@@ -181,3 +181,41 @@ export interface TokensPerSecondMetrics {
   /** Timestamp when metrics were collected */
   timestamp: string;
 }
+
+/**
+ * TTFT metrics per provider
+ */
+export interface TtftByProvider {
+  /** Provider identifier */
+  provider: string;
+  /** Average time to first token in milliseconds */
+  avgTtftMs: number;
+  /** Total number of captures used for this average */
+  totalCaptures: number;
+}
+
+/**
+ * TTFT metrics per provider and model
+ */
+export interface TtftByProviderAndModel {
+  /** Provider identifier */
+  provider: string;
+  /** Model identifier */
+  model: string;
+  /** Average time to first token in milliseconds */
+  avgTtftMs: number;
+  /** Total number of captures used for this average */
+  totalCaptures: number;
+}
+
+/**
+ * Complete TTFT metrics response
+ */
+export interface TtftMetrics {
+  /** Per-provider metrics (without model breakdown) */
+  byProvider: TtftByProvider[];
+  /** Per-provider-and-model metrics */
+  byProviderAndModel: TtftByProviderAndModel[];
+  /** Timestamp when metrics were collected */
+  timestamp: string;
+}
