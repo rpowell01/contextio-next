@@ -1,5 +1,5 @@
 import type { Session, ProxyStatus, SessionStats, SessionSummary, SessionMetrics, Capture, CaptureWithRedaction, CaptureDetail, APIResponse, ContainerEnvVar, LogEntry, LogsFilter, ProxyEnvVar, RedactionDetails, MetricsData, ProviderConfig, ProviderMetadata, FalsePositiveEntry, MaintenanceOperation, MaintenanceResponse } from "@/types/api";
-import type { RateLimiterMetrics, RetryMetrics, TokensPerSecondMetrics, TtftByProvider } from "@/types/client-api";
+import type { RateLimiterMetrics, RetryMetrics, TokensPerSecondMetrics, TtftMetrics } from "@/types/client-api";
 import type { Settings, SettingMeta } from "@/lib/settings";
 
 /**

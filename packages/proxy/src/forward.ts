@@ -1237,26 +1237,25 @@ export function createProxyHandler(
                   if (!res.destroyed) {
                     res.end();
                   }
-                  // Run capture plugins manually since we bypassed finishResponse
-                  if (hasCapturePlugins) {
-                    const timings: CaptureData["timings"] = {
-                      send_ms: Math.round(
-                        Math.max(
-                          0,
-                          (requestSentTime || firstByteTime) - startTime,
-                        ),
-                      ),
-                      wait_ms: Math.round(
-                        Math.max(
-                          0,
-                          firstByteTime - (requestSentTime || startTime),
-                        ),
-                      ),
-                      receive_ms: Math.round(endTime - firstByteTime),
-                      total_ms: Math.round(endTime - startTime),
-                      firstTokenMs: Math.round(firstByteTime - startTime),
-                      total_ms: Math.round(endTime - startTime),
-                    };
+// Run capture plugins manually since we bypassed finishResponse
+                   if (hasCapturePlugins) {
+                     const timings: CaptureData["timings"] = {
+                       send_ms: Math.round(
+                         Math.max(
+                           0,
+                           (requestSentTime || firstByteTime) - startTime,
+                         ),
+                       ),
+                       wait_ms: Math.round(
+                         Math.max(
+                           0,
+                           firstByteTime - (requestSentTime || startTime),
+                         ),
+                       ),
+                       receive_ms: Math.round(endTime - firstByteTime),
+                       total_ms: Math.round(endTime - startTime),
+                       firstTokenMs: Math.round(firstByteTime - startTime),
+                     };
 
                     // Skip capture for title-generation requests (internal UI feature)
                     if (!sessionId?.startsWith("title-")) {

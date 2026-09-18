@@ -306,7 +306,7 @@ function CombinedRateLimiterRetryChartComponent({
   ttftMetrics,
   loading = false,
   maxDataPoints = 50,
-}) {
+}: CombinedRateLimiterRetryChartProps) {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
