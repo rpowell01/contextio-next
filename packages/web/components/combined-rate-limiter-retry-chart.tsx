@@ -811,15 +811,15 @@ tickFormatter={(value) => {
               dataKey="yAxisLabel"
               type="category"
               width={180}
-              label={{
-                value: "Session / Provider / Model",
-                position: "outsideTop",
-                offset: 10,
-                style: { textAnchor: "start", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
-              }}
               tick={{ fill: "rgb(var(--color-text))", fontSize: 11 }}
               tickLine={{ stroke: "rgb(var(--color-border))" }}
               axisLine={{ stroke: "rgb(var(--color-border))" }}
+            />
+            {/* Custom Y-axis label positioned at top-left */}
+            <Label
+              value="Session / Provider / Model"
+              position={{ x: -60, y: -10 }}
+              style={{ fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500, textAnchor: "start" }}
             />
             {/* group 2: tooltip */}
             <Tooltip
