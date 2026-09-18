@@ -877,9 +877,9 @@ tickFormatter={(value) => {
                 fill="rgb(var(--color-text-muted))"
               />
             </Bar>
-            {/* group 7: reference lines */}
+{/* group 7: reference lines */}
             {chartData.map((p, idx) => (
-              <React.Fragment key={`${p.provider}-${idx}`}>
+              <React.Fragment key={`${p.provider}-${idx}-${(p as any)._sessionIndex ?? 0}`}>
                 {/* Max requests threshold lines (70%, 90%, max) */}
                 {p.maxRequests > 0 && (
                   <>
@@ -947,24 +947,23 @@ tickFormatter={(value) => {
                         offset={10 + idx * 30 + 45}
                       />
                     }
+
                   />
                 )}
               </React.Fragment>
             ))}
-            {/* group 8: session separator lines */}
-            {(() => {
+            {/* group 8: session separator lines - DISABLED for debugging */}
+            {/* {(() => {
               const separators: React.ReactNode[] = [];
               let lastSessionIndex = -1;
               chartData.forEach((p, idx) => {
                 const sessionIndex = (p as any)._sessionIndex ?? 0;
                 const isLastInSession = (p as any)._isLastInSession;
                 if (sessionIndex !== lastSessionIndex && isLastInSession && sessionIndex > 0) {
-                  // Add a horizontal separator line between sessions
-                  // In vertical layout, ReferenceLine with y prop creates horizontal line
                   separators.push(
                     <ReferenceLine
                       key={`session-sep-${sessionIndex}`}
-                      y={idx + 0.5} // Position between this and next item
+                      y={idx + 0.5}
                       stroke="rgb(var(--color-border))"
                       strokeWidth={2}
                       strokeDasharray="8 4"
@@ -974,7 +973,7 @@ tickFormatter={(value) => {
                 lastSessionIndex = sessionIndex;
               });
               return separators;
-            })()}
+            })()} */}
           </BarChart>
         </ResponsiveContainer>
       </div>
