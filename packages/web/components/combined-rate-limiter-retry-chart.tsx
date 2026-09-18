@@ -463,7 +463,7 @@ function CombinedRateLimiterRetryChartComponent({
     }
 
     // Finally, merge tokens per second metrics - per provider and model (aggregated across active sessions)
-    // Assign to "all" session (global) since they don't have session breakdown
+    // Assign to "all" session (global) only if not already present in a session-specific map
     if (tokensPerSecondMetrics?.byProviderAndModel) {
       const sessionMap = sessionProviderMap.get("all");
       if (sessionMap) {
@@ -471,18 +471,35 @@ function CombinedRateLimiterRetryChartComponent({
           const provider = tpsProvider.provider;
           const model = tpsProvider.model;
           const key = model ? `${provider}:${model}` : provider;
-          let existing = sessionMap.get(key);
-          if (!existing) {
-            existing = getOrCreateProviderData("all", provider, model);
+          
+          // Check if this provider/model already exists in any session-specific map
+          let foundInSession = false;
+          for (const [sessionId, sMap] of sessionProviderMap.entries()) {
+            if (sessionId !== "all" && sMap.has(key)) {
+              // Update existing entry in session-specific map
+              const existing = sMap.get(key)!;
+              existing.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
+              existing.model = model;
+              foundInSession = true;
+              break;
+            }
           }
-          existing.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
-          existing.model = model;
+          
+          // Only add to "all" if not found in any session-specific map
+          if (!foundInSession) {
+            let existing = sessionMap.get(key);
+            if (!existing) {
+              existing = getOrCreateProviderData("all", provider, model);
+            }
+            existing.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
+            existing.model = model;
+          }
         });
       }
     }
 
     // Finally, merge TTFT metrics - per provider and model (aggregated across active sessions)
-    // Assign to "all" session (global) since they don't have session breakdown
+    // Assign to "all" session (global) only if not already present in a session-specific map
     if (ttftMetrics?.byProviderAndModel) {
       const sessionMap = sessionProviderMap.get("all");
       if (sessionMap) {
@@ -490,13 +507,31 @@ function CombinedRateLimiterRetryChartComponent({
           const provider = ttftProvider.provider;
           const model = ttftProvider.model;
           const key = model ? `${provider}:${model}` : provider;
-          let existing = sessionMap.get(key);
-          if (!existing) {
-            existing = getOrCreateProviderData("all", provider, model);
+          
+          // Check if this provider/model already exists in any session-specific map
+          let foundInSession = false;
+          for (const [sessionId, sMap] of sessionProviderMap.entries()) {
+            if (sessionId !== "all" && sMap.has(key)) {
+              // Update existing entry in session-specific map
+              const existing = sMap.get(key)!;
+              existing.avgTtftMs = ttftProvider.avgTtftMs;
+              existing.ttftTotalCaptures = ttftProvider.totalCaptures;
+              existing.model = model;
+              foundInSession = true;
+              break;
+            }
           }
-          existing.avgTtftMs = ttftProvider.avgTtftMs;
-          existing.ttftTotalCaptures = ttftProvider.totalCaptures;
-          existing.model = model;
+          
+          // Only add to "all" if not found in any session-specific map
+          if (!foundInSession) {
+            let existing = sessionMap.get(key);
+            if (!existing) {
+              existing = getOrCreateProviderData("all", provider, model);
+            }
+            existing.avgTtftMs = ttftProvider.avgTtftMs;
+            existing.ttftTotalCaptures = ttftProvider.totalCaptures;
+            existing.model = model;
+          }
         });
       }
     }
