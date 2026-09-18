@@ -112,6 +112,21 @@ function isRateLimiterPlugin(plugin: ProxyPlugin): plugin is ProxyPlugin & { _in
   );
 }
 
+function getActiveSessionIdsFromRateLimiter(plugins: ProxyPlugin[]): string[] {
+  const rateLimiterPlugin = plugins.find((p) => p.name === "rate-limiter");
+  if (!rateLimiterPlugin || !isRateLimiterPlugin(rateLimiterPlugin)) {
+    return [];
+  }
+  const bucketStates = rateLimiterPlugin._internal.getAllBucketStates();
+  const sessionIds = new Set<string>();
+  for (const bucket of bucketStates) {
+    if (bucket.sessionId) {
+      sessionIds.add(bucket.sessionId);
+    }
+  }
+  return Array.from(sessionIds);
+}
+
 function isRetryPlugin(plugin: ProxyPlugin): plugin is ProxyPlugin & { _internal: RetryInternal } {
   return (
     plugin.name === "retry" &&
@@ -965,12 +980,9 @@ try {
           }
 
           try {
-            // Get active streaming session IDs from retry plugin to filter tokens/sec metrics
-            const retryPlugin = plugins.find((p) => p.name === "retry");
-            let activeSessionIds: string[] = [];
-            if (retryPlugin && isRetryPlugin(retryPlugin)) {
-              activeSessionIds = retryPlugin._internal.getActiveStreamingSessionIds();
-            }
+            // Get active session IDs from rate limiter buckets to filter tokens/sec metrics
+            // This ensures consistency with the rate limiter metrics displayed in the chart
+            const activeSessionIds = getActiveSessionIdsFromRateLimiter(plugins);
 
             // If no active sessions, return empty results instead of all historical data
             // (empty array would cause the DB query to return all models since [] is truthy but length is 0)
@@ -1010,12 +1022,9 @@ try {
           }
 
           try {
-            // Get active streaming session IDs from retry plugin to filter TTFT metrics
-            const retryPlugin = plugins.find((p) => p.name === "retry");
-            let activeSessionIds: string[] = [];
-            if (retryPlugin && isRetryPlugin(retryPlugin)) {
-              activeSessionIds = retryPlugin._internal.getActiveStreamingSessionIds();
-            }
+            // Get active session IDs from rate limiter buckets to filter TTFT metrics
+            // This ensures consistency with the rate limiter metrics displayed in the chart
+            const activeSessionIds = getActiveSessionIdsFromRateLimiter(plugins);
 
             // If no active sessions, return empty results instead of all historical data
             // (empty array would cause the DB query to return all models since [] is truthy but length is 0)
