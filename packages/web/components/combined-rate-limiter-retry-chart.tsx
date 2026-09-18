@@ -82,7 +82,7 @@ function CustomTooltipContent({ active, payload }: { active?: boolean; payload?:
     const modelInfo = p.model ? ` (${p.model})` : "";
     parts.push(
       <div key="ttft" style={{ marginBottom: 2, fontSize: "11px", color: "rgb(var(--color-popover-foreground))" }}>
-        Avg TTFT{modelInfo}: {p.avgTtftMs.toFixed(1)}ms
+        Avg TTFT{modelInfo}: {((p.avgTtftMs ?? 0) / 1000).toFixed(3)}s
       </div>
     );
   }
@@ -370,8 +370,17 @@ function CombinedRateLimiterRetryChartComponent({
             .filter((s): s is string => Boolean(s)) || []
         ));
 
+    // Check if we have global metrics that need an "all" session
+    const hasGlobalMetrics = 
+      (retryMetrics?.providers?.length ?? 0) > 0 ||
+      (tokensPerSecondMetrics?.byProviderAndModel?.length ?? 0) > 0 ||
+      (ttftMetrics?.byProviderAndModel?.length ?? 0) > 0;
+
     // If no sessions found, fall back to "all" (shared buckets)
-    const sessions = sessionIds.length > 0 ? sessionIds : ["all"];
+    // Also include "all" if we have global metrics to display
+    const sessions = sessionIds.length > 0 
+      ? (hasGlobalMetrics ? [...sessionIds, "all"] : sessionIds)
+      : ["all"];
     
     // Build a map of session -> provider/model -> ProviderData
     const sessionProviderMap = new Map<string, Map<string, ProviderData>>();
@@ -432,57 +441,64 @@ function CombinedRateLimiterRetryChartComponent({
       });
     }
 
-    // Then, merge retry metrics - these are per provider, distribute across sessions
-    // Since retry metrics are aggregated, we'll assign them to the first session or all sessions
+    // Then, merge retry metrics - these are aggregated per provider (not per session)
+    // Assign to "all" session (global) since they don't have session breakdown
     if (retryMetrics?.providers) {
-      retryMetrics.providers.forEach((retryProvider: RetryProviderMetrics) => {
-        const provider = retryProvider.provider;
-        // Assign retry metrics to each session that has this provider
-        sessions.forEach(sessionId => {
-          const sessionMap = sessionProviderMap.get(sessionId);
-          if (sessionMap) {
-            const key = provider; // retry metrics don't have model breakdown
-            let existing = sessionMap.get(key);
-            if (!existing) {
-              existing = getOrCreateProviderData(sessionId, provider);
-            }
-            existing.nonStreamingRetryAttempts = retryProvider.nonStreamingRetryAttempts;
-            existing.streamingRetryAttempts = retryProvider.streamingRetryAttempts;
-            existing.totalRetryAttempts = retryProvider.totalRetryAttempts;
-            existing.activeStreamingSessions = retryProvider.activeStreamingSessions;
-            existing.maxRetries = retryProvider.maxRetries;
+      const sessionMap = sessionProviderMap.get("all");
+      if (sessionMap) {
+        retryMetrics.providers.forEach((retryProvider: RetryProviderMetrics) => {
+          const provider = retryProvider.provider;
+          const key = provider; // retry metrics don't have model breakdown
+          let existing = sessionMap.get(key);
+          if (!existing) {
+            existing = getOrCreateProviderData("all", provider);
           }
+          existing.nonStreamingRetryAttempts = retryProvider.nonStreamingRetryAttempts;
+          existing.streamingRetryAttempts = retryProvider.streamingRetryAttempts;
+          existing.totalRetryAttempts = retryProvider.totalRetryAttempts;
+          existing.activeStreamingSessions = retryProvider.activeStreamingSessions;
+          existing.maxRetries = retryProvider.maxRetries;
         });
-      });
+      }
     }
 
-    // Finally, merge tokens per second metrics - per provider and model
+    // Finally, merge tokens per second metrics - per provider and model (aggregated across active sessions)
+    // Assign to "all" session (global) since they don't have session breakdown
     if (tokensPerSecondMetrics?.byProviderAndModel) {
-      tokensPerSecondMetrics.byProviderAndModel.forEach((tpsProvider: TokensPerSecondProviderMetrics) => {
-        const provider = tpsProvider.provider;
-        const model = tpsProvider.model;
-        // Assign to all sessions (since these are already filtered by active sessions)
-        sessions.forEach(sessionId => {
-          const data = getOrCreateProviderData(sessionId, provider, model);
-          data.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
-          data.model = model;
+      const sessionMap = sessionProviderMap.get("all");
+      if (sessionMap) {
+        tokensPerSecondMetrics.byProviderAndModel.forEach((tpsProvider: TokensPerSecondProviderMetrics) => {
+          const provider = tpsProvider.provider;
+          const model = tpsProvider.model;
+          const key = model ? `${provider}:${model}` : provider;
+          let existing = sessionMap.get(key);
+          if (!existing) {
+            existing = getOrCreateProviderData("all", provider, model);
+          }
+          existing.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
+          existing.model = model;
         });
-      });
+      }
     }
 
-    // Finally, merge TTFT metrics - per provider and model
+    // Finally, merge TTFT metrics - per provider and model (aggregated across active sessions)
+    // Assign to "all" session (global) since they don't have session breakdown
     if (ttftMetrics?.byProviderAndModel) {
-      ttftMetrics.byProviderAndModel.forEach((ttftProvider: TtftByProviderAndModel) => {
-        const provider = ttftProvider.provider;
-        const model = ttftProvider.model;
-        // Assign to all sessions (since these are already filtered by active sessions)
-        sessions.forEach(sessionId => {
-          const data = getOrCreateProviderData(sessionId, provider, model);
-          data.avgTtftMs = ttftProvider.avgTtftMs;
-          data.ttftTotalCaptures = ttftProvider.totalCaptures;
-          data.model = model;
+      const sessionMap = sessionProviderMap.get("all");
+      if (sessionMap) {
+        ttftMetrics.byProviderAndModel.forEach((ttftProvider: TtftByProviderAndModel) => {
+          const provider = ttftProvider.provider;
+          const model = ttftProvider.model;
+          const key = model ? `${provider}:${model}` : provider;
+          let existing = sessionMap.get(key);
+          if (!existing) {
+            existing = getOrCreateProviderData("all", provider, model);
+          }
+          existing.avgTtftMs = ttftProvider.avgTtftMs;
+          existing.ttftTotalCaptures = ttftProvider.totalCaptures;
+          existing.model = model;
         });
-      });
+      }
     }
 
     // Convert to flat array with session grouping
@@ -590,8 +606,12 @@ function CombinedRateLimiterRetryChartComponent({
 
   const isDownsampled = chartData.length < providerData.length;
 
-  // Get unique session count for display
-  const sessionCount = Array.from(new Set(chartData.map(d => d.sessionId).filter(Boolean))).length;
+  // Get unique session count for display (exclude "all" session which is for global metrics)
+  const sessionCount = Array.from(new Set(
+    chartData
+      .map(d => d.sessionId)
+      .filter((s): s is string => Boolean(s) && s !== "all")
+  )).length;
 
   if (loading) {
     return (
@@ -807,7 +827,7 @@ tickFormatter={(value) => {
                 dataKey="avgTtftMs"
                 position="right"
                 offset={5}
-                formatter={(value: number) => (value > 0 ? `${value.toFixed(1)}ms` : "")}
+                formatter={(value: number) => (value > 0 ? `${(value / 1000).toFixed(3)}s` : "")}
                 fontSize={11}
                 fill="rgb(var(--color-text-muted))"
               />
