@@ -1152,6 +1152,13 @@ for (const part of jsonParts) {
       await this.delay(delayMs);
     }
     
+    // Clean up streamState for non-streaming retries since the retry response
+    // bypasses the plugin pipeline (forward.ts calls doForward directly) and
+    // onResponse will not be called for the retry response.
+    if (ctx.sessionId) {
+      this.streamState.delete(ctx.sessionId);
+    }
+    
     // Return a special response to signal that a retry should be performed
     // Status 599 is our internal retry signal (not a real HTTP status)
     // We include the request ID in the headers so we can match it in forward.ts
