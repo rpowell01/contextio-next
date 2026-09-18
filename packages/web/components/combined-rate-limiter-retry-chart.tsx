@@ -13,6 +13,7 @@ import {
   Tooltip,
   ReferenceLine,
   Label,
+  LabelList,
 } from "recharts";
 import { Copy, Loader2 } from "lucide-react";
 
@@ -331,6 +332,32 @@ function CombinedRateLimiterRetryChartComponent({
 }: CombinedRateLimiterRetryChartProps) {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const renderCountRef = useRef(0);
+  renderCountRef.current++;
+
+  // Debug: log render count and data changes
+  const prevTokensPerSecondRef = useRef(tokensPerSecondMetrics);
+  const prevTtftRef = useRef(ttftMetrics);
+  if (prevTokensPerSecondRef.current !== tokensPerSecondMetrics) {
+    console.log('[CombinedChart] tokensPerSecondMetrics changed', {
+      renderCount: renderCountRef.current,
+      prevTimestamp: prevTokensPerSecondRef.current?.timestamp,
+      newTimestamp: tokensPerSecondMetrics?.timestamp,
+      prevByProviderAndModelLength: prevTokensPerSecondRef.current?.byProviderAndModel?.length,
+      newByProviderAndModelLength: tokensPerSecondMetrics?.byProviderAndModel?.length,
+    });
+    prevTokensPerSecondRef.current = tokensPerSecondMetrics;
+  }
+  if (prevTtftRef.current !== ttftMetrics) {
+    console.log('[CombinedChart] ttftMetrics changed', {
+      renderCount: renderCountRef.current,
+      prevTimestamp: prevTtftRef.current?.timestamp,
+      newTimestamp: ttftMetrics?.timestamp,
+      prevByProviderAndModelLength: prevTtftRef.current?.byProviderAndModel?.length,
+      newByProviderAndModelLength: ttftMetrics?.byProviderAndModel?.length,
+    });
+    prevTtftRef.current = ttftMetrics;
+  }
 
   // Build session-grouped data: group by session first, then by provider/model
   const providerData = useMemo((): ProviderData[] => {
@@ -757,7 +784,16 @@ function CombinedRateLimiterRetryChartComponent({
               name="Avg Tokens/sec"
               fill={CHART_COLORS.tokensPerSecond} // Emerald green for tokens/sec
               animationDuration={300}
-            />
+            >
+              <LabelList
+                dataKey="avgTokensPerSecond"
+                position="right"
+                offset={5}
+                formatter={(value: number) => (value > 0 ? formatNumber(value) : "")}
+                fontSize={11}
+                fill="rgb(var(--color-text-muted))"
+              />
+            </Bar>
             {/* group 6: TTFT (Time to First Token) */}
             <Bar
               xAxisId="ttft"
@@ -765,7 +801,16 @@ function CombinedRateLimiterRetryChartComponent({
               name="Avg TTFT"
               fill={CHART_COLORS.ttft} // Distinct color for TTFT
               animationDuration={300}
-            />
+            >
+              <LabelList
+                dataKey="avgTtftMs"
+                position="right"
+                offset={5}
+                formatter={(value: number) => (value > 0 ? `${value.toFixed(1)}ms` : "")}
+                fontSize={11}
+                fill="rgb(var(--color-text-muted))"
+              />
+            </Bar>
             {/* group 7: reference lines */}
             {chartData.map((p, idx) => (
               <React.Fragment key={`${p.provider}-${idx}`}>
