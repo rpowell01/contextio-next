@@ -775,6 +775,11 @@ function MetricsContent() {
                     ttftMetrics={ttftMetrics}
                     loading={rateLimiterLoading || retryLoading}
                     maxDataPoints={maxDataPoints}
+                    activeSessionIds={
+                      rateLimiterMetrics?.buckets
+                        ? Array.from(new Set(rateLimiterMetrics.buckets.map(b => b.sessionId).filter((s): s is string => Boolean(s))))
+                        : []
+                    }
                   />
                 </div>
 

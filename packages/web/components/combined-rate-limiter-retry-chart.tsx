@@ -26,10 +26,19 @@ function CustomTooltipContent({ active, payload }: { active?: boolean; payload?:
   const p = payload[0].payload;
   const parts: React.ReactNode[] = [];
 
+  // Session header
+  if (p.sessionId && p.sessionId !== "all") {
+    parts.push(
+      <div key="session" style={{ fontWeight: 600, marginBottom: 4, color: "rgb(var(--color-primary))", fontSize: "12px" }}>
+        📊 Session: {p.sessionId.slice(0, 20)}{p.sessionId.length > 20 ? "..." : ""}
+      </div>
+    );
+  }
+
   // Provider name header
   parts.push(
     <div key="provider" style={{ fontWeight: 600, marginBottom: 4, color: "rgb(var(--color-popover-foreground))" }}>
-      Provider: {p.provider}
+      Provider: {p.provider}{p.model ? ` (${p.model})` : ""}
     </div>
   );
 
@@ -103,10 +112,13 @@ interface CombinedRateLimiterRetryChartProps {
   ttftMetrics?: TtftMetrics | null;
   loading?: boolean;
   maxDataPoints?: number;
+  activeSessionIds?: string[]; // Active session IDs for grouping
 }
 
 interface ProviderData {
   provider: string;
+  // Session ID for grouping
+  sessionId?: string;
   // Request Buckets (from rate limiter)
   requestBuckets: number;
   maxRequests: number;
@@ -243,6 +255,15 @@ function downsampleData(data: ProviderData[], maxPoints: number): ProviderData[]
 function chartDataEqual(prevProps: CombinedRateLimiterRetryChartProps, nextProps: CombinedRateLimiterRetryChartProps): boolean {
   if (prevProps.loading !== nextProps.loading) return false;
   if (prevProps.maxDataPoints !== nextProps.maxDataPoints) return false;
+  if (prevProps.activeSessionIds !== nextProps.activeSessionIds) {
+    // Compare arrays
+    const prevSessions = prevProps.activeSessionIds || [];
+    const nextSessions = nextProps.activeSessionIds || [];
+    if (prevSessions.length !== nextSessions.length) return false;
+    for (let i = 0; i < prevSessions.length; i++) {
+      if (prevSessions[i] !== nextSessions[i]) return false;
+    }
+  }
 
   const prevRL = prevProps.rateLimiterMetrics;
   const nextRL = nextProps.rateLimiterMetrics;
@@ -276,7 +297,7 @@ function chartDataEqual(prevProps: CombinedRateLimiterRetryChartProps, nextProps
   // Compare retry metrics providers
   const prevProviders = prevRetry?.providers || [];
   const nextProviders = nextRetry?.providers || [];
-   
+  
   if (prevProviders.length !== nextProviders.length) return false;
 
   for (let i = 0; i < prevProviders.length; i++) {
@@ -306,166 +327,163 @@ function CombinedRateLimiterRetryChartComponent({
   ttftMetrics,
   loading = false,
   maxDataPoints = 50,
+  activeSessionIds = [],
 }: CombinedRateLimiterRetryChartProps) {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Aggregate rate limiter buckets by provider to match retry metrics providers
+  // Build session-grouped data: group by session first, then by provider/model
   const providerData = useMemo((): ProviderData[] => {
-    const providerMap = new Map<string, ProviderData>();
+// Get active session IDs - from prop or extract from rate limiter buckets
+    const sessionIds = activeSessionIds.length > 0
+      ? activeSessionIds
+      : Array.from(new Set(
+          rateLimiterMetrics?.buckets
+            ?.map(b => b.sessionId)
+            .filter((s): s is string => Boolean(s)) || []
+        ));
 
-    // First, process rate limiter buckets
+    // If no sessions found, fall back to "all" (shared buckets)
+    const sessions = sessionIds.length > 0 ? sessionIds : ["all"];
+    
+    // Build a map of session -> provider/model -> ProviderData
+    const sessionProviderMap = new Map<string, Map<string, ProviderData>>();
+    
+    // Initialize maps for each session
+    sessions.forEach(sessionId => {
+      sessionProviderMap.set(sessionId, new Map());
+    });
+
+    // Helper to get or create ProviderData for a session/provider/model combination
+    const getOrCreateProviderData = (sessionId: string, provider: string, model?: string) => {
+      const sessionMap = sessionProviderMap.get(sessionId)!;
+      const key = model ? `${provider}:${model}` : provider;
+      let existing = sessionMap.get(key);
+      if (!existing) {
+        existing = {
+          provider,
+          sessionId,
+          requestBuckets: 0,
+          maxRequests: 0,
+          bufferCapacity: 0,
+          totalMaxRequests: 0,
+          totalRequestsInWindow: 0,
+          totalQueueLength: 0,
+          utilizationPercent: 0,
+          nonStreamingRetryAttempts: 0,
+          streamingRetryAttempts: 0,
+          totalRetryAttempts: 0,
+          activeStreamingSessions: 0,
+          maxRetries: 0,
+          model,
+        };
+        sessionMap.set(key, existing);
+      }
+      return existing;
+    };
+
+    // First, process rate limiter buckets - group by session
     if (rateLimiterMetrics?.buckets) {
       rateLimiterMetrics.buckets.forEach((bucket) => {
         const provider = bucket.provider ?? "unknown";
+        const sessionId = bucket.sessionId ?? "all";
         const maxRequests = bucket.maxTokens - bucket.bufferCapacity;
         const bufferCapacity = bucket.bufferCapacity;
         const totalMaxRequests = bucket.maxTokens; // maxRequests + bufferCapacity
         const requestsInWindow = bucket.requestsInWindow ?? 0;
 
-        const existing = providerMap.get(provider);
-        if (!existing) {
-          providerMap.set(provider, {
-            provider,
-            requestBuckets: 1,
-            maxRequests,
-            bufferCapacity,
-            totalMaxRequests,
-            totalRequestsInWindow: requestsInWindow,
-            totalQueueLength: bucket.queueLength,
-            utilizationPercent: totalMaxRequests > 0 ? Math.round((requestsInWindow / totalMaxRequests) * 10000) / 100 : 0,
-            // Retry fields - will be filled from retry metrics
-            nonStreamingRetryAttempts: 0,
-            streamingRetryAttempts: 0,
-            totalRetryAttempts: 0,
-            activeStreamingSessions: 0,
-            maxRetries: 0,
-          });
-        } else {
-          existing.requestBuckets += 1;
-          existing.maxRequests += maxRequests;
-          existing.bufferCapacity += bufferCapacity;
-          existing.totalMaxRequests += totalMaxRequests;
-          existing.totalRequestsInWindow += requestsInWindow;
-          existing.totalQueueLength += bucket.queueLength;
-          existing.utilizationPercent = existing.totalMaxRequests > 0
-            ? Math.round((existing.totalRequestsInWindow / existing.totalMaxRequests) * 10000) / 100
-            : 0;
-        }
+        const data = getOrCreateProviderData(sessionId, provider);
+        data.requestBuckets += 1;
+        data.maxRequests += maxRequests;
+        data.bufferCapacity += bufferCapacity;
+        data.totalMaxRequests += totalMaxRequests;
+        data.totalRequestsInWindow += requestsInWindow;
+        data.totalQueueLength += bucket.queueLength;
+        data.utilizationPercent = data.totalMaxRequests > 0
+          ? Math.round((data.totalRequestsInWindow / data.totalMaxRequests) * 10000) / 100
+          : 0;
       });
     }
 
-    // Then, merge retry metrics
+    // Then, merge retry metrics - these are per provider, distribute across sessions
+    // Since retry metrics are aggregated, we'll assign them to the first session or all sessions
     if (retryMetrics?.providers) {
       retryMetrics.providers.forEach((retryProvider: RetryProviderMetrics) => {
         const provider = retryProvider.provider;
-        const existing = providerMap.get(provider);
-        
-        if (!existing) {
-          // Provider only exists in retry metrics
-          providerMap.set(provider, {
-            provider,
-            requestBuckets: 0,
-            maxRequests: 0,
-            bufferCapacity: 0,
-            totalMaxRequests: 0,
-            totalRequestsInWindow: 0,
-            totalQueueLength: 0,
-            utilizationPercent: 0,
-            nonStreamingRetryAttempts: retryProvider.nonStreamingRetryAttempts,
-            streamingRetryAttempts: retryProvider.streamingRetryAttempts,
-            totalRetryAttempts: retryProvider.totalRetryAttempts,
-            activeStreamingSessions: retryProvider.activeStreamingSessions,
-            maxRetries: retryProvider.maxRetries,
-          });
-        } else {
-          // Merge retry data
-          existing.nonStreamingRetryAttempts = retryProvider.nonStreamingRetryAttempts;
-          existing.streamingRetryAttempts = retryProvider.streamingRetryAttempts;
-          existing.totalRetryAttempts = retryProvider.totalRetryAttempts;
-          existing.activeStreamingSessions = retryProvider.activeStreamingSessions;
-          existing.maxRetries = retryProvider.maxRetries;
-        }
+        // Assign retry metrics to each session that has this provider
+        sessions.forEach(sessionId => {
+          const sessionMap = sessionProviderMap.get(sessionId);
+          if (sessionMap) {
+            const key = provider; // retry metrics don't have model breakdown
+            let existing = sessionMap.get(key);
+            if (!existing) {
+              existing = getOrCreateProviderData(sessionId, provider);
+            }
+            existing.nonStreamingRetryAttempts = retryProvider.nonStreamingRetryAttempts;
+            existing.streamingRetryAttempts = retryProvider.streamingRetryAttempts;
+            existing.totalRetryAttempts = retryProvider.totalRetryAttempts;
+            existing.activeStreamingSessions = retryProvider.activeStreamingSessions;
+            existing.maxRetries = retryProvider.maxRetries;
+          }
+        });
       });
     }
 
-    // Finally, merge tokens per second metrics
+    // Finally, merge tokens per second metrics - per provider and model
     if (tokensPerSecondMetrics?.byProviderAndModel) {
       tokensPerSecondMetrics.byProviderAndModel.forEach((tpsProvider: TokensPerSecondProviderMetrics) => {
-        // Create a composite key for provider+model to allow multiple models per provider
-        const key = tpsProvider.model ? `${tpsProvider.provider}:${tpsProvider.model}` : tpsProvider.provider;
-        const existing = providerMap.get(key);
-
-        if (!existing) {
-          // Provider+model only exists in tokens per second metrics
-          providerMap.set(key, {
-            provider: key,
-            requestBuckets: 0,
-            maxRequests: 0,
-            bufferCapacity: 0,
-            totalMaxRequests: 0,
-            totalRequestsInWindow: 0,
-            totalQueueLength: 0,
-            utilizationPercent: 0,
-            nonStreamingRetryAttempts: 0,
-            streamingRetryAttempts: 0,
-            totalRetryAttempts: 0,
-            activeStreamingSessions: 0,
-            maxRetries: 0,
-            avgTokensPerSecond: tpsProvider.avgTokensPerSecond,
-            model: tpsProvider.model,
-          });
-        } else {
-          // Merge tokens per second data
-          existing.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
-          existing.model = tpsProvider.model;
-        }
+        const provider = tpsProvider.provider;
+        const model = tpsProvider.model;
+        // Assign to all sessions (since these are already filtered by active sessions)
+        sessions.forEach(sessionId => {
+          const data = getOrCreateProviderData(sessionId, provider, model);
+          data.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
+          data.model = model;
+        });
       });
     }
 
-    // Finally, merge TTFT metrics
+    // Finally, merge TTFT metrics - per provider and model
     if (ttftMetrics?.byProviderAndModel) {
       ttftMetrics.byProviderAndModel.forEach((ttftProvider: TtftByProviderAndModel) => {
-        // Create a composite key for provider+model to allow multiple models per provider
-        const key = ttftProvider.model ? `${ttftProvider.provider}:${ttftProvider.model}` : ttftProvider.provider;
-        const existing = providerMap.get(key);
-
-        if (!existing) {
-          // Provider+model only exists in TTFT metrics
-          providerMap.set(key, {
-            provider: key,
-            requestBuckets: 0,
-            maxRequests: 0,
-            bufferCapacity: 0,
-            totalMaxRequests: 0,
-            totalRequestsInWindow: 0,
-            totalQueueLength: 0,
-            utilizationPercent: 0,
-            nonStreamingRetryAttempts: 0,
-            streamingRetryAttempts: 0,
-            totalRetryAttempts: 0,
-            activeStreamingSessions: 0,
-            maxRetries: 0,
-            avgTokensPerSecond: 0,
-            model: ttftProvider.model,
-            avgTtftMs: ttftProvider.avgTtftMs,
-            ttftTotalCaptures: ttftProvider.totalCaptures,
-          });
-        } else {
-          // Merge TTFT data
-          existing.avgTtftMs = ttftProvider.avgTtftMs;
-          existing.ttftTotalCaptures = ttftProvider.totalCaptures;
-          existing.model = ttftProvider.model;
-        }
+        const provider = ttftProvider.provider;
+        const model = ttftProvider.model;
+        // Assign to all sessions (since these are already filtered by active sessions)
+        sessions.forEach(sessionId => {
+          const data = getOrCreateProviderData(sessionId, provider, model);
+          data.avgTtftMs = ttftProvider.avgTtftMs;
+          data.ttftTotalCaptures = ttftProvider.totalCaptures;
+          data.model = model;
+        });
       });
     }
 
-    // Convert to array and sort by total requests (most constrained first)
-    return Array.from(providerMap.values()).sort((a, b) => {
-      if (b.totalRequestsInWindow !== a.totalRequestsInWindow) return b.totalRequestsInWindow - a.totalRequestsInWindow;
-      return b.totalRetryAttempts - a.totalRetryAttempts;
+    // Convert to flat array with session grouping
+    // Sort sessions first, then within each session sort by provider/model
+    const result: ProviderData[] = [];
+    sessions.forEach((sessionId, sessionIndex) => {
+      const sessionMap = sessionProviderMap.get(sessionId);
+      if (!sessionMap) return;
+      
+      const sessionEntries = Array.from(sessionMap.values());
+      // Sort by total requests (most constrained first), then by provider name
+      sessionEntries.sort((a, b) => {
+        if (b.totalRequestsInWindow !== a.totalRequestsInWindow) return b.totalRequestsInWindow - a.totalRequestsInWindow;
+        return b.totalRetryAttempts - a.totalRetryAttempts;
+      });
+      
+      // Add session index for rendering separators
+      sessionEntries.forEach(entry => {
+        (entry as any)._sessionIndex = sessionIndex;
+        (entry as any)._isFirstInSession = entry === sessionEntries[0];
+        (entry as any)._isLastInSession = entry === sessionEntries[sessionEntries.length - 1];
+      });
+      
+      result.push(...sessionEntries);
     });
-  }, [rateLimiterMetrics?.buckets, retryMetrics?.providers, tokensPerSecondMetrics?.byProviderAndModel, ttftMetrics?.byProviderAndModel]);
+
+    return result;
+  }, [rateLimiterMetrics?.buckets, retryMetrics?.providers, tokensPerSecondMetrics?.byProviderAndModel, ttftMetrics?.byProviderAndModel, activeSessionIds]);
 
   // Downsample if needed
   const chartData = useMemo(() => {
@@ -535,6 +553,9 @@ function CombinedRateLimiterRetryChartComponent({
 
   const isDownsampled = chartData.length < providerData.length;
 
+  // Get unique session count for display
+  const sessionCount = Array.from(new Set(chartData.map(d => d.sessionId).filter(Boolean))).length;
+
   if (loading) {
     return (
       <div className="w-full flex flex-col items-center justify-center py-12">
@@ -580,20 +601,26 @@ function CombinedRateLimiterRetryChartComponent({
           <Copy className="h-4 w-4" />
           {copied ? "Copied" : "Copy"}
         </button>
-        {isDownsampled && (
-          <span className="text-muted-foreground text-xs">
-            Showing {chartData.length} of {providerData.length} providers (max-sampled)
-          </span>
-        )}
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          {isDownsampled && (
+            <span>Showing {chartData.length} of {providerData.length} provider/model entries (max-sampled)</span>
+          )}
+          {sessionCount > 1 && (
+            <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+              {sessionCount} Active Session{sessionCount > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
       </div>
 
       <div id="combined-chart-description" className="sr-only">
-        Grouped vertical bar chart displaying four metric groups per AI provider:
+        Grouped vertical bar chart displaying four metric groups per AI provider/model, grouped by active session:
         1. Request Buckets (blue) \u2014 rate limiter usage showing requests used vs maximum capacity, with 70%, 90%, and 100% threshold lines.
         2. Retry Attempts (amber + purple stacked) \u2014 non-streaming and streaming retry counts with max retries reference line.
         3. Average Tokens/sec (emerald) \u2014 average token generation speed per provider/model.
         4. Average TTFT (orange) \u2014 average time to first token per provider/model.
-        Each provider shown as a row. Hover or focus any bar for detailed metrics including utilization percentages, queue lengths, active sessions, tokens/sec, and TTFT.
+        Each session group separated by dashed horizontal lines. Each provider/model shown as a row within its session group.
+        Hover or focus any bar for detailed metrics including utilization percentages, queue lengths, active sessions, tokens/sec, and TTFT.
         Color coding: Green = healthy (less than 70%), Amber = warning (70-89%), Red = critical (greater than 90%). Blue represents request usage, purple represents streaming retries, emerald represents tokens/sec, orange represents TTFT.
       </div>
 
@@ -731,7 +758,7 @@ function CombinedRateLimiterRetryChartComponent({
             />
             {/* group 7: reference lines */}
             {chartData.map((p, idx) => (
-              <React.Fragment key={p.provider}>
+              <React.Fragment key={`${p.provider}-${idx}`}>
                 {/* Max requests threshold lines (70%, 90%, max) */}
                 {p.maxRequests > 0 && (
                   <>
@@ -803,6 +830,30 @@ function CombinedRateLimiterRetryChartComponent({
                 )}
               </React.Fragment>
             ))}
+            {/* group 8: session separator lines */}
+            {(() => {
+              const separators: React.ReactNode[] = [];
+              let lastSessionIndex = -1;
+              chartData.forEach((p, idx) => {
+                const sessionIndex = (p as any)._sessionIndex ?? 0;
+                const isLastInSession = (p as any)._isLastInSession;
+                if (sessionIndex !== lastSessionIndex && isLastInSession && sessionIndex > 0) {
+                  // Add a horizontal separator line between sessions
+                  // In vertical layout, ReferenceLine with y prop creates horizontal line
+                  separators.push(
+                    <ReferenceLine
+                      key={`session-sep-${sessionIndex}`}
+                      y={idx + 0.5} // Position between this and next item
+                      stroke="rgb(var(--color-border))"
+                      strokeWidth={2}
+                      strokeDasharray="8 4"
+                    />
+                  );
+                }
+                lastSessionIndex = sessionIndex;
+              });
+              return separators;
+            })()}
           </BarChart>
         </ResponsiveContainer>
       </div>
