@@ -592,9 +592,9 @@ function CombinedRateLimiterRetryChartComponent({
         1. Request Buckets (blue) \u2014 rate limiter usage showing requests used vs maximum capacity, with 70%, 90%, and 100% threshold lines.
         2. Retry Attempts (amber + purple stacked) \u2014 non-streaming and streaming retry counts with max retries reference line.
         3. Average Tokens/sec (emerald) \u2014 average token generation speed per provider/model.
-        4. Average TTFT (emerald) \u2014 average time to first token per provider/model.
+        4. Average TTFT (orange) \u2014 average time to first token per provider/model.
         Each provider shown as a row. Hover or focus any bar for detailed metrics including utilization percentages, queue lengths, active sessions, tokens/sec, and TTFT.
-        Color coding: Green = healthy (less than 70%), Amber = warning (70-89%), Red = critical (greater than 90%). Blue represents request usage, purple represents streaming retries, emerald represents tokens/sec and TTFT.
+        Color coding: Green = healthy (less than 70%), Amber = warning (70-89%), Red = critical (greater than 90%). Blue represents request usage, purple represents streaming retries, emerald represents tokens/sec, orange represents TTFT.
       </div>
 
       <div className="max-h-[700px] overflow-y-auto">
@@ -826,7 +826,7 @@ function CombinedRateLimiterRetryChartComponent({
           <span>Avg Tokens/sec</span>
         </div>
         <div className="flex items-center gap-2" role="listitem">
-          <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.tokensPerSecond }} />
+          <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.ttft }} />
           <span>Avg TTFT</span>
         </div>
         <div className="flex items-center gap-1 ml-4" role="listitem">

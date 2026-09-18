@@ -89,6 +89,7 @@ export interface CaptureRedactionMetadata {
     wait_ms?: number;
     receive_ms?: number;
     total_ms?: number;
+    firstTokenMs?: number;
   };
   // Token metrics
   totalInputTokens?: number;
@@ -333,6 +334,7 @@ function computeCaptureMeta(captureId: string, rawData: unknown): CaptureRedacti
         wait_ms: typeof rawTimings.wait_ms === "number" ? rawTimings.wait_ms : undefined,
         receive_ms: typeof rawTimings.receive_ms === "number" ? rawTimings.receive_ms : undefined,
         total_ms: typeof rawTimings.total_ms === "number" ? rawTimings.total_ms : undefined,
+        firstTokenMs: typeof rawTimings.firstTokenMs === "number" ? rawTimings.firstTokenMs : undefined,
       },
       // Token metrics
       totalInputTokens,
