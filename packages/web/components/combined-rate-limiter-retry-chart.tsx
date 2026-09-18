@@ -475,14 +475,18 @@ function CombinedRateLimiterRetryChartComponent({
         tokensPerSecondMetrics.byProviderAndModel.forEach((tpsProvider: TokensPerSecondProviderMetrics) => {
           const provider = tpsProvider.provider;
           const model = tpsProvider.model;
-          const key = model ? `${provider}:${model}` : provider;
+          const fullKey = model ? `${provider}:${model}` : provider;
+          const providerOnlyKey = provider;
           
           // Check if this provider/model already exists in any session-specific map
+          // First try full key (provider:model), then fall back to provider-only key
+          // since rate limiter buckets don't have model information
           let foundInSession = false;
           for (const sMap of sessionMaps) {
-            if (sMap.has(key)) {
+            if (sMap.has(fullKey) || sMap.has(providerOnlyKey)) {
               // Update existing entry in session-specific map
-              const existing = sMap.get(key)!;
+              const existingKey = sMap.has(fullKey) ? fullKey : providerOnlyKey;
+              const existing = sMap.get(existingKey)!;
               existing.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
               existing.model = model;
               foundInSession = true;
@@ -492,7 +496,7 @@ function CombinedRateLimiterRetryChartComponent({
           
           // Only add to "all" if not found in any session-specific map
           if (!foundInSession) {
-            let existing = sessionMap.get(key);
+            let existing = sessionMap.get(fullKey);
             if (!existing) {
               existing = getOrCreateProviderData("all", provider, model);
             }
@@ -516,14 +520,18 @@ function CombinedRateLimiterRetryChartComponent({
         ttftMetrics.byProviderAndModel.forEach((ttftProvider: TtftByProviderAndModel) => {
           const provider = ttftProvider.provider;
           const model = ttftProvider.model;
-          const key = model ? `${provider}:${model}` : provider;
+          const fullKey = model ? `${provider}:${model}` : provider;
+          const providerOnlyKey = provider;
           
           // Check if this provider/model already exists in any session-specific map
+          // First try full key (provider:model), then fall back to provider-only key
+          // since rate limiter buckets don't have model information
           let foundInSession = false;
           for (const sMap of sessionMaps) {
-            if (sMap.has(key)) {
+            if (sMap.has(fullKey) || sMap.has(providerOnlyKey)) {
               // Update existing entry in session-specific map
-              const existing = sMap.get(key)!;
+              const existingKey = sMap.has(fullKey) ? fullKey : providerOnlyKey;
+              const existing = sMap.get(existingKey)!;
               existing.avgTtftMs = ttftProvider.avgTtftMs;
               existing.ttftTotalCaptures = ttftProvider.totalCaptures;
               existing.model = model;
@@ -534,7 +542,7 @@ function CombinedRateLimiterRetryChartComponent({
           
           // Only add to "all" if not found in any session-specific map
           if (!foundInSession) {
-            let existing = sessionMap.get(key);
+            let existing = sessionMap.get(fullKey);
             if (!existing) {
               existing = getOrCreateProviderData("all", provider, model);
             }
@@ -802,12 +810,12 @@ tickFormatter={(value) => {
             <YAxis
               dataKey="yAxisLabel"
               type="category"
-              width={220}
+              width={180}
               label={{
                 value: "Session / Provider / Model",
                 position: "outsideLeft",
-                offset: 60,
-                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500, transform: "rotate(-90deg)" },
+                offset: 30,
+                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
               }}
               tick={{ fill: "rgb(var(--color-text))", fontSize: 11 }}
               tickLine={{ stroke: "rgb(var(--color-border))" }}
