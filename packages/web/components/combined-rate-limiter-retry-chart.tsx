@@ -152,7 +152,7 @@ const CHART_COLORS = {
   retryStreaming: "#8b5cf6",            // Purple (distinct from blue)
   // Tokens per second
   tokensPerSecond: "#10b981",           // Emerald green
-  ttft: "#fb923c", // Orange for TTFT
+  ttft: "#06b6d4", // Cyan/teal for TTFT (distinct from other chart bars)
   // Reference lines
   threshold70: "#fbbf24",               // Amber for 70%
   threshold90: "#ef4444",               // Red for 90%
@@ -655,7 +655,7 @@ function CombinedRateLimiterRetryChartComponent({
         1. Request Buckets (blue) \u2014 rate limiter usage showing requests used vs maximum capacity, with 70%, 90%, and 100% threshold lines.
         2. Retry Attempts (amber + purple stacked) \u2014 non-streaming and streaming retry counts with max retries reference line.
         3. Average Tokens/sec (emerald) \u2014 average token generation speed per provider/model.
-        4. Average TTFT (orange) \u2014 average time to first token per provider/model.
+        4. Average TTFT (s) \u2014 average time to first token per provider/model in seconds.
         Each session group separated by dashed horizontal lines. Each provider/model shown as a row within its session group.
         Hover or focus any bar for detailed metrics including utilization percentages, queue lengths, active sessions, tokens/sec, and TTFT.
         Color coding: Green = healthy (less than 70%), Amber = warning (70-89%), Red = critical (greater than 90%). Blue represents request usage, purple represents streaming retries, emerald represents tokens/sec, orange represents TTFT.
@@ -718,7 +718,7 @@ function CombinedRateLimiterRetryChartComponent({
               xAxisId="ttft"
               type="number"
               label={{
-                value: "Avg TTFT (ms)",
+                value: "Avg TTFT (s)",
                 position: "outsideBottom",
                 offset: 80, // Offset further down to avoid overlapping with tokensPerSecond
                 style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
@@ -726,9 +726,10 @@ function CombinedRateLimiterRetryChartComponent({
               tick={{ fill: "rgb(var(--color-text-muted))", fontSize: 11 }}
               tickLine={{ stroke: "rgb(var(--color-border))" }}
               axisLine={{ stroke: "rgb(var(--color-border))" }}
-              tickFormatter={(value) => {
-                if (value >= 1000) return `${Math.round(value)}ms`;
-                return value.toFixed(1) + "ms";
+tickFormatter={(value) => {
+                // Display in seconds with 3 decimal places
+                const valueInSeconds = value / 1000;
+                return valueInSeconds.toFixed(3) + "s";
               }}
               domain={[0, globalMaxTtft * 1.2]}
               orientation="bottom"
@@ -932,7 +933,7 @@ function CombinedRateLimiterRetryChartComponent({
           <span>Avg Tokens/sec</span>
         </div>
         <div className="flex items-center gap-2" role="listitem">
-          <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.ttft }} />
+          <div className="w-4 h-4 rounded" style={{ background: CHART_COLORS.ttft }} title="Average Time to First Token (seconds)" />
           <span>Avg TTFT</span>
         </div>
         <div className="flex items-center gap-1 ml-4" role="listitem">
