@@ -92,7 +92,7 @@ function createRedactionMetadata(overrides: Partial<RedactionMetadata> = {}): Re
 		targetUrl: "https://api.anthropic.com/v1/messages",
 		requestBytes: 1024,
 		responseBytes: 2048,
-		timings: { send_ms: 10, wait_ms: 500, receive_ms: 50, total_ms: 560 },
+		timings: { send_ms: 10, wait_ms: 500, receive_ms: 50, total_ms: 560, firstTokenMs: undefined },
 		totalInputTokens: 100,
 		totalOutputTokens: 200,
 		tokensPerSecond: 357.14,
@@ -100,8 +100,8 @@ function createRedactionMetadata(overrides: Partial<RedactionMetadata> = {}): Re
 		errorCount: 0,
 		model: "claude-3-opus",
 		matches: [
-			{ ruleId: "email", preValue: "john@example.com", postValue: "[EMAIL_REDACTED]", path: "requestBody.messages[0].content" },
-			{ ruleId: "email", preValue: "jane@example.com", postValue: "[EMAIL_REDACTED]", path: "requestBody.messages[1].content" },
+			{ ruleId: "email", preValue: "[EMAIL_1]", postValue: "[EMAIL_REDACTED]", path: "requestBody.messages[0].content" },
+			{ ruleId: "email", preValue: "[EMAIL_2]", postValue: "[EMAIL_REDACTED]", path: "requestBody.messages[1].content" },
 			{ ruleId: "api_key", preValue: "sk-abc123", postValue: "[API_KEY_REDACTED]", path: "requestBody.api_key" },
 		],
 	};

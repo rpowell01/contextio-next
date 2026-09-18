@@ -26,6 +26,7 @@ export interface RedactionMetadataRow {
 	timings_wait_ms: number | null;
 	timings_receive_ms: number | null;
 	timings_total_ms: number | null;
+	timings_first_token_ms: number | null;
 	total_input_tokens: number | null;
 	total_output_tokens: number | null;
 	tokens_per_second: number | null;
@@ -68,6 +69,7 @@ export interface RedactionMetadata {
 		wait_ms?: number;
 		receive_ms?: number;
 		total_ms?: number;
+		firstTokenMs?: number;
 	};
 	totalInputTokens?: number;
 	totalOutputTokens?: number;
@@ -107,6 +109,7 @@ function rowToRedactionMetadata(row: RedactionMetadataRow): RedactionMetadata {
 			wait_ms: row.timings_wait_ms ?? undefined,
 			receive_ms: row.timings_receive_ms ?? undefined,
 			total_ms: row.timings_total_ms ?? undefined,
+			firstTokenMs: row.timings_first_token_ms ?? undefined,
 		} : undefined,
 		totalInputTokens: row.total_input_tokens ?? undefined,
 		totalOutputTokens: row.total_output_tokens ?? undefined,
@@ -151,6 +154,7 @@ function redactionMetadataToRow(
 		timings_wait_ms: metadata.timings?.wait_ms ?? null,
 		timings_receive_ms: metadata.timings?.receive_ms ?? null,
 		timings_total_ms: metadata.timings?.total_ms ?? null,
+		timings_first_token_ms: metadata.timings?.firstTokenMs ?? null,
 		total_input_tokens: metadata.totalInputTokens ?? null,
 		total_output_tokens: metadata.totalOutputTokens ?? null,
 		tokens_per_second: metadata.tokensPerSecond ?? null,
@@ -166,10 +170,10 @@ const UPSERT_REDACTION_METADATA_SQL = `
 	INSERT INTO redaction_metadata (
 		capture_id, session_id, rule_counts, total_redactions, encrypted,
 		source, provider, target_url, request_bytes, response_bytes,
-		timings_send_ms, timings_wait_ms, timings_receive_ms, timings_total_ms,
+		timings_send_ms, timings_wait_ms, timings_receive_ms, timings_total_ms, timings_first_token_ms,
 		total_input_tokens, total_output_tokens, tokens_per_second,
 		success_count, error_count, model, matches, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(capture_id) DO UPDATE SET
 		session_id = excluded.session_id,
 		rule_counts = excluded.rule_counts,
@@ -184,6 +188,7 @@ const UPSERT_REDACTION_METADATA_SQL = `
 		timings_wait_ms = excluded.timings_wait_ms,
 		timings_receive_ms = excluded.timings_receive_ms,
 		timings_total_ms = excluded.timings_total_ms,
+		timings_first_token_ms = excluded.timings_first_token_ms,
 		total_input_tokens = excluded.total_input_tokens,
 		total_output_tokens = excluded.total_output_tokens,
 		tokens_per_second = excluded.tokens_per_second,
@@ -219,6 +224,7 @@ export function upsertRedactionMetadata(metadata: RedactionMetadata): void {
 		row.timings_wait_ms,
 		row.timings_receive_ms,
 		row.timings_total_ms,
+		row.timings_first_token_ms,
 		row.total_input_tokens,
 		row.total_output_tokens,
 		row.tokens_per_second,
@@ -259,6 +265,7 @@ export function upsertRedactionMetadataBulk(metadataArray: RedactionMetadata[]):
 				row.timings_wait_ms,
 				row.timings_receive_ms,
 				row.timings_total_ms,
+				row.timings_first_token_ms,
 				row.total_input_tokens,
 				row.total_output_tokens,
 				row.tokens_per_second,

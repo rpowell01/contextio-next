@@ -4,9 +4,11 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
 
+const isStandalone = process.env.SKIP_STANDALONE !== "true";
+
 const nextConfig = {
   reactStrictMode: true,
-  output: "standalone",
+  output: isStandalone ? "standalone" : undefined,
   outputFileTracingRoot: workspaceRoot,
   turbopack: {
     // Handle node: protocol imports by aliasing to non-prefixed versions

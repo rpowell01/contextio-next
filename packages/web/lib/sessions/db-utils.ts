@@ -126,6 +126,7 @@ export async function getRedactionMetadataByCaptureIdFromDb(
     wait_ms?: number;
     receive_ms?: number;
     total_ms?: number;
+    firstTokenMs?: number;
   };
   totalInputTokens?: number;
   totalOutputTokens?: number;
@@ -146,6 +147,7 @@ export async function getRedactionMetadataByCaptureIdFromDb(
     postValue: string;
     path: string;
   }>;
+  firstTokenMs?: number;
 } | null> {
   const db = await getDbModule();
   const meta = db.getRedactionMetadataByCaptureId(captureId);
@@ -211,6 +213,7 @@ export async function getRedactionMetadataBySessionIdFromDb(
       timings_wait_ms: number | null;
       timings_receive_ms: number | null;
       timings_total_ms: number | null;
+      timings_first_token_ms: number | null;
       total_input_tokens: number | null;
       total_output_tokens: number | null;
       tokens_per_second: number | null;
@@ -282,6 +285,7 @@ export async function getAllRedactionMetadataFromDb(): Promise<import("@contexti
     timings_wait_ms: number | null;
     timings_receive_ms: number | null;
     timings_total_ms: number | null;
+    timings_first_token_ms: number | null;
     total_input_tokens: number | null;
     total_output_tokens: number | null;
     tokens_per_second: number | null;
