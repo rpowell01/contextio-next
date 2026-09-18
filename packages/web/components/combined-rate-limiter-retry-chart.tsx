@@ -813,9 +813,9 @@ tickFormatter={(value) => {
               width={180}
               label={{
                 value: "Session / Provider / Model",
-                position: "outsideLeft",
-                offset: 30,
-                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
+                position: "outsideTop",
+                offset: 10,
+                style: { textAnchor: "start", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
               }}
               tick={{ fill: "rgb(var(--color-text))", fontSize: 11 }}
               tickLine={{ stroke: "rgb(var(--color-border))" }}
