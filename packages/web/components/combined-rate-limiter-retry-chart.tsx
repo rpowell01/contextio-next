@@ -806,10 +806,10 @@ tickFormatter={(value) => {
               label={{
                 value: "Session / Provider / Model",
                 position: "outsideLeft",
-                offset: 40,
-                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
+                offset: 60,
+                style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500, transform: "rotate(-90deg)" },
               }}
-              tick={{ fill: "rgb(var(--color-text))", fontSize: 10, dy: 5 }}
+              tick={{ fill: "rgb(var(--color-text))", fontSize: 11 }}
               tickLine={{ stroke: "rgb(var(--color-border))" }}
               axisLine={{ stroke: "rgb(var(--color-border))" }}
             />
