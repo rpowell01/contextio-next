@@ -718,7 +718,7 @@ function CombinedRateLimiterRetryChartComponent({
               xAxisId="tokensPerSecond"
               dataKey="avgTokensPerSecond"
               name="Avg Tokens/sec"
-              fill={CHART_COLORS.ttft} // Distinct color for TTFT
+              fill={CHART_COLORS.tokensPerSecond} // Emerald green for tokens/sec
               animationDuration={0}
             />
             {/* group 6: TTFT (Time to First Token) */}
