@@ -802,14 +802,14 @@ tickFormatter={(value) => {
             <YAxis
               dataKey="yAxisLabel"
               type="category"
-              width={180}
+              width={220}
               label={{
                 value: "Session / Provider / Model",
                 position: "outsideLeft",
-                offset: 30,
+                offset: 40,
                 style: { textAnchor: "middle", fill: "rgb(var(--color-text))", fontSize: 12, fontWeight: 500 },
               }}
-              tick={{ fill: "rgb(var(--color-text))", fontSize: 11 }}
+              tick={{ fill: "rgb(var(--color-text))", fontSize: 10, dy: 5 }}
               tickLine={{ stroke: "rgb(var(--color-border))" }}
               axisLine={{ stroke: "rgb(var(--color-border))" }}
             />
