@@ -1017,9 +1017,14 @@ try {
               activeSessionIds = retryPlugin._internal.getActiveStreamingSessionIds();
             }
 
-            // Get TTFT metrics per provider and per provider+model
-            const byProvider = getTtftByProvider(activeSessionIds);
-            const byProviderAndModel = getTtftByProviderAndModel(activeSessionIds);
+            // If no active sessions, return empty results instead of all historical data
+            // (empty array would cause the DB query to return all models since [] is truthy but length is 0)
+            let byProvider: Array<any> = [];
+            let byProviderAndModel: Array<any> = [];
+            if (activeSessionIds.length > 0) {
+              byProvider = getTtftByProvider(activeSessionIds);
+              byProviderAndModel = getTtftByProviderAndModel(activeSessionIds);
+            }
 
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({
