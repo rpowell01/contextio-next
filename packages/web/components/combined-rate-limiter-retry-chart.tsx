@@ -467,6 +467,11 @@ function CombinedRateLimiterRetryChartComponent({
     if (tokensPerSecondMetrics?.byProviderAndModel) {
       const sessionMap = sessionProviderMap.get("all");
       if (sessionMap) {
+        // Get session-specific maps (excluding "all")
+        const sessionMaps = Array.from(sessionProviderMap.entries())
+          .filter(([sessionId]) => sessionId !== "all")
+          .map(([, sMap]) => sMap);
+        
         tokensPerSecondMetrics.byProviderAndModel.forEach((tpsProvider: TokensPerSecondProviderMetrics) => {
           const provider = tpsProvider.provider;
           const model = tpsProvider.model;
@@ -474,8 +479,8 @@ function CombinedRateLimiterRetryChartComponent({
           
           // Check if this provider/model already exists in any session-specific map
           let foundInSession = false;
-          for (const [sessionId, sMap] of sessionProviderMap.entries()) {
-            if (sessionId !== "all" && sMap.has(key)) {
+          for (const sMap of sessionMaps) {
+            if (sMap.has(key)) {
               // Update existing entry in session-specific map
               const existing = sMap.get(key)!;
               existing.avgTokensPerSecond = tpsProvider.avgTokensPerSecond;
@@ -503,6 +508,11 @@ function CombinedRateLimiterRetryChartComponent({
     if (ttftMetrics?.byProviderAndModel) {
       const sessionMap = sessionProviderMap.get("all");
       if (sessionMap) {
+        // Get session-specific maps (excluding "all")
+        const sessionMaps = Array.from(sessionProviderMap.entries())
+          .filter(([sessionId]) => sessionId !== "all")
+          .map(([, sMap]) => sMap);
+        
         ttftMetrics.byProviderAndModel.forEach((ttftProvider: TtftByProviderAndModel) => {
           const provider = ttftProvider.provider;
           const model = ttftProvider.model;
@@ -510,8 +520,8 @@ function CombinedRateLimiterRetryChartComponent({
           
           // Check if this provider/model already exists in any session-specific map
           let foundInSession = false;
-          for (const [sessionId, sMap] of sessionProviderMap.entries()) {
-            if (sessionId !== "all" && sMap.has(key)) {
+          for (const sMap of sessionMaps) {
+            if (sMap.has(key)) {
               // Update existing entry in session-specific map
               const existing = sMap.get(key)!;
               existing.avgTtftMs = ttftProvider.avgTtftMs;
