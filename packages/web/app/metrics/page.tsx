@@ -982,42 +982,26 @@ function MetricsContent() {
               </div>
             </div>
 
-            {/* TTFT per Provider */}
-            {ttftMetrics && ttftMetrics.byProviderAndModel.length > 0 && (
-              <div className="space-y-4">
-                <div className="text-sm font-medium">Time to First Token (by Model)</div>
-                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                  {ttftMetrics.byProviderAndModel.map((ttft) => (
-                    <div
-                      key={`${ttft.provider}-${ttft.model}`}
-                      className="rounded-lg border p-3 bg-primary/5 border-primary/20"
-                      title={`Average TTFT for ${ttft.provider} ${ttft.model ? `(${ttft.model})` : ''}: ${ttft.avgTtftMs}ms`}
-                    >
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="font-medium text-primary">
-                          {ttft.provider}{ttft.model ? ` ` : ''}{ttft.model ? `(${ttft.model})` : ''}
-                        </div>
-                        <div className="text-sm">{ttft.avgTtftMs}ms</div>
-                      </div>
-                      <div className="w-full bg-muted/50 rounded-full h-1.5 mt-1">
-                        <div
-                          className="flex h-full items-center justify-end bg-primary/20 text-xs font-medium text-primary/80"
-                          style={{
-                            width: `${Math.min(ttft.avgTtftMs / 2000 * 100, 100)}%`, // Scale to 2 seconds = 100% for visualization
-                            minWidth: `${Math.min(ttft.avgTtftMs / 2000 * 100, 100)}%`
-                          }}
-                        >
-                          {ttft.avgTtftMs}ms
-                        </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {ttft.totalCaptures} captures
-                      </div>
-                    </div>
-                  ))}
+            {/* TTFT (Time to First Token) - Summary Card */}
+            {ttftMetrics && ttftMetrics.byProviderAndModel.length > 0 && (() => {
+              // Calculate overall average TTFT across all providers/models
+              const totalCaptures = ttftMetrics.byProviderAndModel.reduce((sum, p) => sum + p.totalCaptures, 0);
+              const weightedSum = ttftMetrics.byProviderAndModel.reduce((sum, p) => sum + p.avgTtftMs * p.totalCaptures, 0);
+              const overallAvgTtftMs = totalCaptures > 0 ? Math.round(weightedSum / totalCaptures) : 0;
+              return (
+                <div
+                  className="rounded-lg border p-4 bg-primary/10 border-primary/20"
+                  title={`Overall average TTFT across all providers/models: ${overallAvgTtftMs}ms (${totalCaptures} total captures)`}
+                >
+                  <div className="text-sm text-muted-foreground">
+                    Time to First Token (avg)
+                  </div>
+                  <div className="text-2xl font-bold text-primary">
+                    <span>{overallAvgTtftMs}ms</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Unique Redactions (deduplicated by session) */}
             <div
@@ -1138,6 +1122,44 @@ function MetricsContent() {
               ))}
             </div>
           </div>
+
+          {/* TTFT (Time to First Token) Detail */}
+          {ttftMetrics && ttftMetrics.byProviderAndModel.length > 0 && (
+            <div className="rounded-lg border p-4">
+              <h3 className="text-lg font-semibold mb-4">Time to First Token (by Model)</h3>
+              <div className="space-y-2">
+                {ttftMetrics.byProviderAndModel.map((ttft) => (
+                  <div
+                    key={`${ttft.provider}-${ttft.model}`}
+                    className="flex items-center justify-between rounded border p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium text-primary">
+                        {ttft.provider}{ttft.model ? ` ` : ''}{ttft.model ? `(${ttft.model})` : ''}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {ttft.totalCaptures} captures
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="font-mono text-primary">{ttft.avgTtftMs}ms</div>
+                      <div className="w-32 bg-muted/50 rounded-full h-1.5">
+                        <div
+                          className="flex h-full items-center justify-end bg-primary/20 text-[10px] font-medium text-primary/80"
+                          style={{
+                            width: `${Math.min(ttft.avgTtftMs / 2000 * 100, 100)}%`,
+                            minWidth: `${Math.min(ttft.avgTtftMs / 2000 * 100, 100)}%`
+                          }}
+                        >
+                          {ttft.avgTtftMs}ms
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
