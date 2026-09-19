@@ -1141,19 +1141,8 @@ function MetricsContent() {
                         {ttft.totalCaptures} captures
                       </span>
                     </div>
-                    <div className="flex items-center gap-4 text-sm">
+                    <div className="text-right text-sm">
                       <div className="font-mono text-primary">{ttft.avgTtftMs}ms</div>
-                      <div className="w-32 bg-muted/50 rounded-full h-1.5">
-                        <div
-                          className="flex h-full items-center justify-end bg-primary/20 text-[10px] font-medium text-primary/80"
-                          style={{
-                            width: `${Math.min(ttft.avgTtftMs / 2000 * 100, 100)}%`,
-                            minWidth: `${Math.min(ttft.avgTtftMs / 2000 * 100, 100)}%`
-                          }}
-                        >
-                          {ttft.avgTtftMs}ms
-                        </div>
-                      </div>
                     </div>
                   </div>
                 ))}
