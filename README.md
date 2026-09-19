@@ -1,11 +1,9 @@
 # ContextIO-Next
 
 [![CI](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml/badge.svg)](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml)
-[![GitHub Release](https://shields.io)](https://github.com/rpowell01/contextio-next/releases/)
+[![GitHub release](https://img.shields.io/github/release/rpowell01/contextio-next.svg)](https://GitHub.com/rpowell01/contextio-next/releases/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Website](https://img.shields.io/badge/website-rpowell01.github.io%2Fcontextio--next-blue)](https://rpowell01.github.io/contextio-next/)
-
-🌐 **Website**: https://rpowell01.github.io/contextio-next/
 
 ## MIT License and Attribution
 
@@ -14,6 +12,8 @@ This project is a fork of [contextio](https://github.com/larsderidder/contextio)
 ---
 
 ## Overview
+
+🌐 **Website**: https://rpowell01.github.io/contextio-next/
 
 ContextIO-Next is a single-port Docker proxy that sits between your AI coding tools (Claude CLI, Aider, Gemini CLI, Codex, Copilot, OpenCode, etc.) and LLM provider APIs (Anthropic, OpenAI, Google, NVIDIA, OpenRouter, Kilo Code Gateway, etc.). It provides:
 
