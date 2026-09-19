@@ -2,6 +2,9 @@
 
 [![CI](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml/badge.svg)](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Website](https://img.shields.io/badge/website-rpowell01.github.io%2Fcontextio--next-blue)](https://rpowell01.github.io/contextio-next/)
+
+🌐 **Website**: https://rpowell01.github.io/contextio-next/
 
 ## MIT License and Attribution
 
