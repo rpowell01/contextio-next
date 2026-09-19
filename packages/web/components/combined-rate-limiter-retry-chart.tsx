@@ -817,7 +817,7 @@ tickFormatter={(value) => {
               label={{
                 value: "Session / Provider / Model",
                 position: "insideLeft",
-                offset: 5,
+                offset: -10,
                 angle: -90,
                 style: {
                   fill: "rgb(var(--color-text))",
