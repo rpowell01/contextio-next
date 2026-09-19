@@ -588,9 +588,10 @@ function CombinedRateLimiterRetryChartComponent({
     // Recharts Bar components access dataKey directly and Math.max(1, NaN) === NaN
     return raw.map((d) => {
       // Create a composite Y-axis label: Session + Provider + Model
+      // For "all" session (global metrics), show "retries" instead of "shared"
       const sessionShort = d.sessionId && d.sessionId !== "all" 
         ? d.sessionId.slice(0, 8) 
-        : "shared";
+        : "retries";
       const modelPart = d.model ? ` (${d.model})` : "";
       const yAxisLabel = `${sessionShort} | ${d.provider}${modelPart}`;
 
