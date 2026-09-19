@@ -816,14 +816,14 @@ tickFormatter={(value) => {
               axisLine={{ stroke: "rgb(var(--color-border))" }}
               label={{
                 value: "Session / Provider / Model",
-                position: "outsideLeft",
+                position: "insideLeft",
                 offset: 60,
+                angle: -90,
                 style: {
                   fill: "rgb(var(--color-text))",
                   fontSize: 12,
                   fontWeight: 500,
                   textAnchor: "middle",
-                  transform: "rotate(-90deg)",
                 },
               }}
             />
