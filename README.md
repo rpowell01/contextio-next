@@ -1,6 +1,7 @@
 # ContextIO-Next
 
 [![CI](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml/badge.svg)](https://github.com/rpowell01/contextio-next/actions/workflows/ci.yml)
+[![GitHub Release](https://shields.io)](https://github.com/rpowell01/contextio-next/releases/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Website](https://img.shields.io/badge/website-rpowell01.github.io%2Fcontextio--next-blue)](https://rpowell01.github.io/contextio-next/)
 
