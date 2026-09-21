@@ -4,7 +4,7 @@ import { withAuth } from "@/lib/auth/guards";
 import { consumeToken } from "@/lib/csrf";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 
-async function handleGetProviders() {
+async function handleGetProviders(_request: NextRequest, _params: Promise<{ }>) {
   try {
     // Check database availability first
     if (!isDatabaseAvailable()) {
