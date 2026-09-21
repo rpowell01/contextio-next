@@ -40,7 +40,7 @@ async function handleCreateProvider(request: NextRequest, _params: Promise<{ }>)
       return NextResponse.json(createErrorResponse({ message: "Invalid JSON body", status: 400 }), { status: 400 });
     }
 
-    const provider = await createProvider(body);
+    const provider = await createProvider(body as ProviderConfigInput);
     return NextResponse.json(createSuccessResponse({ data: provider }), { status: 201 });
   } catch (error) {
     const details = (error as any)?.errors;
