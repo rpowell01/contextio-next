@@ -6,7 +6,7 @@ import { createErrorResponse, createSuccessResponse } from "@contextio/core";
 import type { ProviderConfigInput } from "@/lib/providers";
 import type { AuthSession } from "@/lib/auth/session";
 
-async function handleGetProviders(_request: NextRequest, _context: { params: Promise<{ }>; session: AuthSession | undefined }) {
+async function handleGetProviders(_request: NextRequest, _context: { params: any; session: AuthSession | undefined }) {
   try {
     // Check database availability first
     if (!isDatabaseAvailable()) {
@@ -28,7 +28,7 @@ async function handleGetProviders(_request: NextRequest, _context: { params: Pro
   }
 }
 
-async function handleCreateProvider(request: NextRequest, _context: { params: Promise<{ }>; session: AuthSession | undefined }) {
+async function handleCreateProvider(request: NextRequest, _context: { params: any; session: AuthSession | undefined }) {
   try {
     const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
