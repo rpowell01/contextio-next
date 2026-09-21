@@ -3,6 +3,7 @@ import { getAllProviders, isDatabaseAvailable, createProvider } from "@/lib/prov
 import { withAuth } from "@/lib/auth/guards";
 import { consumeToken } from "@/lib/csrf";
 import { createErrorResponse, createSuccessResponse } from "@contextio/core";
+import type { ProviderConfigInput } from "@/lib/providers";
 
 async function handleGetProviders(_request: NextRequest, _params: Promise<{ }>) {
   try {
