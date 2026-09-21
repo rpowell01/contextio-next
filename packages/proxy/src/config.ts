@@ -139,11 +139,13 @@ export function readProvidersConfig(filePath = getProvidersFilePath()): Provider
     
     // If database has providers, use them
     if (dbProviders.size > 0) {
+      console.log(`[config] database providers found: ${Array.from(dbProviders.keys()).join(", ")}`);
       const result: ProvidersMap = {} as ProvidersMap;
       let loaded = 0;
       let skipped = 0;
       
       for (const [key, config] of dbProviders) {
+        console.log(`[config] checking db provider[${key}]: enabled=${config.enabled}, apiFormat=${config.apiFormat}, baseUrlOverrideHeader=${config.baseUrlOverrideHeader}`);
         // Validate the provider config
         try {
           validateProviderConfig(config);
@@ -164,7 +166,7 @@ export function readProvidersConfig(filePath = getProvidersFilePath()): Provider
       }
       
       if (loaded > 0) {
-        console.log(`[config] read providers from database: ${loaded} loaded, ${skipped} skipped, ${Object.keys(result).length} active`);
+        console.log(`[config] read providers from database: ${loaded} loaded, ${skipped} skipped, ${Object.keys(result).length} active: ${Object.keys(result).join(", ")}`);
         return result;
       }
       console.log(`[config] database has providers but none are valid/enabled, falling back to providers.json`);
