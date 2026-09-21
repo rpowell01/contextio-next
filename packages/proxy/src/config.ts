@@ -14,7 +14,7 @@ import { getAllProvidersFromDb, getSettings } from "@contextio/core/db";
 
 /** Type predicate to check if a string is a valid Provider. */
 function isProvider(value: string): value is Provider {
-  return KNOWN_PROVIDERS.includes(value as Provider);
+  return KNOWN_PROVIDERS.includes(value as (typeof KNOWN_PROVIDERS)[number]) || /^[a-z0-9_]+$/.test(value);
 }
 
 /** Normalize an upstream URL by stripping a trailing `/v1` so callers do not

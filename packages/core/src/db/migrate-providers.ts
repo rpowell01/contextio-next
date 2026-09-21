@@ -101,9 +101,10 @@ function parseProvidersFile(filePath: string): Array<{ key: string; config: Reco
 function buildProviderConfig(key: string, config: Record<string, unknown>): ProviderConfig {
 	const providerId = config.id as string || key;
 	
-	// Validate providerId against known providers
-	if (!KNOWN_PROVIDERS.includes(providerId as Provider)) {
-		throw new Error(`Unknown provider: ${providerId}. Must be one of: ${KNOWN_PROVIDERS.join(", ")}`);
+	// Validate providerId against known providers (allow custom providers)
+	const isKnownProvider = KNOWN_PROVIDERS.includes(providerId as (typeof KNOWN_PROVIDERS)[number]);
+	if (!isKnownProvider && !/^[a-z0-9_]+$/.test(providerId)) {
+		throw new Error(`Invalid provider ID: ${providerId}. Must be a known provider or a custom ID with lowercase letters, numbers, and underscores only.`);
 	}
 	
 	// Default values (matching provider-repo.ts defaults)

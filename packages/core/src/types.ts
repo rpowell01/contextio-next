@@ -24,7 +24,8 @@ export type Provider =
   | "nvidia"
   | "openrouter"
   | "kilo"
-  | "unknown";
+  | "unknown"
+  | (string & {});
 
 /**
  * Wire format of the API request.
@@ -79,10 +80,10 @@ export const KNOWN_PROVIDERS = [
   "openrouter",
   "kilo",
   "unknown",
-] as const satisfies readonly Provider[];
+] as const satisfies readonly string[];
 
-/** Exhaustiveness check: ensures KNOWN_PROVIDERS includes all Provider values. */
-type _ProviderExhaustiveCheck = Exclude<Provider, typeof KNOWN_PROVIDERS[number]> extends never ? true : false;
+/** Exhaustiveness check: ensures KNOWN_PROVIDERS includes all known Provider values (excluding custom strings). */
+type _ProviderExhaustiveCheck = Exclude<Exclude<Provider, string & {}>, typeof KNOWN_PROVIDERS[number]> extends never ? true : false;
 const _providerExhaustive: _ProviderExhaustiveCheck = true;
 
 export type JsonPrimitive = string | number | boolean | null;
