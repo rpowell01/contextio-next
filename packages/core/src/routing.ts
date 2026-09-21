@@ -101,17 +101,39 @@ const API_PATH_SEGMENTS = new Set([
  * Detection order: ChatGPT → Anthropic → Gemini → Vertex → OpenAI (path) →
  *   NVIDIA (x-nvidia-baseurl) → OpenRouter (x-openrouter-baseurl) →
  *   Kilo (x-kilo-baseurl) → OpenAI (x-openai-baseurl) → OpenAI (catch-all).
+ *   Custom providers (via baseUrlOverrideHeader) are checked first if providerConfigs provided.
  */
 export function classifyRequest(
   pathname: string,
   headers: Record<string, string | undefined>,
   strictUrlForwarding = false,
   upstreams?: Upstreams,
+  providerConfigs?: Record<string, ProviderConfig>,
 ): { provider: Provider; apiFormat: ApiFormat } {
   if (process.env.DEBUG_ROUTING === "true") {
     console.log(
       `[DEBUG_ROUTING] classifyRequest: pathname=${pathname}, strictUrlForwarding=${strictUrlForwarding}, upstreams=${upstreams ? 'provided' : 'undefined'}`,
     );
+  }
+
+  // Check for custom providers first (if providerConfigs provided)
+  // This allows custom providers (llama.cpp, vLLM, etc.) to be detected via their baseUrlOverrideHeader
+  // before falling back to path-based classification
+  if (!strictUrlForwarding && providerConfigs) {
+    for (const [providerId, providerConfig] of Object.entries(providerConfigs)) {
+      if (providerConfig.enabled && providerConfig.baseUrlOverrideHeader) {
+        const headerName = providerConfig.baseUrlOverrideHeader.toLowerCase();
+        const headerValue = headers[headerName];
+        if (headerValue) {
+          if (process.env.DEBUG_ROUTING === "true") {
+            console.error(
+              `[DEBUG_ROUTING] Detected custom provider ${providerId} via header ${headerName}`,
+            );
+          }
+          return { provider: providerId as Provider, apiFormat: providerConfig.apiFormat };
+        }
+      }
+    }
   }
 
   // ChatGPT backend (Codex subscription uses /api/ and /backend-api/ paths)
@@ -385,6 +407,7 @@ export function resolveTargetUrl(
     headers,
     strictUrlForwarding,
     upstreams,
+    providerConfigs,
   );
 const qs = search || "";
   let targetUrl: string | undefined = headers["x-target-url"];
