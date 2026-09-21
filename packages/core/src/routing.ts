@@ -32,15 +32,20 @@ function normalizeUpstreamUrl(url: string): string {
  */
 function getBaseUrl(
   headerName: string,
-  upstreamKey: keyof Upstreams,
+  upstreamKey: string,
   headers: Record<string, string | undefined>,
   upstreams: Upstreams,
   strictUrlForwarding: boolean,
   providerConfigs?: Record<string, ProviderConfig>,
   provider?: string,
 ): string {
+  // For custom providers not in Upstreams, get upstream URL from providerConfigs
+  const isCustomProvider = provider && providerConfigs && providerConfigs[provider] && !upstreams[upstreamKey as keyof Upstreams];
+  const upstreamValue = isCustomProvider && providerConfigs && providerConfigs[provider]
+    ? providerConfigs[provider].upstreamUrl
+    : upstreams[upstreamKey as keyof Upstreams];
+
   if (strictUrlForwarding) {
-    const upstreamValue = upstreams[upstreamKey];
     const headerValue = headers[headerName];
     if (headerValue && headerValue !== upstreamValue) {
       console.warn(
@@ -55,7 +60,7 @@ function getBaseUrl(
     const providerConfig = providerConfigs[provider];
     if (providerConfig && providerConfig.allowBaseUrlOverride === false) {
       // Override disabled for this provider, use configured upstream
-      return upstreams[upstreamKey];
+      return upstreamValue;
     }
   }
   
@@ -69,7 +74,7 @@ function getBaseUrl(
     }
     return normalized;
   }
-  return upstreams[upstreamKey];
+  return upstreamValue;
 }
 
 const API_PATH_SEGMENTS = new Set([
@@ -375,7 +380,7 @@ export function resolveTargetUrl(
   strictUrlForwarding = false,
   providerConfigs?: Record<string, ProviderConfig>,
 ): ResolveTargetResult {
-  const { provider, apiFormat } = classifyRequest(
+  let { provider, apiFormat } = classifyRequest(
     pathname,
     headers,
     strictUrlForwarding,
@@ -393,6 +398,27 @@ const qs = search || "";
     console.error(
       `[DEBUG_ROUTING] x-target-url=${headers["x-target-url"] || "none"}`,
     );
+  }
+
+  // If provider is unknown, check for custom providers in providerConfigs
+  // that have a base URL override header present in the request headers
+  if (provider === "unknown" && providerConfigs) {
+    for (const [providerId, providerConfig] of Object.entries(providerConfigs)) {
+      if (providerConfig.enabled && providerConfig.baseUrlOverrideHeader) {
+        const headerName = providerConfig.baseUrlOverrideHeader.toLowerCase();
+        const headerValue = headers[headerName];
+        if (headerValue) {
+          provider = providerId as Provider;
+          apiFormat = providerConfig.apiFormat;
+          if (process.env.DEBUG_ROUTING === "true") {
+            console.error(
+              `[DEBUG_ROUTING] Detected custom provider ${providerId} via header ${headerName}`,
+            );
+          }
+          break;
+        }
+      }
+    }
   }
 
   if (!targetUrl) {
@@ -457,6 +483,23 @@ const qs = search || "";
       const openaiPath =
         pathname === "/responses" ? "/v1/responses" : pathname;
       targetUrl = getBaseUrl("x-openai-baseurl", "openai", headers, upstreams, strictUrlForwarding, providerConfigs, provider) + openaiPath + qs;
+    } else if (providerConfigs && providerConfigs[provider]) {
+      // Custom provider: use the provider's configured baseUrlOverrideHeader and apiFormat
+      const customProviderConfig = providerConfigs[provider];
+      if (customProviderConfig.enabled && customProviderConfig.baseUrlOverrideHeader) {
+        const headerName = customProviderConfig.baseUrlOverrideHeader;
+        // For OpenAI-compatible custom providers, ensure /v1/ prefix for chat/completions
+        const customPath = customProviderConfig.apiFormat === "chat-completions" && !pathname.startsWith("/v1/")
+          ? `/v1${pathname}`
+          : pathname;
+        targetUrl = getBaseUrl(headerName, provider, headers, upstreams, strictUrlForwarding, providerConfigs, provider) + customPath + qs;
+        apiFormat = customProviderConfig.apiFormat;
+        if (process.env.DEBUG_ROUTING === "true") {
+          console.error(
+            `[DEBUG_ROUTING] Using custom provider ${provider} with header ${headerName}: ${targetUrl}`,
+          );
+        }
+      }
     }
 
     if (process.env.DEBUG_ROUTING === "true" && targetUrl) {
