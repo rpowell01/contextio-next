@@ -26,7 +26,7 @@ async function handleGetProviders(_request: NextRequest, _params: Promise<{ }>) 
   }
 }
 
-async function handleCreateProvider(request: NextRequest) {
+async function handleCreateProvider(request: NextRequest, _params: Promise<{ }>) {
   try {
     const csrfToken = request.headers.get("x-csrf-token");
     if (!(await consumeToken(csrfToken ?? ""))) {
