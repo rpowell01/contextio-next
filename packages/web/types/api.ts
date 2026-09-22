@@ -6,6 +6,16 @@
  * logging, and metrics.
  */
 
+/** Wire format of the provider's API */
+export type ApiFormat =
+  | "anthropic-messages"
+  | "chatgpt-backend"
+  | "responses"
+  | "chat-completions"
+  | "gemini"
+  | "raw"
+  | "unknown";
+
 /**
  * Represents an API session with request/response details.
  */
@@ -212,6 +222,8 @@ export interface ProviderConfig {
   baseUrl: string;
   /** List of available model names */
   models: string[];
+  /** Wire format of the provider's API */
+  apiFormat?: ApiFormat;
   /** Whether to allow clients to override the base URL via x-<provider>-baseurl header */
   allowBaseUrlOverride?: boolean;
   /** Header name to use for base URL override (e.g., "x-openai-baseurl") */

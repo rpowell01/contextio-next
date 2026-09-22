@@ -1637,6 +1637,7 @@ export default function SettingsPage() {
     name: "",
     baseUrl: "",
     models: [],
+    apiFormat: "chat-completions",
     allowBaseUrlOverride: true,
     baseUrlOverrideHeader: "",
   });
@@ -3794,6 +3795,23 @@ if (loading) {
                 <p className="text-xs text-muted-foreground">When enabled, clients can override the base URL using the header below</p>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="provider-api-format">API Format</Label>
+                <Select value={providerFormData.apiFormat} onValueChange={(value) => handleProviderFormChange("apiFormat", value)} disabled={providerFormSubmitting}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select API format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="chat-completions">Chat Completions (OpenAI-compatible)</SelectItem>
+                    <SelectItem value="anthropic-messages">Anthropic Messages</SelectItem>
+                    <SelectItem value="responses">OpenAI Responses API</SelectItem>
+                    <SelectItem value="gemini">Google Gemini</SelectItem>
+                    <SelectItem value="chatgpt-backend">ChatGPT Backend</SelectItem>
+                    <SelectItem value="unknown">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Wire format of the provider's API. Use Chat Completions for OpenAI-compatible APIs (llama.cpp, vLLM, etc.)</p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="provider-baseurl-override-header">Override Header Name</Label>
                 <Input
                   id="provider-baseurl-override-header"
@@ -3901,6 +3919,23 @@ if (loading) {
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground">When enabled, clients can override the base URL using the header below</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-provider-api-format">API Format</Label>
+                <Select value={providerFormData.apiFormat} onValueChange={(value) => handleProviderFormChange("apiFormat", value)} disabled={providerFormSubmitting}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select API format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="chat-completions">Chat Completions (OpenAI-compatible)</SelectItem>
+                    <SelectItem value="anthropic-messages">Anthropic Messages</SelectItem>
+                    <SelectItem value="responses">OpenAI Responses API</SelectItem>
+                    <SelectItem value="gemini">Google Gemini</SelectItem>
+                    <SelectItem value="chatgpt-backend">ChatGPT Backend</SelectItem>
+                    <SelectItem value="unknown">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Wire format of the provider's API. Use Chat Completions for OpenAI-compatible APIs (llama.cpp, vLLM, etc.)</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-provider-baseurl-override-header">Override Header Name</Label>
