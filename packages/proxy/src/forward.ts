@@ -664,6 +664,16 @@ export function createProxyHandler(
       opts.logTraffic,
     );
 
+    // Debug: log all headers to trace custom header issue
+    if (process.env.DEBUG_ROUTING === "true") {
+      console.error(
+        `[DEBUG_ROUTING] All request headers: ${JSON.stringify(req.headers, null, 2)}`,
+      );
+      console.error(
+        `[DEBUG_ROUTING] Routing headers: ${JSON.stringify(routingHeaders, null, 2)}`,
+      );
+    }
+
     if (opts.logTraffic) {
       console.error(
         `[DEBUG] Routing headers: ${JSON.stringify(routingHeaders, null, 2)}`,
