@@ -1487,10 +1487,15 @@ export default function SettingsPage() {
                 Add Provider
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mb-4">
-              Default and environment-configured providers are managed externally.
-              Click "Add Provider" to create your own custom provider, which you can then edit or delete.
-            </p>
+            <div className="mb-4">
+              <p className="text-xs text-muted-foreground">
+                Default and environment-configured providers are managed externally.
+                Click "Add Provider" to create your own custom provider, which you can then edit or delete.
+              </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                ⚠ Adding a new custom provider requires a container restart to take effect.
+              </p>
+            </div>
 
             {providersError && (
               <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive mb-4">
@@ -1839,12 +1844,12 @@ export default function SettingsPage() {
     }));
   };
 
-  const updateRedactProviders = (provider: Provider, enabled: boolean) => {
+  const updateRedactProviders = (providerId: string, enabled: boolean) => {
     setSettings((prev) => ({
       ...prev,
       redactProviders: {
         ...prev.redactProviders,
-        [provider]: enabled,
+        [providerId]: enabled,
       },
     }));
   };
@@ -1888,6 +1893,7 @@ export default function SettingsPage() {
       name: provider.name,
       baseUrl: provider.baseUrl,
       models: provider.models,
+      apiFormat: provider.apiFormat ?? "chat-completions",
       allowBaseUrlOverride: provider.allowBaseUrlOverride ?? true,
       baseUrlOverrideHeader: provider.baseUrlOverrideHeader ?? `x-${provider.id}-baseurl`,
     });
@@ -2682,16 +2688,6 @@ case "oidcIssuer":
           </div>
         );
       case "redactProviders": {
-        const providers: Provider[] = [
-          "anthropic",
-          "openai",
-          "chatgpt",
-          "gemini",
-          "vertex",
-          "nvidia",
-          "openrouter",
-          "kilo",
-        ];
         const redactDisabled = !settings.enableRedact;
         return (
           <div className="space-y-4">
@@ -2717,12 +2713,12 @@ case "oidcIssuer":
                 </thead>
                 <tbody>
                   {providers.map((provider) => {
-                    const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1);
-                    const rowId = `redact-${provider}`;
-                    const enabled = settings.redactProviders?.[provider] ?? true;
+                    const providerLabel = provider.name || provider.id;
+                    const rowId = `redact-${provider.id}`;
+                    const enabled = settings.redactProviders?.[provider.id] ?? true;
                     const checkboxDisabled = isSettingOverridden("redactProviders") || redactDisabled;
                     return (
-                      <tr key={provider} className="border-t">
+                      <tr key={provider.id} className="border-t">
                         <td className="px-3 py-2 font-medium">{providerLabel}</td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-2">
@@ -2730,7 +2726,7 @@ case "oidcIssuer":
                               id={rowId}
                               type="checkbox"
                               checked={enabled}
-                              onChange={(e) => updateRedactProviders(provider, e.target.checked)}
+                              onChange={(e) => updateRedactProviders(provider.id, e.target.checked)}
                               disabled={checkboxDisabled}
                               className="w-4 h-4"
                             />
