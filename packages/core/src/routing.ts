@@ -119,22 +119,41 @@ export function classifyRequest(
   // Check for custom providers first (if providerConfigs provided)
   // This allows custom providers (llama.cpp, vLLM, etc.) to be detected via their baseUrlOverrideHeader
   // before falling back to path-based classification
-  if (!strictUrlForwarding && providerConfigs) {
-    for (const [providerId, providerConfig] of Object.entries(providerConfigs)) {
-      if (providerConfig.enabled && providerConfig.baseUrlOverrideHeader) {
-        const headerName = providerConfig.baseUrlOverrideHeader.toLowerCase();
-        const headerValue = headers[headerName];
-        if (headerValue) {
-          if (process.env.DEBUG_ROUTING === "true") {
-            console.error(
-              `[DEBUG_ROUTING] Detected custom provider ${providerId} via header ${headerName}`,
-            );
-          }
-          return { provider: providerId as Provider, apiFormat: providerConfig.apiFormat };
+  // Built-in provider IDs that should not be treated as custom providers
+const BUILTIN_PROVIDERS = new Set([
+  "openai",
+  "anthropic",
+  "chatgpt",
+  "gemini",
+  "geminiCodeAssist",
+  "vertex",
+  "nvidia",
+  "openrouter",
+  "kilo",
+  "unknown",
+]);
+
+// Check for custom providers first (if providerConfigs provided)
+// This allows custom providers (llama.cpp, vLLM, etc.) to be detected via their baseUrlOverrideHeader
+// before falling back to path-based classification
+// Skip built-in providers to avoid conflicting with their specific detection logic
+if (!strictUrlForwarding && providerConfigs) {
+  for (const [providerId, providerConfig] of Object.entries(providerConfigs)) {
+    if (BUILTIN_PROVIDERS.has(providerId)) continue;
+    if (providerConfig.enabled && providerConfig.baseUrlOverrideHeader) {
+      const headerName = providerConfig.baseUrlOverrideHeader.toLowerCase();
+      const headerValue = headers[headerName];
+      if (headerValue) {
+        if (process.env.DEBUG_ROUTING === "true") {
+          console.error(
+            `[DEBUG_ROUTING] Detected custom provider ${providerId} via header ${headerName}`,
+          );
         }
+        return { provider: providerId as Provider, apiFormat: providerConfig.apiFormat };
       }
     }
   }
+}
 
   // ChatGPT backend (Codex subscription uses /api/ and /backend-api/ paths)
   // /codex/ is used by Pi's openai-codex provider (appends /codex/responses to baseUrl)
