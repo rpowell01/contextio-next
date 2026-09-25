@@ -6,7 +6,6 @@ import { DEFAULT_SETTINGS } from "@/lib/settings";
 import type { Settings, SettingMeta, RateLimitConfig, StreamingRetryConfig } from "@/lib/settings";
 import type { ProviderConfig, ProviderMetadata, MaintenanceOperation, MaintenanceResult } from "@/types/api";
 import type { PresetName } from "@contextio/redact";
-import type { Provider } from "@contextio/core";
 import { useState, useEffect, useRef } from "react";
 import { useAdminProtection } from "@/hooks/use-admin-auth";
 import { AdminAccessDeniedDialog } from "@/components/admin-access-denied-dialog";
@@ -1811,7 +1810,7 @@ export default function SettingsPage() {
   };
 
   const updateRateLimiter = (
-    provider: Provider,
+    providerId: string,
     field: keyof RateLimitConfig,
     value: number,
   ) => {
@@ -1819,8 +1818,8 @@ export default function SettingsPage() {
       ...prev,
       rateLimiter: {
         ...prev.rateLimiter,
-        [provider]: {
-          ...prev.rateLimiter?.[provider],
+        [providerId]: {
+          ...prev.rateLimiter?.[providerId],
           [field]: value,
         },
       },
@@ -1828,7 +1827,7 @@ export default function SettingsPage() {
   };
 
   const updateStreamingRetry = (
-    provider: Provider,
+    providerId: string,
     field: keyof StreamingRetryConfig,
     value: number | boolean,
   ) => {
@@ -1836,8 +1835,8 @@ export default function SettingsPage() {
       ...prev,
       streamingRetry: {
         ...prev.streamingRetry,
-        [provider]: {
-          ...prev.streamingRetry?.[provider],
+        [providerId]: {
+          ...prev.streamingRetry?.[providerId],
           [field]: value,
         },
       },
@@ -2863,16 +2862,6 @@ case "oidcIssuer":
           </div>
         );
       case "rateLimiter": {
-        const providers: Provider[] = [
-          "anthropic",
-          "openai",
-          "chatgpt",
-          "gemini",
-          "vertex",
-          "nvidia",
-          "openrouter",
-          "kilo",
-        ];
         return (
           <div className="space-y-4">
             <SettingHelp
@@ -2893,11 +2882,11 @@ case "oidcIssuer":
                 </thead>
                 <tbody>
                   {providers.map((provider) => {
-                    const config = settings.rateLimiter?.[provider];
-                    const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1);
-                    const rowId = `ratelimit-${provider}`;
+                    const config = settings.rateLimiter?.[provider.id];
+                    const providerLabel = provider.name || provider.id;
+                    const rowId = `ratelimit-${provider.id}`;
                     return (
-                      <tr key={provider} className="border-t">
+                      <tr key={provider.id} className="border-t">
                         <td className="px-3 py-2 font-medium">{providerLabel}</td>
                         <td className="px-3 py-2">
                           <Label htmlFor={`${rowId}-max`} className="sr-only">
@@ -2910,7 +2899,7 @@ case "oidcIssuer":
                             max="10000"
                             value={config?.maxRequests ?? 60}
                             onChange={(e) =>
-                              updateRateLimiter(provider, "maxRequests", parseInt(e.target.value) || 1)
+                              updateRateLimiter(provider.id, "maxRequests", parseInt(e.target.value) || 1)
                             }
                             disabled={isSettingOverridden("rateLimiter")}
                             className="w-20"
@@ -2927,7 +2916,7 @@ case "oidcIssuer":
                             max="86400000"
                             value={config?.windowMs ?? 60000}
                             onChange={(e) =>
-                              updateRateLimiter(provider, "windowMs", parseInt(e.target.value) || 60000)
+                              updateRateLimiter(provider.id, "windowMs", parseInt(e.target.value) || 60000)
                             }
                             disabled={isSettingOverridden("rateLimiter")}
                             className="w-24"
@@ -2944,7 +2933,7 @@ case "oidcIssuer":
                             max="10000"
                             value={config?.bufferCapacity ?? 10}
                             onChange={(e) =>
-                              updateRateLimiter(provider, "bufferCapacity", parseInt(e.target.value) || 0)
+                              updateRateLimiter(provider.id, "bufferCapacity", parseInt(e.target.value) || 0)
                             }
                             disabled={isSettingOverridden("rateLimiter")}
                             className="w-16"
@@ -2960,16 +2949,6 @@ case "oidcIssuer":
         );
       }
       case "streamingRetry": {
-        const providers: Provider[] = [
-          "anthropic",
-          "openai",
-          "chatgpt",
-          "gemini",
-          "vertex",
-          "nvidia",
-          "openrouter",
-          "kilo",
-        ];
         return (
           <div className="space-y-4">
             <SettingHelp
@@ -2990,11 +2969,11 @@ case "oidcIssuer":
                 </thead>
                 <tbody>
                   {providers.map((provider) => {
-                    const config = settings.streamingRetry?.[provider];
-                    const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1);
-                    const rowId = `streamingRetry-${provider}`;
+                    const config = settings.streamingRetry?.[provider.id];
+                    const providerLabel = provider.name || provider.id;
+                    const rowId = `streamingRetry-${provider.id}`;
                     return (
-                      <tr key={provider} className="border-t">
+                      <tr key={provider.id} className="border-t">
                         <td className="px-3 py-2 font-medium">{providerLabel}</td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-2">
@@ -3003,7 +2982,7 @@ case "oidcIssuer":
                               id={`${rowId}-enabled`}
                               checked={config?.enabled ?? true}
                               onChange={(e) =>
-                                updateStreamingRetry(provider, "enabled", e.target.checked)
+                                updateStreamingRetry(provider.id, "enabled", e.target.checked)
                               }
                               disabled={isSettingOverridden("streamingRetry")}
                               className="h-4 w-4 rounded border-border"
@@ -3024,7 +3003,7 @@ case "oidcIssuer":
                             max="10"
                             value={config?.maxRetries ?? 3}
                             onChange={(e) =>
-                              updateStreamingRetry(provider, "maxRetries", parseInt(e.target.value) || 0)
+                              updateStreamingRetry(provider.id, "maxRetries", parseInt(e.target.value) || 0)
                             }
                             disabled={isSettingOverridden("streamingRetry")}
                             className="w-20"
@@ -3041,7 +3020,7 @@ case "oidcIssuer":
                             max="100"
                             value={config?.maxBufferSizeMB ?? 10}
                             onChange={(e) =>
-                              updateStreamingRetry(provider, "maxBufferSizeMB", parseInt(e.target.value) || 1)
+                              updateStreamingRetry(provider.id, "maxBufferSizeMB", parseInt(e.target.value) || 1)
                             }
                             disabled={isSettingOverridden("streamingRetry")}
                             className="w-20"
